@@ -1,0 +1,213 @@
+{
+  "name": "Pensamiento Lógico-Matemático",
+  "description": "Bot especializado en razonamiento cuantitativo, resolución de problemas y análisis de datos para bachillerato colombiano (Saber 11)",
+  "category": "matematicas",
+  "version": "2.0",
+  "target": "Bachillerato Colombia - Saber 11",
+  "difficulty_range": {"min": "beginner", "max": "expert"},
+  "personality": {
+    "teaching_style": "balanced",
+    "verbosity": "medium",
+    "use_examples": true,
+    "use_analogies": true
+  },
+  "steps": [
+    {
+      "title": "Operaciones básicas y jerarquía de operaciones",
+      "description": "Dominar la jerarquía de operaciones: paréntesis, exponentes, multiplicación/división, suma/resta (PEMDAS).",
+      "details": "La jerarquía de operaciones es fundamental. Primero se resuelven paréntesis, luego exponentes, después multiplicación y división (de izquierda a derecha), y finalmente suma y resta. Ejemplo: 3 + 4 × 2 = 3 + 8 = 11 (no 14).",
+      "is_critical": true,
+      "common_errors": [
+        "Resolver de izquierda a derecha sin respetar la jerarquía",
+        "Olvidar que multiplicación y división tienen la misma prioridad",
+        "No resolver primero lo que está dentro de paréntesis"
+      ],
+      "tips": [
+        "Recuerda PEMDAS: Paréntesis, Exponentes, Multiplicación/División, Adición/Sustracción",
+        "Si hay operaciones del mismo nivel, resuelve de izquierda a derecha"
+      ]
+    },
+    {
+      "title": "Fracciones, decimales y porcentajes",
+      "description": "Convertir entre fracciones, decimales y porcentajes. Operar con fracciones.",
+      "details": "Una fracción a/b se convierte a decimal dividiendo a÷b. Para convertir a porcentaje, multiplica el decimal por 100. Ejemplo: 3/4 = 0.75 = 75%. Para sumar fracciones con diferente denominador, busca el MCM.",
+      "is_critical": true,
+      "common_errors": [
+        "Sumar numeradores y denominadores directamente: 1/2 + 1/3 ≠ 2/5",
+        "Confundir el proceso de multiplicar con el de sumar fracciones",
+        "No simplificar la fracción resultante"
+      ],
+      "tips": [
+        "Para sumar fracciones: busca denominador común, luego suma numeradores",
+        "Para multiplicar fracciones: multiplica numerador con numerador y denominador con denominador",
+        "El 50% es la mitad, el 25% es la cuarta parte, el 10% solo mueve la coma"
+      ]
+    },
+    {
+      "title": "Ecuaciones lineales",
+      "description": "Resolver ecuaciones de primer grado con una incógnita.",
+      "details": "Una ecuación lineal tiene la forma ax + b = c. Para resolverla, aísla la variable x: primero resta b de ambos lados, luego divide entre a. Ejemplo: 2x + 5 = 13 → 2x = 8 → x = 4. Siempre verifica sustituyendo el resultado.",
+      "is_critical": true,
+      "common_errors": [
+        "No aplicar la misma operación a ambos lados de la ecuación",
+        "Confundir signos al pasar términos al otro lado",
+        "No verificar la solución sustituyendo en la ecuación original"
+      ],
+      "tips": [
+        "Lo que está sumando pasa restando y viceversa",
+        "Lo que está multiplicando pasa dividiendo y viceversa",
+        "Siempre verifica: sustituye tu respuesta en la ecuación original"
+      ]
+    },
+    {
+      "title": "Sistemas de ecuaciones",
+      "description": "Resolver sistemas de dos ecuaciones con dos incógnitas usando sustitución y eliminación.",
+      "details": "Un sistema 2x2 se puede resolver por sustitución (despejar una variable y reemplazar) o por eliminación (sumar/restar ecuaciones para eliminar una variable). Ejemplo: x + y = 5 y x - y = 1. Sumando: 2x = 6, x = 3, y = 2.",
+      "is_critical": false,
+      "common_errors": [
+        "No multiplicar toda la ecuación al igualar coeficientes",
+        "Perder el signo al sustituir valores negativos",
+        "Encontrar solo una variable y olvidar calcular la otra"
+      ],
+      "tips": [
+        "Elige el método más fácil según las ecuaciones",
+        "Si una variable ya está despejada, usa sustitución",
+        "Si los coeficientes son iguales o fáciles de igualar, usa eliminación"
+      ]
+    },
+    {
+      "title": "Funciones y gráficas",
+      "description": "Entender el concepto de función, dominio, rango y graficar funciones lineales y cuadráticas.",
+      "details": "Una función f(x) asigna a cada valor de x exactamente un valor de y. La función lineal y = mx + b tiene pendiente m e intercepto b. La cuadrática y = ax² + bx + c forma una parábola. El dominio son los valores posibles de x, el rango los de y.",
+      "is_critical": false,
+      "common_errors": [
+        "Confundir dominio con rango",
+        "No identificar correctamente la pendiente y el intercepto",
+        "Olvidar que la parábola se abre hacia arriba si a > 0 y hacia abajo si a < 0"
+      ],
+      "tips": [
+        "La pendiente indica qué tan inclinada es la recta: positiva sube, negativa baja",
+        "Para graficar una recta solo necesitas 2 puntos",
+        "El vértice de la parábola está en x = -b/(2a)"
+      ]
+    },
+    {
+      "title": "Estadística descriptiva",
+      "description": "Calcular e interpretar media, mediana, moda, rango y desviación estándar.",
+      "details": "La media es el promedio (suma ÷ cantidad). La mediana es el valor central al ordenar los datos. La moda es el valor más frecuente. El rango es máximo - mínimo. La desviación estándar mide qué tan dispersos están los datos respecto a la media.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir media con mediana",
+        "No ordenar los datos antes de calcular la mediana",
+        "Creer que la moda siempre existe (puede no haberla o haber varias)"
+      ],
+      "tips": [
+        "Media: suma todo y divide entre cuántos hay",
+        "Mediana: ordena y busca el del medio. Si hay par de datos, promedia los dos centrales",
+        "Moda: el que más se repite. Puede haber bimodal o sin moda"
+      ]
+    },
+    {
+      "title": "Probabilidad básica",
+      "description": "Calcular probabilidades simples, eventos independientes y regla de la adición/multiplicación.",
+      "details": "La probabilidad de un evento es P(A) = casos favorables / casos totales. Para eventos independientes: P(A y B) = P(A) × P(B). Para eventos mutuamente excluyentes: P(A o B) = P(A) + P(B). Ejemplo: al lanzar un dado, P(par) = 3/6 = 1/2.",
+      "is_critical": false,
+      "common_errors": [
+        "Confundir eventos independientes con mutuamente excluyentes",
+        "Sumar probabilidades cuando debería multiplicar",
+        "Obtener probabilidad mayor a 1 (imposible)"
+      ],
+      "tips": [
+        "La probabilidad siempre está entre 0 y 1 (o entre 0% y 100%)",
+        "'Y' → multiplica. 'O' → suma (si son excluyentes)",
+        "Complemento: P(no A) = 1 - P(A)"
+      ]
+    },
+    {
+      "title": "Razonamiento lógico y resolución de problemas",
+      "description": "Desarrollar habilidades de razonamiento lógico, análisis de patrones y resolución de problemas en contexto.",
+      "details": "El razonamiento lógico implica: identificar patrones, hacer deducciones, validar conclusiones y resolver problemas paso a paso. En las pruebas Saber 11, los problemas vienen en contexto (situaciones reales). La clave es: leer bien, identificar datos, plantear la operación y verificar.",
+      "is_critical": true,
+      "common_errors": [
+        "No leer completamente el enunciado del problema",
+        "No identificar qué datos son relevantes y cuáles son distractores",
+        "Intentar resolver todo mentalmente sin escribir los pasos"
+      ],
+      "tips": [
+        "Lee el problema dos veces antes de empezar",
+        "Subraya los datos importantes y la pregunta",
+        "Plantea el problema matemáticamente antes de calcular",
+        "Verifica que tu respuesta tenga sentido en el contexto"
+      ]
+    }
+  ],
+  "warnings": [
+    {"message": "Nunca dividas entre cero. Es una operación indefinida.", "severity": "critical"},
+    {"message": "Al cambiar de signo una desigualdad al multiplicar/dividir por número negativo.", "severity": "high"},
+    {"message": "Las respuestas del Saber 11 son de selección múltiple: verifica siempre con las opciones.", "severity": "medium"},
+    {"message": "El calculador NO está permitido en la prueba Saber 11.", "severity": "critical"}
+  ],
+  "rules": [
+    "Siempre respetar la jerarquía de operaciones (PEMDAS)",
+    "Una ecuación se mantiene balanceada: lo que haces a un lado, lo haces al otro",
+    "La probabilidad nunca puede ser mayor que 1 ni menor que 0",
+    "La media aritmética puede ser afectada por valores extremos, la mediana no",
+    "Una función asigna a cada valor de x exactamente un valor de y",
+    "Al multiplicar o dividir una desigualdad por un número negativo, se invierte el signo",
+    "Para verificar una solución, siempre sustituye el resultado en la ecuación original",
+    "Los porcentajes son fracciones con denominador 100"
+  ],
+  "tips": [
+    "Practica con problemas de contexto real, no solo con ejercicios abstractos",
+    "Si un problema parece difícil, divide en partes más pequeñas",
+    "Dibuja diagramas y gráficos para visualizar el problema",
+    "Estima la respuesta antes de calcular: si obtienes algo muy diferente, revisa",
+    "En la prueba Saber 11, lee todas las opciones antes de elegir",
+    "Relaciona los conceptos matemáticos con situaciones cotidianas",
+    "Practica el cálculo mental con sumas y multiplicaciones sencillas",
+    "Cuando no entiendas un concepto, busca un ejemplo concreto"
+  ],
+  "scenarios": [
+    {
+      "title": "Problema de porcentajes en contexto",
+      "description": "Un producto cuesta $80.000 y tiene un descuento del 25%. ¿Cuánto pagas?",
+      "initial_situation": "Precio original: $80.000. Descuento: 25%.",
+      "expected_actions": ["Calcular el 25% de 80.000", "Restar el descuento al precio original"],
+      "correct_outcome": "Descuento: $80.000 × 0.25 = $20.000. Precio final: $80.000 - $20.000 = $60.000",
+      "common_mistakes": ["Calcular 25% como 80.000/25", "Sumar en vez de restar el descuento"],
+      "difficulty": "easy"
+    },
+    {
+      "title": "Interpretación de gráficas estadísticas",
+      "description": "Una gráfica muestra las ventas mensuales de una tienda. ¿En qué mes hubo mayor crecimiento?",
+      "initial_situation": "Datos: Ene=100, Feb=120, Mar=115, Abr=150, May=145",
+      "expected_actions": ["Calcular la diferencia entre meses consecutivos", "Identificar la mayor diferencia positiva"],
+      "correct_outcome": "Mayor crecimiento: de Mar a Abr (+35 unidades). No confundir con el mes de mayor venta (Abr=150).",
+      "common_mistakes": ["Confundir el mes con más ventas con el de mayor crecimiento", "No calcular las diferencias entre meses"],
+      "difficulty": "medium"
+    },
+    {
+      "title": "Problema de probabilidad con datos",
+      "description": "En un curso de 30 estudiantes, 18 aprobaron matemáticas y 12 aprobaron ciencias. 8 aprobaron ambas. ¿Cuál es la probabilidad de que un estudiante elegido al azar haya aprobado al menos una?",
+      "initial_situation": "Total: 30. Aprob. Mat: 18. Aprob. Ciencias: 12. Ambas: 8.",
+      "expected_actions": ["Usar la fórmula de unión: P(A∪B) = P(A) + P(B) - P(A∩B)", "Calcular: (18+12-8)/30"],
+      "correct_outcome": "P(al menos una) = (18 + 12 - 8) / 30 = 22/30 = 11/15 ≈ 0.733 o 73.3%",
+      "common_mistakes": ["Sumar directamente 18+12 sin restar la intersección", "Olvidar dividir entre el total"],
+      "difficulty": "hard"
+    }
+  ],
+  "faq": [
+    {"question": "¿Qué es el razonamiento cuantitativo?", "answer": "Es la capacidad de usar conceptos matemáticos para analizar, interpretar y resolver problemas. No es solo hacer cuentas, sino entender qué operación aplicar y por qué.", "category": "conceptos", "difficulty": "beginner"},
+    {"question": "¿Qué diferencia hay entre media y mediana?", "answer": "La media es el promedio (suma de todos los datos dividida entre la cantidad). La mediana es el valor que queda en el centro al ordenar los datos de menor a mayor. La media es sensible a valores extremos, la mediana no.", "category": "estadistica", "difficulty": "easy"},
+    {"question": "¿Cómo se resuelve una ecuación lineal?", "answer": "Aísla la variable: 1) Pasa los términos con x a un lado y los números al otro. 2) Simplifica. 3) Divide entre el coeficiente de x. Ejemplo: 3x + 5 = 20 → 3x = 15 → x = 5. Verifica: 3(5) + 5 = 20 ✓", "category": "algebra", "difficulty": "easy"},
+    {"question": "¿Qué es una función?", "answer": "Una función es una relación que asigna a cada valor de entrada (x) exactamente un valor de salida (y). Se escribe f(x). Ejemplo: f(x) = 2x + 1. Si x=3, entonces f(3) = 2(3)+1 = 7.", "category": "funciones", "difficulty": "medium"},
+    {"question": "¿Cómo calculo un porcentaje?", "answer": "Para calcular el X% de un número N: multiplica N × (X/100). Ejemplo: 15% de 200 = 200 × 0.15 = 30. Atajo: 10% mueve la coma un lugar, 1% mueve dos lugares.", "category": "aritmetica", "difficulty": "beginner"},
+    {"question": "¿Qué es la probabilidad?", "answer": "Es una medida de qué tan posible es que ocurra un evento. Se calcula: P = casos favorables / casos totales. Siempre está entre 0 (imposible) y 1 (seguro). Ejemplo: P(sacar 6 en un dado) = 1/6.", "category": "probabilidad", "difficulty": "easy"},
+    {"question": "¿Cómo interpreto una gráfica?", "answer": "1) Lee el título para saber qué representa. 2) Lee los ejes (qué mide cada uno). 3) Identifica tendencias (sube, baja, constante). 4) Busca el valor más alto, el más bajo y cambios importantes. 5) Relaciona con la pregunta.", "category": "estadistica", "difficulty": "medium"},
+    {"question": "¿Qué es un sistema de ecuaciones?", "answer": "Son dos o más ecuaciones con las mismas incógnitas que se deben cumplir simultáneamente. Se resuelven por sustitución, eliminación o igualación. La solución son los valores que satisfacen todas las ecuaciones a la vez.", "category": "algebra", "difficulty": "medium"},
+    {"question": "¿Por qué no se puede dividir entre cero?", "answer": "Porque no existe ningún número que multiplicado por 0 dé un resultado diferente de 0. Matemáticamente es una operación indefinida. Si tu calculadora da error, probablemente estás dividiendo entre cero.", "category": "conceptos", "difficulty": "beginner"},
+    {"question": "¿Qué tipo de preguntas salen en el Saber 11 de matemáticas?", "answer": "Las preguntas son de razonamiento cuantitativo con contexto: interpretar datos, gráficas, tablas, resolver problemas de la vida real usando matemáticas. No son cálculos mecánicos sino análisis y comprensión.", "category": "saber11", "difficulty": "easy"},
+    {"question": "¿Cómo resuelvo un problema con enunciado largo?", "answer": "1) Lee todo el enunciado completo. 2) Identifica la pregunta (¿qué te piden?). 3) Subraya los datos relevantes. 4) Ignora la información que no necesitas. 5) Plantea la operación. 6) Resuelve. 7) Verifica que la respuesta tenga sentido.", "category": "estrategias", "difficulty": "easy"},
+    {"question": "¿Qué es la desviación estándar?", "answer": "Mide qué tan dispersos están los datos respecto a la media. Una desviación estándar baja significa datos agrupados cerca del promedio. Una alta significa datos muy dispersos. Se usa para saber si los datos son homogéneos o variados.", "category": "estadistica", "difficulty": "hard"}
+  ]
+}

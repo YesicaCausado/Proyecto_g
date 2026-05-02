@@ -1,0 +1,193 @@
+{
+  "name": "Comprensión Lectora y Pensamiento Crítico",
+  "description": "Bot especializado en lectura crítica, análisis textual, inferencia y argumentación para bachillerato colombiano (Saber 11)",
+  "category": "lectura_critica",
+  "version": "2.0",
+  "target": "Bachillerato Colombia - Saber 11",
+  "difficulty_range": {"min": "beginner", "max": "expert"},
+  "personality": {
+    "teaching_style": "encouraging",
+    "verbosity": "medium",
+    "use_examples": true,
+    "use_analogies": true
+  },
+  "steps": [
+    {
+      "title": "Comprensión literal: ¿Qué dice el texto?",
+      "description": "Identificar la información explícita del texto: datos, hechos, nombres, fechas y eventos mencionados directamente.",
+      "details": "La comprensión literal es el primer nivel de lectura. Consiste en extraer información que está directamente en el texto sin interpretar. Preguntas clave: ¿Quién? ¿Qué? ¿Cuándo? ¿Dónde? ¿Cuántos?",
+      "is_critical": true,
+      "common_errors": [
+        "Agregar información que NO está en el texto",
+        "Confundir lo que dice el texto con lo que crees que dice",
+        "No releer cuando la respuesta no es evidente"
+      ],
+      "tips": [
+        "Subraya las ideas principales mientras lees",
+        "Identifica quién habla, de qué habla y cuándo",
+        "La respuesta literal SIEMPRE está en el texto, búscala"
+      ]
+    },
+    {
+      "title": "Comprensión inferencial: ¿Qué quiere decir?",
+      "description": "Deducir información que no está explícita pero se puede concluir a partir del texto.",
+      "details": "La inferencia es 'leer entre líneas'. El texto no lo dice directamente, pero hay pistas que te permiten concluir algo. Ejemplo: si el texto dice 'María salió con paraguas', puedes inferir que iba a llover o estaba lloviendo.",
+      "is_critical": true,
+      "common_errors": [
+        "Inferir cosas que no tienen soporte en el texto",
+        "Confundir opinión personal con inferencia válida",
+        "Ignorar las pistas contextuales del texto"
+      ],
+      "tips": [
+        "Una inferencia válida siempre tiene evidencia en el texto",
+        "Pregúntate: ¿qué pistas me da el autor para entender esto?",
+        "Si no puedes señalar la evidencia en el texto, tu inferencia puede ser incorrecta"
+      ]
+    },
+    {
+      "title": "Identificar la idea principal y las secundarias",
+      "description": "Distinguir entre la idea central del texto y las ideas de apoyo.",
+      "details": "La idea principal es de lo que trata principalmente el texto, lo que el autor quiere comunicar. Las ideas secundarias son ejemplos, explicaciones o datos que apoyan la idea principal. La idea principal puede estar al inicio, al final o implícita en todo el texto.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir el tema con la idea principal (el tema es de qué habla, la idea principal es qué dice sobre el tema)",
+        "Elegir un detalle secundario como idea principal",
+        "Confundir la primera oración con la idea principal"
+      ],
+      "tips": [
+        "Tema: ¿De qué habla? Idea principal: ¿Qué dice sobre ese tema?",
+        "La idea principal resume todo el texto en una oración",
+        "Las ideas secundarias se pueden eliminar sin perder el sentido general"
+      ]
+    },
+    {
+      "title": "Tipos de textos: narrativo, argumentativo, expositivo, descriptivo",
+      "description": "Reconocer la tipología textual y sus características.",
+      "details": "Narrativo: cuenta una historia (cuento, novela, crónica). Argumentativo: defiende una posición con razones (editorial, ensayo). Expositivo: explica un tema de forma objetiva (artículo científico, manual). Descriptivo: detalla características de algo (retrato, paisaje).",
+      "is_critical": false,
+      "common_errors": [
+        "Confundir texto argumentativo con expositivo",
+        "No identificar la intención comunicativa del autor",
+        "Pensar que un texto solo puede ser de un tipo"
+      ],
+      "tips": [
+        "¿El autor cuenta algo? → Narrativo. ¿Defiende una idea? → Argumentativo",
+        "¿Explica sin opinar? → Expositivo. ¿Detalla cómo es algo? → Descriptivo",
+        "Un texto puede mezclar tipos, pero siempre hay uno predominante"
+      ]
+    },
+    {
+      "title": "Análisis de argumentos",
+      "description": "Identificar la tesis, los argumentos y las conclusiones en un texto argumentativo.",
+      "details": "La tesis es la posición del autor. Los argumentos son las razones que la sustentan. La conclusión es lo que se desprende de los argumentos. Un buen argumento tiene evidencia (datos, ejemplos, citas). Una falacia es un argumento aparentemente válido pero engañoso.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir la tesis del autor con tu propia opinión",
+        "No distinguir entre un hecho (verificable) y una opinión (subjetiva)",
+        "Aceptar un argumento solo porque suena convincente sin evaluar su evidencia"
+      ],
+      "tips": [
+        "La tesis responde a: ¿qué quiere demostrar el autor?",
+        "Un argumento fuerte tiene evidencia verificable",
+        "Busca conectores: 'porque', 'por lo tanto', 'en consecuencia' señalan argumentos y conclusiones"
+      ]
+    },
+    {
+      "title": "Vocabulario en contexto",
+      "description": "Determinar el significado de palabras desconocidas usando el contexto del texto.",
+      "details": "No necesitas saber todas las palabras. El contexto te ayuda: lee la oración completa, busca sinónimos o antónimos cercanos, analiza el tono del texto. Ejemplo: 'Su discurso fue elocuente y cautivó a toda la audiencia.' Elocuente = que habla de forma convincente y expresiva.",
+      "is_critical": false,
+      "common_errors": [
+        "Detenerse en cada palabra desconocida sin intentar inferir por contexto",
+        "Elegir el primer significado del diccionario sin considerar el contexto",
+        "Confundir palabras similares (homónimos, parónimos)"
+      ],
+      "tips": [
+        "Lee la oración completa y piensa qué significado tiene sentido ahí",
+        "Busca pistas: sinónimos, antónimos o ejemplos cerca de la palabra",
+        "En las pruebas Saber 11, siempre elige el significado según el contexto, no el más común"
+      ]
+    },
+    {
+      "title": "Pensamiento crítico: evaluar y cuestionar",
+      "description": "Evaluar la validez, confiabilidad y sesgo de un texto. Cuestionar la información.",
+      "details": "El pensamiento crítico implica no aceptar todo como verdad. Pregúntate: ¿Quién lo escribió? ¿Con qué intención? ¿Tiene evidencia? ¿Hay otra perspectiva? ¿Es un hecho o una opinión? La lectura crítica es especialmente importante con información de internet y redes sociales.",
+      "is_critical": true,
+      "common_errors": [
+        "Aceptar todo lo que lees sin cuestionar la fuente",
+        "Confundir pensamiento crítico con criticar negativamente",
+        "No considerar perspectivas diferentes a la del autor"
+      ],
+      "tips": [
+        "Pensamiento crítico = analizar con criterio, no criticar por criticar",
+        "Siempre pregunta: ¿esto es un hecho comprobable o una opinión?",
+        "Busca siempre la otra cara de la moneda: ¿qué diría alguien que piensa diferente?"
+      ]
+    }
+  ],
+  "warnings": [
+    {"message": "En la prueba Saber 11, la respuesta correcta siempre se sustenta en el texto, NO en tu opinión personal.", "severity": "critical"},
+    {"message": "Lee TODO el texto antes de responder las preguntas. No respondas con la primera impresión.", "severity": "high"},
+    {"message": "Diferencia entre lo que DICE el texto (literal) y lo que IMPLICA (inferencial).", "severity": "high"},
+    {"message": "No confundas la posición del autor con los argumentos que cita de otros.", "severity": "medium"}
+  ],
+  "rules": [
+    "Toda respuesta de comprensión lectora debe sustentarse en el texto",
+    "Una inferencia válida siempre tiene pistas o evidencia en el texto",
+    "La idea principal resume el mensaje central, no es un detalle específico",
+    "Hecho = verificable y objetivo. Opinión = subjetiva y discutible",
+    "El tipo de texto define la intención: narrar, argumentar, explicar o describir",
+    "El significado de una palabra depende del contexto en que se usa",
+    "Pensamiento crítico = analizar evidencia y cuestionar con fundamento"
+  ],
+  "tips": [
+    "Lee el texto al menos dos veces: una rápida y una detallada",
+    "En la primera lectura capta la idea general; en la segunda busca detalles",
+    "Subraya ideas principales, palabras clave y conectores",
+    "En preguntas tipo Saber 11, descarta opciones evidentemente incorrectas primero",
+    "Si dos opciones parecen correctas, elige la que mejor se sustenta con el texto",
+    "Practica leyendo editoriales, columnas de opinión y artículos científicos",
+    "Leer todos los días, aunque sea 15 minutos, mejora tu comprensión"
+  ],
+  "scenarios": [
+    {
+      "title": "Análisis de un editorial periodístico",
+      "description": "Lee un editorial sobre el cambio climático e identifica la tesis, los argumentos y si hay falacias.",
+      "initial_situation": "Editorial: 'El cambio climático es la mayor amenaza de nuestra generación. Según la ONU, las temperaturas han subido 1.1°C desde la era preindustrial. Sin embargo, algunos políticos niegan esta realidad por intereses económicos.'",
+      "expected_actions": ["Identificar la tesis", "Reconocer los argumentos y su evidencia", "Detectar si hay sesgo o falacias"],
+      "correct_outcome": "Tesis: el cambio climático es la mayor amenaza. Argumento con evidencia: dato de la ONU. Posible sesgo: atribuye la negación a 'intereses económicos' sin evidencia específica.",
+      "common_mistakes": ["Confundir la cita de la ONU con opinión del autor", "No detectar el sesgo en la última oración"],
+      "difficulty": "medium"
+    },
+    {
+      "title": "Inferencia en un texto narrativo",
+      "description": "Lee un fragmento de cuento y responde preguntas inferenciales.",
+      "initial_situation": "Texto: 'Juan llegó a casa con los ojos rojos. Dejó las llaves sin decir nada y subió directamente a su cuarto. Su madre lo observó desde la cocina, pero decidió no preguntar. Ya habría tiempo.'",
+      "expected_actions": ["Inferir el estado emocional de Juan", "Inferir por qué la madre no preguntó", "Identificar pistas textuales"],
+      "correct_outcome": "Juan probablemente estaba triste o había llorado (ojos rojos, silencio). La madre fue prudente, respetó su espacio emocional (decidió no preguntar, 'ya habría tiempo' = paciencia).",
+      "common_mistakes": ["Inventar razones no sustentadas en el texto", "Decir que Juan estaba enfermo (posible pero no la inferencia más fuerte)"],
+      "difficulty": "easy"
+    },
+    {
+      "title": "Evaluación de fuentes de información",
+      "description": "Compara dos fuentes que hablan del mismo tema y evalúa su confiabilidad.",
+      "initial_situation": "Fuente 1: artículo de revista científica revisada por pares. Fuente 2: publicación viral en redes sociales sin autor identificado.",
+      "expected_actions": ["Evaluar autoría y credenciales", "Analizar si hay revisión o verificación", "Determinar cuál es más confiable"],
+      "correct_outcome": "La revista científica es más confiable: tiene revisión por pares, autor identificado y metodología. La publicación en redes puede tener sesgo, no tiene verificación ni autor responsable.",
+      "common_mistakes": ["Elegir la fuente de redes por ser más reciente o más fácil de leer", "No considerar el proceso de verificación de cada fuente"],
+      "difficulty": "hard"
+    }
+  ],
+  "faq": [
+    {"question": "¿Qué es la comprensión lectora?", "answer": "Es la capacidad de entender, interpretar y evaluar lo que lees. Tiene tres niveles: literal (lo que dice), inferencial (lo que implica) y crítico (evaluación del contenido y la fuente).", "category": "conceptos", "difficulty": "beginner"},
+    {"question": "¿Qué diferencia hay entre tema e idea principal?", "answer": "El tema es el asunto general del que habla el texto (ej: 'el agua'). La idea principal es lo que el autor dice sobre ese tema (ej: 'el agua potable es un recurso escaso que debemos cuidar'). El tema se expresa en palabras, la idea principal en una oración.", "category": "comprension", "difficulty": "easy"},
+    {"question": "¿Cómo hago una inferencia?", "answer": "1) Lee el texto con atención. 2) Busca pistas (palabras clave, tono, contexto). 3) Usa esas pistas + tu conocimiento previo para llegar a una conclusión. 4) Verifica que tu inferencia no contradiga lo que dice el texto.", "category": "inferencia", "difficulty": "medium"},
+    {"question": "¿Qué es una falacia?", "answer": "Es un argumento que parece válido pero tiene un error lógico. Ejemplos: ad hominem (atacar a la persona en vez del argumento), generalización apresurada (concluir algo de pocos casos), apelación a la autoridad (citar a alguien famoso como experto en un tema que no domina).", "category": "argumentacion", "difficulty": "hard"},
+    {"question": "¿Cómo identifico la tesis de un texto argumentativo?", "answer": "La tesis es la idea que el autor quiere demostrar o defender. Generalmente aparece al inicio o al final del texto. Búscala preguntándote: '¿Qué posición defiende el autor?' Los argumentos (razones, datos, ejemplos) están ahí para sostener esa tesis.", "category": "argumentacion", "difficulty": "medium"},
+    {"question": "¿Qué es un hecho y qué es una opinión?", "answer": "Un hecho es algo verificable y objetivo: 'Colombia tiene 32 departamentos'. Una opinión es subjetiva y debatible: 'Colombia es el mejor país'. La clave: ¿se puede comprobar? Si sí, es hecho. Si depende de quién lo diga, es opinión.", "category": "pensamiento_critico", "difficulty": "easy"},
+    {"question": "¿Cómo me va mejor en lectura crítica del Saber 11?", "answer": "1) Lee mucho (editoriales, ensayos, cuentos). 2) Practica identificar idea principal e inferencias. 3) En la prueba: lee todo el texto antes de las preguntas. 4) La respuesta siempre está sustentada en el texto. 5) Descarta opciones absurdas primero. 6) Si dudas entre dos, elige la que tenga más soporte textual.", "category": "saber11", "difficulty": "easy"},
+    {"question": "¿Qué son los conectores y para qué sirven?", "answer": "Son palabras que unen ideas y muestran relaciones: 'sin embargo' (contraste), 'por lo tanto' (conclusión), 'además' (adición), 'porque' (causa). Identificarlos te ayuda a entender la estructura lógica del texto.", "category": "comprension", "difficulty": "easy"},
+    {"question": "¿Qué es la intención comunicativa?", "answer": "Es el propósito del autor al escribir: informar (dar datos), persuadir (convencer), entretener (divertir), instruir (enseñar) o expresar (compartir sentimientos). Identificarla te ayuda a entender mejor el texto y elegir la respuesta correcta.", "category": "comprension", "difficulty": "medium"},
+    {"question": "¿Cómo analizo un texto que tiene ironía o sarcasmo?", "answer": "La ironía dice lo contrario de lo que quiere expresar. Pistas: tono exagerado, contexto que contradice las palabras, uso de comillas. Ejemplo: 'Qué gran idea fue salir sin paraguas' (cuando está lloviendo). Lee el contexto completo para detectarla.", "category": "inferencia", "difficulty": "hard"}
+  ]
+}

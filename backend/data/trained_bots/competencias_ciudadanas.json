@@ -1,0 +1,213 @@
+{
+  "name": "Competencias Ciudadanas",
+  "description": "Bot especializado en competencias ciudadanas y ciencias sociales para bachillerato colombiano (Saber 11)",
+  "category": "ciudadanas",
+  "version": "2.0",
+  "target": "Bachillerato Colombia - Saber 11",
+  "difficulty_range": {"min": "beginner", "max": "expert"},
+  "personality": {
+    "teaching_style": "socratic",
+    "verbosity": "medium",
+    "use_examples": true,
+    "use_analogies": true
+  },
+  "steps": [
+    {
+      "title": "La Constitución Política de Colombia de 1991",
+      "description": "Comprender la estructura, principios fundamentales y derechos establecidos en la Constitución de 1991.",
+      "details": "La Constitución de 1991 reemplazó la de 1886 y estableció a Colombia como un Estado Social de Derecho. Principios: soberanía popular, democracia participativa, pluralismo, dignidad humana. Estructura: Preámbulo, 13 títulos, 380 artículos y disposiciones transitorias. Los primeros 95 artículos contienen los derechos fundamentales, sociales, económicos, culturales y colectivos.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir la Constitución de 1886 con la de 1991",
+        "No distinguir entre derechos fundamentales y derechos económicos/sociales",
+        "Creer que la Constitución no se puede modificar (sí se puede, por acto legislativo, referendo o asamblea constituyente)"
+      ],
+      "tips": [
+        "Artículo 1: Colombia es un Estado Social de Derecho",
+        "Los derechos fundamentales están en el Título II, Capítulo 1 (Arts. 11-41)",
+        "La Constitución de 1991 introdujo la tutela, la Corte Constitucional y la Defensoría del Pueblo"
+      ]
+    },
+    {
+      "title": "Derechos fundamentales y mecanismos de protección",
+      "description": "Conocer los derechos fundamentales y los mecanismos legales para protegerlos.",
+      "details": "Derechos fundamentales: vida (Art.11), igualdad (Art.13), libertad de expresión (Art.20), educación (Art.67), libre desarrollo de la personalidad (Art.16). Mecanismos de protección: Acción de Tutela (derecho fundamental violado, 10 días para fallo), Derecho de Petición (respuesta en 15 días), Acción Popular (derechos colectivos), Habeas Corpus (libertad personal), Habeas Data (datos personales).",
+      "is_critical": true,
+      "common_errors": [
+        "Creer que la tutela sirve para cualquier queja",
+        "Confundir Derecho de Petición con Acción de Tutela",
+        "No saber que la tutela es solo para derechos FUNDAMENTALES amenazados o violados"
+      ],
+      "tips": [
+        "Tutela: protege derechos FUNDAMENTALES, fallo en máximo 10 días, no necesita abogado",
+        "Derecho de Petición: cualquier persona puede pedir info al Estado, respuesta en 15 días",
+        "Acción Popular: protege derechos COLECTIVOS (medio ambiente, espacio público)"
+      ]
+    },
+    {
+      "title": "Organización del Estado colombiano",
+      "description": "Entender las tres ramas del poder público y los organismos de control.",
+      "details": "Ramas: 1) Legislativa: Congreso (Senado + Cámara de Representantes). Hace leyes. 2) Ejecutiva: Presidente, gobernadores, alcaldes. Ejecuta leyes y administra. 3) Judicial: Corte Suprema, Corte Constitucional, Consejo de Estado, Fiscalía. Administra justicia. Organismos de control: Contraloría (vigila recursos públicos), Procuraduría (vigila conducta de funcionarios), Defensoría del Pueblo (defiende derechos ciudadanos).",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir las funciones de cada rama del poder",
+        "No distinguir Procuraduría de Contraloría",
+        "Creer que el presidente puede crear leyes solo (el Congreso legisla)"
+      ],
+      "tips": [
+        "Legislativa = hace leyes. Ejecutiva = las aplica. Judicial = juzga si se cumplen",
+        "Contraloría = plata. Procuraduría = conducta de funcionarios",
+        "El Congreso colombiano es BICAMERAL: Senado (102) + Cámara (188)"
+      ]
+    },
+    {
+      "title": "Democracia y participación ciudadana",
+      "description": "Comprender los mecanismos de participación democrática y ciudadana en Colombia.",
+      "details": "Colombia es una democracia participativa (Art. 1 y 103). Mecanismos: Voto (elegir representantes), Plebiscito (el presidente consulta al pueblo), Referendo (aprobar/rechazar leyes o reformas), Consulta Popular (pregunta sobre temas de interés), Cabildo Abierto (reunión pública con Concejo/JAL), Iniciativa Popular Legislativa (ciudadanos proponen leyes), Revocatoria del Mandato (revocar alcaldes/gobernadores).",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir plebiscito con referendo",
+        "No saber que la revocatoria del mandato solo aplica a alcaldes y gobernadores, no al presidente",
+        "Pensar que solo votar es participar en democracia"
+      ],
+      "tips": [
+        "Referendo = votar sobre una norma/ley. Plebiscito = apoyar o no una decisión del presidente",
+        "Son 7 mecanismos de participación ciudadana (Art. 103 de la Constitución)",
+        "La revocatoria del mandato NO aplica para presidente ni congresistas"
+      ]
+    },
+    {
+      "title": "Convivencia, resolución de conflictos y cultura de paz",
+      "description": "Desarrollar habilidades para la convivencia pacífica y la resolución de conflictos.",
+      "details": "Tipos de conflicto: interpersonal, intergrupal, social. Mecanismos de resolución: Negociación (las partes buscan acuerdo directo), Mediación (un tercero neutral facilita el diálogo), Conciliación (un conciliador propone soluciones), Arbitraje (un árbitro decide). Competencias ciudadanas: empatía, escucha activa, pensamiento crítico, comunicación asertiva. El Acuerdo de Paz de 2016 con las FARC-EP es un ejemplo histórico de resolución de conflicto armado.",
+      "is_critical": false,
+      "common_errors": [
+        "Confundir mediación con conciliación (en mediación el tercero no propone, en conciliación sí)",
+        "Creer que todo conflicto es negativo (puede generar cambio positivo)",
+        "No diferenciar comunicación agresiva de comunicación asertiva"
+      ],
+      "tips": [
+        "Conflicto ≠ violencia. El conflicto es natural, la violencia es una forma inaceptable de manejarlo",
+        "Asertividad: expresar lo que piensas/sientes respetando a los demás",
+        "Colombia ha avanzado en justicia transicional con la JEP (Jurisdicción Especial para la Paz)"
+      ]
+    },
+    {
+      "title": "Pensamiento crítico social: análisis de problemáticas",
+      "description": "Analizar problemáticas sociales, políticas y económicas de Colombia y el mundo con pensamiento crítico.",
+      "details": "Problemas sociales colombianos: desigualdad, pobreza, desplazamiento forzado, corrupción, violencia, inequidad educativa. Análisis crítico implica: identificar el problema, investigar causas, evaluar consecuencias, considerar múltiples perspectivas, proponer soluciones basadas en evidencia. En Saber 11 se evalúa la capacidad de analizar textos, gráficas y situaciones sociales.",
+      "is_critical": true,
+      "common_errors": [
+        "Dar opiniones sin evidencia ni argumentos",
+        "Ver los problemas sociales como si tuvieran una sola causa",
+        "No considerar diferentes perspectivas antes de emitir un juicio"
+      ],
+      "tips": [
+        "Ante un problema social pregúntate: ¿Qué? ¿Por qué? ¿A quién afecta? ¿Qué soluciones hay?",
+        "Un buen argumento tiene: afirmación + evidencia + razonamiento",
+        "En el Saber 11 debes analizar, NO solo opinar"
+      ]
+    },
+    {
+      "title": "Multiperspectividad y diversidad cultural",
+      "description": "Comprender y respetar la diversidad étnica, cultural y de pensamiento en Colombia.",
+      "details": "Colombia es un país pluriétnico y multicultural (Art. 7 de la Constitución). Grupos étnicos reconocidos: pueblos indígenas, comunidades afrocolombianas, raizales, palenqueros, pueblo rom/gitano. La Constitución de 1991 reconoce la diversidad étnica, la libertad de cultos y la igualdad ante la ley sin discriminación. Conceptos clave: interculturalidad, inclusión, equidad de género, respeto a la diferencia.",
+      "is_critical": false,
+      "common_errors": [
+        "Confundir multiculturalidad con interculturalidad (multi = coexistir, inter = interactuar)",
+        "No reconocer los aportes de las comunidades étnicas a la cultura colombiana",
+        "Confundir igualdad con equidad (igualdad = dar lo mismo a todos, equidad = dar según la necesidad)"
+      ],
+      "tips": [
+        "Colombia tiene más de 100 pueblos indígenas y más de 60 lenguas nativas",
+        "Art. 7: el Estado reconoce y protege la diversidad étnica y cultural",
+        "Multiculturalidad = reconocer la diversidad. Interculturalidad = dialogar entre culturas"
+      ]
+    },
+    {
+      "title": "Preguntas tipo Saber 11 en competencias ciudadanas",
+      "description": "Practicar con los enfoques y tipos de preguntas de la prueba Saber 11 en esta competencia.",
+      "details": "La prueba de Competencias Ciudadanas evalúa: 1) Conocimiento (Constitución, organización del Estado, derechos). 2) Argumentación (evaluar argumentos y evidencias). 3) Multiperspectividad (considerar diferentes puntos de vista). 4) Pensamiento sistémico (ver relaciones causa-efecto en lo social). Se presentan textos, gráficas, situaciones y enunciados para analizar.",
+      "is_critical": true,
+      "common_errors": [
+        "Responder con la opinión personal sin considerar lo que dice el texto/enunciado",
+        "No leer todas las opciones de respuesta",
+        "Confundir lo que la pregunta pide: ¿un hecho, un argumento, una perspectiva o una solución?"
+      ],
+      "tips": [
+        "Lee el enunciado completo antes de ver las opciones",
+        "Identifica qué te piden: información, argumento, perspectiva o propuesta",
+        "Si hay una gráfica o tabla, analízala con cuidado antes de responder",
+        "En multiperspectividad, la mejor respuesta suele considerar VARIAS posiciones"
+      ]
+    }
+  ],
+  "warnings": [
+    {"message": "No confundas opinión con argumento. Un argumento necesita evidencia y razonamiento.", "severity": "critical"},
+    {"message": "La Acción de Tutela es SOLO para derechos fundamentales, no para cualquier queja.", "severity": "high"},
+    {"message": "No todas las preguntas de ciudadanas son de memorizar: muchas requieren analizar situaciones.", "severity": "high"},
+    {"message": "Referendo y plebiscito NO son lo mismo. El referendo es sobre una norma, el plebiscito sobre una decisión del presidente.", "severity": "medium"}
+  ],
+  "rules": [
+    "Colombia es un Estado Social de Derecho (Constitución de 1991, Art. 1)",
+    "Hay tres ramas del poder público: Legislativa, Ejecutiva y Judicial",
+    "La tutela protege derechos fundamentales con fallo máximo en 10 días",
+    "Son 7 los mecanismos de participación ciudadana (Art. 103)",
+    "La Constitución reconoce la diversidad étnica y cultural (Art. 7)",
+    "Todo argumento válido necesita: afirmación + evidencia + razonamiento",
+    "La democracia colombiana es participativa, no solo representativa",
+    "Los derechos vienen acompañados de deberes ciudadanos (Art. 95)"
+  ],
+  "tips": [
+    "Lee los primeros 95 artículos de la Constitución: ahí están los derechos y deberes",
+    "Practica analizando noticias con pensamiento crítico: ¿quién dice qué y por qué?",
+    "En el Saber 11, las preguntas de ciudadanas están integradas con lectura crítica",
+    "Aprende los mecanismos de participación: te preguntan por ellos frecuentemente",
+    "No memorices todo: entiende los conceptos y aplícalos a situaciones nuevas",
+    "Distingue siempre entre hechos (datos verificables) y opiniones (puntos de vista)",
+    "Cuando analices un conflicto, identifica las partes involucradas y sus intereses",
+    "Sigue la actualidad colombiana: muchas preguntas se basan en contextos reales"
+  ],
+  "scenarios": [
+    {
+      "title": "Vulneración de un derecho fundamental",
+      "description": "Un estudiante de 15 años es expulsado de su colegio sin proceso disciplinario.",
+      "initial_situation": "Juan, de 15 años, fue expulsado de su colegio público sin haberle dado la oportunidad de defenderse ni seguir el manual de convivencia. Sus padres no saben qué hacer.",
+      "expected_actions": ["Identificar los derechos vulnerados: educación (Art.67), debido proceso (Art.29)", "Identificar el mecanismo de protección apropiado: Acción de Tutela", "Reconocer que no necesita abogado y que el fallo sale en máximo 10 días"],
+      "correct_outcome": "Los padres de Juan pueden interponer una Acción de Tutela porque se vulneraron sus derechos fundamentales a la educación y al debido proceso. La tutela no requiere abogado y un juez debe fallar en máximo 10 días.",
+      "common_mistakes": ["Pensar que no se puede hacer nada", "Confundir tutela con derecho de petición", "No identificar el derecho al debido proceso"],
+      "difficulty": "medium"
+    },
+    {
+      "title": "Análisis de un conflicto comunitario",
+      "description": "Dos barrios de una ciudad compiten por la construcción de un parque en un terreno disponible.",
+      "initial_situation": "El municipio tiene un terreno baldío entre dos barrios. El barrio A quiere un parque deportivo y el barrio B quiere un centro cultural. El alcalde debe decidir. Cada barrio ha recogido firmas y organizado protestas pacíficas.",
+      "expected_actions": ["Identificar el tipo de conflicto: intergrupal por recursos", "Proponer un mecanismo de participación: Cabildo Abierto o Consulta Popular", "Considerar la multiperspectividad: ambas posiciones son válidas", "Buscar una solución que beneficie a ambas comunidades"],
+      "correct_outcome": "El alcalde puede convocar un Cabildo Abierto donde ambas comunidades presenten sus propuestas. Una solución de compromiso podría ser un espacio mixto (deportivo y cultural) o consultar a la comunidad ampliada mediante mecanismos de participación.",
+      "common_mistakes": ["Favorecer un barrio sin escuchar al otro", "No pensar en soluciones intermedias", "Ignorar los mecanismos de participación disponibles"],
+      "difficulty": "medium"
+    },
+    {
+      "title": "Evaluación de argumentos sobre una política pública",
+      "description": "Analizar dos posiciones opuestas sobre la educación gratuita universitaria.",
+      "initial_situation": "Posición A: 'La educación universitaria debe ser gratuita porque es un derecho y reduce la desigualdad.' Posición B: 'La educación universitaria gratuita no es sostenible económicamente y no garantiza calidad.' ¿Cuál es el mejor argumento y por qué?",
+      "expected_actions": ["Identificar la afirmación central de cada posición", "Evaluar las evidencias o razones de cada argumento", "Reconocer que ambas posiciones tienen elementos válidos", "Identificar qué información adicional se necesitaría para decidir"],
+      "correct_outcome": "Ambos argumentos tienen elementos válidos pero están incompletos. Posición A reconoce la educación como derecho (Art. 67) pero no aborda la sostenibilidad. Posición B plantea una preocupación legítima pero no ofrece alternativas. Un análisis completo requiere datos de presupuesto, comparación internacional y evidencia sobre el impacto de la gratuidad.",
+      "common_mistakes": ["Elegir un lado solo por opinión personal sin analizar los argumentos", "No pedir evidencia para las afirmaciones", "No considerar que ambas posiciones pueden tener razón parcial"],
+      "difficulty": "hard"
+    }
+  ],
+  "faq": [
+    {"question": "¿Qué es un Estado Social de Derecho?", "answer": "Es un Estado donde: 1) Hay leyes que todos deben cumplir, incluyendo el gobierno (Estado de Derecho). 2) El Estado tiene la obligación de garantizar condiciones dignas de vida para todos, especialmente los más vulnerables (Social). Colombia se declaró así en el Artículo 1 de la Constitución de 1991.", "category": "constitucion", "difficulty": "easy"},
+    {"question": "¿Cuál es la diferencia entre la tutela y el derecho de petición?", "answer": "Tutela: protege derechos FUNDAMENTALES que están siendo violados o amenazados. Fallo en 10 días. Derecho de Petición: solicitar información o hacer consultas a entidades del Estado. Respuesta en 15 días. El derecho de petición no es para urgencias de derechos fundamentales.", "category": "mecanismos", "difficulty": "easy"},
+    {"question": "¿Cuáles son los 7 mecanismos de participación ciudadana?", "answer": "1) Voto. 2) Plebiscito. 3) Referendo. 4) Consulta Popular. 5) Cabildo Abierto. 6) Iniciativa Popular Legislativa. 7) Revocatoria del Mandato. Están en el Artículo 103 de la Constitución. Son el corazón de la democracia participativa colombiana.", "category": "participacion", "difficulty": "easy"},
+    {"question": "¿Cuál es la diferencia entre igualdad y equidad?", "answer": "Igualdad = tratar a todos exactamente igual, dar lo mismo a todos. Equidad = dar a cada quien según su necesidad para lograr un resultado justo. Ejemplo: igualdad es dar el mismo libro a todos; equidad es dar audiolibro a quien no puede ver. Colombia busca la equidad porque reconoce que no todos parten del mismo punto.", "category": "conceptos", "difficulty": "medium"},
+    {"question": "¿Qué es la multiperspectividad?", "answer": "Es la capacidad de ver un problema o situación desde diferentes puntos de vista. En el Saber 11, te piden considerar las perspectivas de distintos actores (gobierno, comunidad, empresas, minorías). No se trata de estar de acuerdo con todos, sino de ENTENDER por qué piensan diferente.", "category": "competencias", "difficulty": "medium"},
+    {"question": "¿Qué papel tiene la Corte Constitucional?", "answer": "La Corte Constitucional es la máxima autoridad en interpretación de la Constitución. Sus funciones: 1) Revisar la constitucionalidad de leyes. 2) Revisar fallos de tutela. 3) Decidir sobre demandas de inconstitucionalidad. Fue creada por la Constitución de 1991 (no existía antes).", "category": "organizacion", "difficulty": "medium"},
+    {"question": "¿Qué es el Acuerdo de Paz de 2016?", "answer": "Fue el acuerdo firmado entre el gobierno colombiano y las FARC-EP para terminar más de 50 años de conflicto armado. Puntos principales: reforma rural integral, participación política, fin del conflicto, solución al problema de drogas ilícitas, víctimas y verdad. Se implementa a través del Sistema Integral de Verdad, Justicia, Reparación y No Repetición (JEP, Comisión de la Verdad, Unidad de Búsqueda).", "category": "paz", "difficulty": "medium"},
+    {"question": "¿Cómo diferencio un hecho de una opinión?", "answer": "Hecho = información verificable con datos o evidencia. Se puede comprobar si es verdadero o falso. Ejemplo: 'Colombia tiene 32 departamentos.' Opinión = punto de vista personal, no se puede verificar como verdadero o falso. Ejemplo: 'Colombia es el mejor país del mundo.' En Saber 11 te piden distinguirlos frecuentemente.", "category": "pensamiento_critico", "difficulty": "easy"},
+    {"question": "¿Qué significa que Colombia sea pluriétnica y multicultural?", "answer": "Significa que en Colombia conviven múltiples grupos étnicos (indígenas, afrocolombianos, raizales, palenqueros, rom) y culturas diversas, y que el Estado los reconoce y protege (Art. 7). Hay más de 100 pueblos indígenas, 60+ lenguas nativas, y comunidades afro que representan aprox. el 10% de la población.", "category": "diversidad", "difficulty": "easy"},
+    {"question": "¿Qué evalúa la prueba de Competencias Ciudadanas en el Saber 11?", "answer": "Evalúa 3 competencias: 1) Conocimiento: Constitución, organización del Estado, derechos, deberes. 2) Argumentación: capacidad de evaluar argumentos, identificar falacias, construir razonamientos. 3) Multiperspectividad y pensamiento sistémico: analizar situaciones desde varias perspectivas y entender relaciones causa-efecto en lo social.", "category": "saber11", "difficulty": "easy"},
+    {"question": "¿Qué es la comunicación asertiva?", "answer": "Es la capacidad de expresar tus ideas, sentimientos y necesidades de forma clara, directa y respetuosa, sin agredir ni someterse. Diferencias: Agresivo = impone su opinión. Pasivo = no expresa su opinión. Asertivo = expresa su opinión respetando a los demás. Es una competencia ciudadana clave para la convivencia.", "category": "convivencia", "difficulty": "easy"}
+  ]
+}

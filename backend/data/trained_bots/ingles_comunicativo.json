@@ -1,0 +1,195 @@
+{
+  "name": "Inglés Comunicativo",
+  "description": "Bot especializado en competencia comunicativa en inglés para bachillerato colombiano (Saber 11)",
+  "category": "ingles",
+  "version": "2.0",
+  "target": "Bachillerato Colombia - Saber 11",
+  "difficulty_range": {"min": "beginner", "max": "expert"},
+  "personality": {
+    "teaching_style": "encouraging",
+    "verbosity": "medium",
+    "use_examples": true,
+    "use_analogies": true
+  },
+  "steps": [
+    {
+      "title": "Present Simple: rutinas y hechos",
+      "description": "Usar el presente simple para hablar de hábitos, rutinas y verdades generales.",
+      "details": "Estructura: Sujeto + verbo (base form). Con he/she/it se agrega -s/-es al verbo. Ejemplo: 'I study every day. She studies every day.' Negativo: don't/doesn't + verbo base. Pregunta: Do/Does + sujeto + verbo base?",
+      "is_critical": true,
+      "common_errors": [
+        "Olvidar la -s en tercera persona: 'She study' en vez de 'She studies'",
+        "Usar does con el verbo conjugado: 'Does she studies?' en vez de 'Does she study?'",
+        "Confundir con presente continuo cuando no hay acción en progreso"
+      ],
+      "tips": [
+        "He/She/It → agrega -s: works, plays, studies",
+        "Con DO/DOES el verbo vuelve a su forma base",
+        "Palabras clave: always, usually, sometimes, never, every day"
+      ]
+    },
+    {
+      "title": "Past Simple: eventos pasados",
+      "description": "Narrar eventos que ya ocurrieron usando el pasado simple.",
+      "details": "Verbos regulares: agregan -ed (worked, played, studied). Verbos irregulares: tienen su propia forma (go→went, eat→ate, see→saw). Negativo: didn't + verbo base. Pregunta: Did + sujeto + verbo base?",
+      "is_critical": true,
+      "common_errors": [
+        "No memorizar los verbos irregulares más comunes",
+        "Usar did con el verbo en pasado: 'Did you went?' en vez de 'Did you go?'",
+        "Confundir -ed con verbos irregulares: 'I goed' en vez de 'I went'"
+      ],
+      "tips": [
+        "Con DID el verbo siempre va en forma base",
+        "Aprende los 50 verbos irregulares más comunes",
+        "Palabras clave: yesterday, last week/month/year, ago, in 2020"
+      ]
+    },
+    {
+      "title": "Present Continuous: acciones en progreso",
+      "description": "Describir acciones que están ocurriendo ahora o planes futuros cercanos.",
+      "details": "Estructura: Sujeto + am/is/are + verbo-ing. Ejemplo: 'I am studying right now.' También se usa para planes: 'I am traveling tomorrow.' Negativo: am/is/are + not + verbo-ing.",
+      "is_critical": false,
+      "common_errors": [
+        "Olvidar el verbo to be: 'I studying' en vez de 'I am studying'",
+        "Confundir con presente simple para hábitos",
+        "No eliminar la -e antes de -ing: 'makeing' en vez de 'making'"
+      ],
+      "tips": [
+        "Presente simple = hábitos. Presente continuo = ahora mismo",
+        "Siempre necesitas AM/IS/ARE + verbo-ING",
+        "Palabras clave: now, right now, at this moment, currently"
+      ]
+    },
+    {
+      "title": "Reading Comprehension: estrategias de lectura en inglés",
+      "description": "Desarrollar estrategias para comprender textos en inglés sin necesidad de traducir palabra por palabra.",
+      "details": "Estrategias clave: 1) Skimming: lectura rápida para idea general. 2) Scanning: buscar información específica. 3) Usar cognados (palabras similares al español). 4) Inferir por contexto. 5) Identificar palabras clave. No necesitas entender cada palabra para comprender el texto.",
+      "is_critical": true,
+      "common_errors": [
+        "Intentar traducir palabra por palabra",
+        "Detenerse en cada palabra desconocida",
+        "No aprovechar los cognados (information=información, important=importante)"
+      ],
+      "tips": [
+        "Cognados: words similar in English and Spanish (university=universidad, family=familia)",
+        "Lee el título y las primeras oraciones de cada párrafo primero",
+        "En el Saber 11, lee las preguntas ANTES del texto para saber qué buscar"
+      ]
+    },
+    {
+      "title": "Vocabulario esencial: familia temática",
+      "description": "Aprender vocabulario organizado por temas frecuentes en las pruebas Saber 11.",
+      "details": "Temas comunes: School (classroom, teacher, homework, exam). Health (doctor, hospital, medicine, sick). Environment (pollution, recycle, climate, nature). Technology (computer, internet, software, device). Daily life (breakfast, work, transportation, shopping).",
+      "is_critical": true,
+      "common_errors": [
+        "Memorizar palabras aisladas sin contexto",
+        "Confundir false friends: actually ≠ actualmente (actually = en realidad)",
+        "No practicar con oraciones completas"
+      ],
+      "tips": [
+        "Aprende palabras en familias temáticas, no aisladas",
+        "Cuidado con false friends: library=biblioteca (no librería), exit=salida (no éxito)",
+        "Haz flashcards: palabra en inglés en un lado, ejemplo en oración en el otro"
+      ]
+    },
+    {
+      "title": "Conectores y estructura de oraciones",
+      "description": "Usar conectores para unir ideas y construir oraciones complejas.",
+      "details": "Adición: and, also, moreover. Contraste: but, however, although. Causa: because, since, due to. Resultado: so, therefore, as a result. Tiempo: before, after, while, when. Ejemplo: 'I like math because it's logical, but I find it challenging sometimes.'",
+      "is_critical": false,
+      "common_errors": [
+        "Usar 'but' y 'however' de la misma forma (however necesita punto y coma o punto antes)",
+        "No usar conectores: oraciones muy cortas y desconectadas",
+        "Confundir because (razón) con because of (+ sustantivo)"
+      ],
+      "tips": [
+        "Because + oración: 'because it rains'. Because of + sustantivo: 'because of the rain'",
+        "Although = aunque. However = sin embargo",
+        "Los conectores mejoran mucho tu comprensión y tu escritura"
+      ]
+    },
+    {
+      "title": "Preguntas tipo Saber 11 en inglés",
+      "description": "Practicar con los tipos de preguntas que aparecen en la prueba Saber 11 de inglés.",
+      "details": "La prueba tiene: 1) Vocabulario en contexto. 2) Gramática en contexto. 3) Lectura de textos cortos. 4) Lectura de textos medianos. Niveles: -A1 (no alcanza), A1 (principiante), A2 (básico), B1 (intermedio), B+ (intermedio alto). La mayoría de estudiantes colombianos están en A1-A2.",
+      "is_critical": true,
+      "common_errors": [
+        "No leer todas las opciones antes de responder",
+        "Traducir literalmente del español al inglés",
+        "No administrar bien el tiempo en la prueba"
+      ],
+      "tips": [
+        "Lee la pregunta y las opciones antes del texto",
+        "Elimina las opciones que claramente no corresponden",
+        "Si no sabes una palabra, intenta inferir por contexto",
+        "Practica con exámenes de años anteriores del ICFES"
+      ]
+    }
+  ],
+  "warnings": [
+    {"message": "No traduzcas literalmente del español. Las estructuras gramaticales son diferentes.", "severity": "critical"},
+    {"message": "False friends: 'actually' no es 'actualmente', 'library' no es 'librería'.", "severity": "high"},
+    {"message": "En el Saber 11, las preguntas de inglés NO son de traducción, son de comprensión.", "severity": "high"},
+    {"message": "La tercera persona singular (he/she/it) siempre lleva -s en presente simple.", "severity": "medium"}
+  ],
+  "rules": [
+    "Present simple con he/she/it: agrega -s al verbo",
+    "Con auxiliares (do/does/did) el verbo principal va en forma base",
+    "Present continuous = am/is/are + verbo-ing (acción en progreso)",
+    "Past simple regular = verbo + -ed. Irregular = forma propia",
+    "Los cognados son tus mejores amigos en comprensión lectora",
+    "El orden en inglés es: Sujeto + Verbo + Complemento (SVO)",
+    "No todo se traduce literal: cada idioma tiene sus propias expresiones"
+  ],
+  "tips": [
+    "Escucha música en inglés y lee las letras: mejora vocabulario y pronunciación",
+    "Cambia el idioma de tu celular a inglés por unas semanas",
+    "Ve series con subtítulos en inglés (no en español)",
+    "Lee textos cortos en inglés todos los días (noticias, memes, posts)",
+    "Aprende 5 palabras nuevas al día con sus ejemplos",
+    "No le tengas miedo al inglés: con práctica constante se mejora",
+    "En la prueba, no pierdas tiempo en preguntas muy difíciles: pasa a la siguiente",
+    "Practica con apps gratuitas como Duolingo, pero complementa con lectura real"
+  ],
+  "scenarios": [
+    {
+      "title": "Completar un diálogo en contexto",
+      "description": "Completa el diálogo eligiendo la respuesta más apropiada.",
+      "initial_situation": "A: What do you usually do on weekends?\nB: ___________\nOpciones: a) I went to the park. b) I usually play soccer. c) I am playing soccer. d) I will play soccer.",
+      "expected_actions": ["Identificar el tiempo verbal de la pregunta (present simple)", "Elegir la respuesta en el mismo tiempo verbal"],
+      "correct_outcome": "Respuesta: b) 'I usually play soccer.' La pregunta usa 'do you usually do' (present simple + frequency adverb), así que la respuesta debe estar en present simple.",
+      "common_mistakes": ["Elegir 'a' que está en pasado", "Elegir 'c' que está en presente continuo"],
+      "difficulty": "easy"
+    },
+    {
+      "title": "Lectura de un aviso o anuncio",
+      "description": "Lee un aviso en inglés y responde preguntas de comprensión.",
+      "initial_situation": "NOTICE: The school library will be closed on Monday, March 15, due to maintenance. Students can return books at the main office. The library will reopen on Tuesday at 8:00 AM.",
+      "expected_actions": ["Identificar: qué, cuándo, por qué, dónde", "Responder preguntas de comprensión literal"],
+      "correct_outcome": "¿Qué? La biblioteca cierra. ¿Cuándo? Lunes 15 de marzo. ¿Por qué? Mantenimiento. ¿Dónde devolver libros? Oficina principal. ¿Cuándo reabre? Martes a las 8 AM.",
+      "common_mistakes": ["No leer todos los detalles del aviso", "Confundir las fechas o lugares"],
+      "difficulty": "beginner"
+    },
+    {
+      "title": "Inferencia en un texto corto en inglés",
+      "description": "Lee el texto y responde una pregunta inferencial.",
+      "initial_situation": "Text: 'Sarah looked at the empty refrigerator and sighed. She grabbed her keys, put on her jacket, and headed to the car.'\nQuestion: Where is Sarah probably going?",
+      "expected_actions": ["Leer el texto completo", "Inferir el destino basándose en las pistas (refrigerador vacío → comprar comida)"],
+      "correct_outcome": "Sarah is probably going to the supermarket/grocery store. Pistas: empty refrigerator (necesita comida) + grabbed keys + headed to car (va a salir).",
+      "common_mistakes": ["Decir que va al trabajo (no hay pista de eso)", "Traducir palabra por palabra y perderse en detalles"],
+      "difficulty": "medium"
+    }
+  ],
+  "faq": [
+    {"question": "¿Cómo puedo mejorar mi inglés si nunca lo he estudiado bien?", "answer": "Empieza por lo básico: aprende saludos, números, colores, días y meses. Usa apps como Duolingo 15 min/día. Escucha canciones en inglés con letra. Ve videos de YouTube para principiantes. Lo importante es la constancia: un poquito cada día vale más que mucho un solo día.", "category": "estrategias", "difficulty": "beginner"},
+    {"question": "¿Cuándo uso DO y cuándo DOES?", "answer": "DO se usa con: I, You, We, They. DOES se usa con: He, She, It. Solo en presente simple para preguntas y negaciones. Ejemplo: 'Do you like pizza?' 'Does she like pizza?' 'I don't like pizza.' 'She doesn't like pizza.' Con DOES, el verbo NO lleva -s.", "category": "gramatica", "difficulty": "easy"},
+    {"question": "¿Qué son los cognados?", "answer": "Son palabras que se parecen en inglés y español porque tienen el mismo origen. Ejemplos: information=información, important=importante, university=universidad, family=familia, chocolate=chocolate. Son tu mayor ventaja como hispanohablante al leer en inglés.", "category": "vocabulario", "difficulty": "beginner"},
+    {"question": "¿Qué son los false friends?", "answer": "Son palabras que se parecen en inglés y español pero significan cosas diferentes. Ejemplos: actually=en realidad (no 'actualmente'), library=biblioteca (no 'librería'), exit=salida (no 'éxito'), fabric=tela (no 'fábrica'), career=carrera profesional (no 'carrera de velocidad').", "category": "vocabulario", "difficulty": "medium"},
+    {"question": "¿Cómo me preparo para el inglés del Saber 11?", "answer": "1) Practica reading comprehension con textos cortos en inglés. 2) Repasa gramática básica (present simple, past simple, present continuous). 3) Aprende vocabulario por temas. 4) Haz simulacros con pruebas de años anteriores (ICFES). 5) Lee avisos, correos y anuncios en inglés. El Saber 11 evalúa comprensión, no traducción.", "category": "saber11", "difficulty": "easy"},
+    {"question": "¿Cuál es la diferencia entre present simple y present continuous?", "answer": "Present simple = hábitos y hechos generales: 'I study English every day.' Present continuous = acción que ocurre ahora mismo: 'I am studying English right now.' Palabras clave: simple (always, usually, every day) vs continuous (now, right now, at this moment).", "category": "gramatica", "difficulty": "easy"},
+    {"question": "¿Cómo se forma el pasado de verbos regulares?", "answer": "Agrega -ed al verbo base: work→worked, play→played. Reglas especiales: si termina en -e, solo agrega -d (live→lived). Si termina en consonante+y, cambia y→ied (study→studied). Si es CVC corto, duplica la última consonante (stop→stopped).", "category": "gramatica", "difficulty": "easy"},
+    {"question": "¿Qué hago si no entiendo una palabra en inglés?", "answer": "1) No te detengas. 2) Lee toda la oración para inferir por contexto. 3) Busca cognados cercanos. 4) Fíjate si hay sinónimos o explicaciones en el mismo texto. 5) Si sigue sin ser clara, ve si realmente la necesitas para responder la pregunta. Muchas veces no necesitas saber TODAS las palabras.", "category": "estrategias", "difficulty": "beginner"},
+    {"question": "¿Qué nivel de inglés necesito para el Saber 11?", "answer": "El ICFES evalúa desde -A1 hasta B+. La meta del MEN (Ministerio de Educación) es que los bachilleres lleguen a B1 (intermedio). La realidad es que la mayoría está en A1-A2. Con llegar a A2-B1 ya tendrás un buen puntaje. Enfócate en comprensión de lectura y vocabulario.", "category": "saber11", "difficulty": "easy"},
+    {"question": "¿Cuáles son los verbos irregulares más importantes?", "answer": "Los 15 más usados: be→was/were, have→had, go→went, come→came, see→saw, take→took, make→made, get→got, know→knew, think→thought, say→said, give→gave, find→found, tell→told, eat→ate. Memorízalos con ejemplos, no solo la lista.", "category": "gramatica", "difficulty": "medium"}
+  ]
+}

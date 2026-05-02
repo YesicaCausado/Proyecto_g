@@ -1,0 +1,391 @@
+﻿import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import api from "../../services/api";
+import type { ChatMessage, ChatMessageResponse } from "../../types";
+import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff } from "lucide-react";
+import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
+import { useFacialDetection } from "../../hooks/useFacialDetection";
+import { useVoiceProsody } from "../../hooks/useVoiceProsody";
+import CognitiveDashboard from "../../components/CognitiveDashboard";
+
+const SKILLS = [
+  { key: "matematicas", name: "Pensamiento Lógico-Matemático", topic: "Razonamiento cuantitativo y matemáticas para Saber 11", icon: "🧮", color: "from-blue-500 to-blue-600" },
+  { key: "lectora",     name: "Comprensión Lectora",           topic: "Comprensión lectora y lectura crítica para Saber 11",  icon: "📖", color: "from-amber-500 to-orange-500" },
+  { key: "ingles",      name: "Inglés Comunicativo",           topic: "Competencia comunicativa en inglés para Saber 11",     icon: "🌎", color: "from-green-500 to-emerald-600" },
+  { key: "ciudadanas",  name: "Competencias Ciudadanas",       topic: "Competencias ciudadanas y sociales para Saber 11",     icon: "🏛️", color: "from-purple-500 to-violet-600" },
+  { key: "cientifico",  name: "Pensamiento Científico",        topic: "Pensamiento científico y ciencias naturales para Saber 11", icon: "🔬", color: "from-cyan-500 to-teal-600" },
+];
+
+const STATE_LABELS: Record<string, { label: string; color: string }> = {
+  normal:      { label: "Normal",      color: "bg-gray-100 text-gray-600" },
+  fatigue:     { label: "Fatiga",      color: "bg-amber-100 text-amber-700" },
+  overload:    { label: "Sobrecarga",  color: "bg-red-100 text-red-700" },
+  doubt:       { label: "Duda",        color: "bg-yellow-100 text-yellow-700" },
+  mastery:     { label: "Dominio",     color: "bg-emerald-100 text-emerald-700" },
+  flow:        { label: "Flujo ✨",    color: "bg-blue-100 text-blue-700" },
+  frustration: { label: "Frustración", color: "bg-red-100 text-red-700" },
+  curiosity:   { label: "Curiosidad",  color: "bg-violet-100 text-violet-700" },
+  focused:     { label: "Enfocado",    color: "bg-green-100 text-green-700" },
+  learning:    { label: "Aprendiendo", color: "bg-blue-100 text-blue-700" },
+  struggling:  { label: "Dificultad",  color: "bg-amber-100 text-amber-700" },
+  confused:    { label: "Confundido",  color: "bg-red-100 text-red-700" },
+  mastering:   { label: "Dominando",   color: "bg-emerald-100 text-emerald-700" },
+};
+
+export default function ChatPage() {
+  const [searchParams] = useSearchParams();
+  const skillParam = searchParams.get("skill");
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [prevInput, setPrevInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sessionActive, setSessionActive] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState(skillParam || "");
+  const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
+  const [showDashboard, setShowDashboard] = useState(true);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const metrics = useBehavioralMetrics();
+  const facial = useFacialDetection();
+  const voice = useVoiceProsody();
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    if (skillParam && !sessionActive) setSelectedSkill(skillParam);
+  }, [skillParam]);
+
+  const startSession = async (skillKey: string) => {
+    const skill = SKILLS.find((s) => s.key === skillKey);
+    if (!skill) return;
+    setSending(true);
+    try {
+      const { data } = await api.post<ChatMessageResponse>("/chat/start", {
+        topic: skill.topic,
+        difficulty: "medium",
+      });
+      setSessionActive(true);
+      setLastResponse(data);
+      metrics.onBotMessageReceived();
+      setMessages([{
+        id: Date.now().toString(),
+        role: "bot",
+        content: data.message,
+        timestamp: new Date(),
+        cognitive_state: data.cognitive_state,
+        action: data.action,
+        suggestions: data.suggestions,
+      }]);
+    } catch (err) {
+      console.error("Error starting session:", err);
+    } finally {
+      setSending(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleInputChange = (val: string) => {
+    metrics.onUserStartedTyping();
+    metrics.onInputChange(val, prevInput);
+    setPrevInput(input);
+    setInput(val);
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || sending) return;
+
+    const msgContent = input.trim();
+    const behavioralMetrics = metrics.getMetrics(msgContent);
+
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      content: msgContent,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setPrevInput("");
+    setSending(true);
+
+    try {
+      const { data } = await api.post<ChatMessageResponse>("/chat/message", {
+        message: msgContent,
+        response_time_ms:  behavioralMetrics.response_time_ms,
+        typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
+        corrections:       behavioralMetrics.corrections,
+        pause_before_ms:   behavioralMetrics.pause_before_ms,
+        ...(facial.isStreaming && facial.snapshot.is_active ? {
+          facial_data: {
+            emotion: facial.snapshot.valence > 0.2 ? "happy" : facial.snapshot.valence < -0.2 ? "worried" : "neutral",
+            valence: facial.snapshot.valence,
+            arousal: facial.snapshot.arousal,
+            attention_score: facial.snapshot.attention_score,
+            blink_rate: facial.snapshot.blink_rate,
+            brow_furrow: facial.snapshot.brow_furrow,
+            smile_intensity: facial.snapshot.smile_intensity,
+            gaze_direction: facial.snapshot.gaze_direction,
+          }
+        } : {}),
+        ...(voice.isStreaming ? {
+          voice_data: {
+            pitch_mean_hz:       voice.snapshot.pitch_mean_hz,
+            volume_db:           voice.snapshot.volume_db,
+            speech_rate_wpm:     voice.snapshot.speech_rate_wpm,
+            voice_tremor:        voice.snapshot.voice_tremor,
+            energy_level:        voice.snapshot.energy_level,
+            filler_words_count:  voice.snapshot.filler_words_count,
+            silence_duration_ms: voice.snapshot.silence_duration_ms,
+          }
+        } : {}),
+      });
+
+      setLastResponse(data);
+      metrics.onBotMessageReceived();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "bot",
+          content: data.message,
+          timestamp: new Date(),
+          cognitive_state: data.cognitive_state,
+          action: data.action,
+          suggestions: data.suggestions,
+        },
+      ]);
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setMessages((prev) => [
+        ...prev,
+        { id: (Date.now() + 1).toString(), role: "bot", content: "❌ Error de conexión. Intenta de nuevo.", timestamp: new Date() },
+      ]);
+    } finally {
+      setSending(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const endSession = async () => {
+    try { await api.post("/chat/end"); } catch { /* ignore */ }
+    setSessionActive(false);
+    setMessages([]);
+    setLastResponse(null);
+    setSelectedSkill("");
+    metrics.reset();
+  };
+
+  const stateKey = lastResponse?.cognitive_state || "";
+  const stateInfo = STATE_LABELS[stateKey] || { label: stateKey, color: "bg-gray-100 text-gray-600" };
+
+  // ===== SKILL SELECTION =====
+  if (!sessionActive) {
+    return (
+      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">🎓 Elige tu habilidad</h1>
+          <p className="text-gray-500 mt-1">Selecciona la competencia que quieres practicar</p>
+          <p className="text-xs text-gray-400 mt-2">
+            El sistema monitoreará tus 5 patrones neuroconductuales en tiempo real
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {SKILLS.map((skill) => (
+            <button
+              key={skill.key}
+              onClick={() => { setSelectedSkill(skill.key); startSession(skill.key); }}
+              disabled={sending}
+              className={`text-left bg-white border-2 rounded-xl p-5 transition-all hover:shadow-md ${
+                selectedSkill === skill.key ? "border-primary-500 shadow-md" : "border-gray-200 hover:border-primary-300"
+              } disabled:opacity-50`}
+            >
+              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${skill.color} flex items-center justify-center text-2xl mb-3 shadow-sm`}>
+                {skill.icon}
+              </div>
+              <h3 className="font-semibold text-gray-900">{skill.name}</h3>
+              <p className="text-xs text-gray-400 mt-1">Saber 11 • IA Adaptativa</p>
+            </button>
+          ))}
+        </div>
+        {sending && (
+          <div className="flex items-center justify-center gap-2 mt-6 text-primary-600">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Iniciando sesión de aprendizaje...</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ===== CHAT VIEW =====
+  return (
+    <div className="flex h-[calc(100vh-64px)] bg-gray-50">
+      {/* Chat Panel */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-accent-600 rounded-xl flex items-center justify-center">
+              <Brain className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900 text-sm">Tutor NeuroLearn</h2>
+              <p className="text-xs text-gray-500">
+                {SKILLS.find((s) => s.key === selectedSkill)?.name || "Sesión activa"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {stateKey && (
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${stateInfo.color}`}>
+                {stateInfo.label}
+              </span>
+            )}
+            {/* Botón Cámara - Patrón 3 */}
+            <button
+              onClick={() => facial.isStreaming ? facial.stopCamera() : facial.startCamera()}
+              title={facial.permissionDenied ? "Permiso de cámara denegado" : facial.isStreaming ? "Desactivar cámara" : "Activar cámara (Patrón 3)"}
+              className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1 ${
+                facial.isStreaming
+                  ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500"
+                  : facial.permissionDenied
+                  ? "bg-red-50 text-red-400 cursor-not-allowed"
+                  : "text-gray-400 hover:text-green-600 hover:bg-green-50"
+              }`}
+              disabled={facial.permissionDenied}
+            >
+              {facial.isStreaming ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
+              {facial.isStreaming && <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />}
+            </button>
+            {/* Botón Micrófono - Patrón 4 */}
+            <button
+              onClick={() => voice.isStreaming ? voice.stopMic() : voice.startMic()}
+              title={voice.permissionDenied ? "Permiso de micrófono denegado" : voice.isStreaming ? "Desactivar micrófono" : "Activar micrófono (Patrón 4)"}
+              className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
+                voice.isStreaming
+                  ? "bg-blue-50 text-blue-600 hover:bg-red-50 hover:text-red-500"
+                  : voice.permissionDenied
+                  ? "bg-red-50 text-red-400 cursor-not-allowed"
+                  : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+              }`}
+              disabled={voice.permissionDenied}
+            >
+              {voice.isStreaming ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+              {voice.isStreaming && voice.snapshot.is_active && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />}
+            </button>
+            <button
+              onClick={() => setShowDashboard(!showDashboard)}
+              className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-gray-400 hover:text-accent-500 hover:bg-accent-50"}`}
+              title="Panel neuroconductual"
+            >
+              <BarChart2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={endSession}
+              className="p-2 text-gray-400 hover:text-danger-500 hover:bg-red-50 rounded-lg transition-colors"
+              title="Terminar sesión"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex animate-fadeIn ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[85%] md:max-w-[70%] ${msg.role === "user" ? "chat-bubble-user" : "chat-bubble-bot"}`}>
+                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                {msg.suggestions && msg.suggestions.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {msg.suggestions.map((sug, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setInput(sug); inputRef.current?.focus(); }}
+                        className="text-xs bg-primary-50 text-primary-700 px-3 py-1.5 rounded-full hover:bg-primary-100 transition-colors"
+                      >
+                        {sug}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {sending && (
+            <div className="flex justify-start animate-fadeIn">
+              <div className="chat-bubble-bot">
+                <div className="flex items-center gap-1 py-1">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <div className="bg-white border-t border-gray-200 px-4 py-3 flex-shrink-0">
+          <div className="flex items-center gap-2 max-w-4xl mx-auto">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+              placeholder="Escribe tu respuesta..."
+              disabled={sending}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-gray-50"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim() || sending}
+              className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            </button>
+          </div>
+          {lastResponse && (
+            <div className="flex items-center gap-3 mt-2 max-w-4xl mx-auto">
+              <div className="flex items-center gap-1 text-xs text-gray-400">
+                <span>Engagement:</span>
+                <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-400 rounded-full transition-all duration-700"
+                    style={{ width: `${Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%` }} />
+                </div>
+                <span>{Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-gray-400">
+                <span>Riesgo error:</span>
+                <span className={`font-medium ${(lastResponse.error_risk ?? 0) > 0.5 ? "text-red-500" : "text-green-500"}`}>
+                  {Math.round((lastResponse.error_risk ?? 0) * 100)}%
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-gray-400">
+                <span className="text-gray-300">|</span>
+                <span>{(lastResponse.active_modalities ?? []).length}/5 patrones activos</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Panel Neuroconductual */}
+      <CognitiveDashboard
+        response={lastResponse}
+        isVisible={showDashboard}
+        facialSnapshot={facial.snapshot}
+        facialActive={facial.isStreaming}
+        voiceSnapshot={voice.snapshot}
+        voiceActive={voice.isStreaming}
+      />
+    </div>
+  );
+}

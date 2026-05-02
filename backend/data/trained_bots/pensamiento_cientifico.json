@@ -1,0 +1,229 @@
+{
+  "name": "Pensamiento Científico",
+  "description": "Bot especializado en pensamiento científico y ciencias naturales para bachillerato colombiano (Saber 11)",
+  "category": "cientifico",
+  "version": "2.0",
+  "target": "Bachillerato Colombia - Saber 11",
+  "difficulty_range": {"min": "beginner", "max": "expert"},
+  "personality": {
+    "teaching_style": "socratic",
+    "verbosity": "medium",
+    "use_examples": true,
+    "use_analogies": true
+  },
+  "steps": [
+    {
+      "title": "El método científico: observar, preguntar, experimentar",
+      "description": "Comprender y aplicar las etapas del método científico como herramienta para investigar fenómenos naturales.",
+      "details": "Etapas: 1) Observación: percibir un fenómeno. 2) Pregunta: formular una pregunta investigable. 3) Hipótesis: proponer una explicación tentativa y verificable. 4) Experimentación: diseñar un experimento controlado con variables. 5) Análisis de resultados: interpretar datos. 6) Conclusión: aceptar o rechazar la hipótesis. 7) Comunicación: compartir hallazgos. Ejemplo: '¿Las plantas crecen más rápido con luz azul o roja?'",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir observación con interpretación",
+        "Formular hipótesis que no se pueden comprobar experimentalmente",
+        "No identificar las variables (independiente, dependiente, controladas)"
+      ],
+      "tips": [
+        "Una buena hipótesis es verificable: 'Si... entonces...'",
+        "Variable independiente = la que TÚ cambias. Dependiente = la que MIDES. Controladas = las que mantienes iguales",
+        "En el Saber 11, te pueden pedir identificar etapas del método en un texto"
+      ]
+    },
+    {
+      "title": "Variables y diseño experimental",
+      "description": "Identificar y manejar variables en un experimento, incluyendo grupos de control y experimental.",
+      "details": "Variable independiente (VI): la que el investigador manipula deliberadamente. Variable dependiente (VD): la que se mide como resultado. Variables controladas: se mantienen constantes para que no afecten los resultados. Grupo control: no recibe el tratamiento. Grupo experimental: recibe el tratamiento. Ejemplo: efecto del fertilizante en el crecimiento de plantas. VI=cantidad de fertilizante, VD=altura de la planta, control=planta sin fertilizante.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir variable independiente con dependiente",
+        "No incluir un grupo control en el diseño",
+        "Cambiar más de una variable a la vez (invalida el experimento)"
+      ],
+      "tips": [
+        "Truco: la variable INDEPENDIENTE va en el eje X de una gráfica, la DEPENDIENTE en el eje Y",
+        "Si cambias dos cosas a la vez, no sabrás cuál causó el efecto",
+        "El grupo control es tu punto de referencia para comparar"
+      ]
+    },
+    {
+      "title": "Interpretación de gráficas y tablas de datos",
+      "description": "Leer, interpretar y analizar información presentada en gráficas, tablas y diagramas científicos.",
+      "details": "Tipos de gráficas: barras (comparar categorías), líneas (cambios en el tiempo), circulares (proporciones), dispersión (relación entre dos variables). Para interpretar: 1) Lee el título. 2) Identifica los ejes y sus unidades. 3) Observa tendencias (sube, baja, constante). 4) Busca valores máximos, mínimos y anomalías. 5) Relaciona con la pregunta.",
+      "is_critical": true,
+      "common_errors": [
+        "No leer el título ni las unidades de los ejes",
+        "Confundir correlación con causalidad",
+        "No identificar la tendencia general por enfocarse en un solo dato"
+      ],
+      "tips": [
+        "Siempre lee: título, ejes, unidades y leyenda ANTES de responder",
+        "Correlación ≠ causalidad: que dos cosas varíen juntas no significa que una cause la otra",
+        "En Saber 11 hay muchas preguntas basadas en gráficas: practica interpretarlas"
+      ]
+    },
+    {
+      "title": "Biología: célula, genética y evolución",
+      "description": "Conceptos fundamentales de biología que aparecen frecuentemente en el Saber 11.",
+      "details": "Célula: unidad básica de la vida. Procariota (sin núcleo: bacterias) vs Eucariota (con núcleo: animales, plantas, hongos). Organelos: mitocondria (energía), ribosoma (proteínas), núcleo (ADN), cloroplasto (fotosíntesis, solo en plantas). Genética: ADN→ARN→Proteína (dogma central). Alelos dominantes y recesivos. Cuadro de Punnett para predecir herencia. Evolución: selección natural (Darwin), adaptación, especiación.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir célula procariota con eucariota",
+        "Creer que evolución significa que 'el más fuerte sobrevive' (es el más APTO al ambiente)",
+        "No entender que la mitocondria genera ATP (energía) en TODAS las células eucariotas"
+      ],
+      "tips": [
+        "Procariota = PRO=antes, sin núcleo (bacterias). Eucariota = EU=verdadero, con núcleo",
+        "Mitocondria = central eléctrica de la célula. Cloroplasto = fábrica de alimento (plantas)",
+        "Selección natural: los individuos mejor ADAPTADOS al ambiente tienen más éxito reproductivo"
+      ]
+    },
+    {
+      "title": "Química: materia, reacciones y estequiometría básica",
+      "description": "Conceptos fundamentales de química necesarios para el pensamiento científico.",
+      "details": "Materia: todo lo que tiene masa y ocupa espacio. Estados: sólido, líquido, gaseoso, plasma. Átomo: protones (+), neutrones (0), electrones (-). Tabla periódica: grupos (columnas, mismas propiedades), períodos (filas). Enlaces: iónico (metal + no metal, transferencia de e⁻), covalente (no metal + no metal, comparten e⁻). Reacciones químicas: reactivos → productos. Ley de conservación de la masa: la materia no se crea ni se destruye.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir mezcla con compuesto (mezcla se puede separar físicamente, compuesto no)",
+        "No balancear ecuaciones químicas",
+        "Confundir enlace iónico con covalente"
+      ],
+      "tips": [
+        "Iónico = transferencia de electrones (Na⁺Cl⁻). Covalente = comparten electrones (H₂O)",
+        "La tabla periódica se lee: grupo = mismas propiedades químicas, período = mismo nivel de energía",
+        "Conservación de la masa: los átomos a la izquierda de la flecha = los átomos a la derecha"
+      ]
+    },
+    {
+      "title": "Física: movimiento, fuerzas y energía",
+      "description": "Conceptos fundamentales de física para el pensamiento científico y el Saber 11.",
+      "details": "Movimiento: distancia, velocidad (d/t), aceleración (cambio de v/t). Leyes de Newton: 1) Inercia (un cuerpo en reposo tiende a permanecer en reposo). 2) F=m×a (fuerza = masa × aceleración). 3) Acción y reacción (fuerzas iguales y opuestas). Energía: cinética (movimiento, Ec=½mv²), potencial (posición, Ep=mgh). Ley de conservación: la energía no se crea ni se destruye, se transforma.",
+      "is_critical": true,
+      "common_errors": [
+        "Confundir velocidad con aceleración",
+        "Creer que un objeto en movimiento necesita fuerza constante para seguir moviéndose (1ª ley de Newton)",
+        "No entender que peso y masa son diferentes (peso = masa × gravedad)"
+      ],
+      "tips": [
+        "Velocidad = qué tan rápido (m/s). Aceleración = qué tan rápido cambia la velocidad (m/s²)",
+        "F=ma: si duplicas la masa, necesitas el doble de fuerza para la misma aceleración",
+        "Masa = cantidad de materia (kg). Peso = fuerza gravitacional (N). En la Luna pesas menos pero tu masa es igual"
+      ]
+    },
+    {
+      "title": "Ecología y medio ambiente",
+      "description": "Comprender las relaciones ecológicas, los ecosistemas y las problemáticas ambientales.",
+      "details": "Niveles de organización ecológica: individuo → población → comunidad → ecosistema → bioma → biósfera. Cadena alimentaria: productores (plantas) → consumidores primarios (herbívoros) → secundarios (carnívoros) → descomponedores. Ciclos biogeoquímicos: agua, carbono, nitrógeno. Problemáticas: cambio climático, pérdida de biodiversidad, deforestación, contaminación. Colombia: segundo país más biodiverso del mundo.",
+      "is_critical": false,
+      "common_errors": [
+        "Confundir cadena alimentaria con red trófica (la red incluye TODAS las relaciones)",
+        "No entender que los descomponedores son esenciales en el ciclo de nutrientes",
+        "Pensar que el calentamiento global solo significa 'más calor' (cambia todo el clima)"
+      ],
+      "tips": [
+        "La energía fluye en una dirección (sol→plantas→animales). Los nutrientes se RECICLAN",
+        "Colombia tiene ~10% de la biodiversidad mundial en solo 0.7% de la superficie terrestre",
+        "Efecto invernadero: natural y necesario. El problema es el EXCESO de gases de efecto invernadero"
+      ]
+    },
+    {
+      "title": "Preguntas tipo Saber 11 en ciencias naturales",
+      "description": "Practicar con los enfoques y tipos de preguntas de la prueba Saber 11 en ciencias naturales.",
+      "details": "La prueba evalúa 3 competencias: 1) Uso comprensivo del conocimiento científico: aplicar conceptos a situaciones. 2) Explicación de fenómenos: usar principios científicos para explicar. 3) Indagación: diseñar experimentos, interpretar datos, sacar conclusiones. Tipos de preguntas: interpretación de gráficas, análisis de experimentos, aplicación de conceptos a situaciones cotidianas.",
+      "is_critical": true,
+      "common_errors": [
+        "Memorizar datos sin comprender los conceptos detrás",
+        "No leer completamente el enunciado y las opciones",
+        "No aplicar el pensamiento científico a situaciones nuevas"
+      ],
+      "tips": [
+        "En Saber 11, las preguntas NO son de memoria: son de APLICAR conocimiento",
+        "Lee el enunciado completo, identifica qué competencia te están evaluando",
+        "Si hay un experimento descrito, identifica: hipótesis, variables, conclusión válida",
+        "Practica con preguntas de años anteriores del ICFES"
+      ]
+    }
+  ],
+  "warnings": [
+    {"message": "Correlación NO es causalidad: que dos variables cambien juntas no significa que una cause la otra.", "severity": "critical"},
+    {"message": "Una hipótesis científica DEBE ser verificable y falsificable experimentalmente.", "severity": "high"},
+    {"message": "En un experimento válido, solo se debe cambiar UNA variable a la vez.", "severity": "high"},
+    {"message": "La energía y la materia no se crean ni se destruyen: se transforman (leyes de conservación).", "severity": "medium"}
+  ],
+  "rules": [
+    "El método científico es un proceso sistemático: observar → preguntar → hipotetizar → experimentar → analizar → concluir",
+    "Variable independiente = la que cambias. Dependiente = la que mides. Controladas = las que mantienes iguales",
+    "Todo experimento válido necesita un grupo control como referencia",
+    "Correlación no implica causalidad",
+    "La materia no se crea ni se destruye, solo se transforma (Lavoisier)",
+    "La energía no se crea ni se destruye, solo se transforma (conservación de la energía)",
+    "La selección natural actúa sobre la variación genética: sobreviven los más APTOS al ambiente",
+    "Las gráficas siempre tienen título, ejes con nombre y unidades"
+  ],
+  "tips": [
+    "Para el Saber 11, practica interpretando gráficas: es una de las habilidades más evaluadas",
+    "Aprende a diferenciar: observación (lo que ves) vs inferencia (lo que interpretas)",
+    "Relaciona los temas de ciencias con tu vida cotidiana para entenderlos mejor",
+    "No memorices fórmulas sin entender qué significan: F=ma dice que fuerza depende de masa y aceleración",
+    "Las ciencias naturales del Saber 11 integran biología, química y física: no las estudies por separado",
+    "Lee artículos de divulgación científica: te entrena para la lectura de enunciados largos",
+    "Cuando te den un experimento, dibuja un diagrama: te ayuda a visualizar las variables",
+    "Practica explicar fenómenos cotidianos con ciencia: ¿por qué el cielo es azul? ¿por qué flota el hielo?"
+  ],
+  "scenarios": [
+    {
+      "title": "Diseño de un experimento sobre crecimiento de plantas",
+      "description": "Un estudiante quiere investigar si el tipo de agua afecta el crecimiento de las plantas.",
+      "initial_situation": "María quiere saber si las plantas crecen más con agua de grifo, agua destilada o agua con nutrientes. Tiene 15 plantas iguales de frijol, 3 tipos de agua y 5 semanas para el experimento.",
+      "expected_actions": [
+        "Identificar la variable independiente: tipo de agua",
+        "Identificar la variable dependiente: crecimiento de la planta (altura en cm)",
+        "Identificar variables controladas: misma especie, misma cantidad de luz, misma tierra, mismo volumen de agua",
+        "Formar 3 grupos de 5 plantas cada uno",
+        "El grupo con agua de grifo puede servir como control"
+      ],
+      "correct_outcome": "Diseño: 3 grupos de 5 plantas. Grupo 1: agua de grifo (control). Grupo 2: agua destilada. Grupo 3: agua con nutrientes. Medir altura cada semana durante 5 semanas. Misma luz, tierra y cantidad de agua para todos. Promediar las 5 plantas de cada grupo para mayor confiabilidad.",
+      "common_mistakes": ["Usar solo 1 planta por grupo (no hay réplicas)", "Cambiar varias cosas a la vez", "No tener grupo control"],
+      "difficulty": "medium"
+    },
+    {
+      "title": "Interpretación de una gráfica de población",
+      "description": "Analizar una gráfica de crecimiento poblacional de conejos en una isla.",
+      "initial_situation": "Una gráfica muestra: Año 1-3: crecimiento rápido de 10 a 200 conejos. Año 3-5: crecimiento lento de 200 a 250. Año 5-7: estabilización en ~250. Año 8: caída brusca a 100. Pregunta: ¿Qué explica cada fase?",
+      "expected_actions": [
+        "Fase 1 (crecimiento rápido): recursos abundantes, poca competencia",
+        "Fase 2 (desaceleración): recursos empiezan a escasear, aumenta competencia",
+        "Fase 3 (estabilización): capacidad de carga del ecosistema (~250)",
+        "Fase 4 (caída): posible enfermedad, depredador o desastre natural"
+      ],
+      "correct_outcome": "El crecimiento sigue un modelo logístico: crece exponencialmente al inicio, se desacelera cuando los recursos se limitan, y se estabiliza en la capacidad de carga (K≈250). La caída en el año 8 sugiere un evento catastrófico (enfermedad, depredador introducido o cambio ambiental drástico).",
+      "common_mistakes": ["No reconocer la capacidad de carga", "Pensar que la caída es 'normal'", "No relacionar el crecimiento con la disponibilidad de recursos"],
+      "difficulty": "medium"
+    },
+    {
+      "title": "Herencia genética con cuadro de Punnett",
+      "description": "Predecir la probabilidad de un rasgo hereditario usando un cruce genético.",
+      "initial_situation": "En una especie de flores, el color rojo (R) es dominante sobre el blanco (r). Se cruzan dos plantas heterocigotas (Rr × Rr). ¿Qué proporción de la descendencia será roja y qué proporción será blanca?",
+      "expected_actions": [
+        "Armar el cuadro de Punnett: Rr × Rr",
+        "Resultados: RR, Rr, Rr, rr",
+        "Proporción genotípica: 1 RR : 2 Rr : 1 rr",
+        "Proporción fenotípica: 3 rojas : 1 blanca (75% roja, 25% blanca)"
+      ],
+      "correct_outcome": "Cuadro de Punnett: |R|r| × |R|r| → RR(roja), Rr(roja), Rr(roja), rr(blanca). Proporción fenotípica: 3 rojas (75%) : 1 blanca (25%). Solo la combinación rr producirá flores blancas porque ambos alelos deben ser recesivos para que se exprese el fenotipo recesivo.",
+      "common_mistakes": ["Pensar que Rr es blanca (R es dominante, una copia basta para expresarse)", "No distinguir genotipo de fenotipo", "Olvidar que la proporción 3:1 es para cruces de heterocigotos"],
+      "difficulty": "medium"
+    }
+  ],
+  "faq": [
+    {"question": "¿Qué diferencia hay entre teoría y ley en ciencia?", "answer": "Ley: describe QUÉ ocurre (patrón observado). Ejemplo: Ley de gravedad (los objetos se atraen). Teoría: explica POR QUÉ ocurre, con evidencia amplia. Ejemplo: Teoría de la evolución (explica cómo cambian las especies). Una teoría NO es 'una ley sin comprobar'. Ambas están respaldadas por evidencia, pero cumplen funciones diferentes.", "category": "metodo_cientifico", "difficulty": "medium"},
+    {"question": "¿Cómo identifico las variables en un experimento?", "answer": "Pregúntate: 1) ¿Qué estoy cambiando a propósito? → Variable INDEPENDIENTE. 2) ¿Qué estoy midiendo como resultado? → Variable DEPENDIENTE. 3) ¿Qué mantengo igual para que sea justo? → Variables CONTROLADAS. Ejemplo: Si pruebo fertilizantes, VI=tipo de fertilizante, VD=crecimiento de la planta, controladas=luz, agua, tierra.", "category": "metodo_cientifico", "difficulty": "easy"},
+    {"question": "¿Qué es la fotosíntesis?", "answer": "Es el proceso por el cual las plantas convierten energía luminosa en energía química (glucosa). Ecuación simplificada: CO₂ + H₂O + luz solar → C₆H₁₂O₆ + O₂. Ocurre en los cloroplastos. Las plantas absorben dióxido de carbono y agua, y producen glucosa (su alimento) y oxígeno (que nosotros respiramos). Sin fotosíntesis, no habría oxígeno ni alimento en la Tierra.", "category": "biologia", "difficulty": "easy"},
+    {"question": "¿Cuál es la diferencia entre célula animal y vegetal?", "answer": "Ambas son eucariotas, pero la célula vegetal tiene: 1) Pared celular (rigidez). 2) Cloroplastos (fotosíntesis). 3) Vacuola central grande (almacenamiento). La célula animal NO tiene estos tres, pero tiene centriolos (división celular) y lisosomas más desarrollados. Ambas tienen: membrana, núcleo, mitocondrias, ribosomas, retículo endoplasmático y aparato de Golgi.", "category": "biologia", "difficulty": "easy"},
+    {"question": "¿Qué es el pH?", "answer": "Es una escala del 0 al 14 que mide qué tan ácido o básico es una sustancia. pH < 7 = ácido (limón ≈ 2, vinagre ≈ 3). pH = 7 = neutro (agua pura). pH > 7 = básico/alcalino (jabón ≈ 9, lejía ≈ 13). Cada número en la escala es 10 veces más que el anterior (escala logarítmica). Nuestro estómago tiene pH ≈ 2 (muy ácido), nuestra sangre pH ≈ 7.4 (ligeramente básica).", "category": "quimica", "difficulty": "easy"},
+    {"question": "¿Qué son las leyes de Newton?", "answer": "1ª Ley (Inercia): Un cuerpo en reposo permanece en reposo, y uno en movimiento sigue en movimiento, a menos que actúe una fuerza. 2ª Ley (F=ma): La aceleración de un objeto es proporcional a la fuerza aplicada e inversamente proporcional a su masa. 3ª Ley (Acción-Reacción): A toda acción corresponde una reacción igual y opuesta. Ejemplo: al caminar, empujas el suelo hacia atrás y el suelo te empuja hacia adelante.", "category": "fisica", "difficulty": "easy"},
+    {"question": "¿Qué es el cambio climático?", "answer": "Es el cambio a largo plazo en los patrones de temperatura y clima de la Tierra. Causa principal actual: emisión excesiva de gases de efecto invernadero (CO₂, metano) por actividades humanas (combustibles fósiles, deforestación, ganadería). Consecuencias: aumento de temperatura global, derretimiento de glaciares, aumento del nivel del mar, eventos climáticos extremos. Colombia es especialmente vulnerable por su biodiversidad y ecosistemas de páramo.", "category": "ecologia", "difficulty": "medium"},
+    {"question": "¿Qué diferencia hay entre mitosis y meiosis?", "answer": "Mitosis: división celular que produce 2 células IDÉNTICAS con el mismo número de cromosomas (2n). Función: crecimiento y reparación. Meiosis: produce 4 células DIFERENTES con la MITAD de cromosomas (n). Función: crear gametos (óvulos y espermatozoides). La meiosis permite la variabilidad genética gracias al entrecruzamiento y la distribución al azar de cromosomas.", "category": "biologia", "difficulty": "medium"},
+    {"question": "¿Cómo se lee una tabla periódica?", "answer": "Cada elemento tiene: símbolo (Fe), número atómico (26, arriba = # protones), masa atómica (55.85, abajo). Grupos (columnas verticales, 18): elementos con propiedades similares. Grupo 1=metales alcalinos, Grupo 17=halógenos, Grupo 18=gases nobles. Períodos (filas horizontales, 7): mismo nivel de energía. Metales a la izquierda, no metales a la derecha, metaloides en la frontera.", "category": "quimica", "difficulty": "easy"},
+    {"question": "¿Qué es la selección natural?", "answer": "Es el mecanismo principal de la evolución propuesto por Darwin. Funciona así: 1) Hay variación genética en una población. 2) Algunos individuos tienen rasgos que les dan ventaja en su ambiente. 3) Esos individuos sobreviven y se reproducen más (aptitud). 4) Con el tiempo, los rasgos ventajosos se vuelven más comunes. NO es 'el más fuerte sobrevive', es 'el más APTO al ambiente sobrevive'. Ejemplo: polillas oscuras en árboles con hollín de la revolución industrial.", "category": "biologia", "difficulty": "medium"},
+    {"question": "¿Cómo me preparo para ciencias naturales en el Saber 11?", "answer": "1) Practica interpretación de gráficas y tablas (es lo más evaluado). 2) Entiende el método científico y el diseño experimental. 3) Repasa conceptos clave de biología, química y física (no memorices, entiende). 4) Resuelve preguntas de años anteriores del ICFES. 5) Relaciona conceptos con la vida cotidiana. 6) Presta especial atención a temas ambientales y ecológicos. La prueba evalúa pensamiento, no memoria.", "category": "saber11", "difficulty": "easy"}
+  ]
+}
