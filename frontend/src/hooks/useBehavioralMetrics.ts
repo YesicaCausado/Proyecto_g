@@ -5,8 +5,15 @@
  *   Patrón 2 - Secuencia de Decisión: corrections (backspace count), depth
  *   Patrones 3-4 - Facial/Voz: placeholders (datos opcionales desde cámara/micrófono)
  *   Patrón 5 - Predicción de Error: calculado en backend con los anteriores
+ *
+ * Novedad Sprint 2:
+ *   - isLongPause: true cuando el usuario lleva >LONG_PAUSE_MS sin escribir nada
+ *   - realTimePauseMs: duración actual de la pausa (actualizado cada segundo)
  */
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
+
+/** Umbral para considerar que el estudiante está bloqueado (3 segundos) */
+const LONG_PAUSE_MS = 3000;
 
 export interface BehavioralMetrics {
   response_time_ms: number;   // Tiempo desde respuesta del bot hasta envío del usuario
@@ -21,6 +28,10 @@ export interface MetricsTracker {
   onInputChange: (val: string, prev: string) => void; // Trackea correcciones
   getMetrics: (finalMessage: string) => BehavioralMetrics;
   reset: () => void;
+  /** true cuando el usuario lleva ≥ LONG_PAUSE_MS sin escribir tras recibir mensaje */
+  isLongPause: boolean;
+  /** duración de pausa actual en ms (se actualiza en tiempo real cada 500ms) */
+  realTimePauseMs: number;
 }
 
 export function useBehavioralMetrics(): MetricsTracker {
@@ -31,18 +42,55 @@ export function useBehavioralMetrics(): MetricsTracker {
   const hasStartedTyping = useRef<boolean>(false);
   const lastLength = useRef<number>(0);
 
+  // Estado de pausa en tiempo real
+  const [isLongPause, setIsLongPause] = useState(false);
+  const [realTimePauseMs, setRealTimePauseMs] = useState(0);
+  const pauseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Ticker que actualiza la pausa cada 500ms mientras el usuario no ha escrito
+  useEffect(() => {
+    return () => {
+      if (pauseIntervalRef.current) clearInterval(pauseIntervalRef.current);
+    };
+  }, []);
+
+  const startPauseTicker = useCallback(() => {
+    if (pauseIntervalRef.current) clearInterval(pauseIntervalRef.current);
+    pauseIntervalRef.current = setInterval(() => {
+      if (botResponseTime.current === 0 || hasStartedTyping.current) {
+        setIsLongPause(false);
+        setRealTimePauseMs(0);
+        clearInterval(pauseIntervalRef.current!);
+        pauseIntervalRef.current = null;
+        return;
+      }
+      const elapsed = Date.now() - botResponseTime.current;
+      setRealTimePauseMs(elapsed);
+      setIsLongPause(elapsed >= LONG_PAUSE_MS);
+    }, 500);
+  }, []);
+
   const onBotMessageReceived = useCallback(() => {
     botResponseTime.current = Date.now();
     hasStartedTyping.current = false;
     typingStartTime.current = 0;
     corrections.current = 0;
     lastLength.current = 0;
-  }, []);
+    setIsLongPause(false);
+    setRealTimePauseMs(0);
+    startPauseTicker();
+  }, [startPauseTicker]);
 
   const onUserStartedTyping = useCallback(() => {
     if (!hasStartedTyping.current) {
       typingStartTime.current = Date.now();
       hasStartedTyping.current = true;
+      // Detener el ticker: el usuario ya empezó a escribir
+      setIsLongPause(false);
+      if (pauseIntervalRef.current) {
+        clearInterval(pauseIntervalRef.current);
+        pauseIntervalRef.current = null;
+      }
     }
   }, []);
 
@@ -88,7 +136,21 @@ export function useBehavioralMetrics(): MetricsTracker {
     corrections.current = 0;
     hasStartedTyping.current = false;
     lastLength.current = 0;
+    setIsLongPause(false);
+    setRealTimePauseMs(0);
+    if (pauseIntervalRef.current) {
+      clearInterval(pauseIntervalRef.current);
+      pauseIntervalRef.current = null;
+    }
   }, []);
 
-  return { onBotMessageReceived, onUserStartedTyping, onInputChange, getMetrics, reset };
+  return {
+    onBotMessageReceived,
+    onUserStartedTyping,
+    onInputChange,
+    getMetrics,
+    reset,
+    isLongPause,
+    realTimePauseMs,
+  };
 }

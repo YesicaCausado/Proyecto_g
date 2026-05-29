@@ -1065,16 +1065,20 @@ class MultimodalCognitiveEngine:
         self.facial_analyzer = FacialMicroexpressionAnalyzer()
         self.voice_analyzer = VoiceProsodyAnalyzer()
         self.error_predictor = ErrorPredictionAnalyzer()
-        # Pesos base (se ajustan dinámicamente)
+        # Pesos base (se ajustan dinámicamente según confianza por modalidad)
+        # P3 facial y P4 voz tienen más peso: cuando están activos son señales
+        # directas de emoción, más fiables que los patrones de teclado solos.
         self.modality_weights: Dict[str, float] = {
-            ModalityType.INTERACTION_RHYTHM.value: 0.30,
-            ModalityType.DECISION_SEQUENCE.value: 0.25,
-            ModalityType.FACIAL_MICROEXPRESSION.value: 0.20,
-            ModalityType.VOICE_PROSODY.value: 0.10,
-            ModalityType.ERROR_PREDICTION.value: 0.15,
+            ModalityType.INTERACTION_RHYTHM.value:    0.27,  # P1
+            ModalityType.DECISION_SEQUENCE.value:     0.22,  # P2
+            ModalityType.FACIAL_MICROEXPRESSION.value: 0.27, # P3 ↑ (era 0.20)
+            ModalityType.VOICE_PROSODY.value:         0.14,  # P4 ↑ (era 0.10)
+            ModalityType.ERROR_PREDICTION.value:      0.10,  # P5
         }
         self.state_history: List[CognitiveStateResult] = []
-        self.temporal_smoothing = self.config.get("temporal_smoothing", 0.3)
+        # Suavizado temporal: 0.15 permite que los cambios de estado sean visibles
+        # desde la primera sesión sin perder estabilidad entre eventos consecutivos
+        self.temporal_smoothing = self.config.get("temporal_smoothing", 0.15)
         self._previous_scores: Optional[Dict[str, float]] = None
 
     # --- Retrocompatibilidad con motor anterior ---
@@ -1250,7 +1254,8 @@ class MultimodalCognitiveEngine:
                scores.get("curiosity", 0) * 0.8 + scores.get("normal", 0) * 0.5)
         neg = (scores.get("fatigue", 0) * 0.8 + scores.get("frustration", 0) * 0.9 +
                scores.get("overload", 0) * 0.7 + scores.get("doubt", 0) * 0.3)
-        return max(0, min(1, (pos - neg + 0.5) * attention * (1 - err_risk * 0.3)))
+        # Asegurar que siempre devuelve float (no int 1 cuando el resultado es exactamente 1.0)
+        return float(max(0.0, min(1.0, (pos - neg + 0.5) * attention * (1 - err_risk * 0.3))))
 
     def _recommendations(self, state: CognitiveStateEnum,
                           scores: Dict, insights: List[str]) -> List[str]:
@@ -1295,7 +1300,8 @@ class MultimodalCognitiveEngine:
 
     def _suggest_adaptation(self, state: CognitiveStateEnum,
                              confidence: float) -> Tuple[bool, Optional[str]]:
-        if confidence < 0.5:
+        # Umbral 0.4 para detectar cambios de estado con menos eventos (sesiones cortas)
+        if confidence < 0.4:
             return False, None
         m = {
             CognitiveStateEnum.FATIGUE: (True, "easy"),

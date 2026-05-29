@@ -333,7 +333,20 @@ export default function ChatPage() {
 
         {/* Input */}
         <div className="bg-white border-t border-gray-200 px-4 py-3 flex-shrink-0">
-          <div className="flex items-center gap-2 max-w-4xl mx-auto">
+          {/* Hint de pausa larga: el motor detecta que el estudiante está bloqueado */}
+        {metrics.isLongPause && sessionActive && !sending && (
+          <div className="px-4 pb-1 max-w-4xl mx-auto w-full animate-fadeIn">
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
+              <span className="text-base">🤔</span>
+              <span>
+                <strong>¿Necesitas ayuda?</strong> Llevas{" "}
+                {Math.round(metrics.realTimePauseMs / 1000)}s sin responder.
+                Escribe <em>"no entiendo"</em> o <em>"dame una pista"</em> y el tutor te guía.
+              </span>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center gap-2 max-w-4xl mx-auto">
             <input
               ref={inputRef}
               type="text"

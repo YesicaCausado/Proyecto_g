@@ -71,7 +71,13 @@ class GroqProvider:
                 )
                 response.raise_for_status()
                 data = response.json()
-                return data["choices"][0]["message"]["content"]
+                content = data["choices"][0]["message"]["content"]
+                # Qwen3 y modelos de razonamiento incluyen <think>...</think>
+                # antes de la respuesta real → extraer solo la parte final
+                if content and "<think>" in content:
+                    import re
+                    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                return content or None
         except httpx.TimeoutException:
             logger.warning("Groq: Timeout en la petición")
             return None

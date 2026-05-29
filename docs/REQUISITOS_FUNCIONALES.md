@@ -1,81 +1,159 @@
-# 📋 Requisitos Funcionales — NeuroLearn AI
-## Organizados por Actor del Sistema
+# 📋 Requisitos Funcionales y No Funcionales — NeuroLearn AI# 📋 Requisitos Funcionales — NeuroLearn AI
+
+## Arquitectura SaaS (Business-to-Business-to-Consumer)## Organizados por Actor del Sistema
+
 ### Plataforma de Aprendizaje Neuro-Digital con IA Adaptativa
 
-**Fecha:** Marzo 2026  
-**Versión:** 1.0  
+**Fecha:** Mayo 2026  
+
+**Enfoque:** Habilidades Transversales para Bachillerato en Colombia (Saber 11)  **Fecha:** Marzo 2026  
+
+**Modelo de Negocio:** Institucional (Colegios adquieren cupos)  **Versión:** 1.0  
+
 **Enfoque:** 5 Habilidades Transversales para Bachillerato en Colombia  
 
 ---
 
+---
+
+## 👤 1. Requisitos Funcionales por Actor del Sistema
+
 ## 🎯 CONTEXTO
 
-NeuroLearn AI se enfoca en las **5 habilidades transversales** donde los bachilleres colombianos tienen peor rendimiento según las pruebas Saber 11 (ICFES):
+### 👑 Actor 1: Súper Profesor (Rector / Administrador Institucional)
 
-| # | Habilidad Transversal | Problema Saber 11 |
-|---|---|---|
-| 1 | Pensamiento Lógico-Matemático | 60% en niveles 1-2 |
-| 2 | Comprensión Lectora y Pensamiento Crítico | Baja inferencia y análisis |
-| 3 | Inglés Comunicativo | 75% en nivel A- (pre-básico) |
-| 4 | Competencias Ciudadanas y Sociales | No comprenden democracia ni derechos |
-| 5 | Pensamiento Científico | No aplican método científico |
+Son los directivos del colegio que compran la plataforma de NeuroLearn AI y gestionan los cupos.NeuroLearn AI se enfoca en las **5 habilidades transversales** donde los bachilleres colombianos tienen peor rendimiento según las pruebas Saber 11 (ICFES):
 
----
 
-## 👥 ACTORES DEL SISTEMA
+
+| ID | Requisito | Descripción | Prioridad || # | Habilidad Transversal | Problema Saber 11 |
+
+|---|---|---|---||---|---|---|
+
+| **RF-SP01** | **Autenticación Institucional** | El Súper Profesor debe poder iniciar y cerrar sesión mediante un número de documento y una contraseña asignada por el sistema central al momento de la compra. | 🔴 Alta || 1 | Pensamiento Lógico-Matemático | 60% en niveles 1-2 |
+
+| **RF-SP02** | **Gestión de Docentes** | Debe poder crear, editar, bloquear y visualizar cuentas de Profesores, el sistema asignará automáticamente credenciales temporales. | 🔴 Alta || 2 | Comprensión Lectora y Pensamiento Crítico | Baja inferencia y análisis |
+
+| **RF-SP03** | **Gestión de Cupos (Estudiantes)** | Debe poder crear cuentas de Estudiantes validando estrictamente el límite de cupos adquiridos por la institución (ej. bloquear registro si intenta añadir al estudiante 501 teniendo 500 licencias). | 🔴 Alta || 3 | Inglés Comunicativo | 75% en nivel A- (pre-básico) |
+
+| **RF-SP04** | **Carga Masiva de Usuarios** | Debe poder cargar masivamente estudiantes y profesores a través de un archivo estándar (CSV o Excel). | 🟡 Media || 4 | Competencias Ciudadanas y Sociales | No comprenden democracia ni derechos |
+
+| **RF-SP05** | **Dashboard Institucional** | Debe visualizar un panel con métricas generales del colegio: cantidad de licencias usadas vs disponibles, niveles de interacción global y reportes de rendimiento macro en las 5 áreas ICFES. | 🔴 Alta || 5 | Pensamiento Científico | No aplican método científico |
+
+
+
+------
+
+
+
+### 👨‍🏫 Actor 2: Profesor## 👥 ACTORES DEL SISTEMA
+
+Son los guías tácticos que crean el material, gestionan a los estudiantes dentro del aula y hacen seguimiento.
 
 | Actor | Descripción |
-|---|---|
-| **Estudiante** | Alumno de bachillerato que aprende mediante el tutor IA |
-| **Profesor** | Docente que crea contenido, gestiona estudiantes y evalúa progreso |
-| **Sistema IA** | Motor neuroconductual + chatbot adaptativo (actor automatizado) |
-| **Administrador** | Gestiona la plataforma, usuarios y contenido global |
 
----
+| ID | Requisito | Descripción | Prioridad ||---|---|
 
-## 📌 NOMENCLATURA
+|---|---|---|---|| **Estudiante** | Alumno de bachillerato que aprende mediante el tutor IA |
 
-- **RF-XX-YYY**: Requisito Funcional - [Actor] - [Número]
+| **RF-PR01** | **Autenticación Segura** | El profesor debe iniciar sesión con su documento y contraseña temporal. El sistema debe forzarle a cambiar la contraseña en su primer ingreso. | 🔴 Alta || **Profesor** | Docente que crea contenido, gestiona estudiantes y evalúa progreso |
+
+| **RF-PR02** | **Gestión de Aulas/Grupos** | Debe poder crear grupos (ej. "Matemáticas 10-A"). El sistema debe generarle automáticamente un Código de Invitación Alfanumérico (ej. "MAT-10A-X89"). | 🔴 Alta || **Sistema IA** | Motor neuroconductual + chatbot adaptativo (actor automatizado) |
+
+| **RF-PR03** | **Creador de Bots Expertos** | Debe poder crear y configurar sus propios Bots de tutoría, especificando un nombre y una personalidad (estricto, socrático, amigable, etc.). | 🔴 Alta || **Administrador** | Gestiona la plataforma, usuarios y contenido global |
+
+| **RF-PR04** | **Carga de Conocimiento (RAG)** | Al crear un Bot, el profesor debe poder subir documentos PDF/TXT para que el Bot restrinja y base sus respuestas estrictamente en ese contenido institucional. | 🔴 Alta |
+
+| **RF-PR05** | **Visibilidad de Bots** | Debe poder configurar si los bots creados son de acceso público (para todo el colegio) o restringidos (solo para alumnos con su código de clase). | 🟡 Media |---
+
+| **RF-PR06** | **Monitoreo de Neuro-Alertas** | Debe tener acceso a un panel de alertas tempranas que le notifique qué estudiantes de sus grupos presentan altos niveles de frustración, fatiga o riesgo de deserción en tiempo real. | 🔴 Alta |
+
+| **RF-PR07** | **Análisis de Progreso** | Debe poder visualizar el progreso individual de calificaciones y mejora académica detallada por cada estudiante. | 🔴 Alta |## 📌 NOMENCLATURA
+
+
+
+---- **RF-XX-YYY**: Requisito Funcional - [Actor] - [Número]
+
   - **ES** = Estudiante
-  - **PR** = Profesor
-  - **IA** = Sistema IA
+
+### 🎓 Actor 3: Estudiante  - **PR** = Profesor
+
+El usuario final que interactúa con la plataforma para su propio aprendizaje activo.  - **IA** = Sistema IA
+
   - **AD** = Administrador
-- **Prioridad:** 🔴 Alta (MVP) | 🟡 Media | 🟢 Baja (Fase futura)
 
----
+| ID | Requisito | Descripción | Prioridad |- **Prioridad:** 🔴 Alta (MVP) | 🟡 Media | 🟢 Baja (Fase futura)
 
----
+|---|---|---|---|
 
-## 👨‍🎓 ACTOR 1: ESTUDIANTE
+| **RF-ES01** | **Autenticación Forzada** | El estudiante debe iniciar sesión con su documento y contraseña temporal, cambiando la misma obligatoriamente en su primer acceso por seguridad. | 🔴 Alta |---
+
+| **RF-ES02** | **Vincular Grupo (Auto-matriculación)** | Debe poder unirse de forma autónoma a la clase de un profesor introduciendo el Código Alfanumérico que este le proporcione. | 🔴 Alta |
+
+| **RF-ES03** | **Perfil Configurable** | Debe poder editar información básica permitida, como subir una foto de perfil o elegir un seudónimo. | 🟡 Media |---
+
+| **RF-ES04** | **Interacción en Neuro-Chat** | Debe poder conversar libre y continuamente con los Bots Expertos de las 5 habilidades transversales mediante comandos de texto naturales (NLP). | 🔴 Alta |
+
+| **RF-ES05** | **Visualización Gamificada** | Debe poder visualizar sus métricas de progreso (Gauges/medidores de fluidez, atención y dominio), así como sus "Días de Racha" en un Dashboard personal y motivador. | 🔴 Alta |## 👨‍🎓 ACTOR 1: ESTUDIANTE
+
+| **RF-ES06** | **Historial y Trazabilidad** | Debe tener la capacidad de leer el historial de chat de las tutorías pasadas para repasar explicaciones emitidas por la IA en sesiones anteriores. | 🟡 Media |
 
 ### 1.1 Autenticación y Perfil
 
+---
+
 | ID | Requisito | Descripción | Prioridad |
-|---|---|---|---|
-| RF-ES-001 | Registro de cuenta | El estudiante debe poder registrarse proporcionando: nombre completo, correo electrónico, nombre de usuario, contraseña y grado escolar. | 🔴 Alta |
+
+### 🧠 Actor 4: Sistema Base (Motor Neuroconductual IA / Background)|---|---|---|---|
+
+Operaciones críticas automatizadas en el backend sin intervención humana.| RF-ES-001 | Registro de cuenta | El estudiante debe poder registrarse proporcionando: nombre completo, correo electrónico, nombre de usuario, contraseña y grado escolar. | 🔴 Alta |
+
 | RF-ES-002 | Inicio de sesión | El estudiante debe poder iniciar sesión con su nombre de usuario/correo y contraseña. El sistema genera un token JWT. | 🔴 Alta |
-| RF-ES-003 | Ver perfil | El estudiante debe poder ver su perfil con: datos personales, nivel actual por habilidad, total de sesiones y tiempo acumulado de estudio. | 🔴 Alta |
-| RF-ES-004 | Editar perfil | El estudiante debe poder actualizar su nombre, correo y contraseña. | 🟡 Media |
-| RF-ES-005 | Recuperar contraseña | El estudiante debe poder solicitar recuperación de contraseña mediante correo electrónico. | 🟢 Baja |
 
-### 1.2 Selección de Habilidad y Aprendizaje
+| ID | Requisito | Descripción | Prioridad || RF-ES-003 | Ver perfil | El estudiante debe poder ver su perfil con: datos personales, nivel actual por habilidad, total de sesiones y tiempo acumulado de estudio. | 🔴 Alta |
 
-| ID | Requisito | Descripción | Prioridad |
+|---|---|---|---|| RF-ES-004 | Editar perfil | El estudiante debe poder actualizar su nombre, correo y contraseña. | 🟡 Media |
+
+| **RF-SY01** | **Captura de Dinámica de Teclado** | El sistema debe registrar silenciosamente métricas de uso de teclado del estudiante (tiempo de pausa desde que el bot formula pregunta, velocidad en CPM y conteo de retrocesos/correcciones). | 🔴 Alta || RF-ES-005 | Recuperar contraseña | El estudiante debe poder solicitar recuperación de contraseña mediante correo electrónico. | 🟢 Baja |
+
+| **RF-SY02** | **Captura Visual y Sonora** | El sistema debe capturar microexpresiones (cámara) y prosodia (micrófono) del estudiante si éste concede el permiso. | 🟡 Media |
+
+| **RF-SY03** | **Fusión Multimodal Bayesiana** | El Motor Cognitivo debe procesar y unificar los datos conductuales recopilados para inferir un estado neurocognitivo (Ej: Fluidez, Duda, Fatiga). | 🔴 Alta |### 1.2 Selección de Habilidad y Aprendizaje
+
+| **RF-SY04** | **Ajuste Dinámico de Dificultad** | El Chatbot debe recibir una señal del sistema que le obligue a simplificar o complejizar la pedagogía dependiendo del estado de frustración o dominio inferido del estudiante. | 🔴 Alta |
+
+| **RF-SY05** | **Cadena de Intercambio IA (Fallback)** | El AI Manager debe intentar generar respuesta en un proveedor primario (ej. Groq / LLaMA 3) y, si ocurre un Timeout o fallo de API, iterar automáticamente a un proveedor de respaldo (Gemini / Local). | 🔴 Alta || ID | Requisito | Descripción | Prioridad |
+
 |---|---|---|---|
-| RF-ES-010 | Ver catálogo de habilidades | El estudiante debe ver las 5 habilidades transversales disponibles con: nombre, descripción, icono, su nivel actual y progreso en cada una. | 🔴 Alta |
-| RF-ES-011 | Seleccionar habilidad | El estudiante debe poder seleccionar una habilidad para iniciar una sesión de aprendizaje. | 🔴 Alta |
+
+---| RF-ES-010 | Ver catálogo de habilidades | El estudiante debe ver las 5 habilidades transversales disponibles con: nombre, descripción, icono, su nivel actual y progreso en cada una. | 🔴 Alta |
+
+---| RF-ES-011 | Seleccionar habilidad | El estudiante debe poder seleccionar una habilidad para iniciar una sesión de aprendizaje. | 🔴 Alta |
+
 | RF-ES-012 | Ver bots disponibles | El estudiante debe poder ver los bots de tutoría disponibles para la habilidad seleccionada (públicos + los asignados por su profesor). | 🔴 Alta |
-| RF-ES-013 | Iniciar sesión de aprendizaje | El sistema debe iniciar una sesión con el tutor IA, registrando: usuario, habilidad, bot seleccionado, dificultad inicial y hora de inicio. | 🔴 Alta |
+
+## ⚙️ 2. Requisitos No Funcionales (Atributos de Calidad y Restricciones)| RF-ES-013 | Iniciar sesión de aprendizaje | El sistema debe iniciar una sesión con el tutor IA, registrando: usuario, habilidad, bot seleccionado, dificultad inicial y hora de inicio. | 🔴 Alta |
+
 | RF-ES-014 | Recibir diagnóstico inicial | Al iniciar una habilidad por primera vez, el tutor IA debe realizar un diagnóstico breve (3-5 preguntas) para determinar el nivel inicial del estudiante. | 🔴 Alta |
 
-### 1.3 Interacción con el Tutor IA (Chat Adaptativo)
+| ID | Requisito | Descripción Técnica y Justificación |
 
-| ID | Requisito | Descripción | Prioridad |
-|---|---|---|---|
-| RF-ES-020 | Enviar mensajes al tutor | El estudiante debe poder enviar mensajes de texto al tutor IA dentro de la sesión de aprendizaje. | 🔴 Alta |
-| RF-ES-021 | Recibir explicaciones | El tutor IA debe explicar los temas paso a paso, con ejemplos, analogías y tips, adaptados al nivel del estudiante. | 🔴 Alta |
-| RF-ES-022 | Recibir evaluaciones automáticas | Después de explicar un tema, el tutor IA debe evaluar automáticamente al estudiante con preguntas, quizzes o ejercicios prácticos. | 🔴 Alta |
-| RF-ES-023 | Recibir retroalimentación inmediata | Tras responder una evaluación, el estudiante debe recibir retroalimentación indicando si su respuesta es correcta/incorrecta y por qué. | 🔴 Alta |
+|---|---|---|### 1.3 Interacción con el Tutor IA (Chat Adaptativo)
+
+| **RNF-01** | **Privacidad y Ley Habeas Data** | El sistema **no debe almacenar** videos, fotos, ni audios en bruto del estudiante en el servidor central. Todo procesamiento facial y vocal debe hacerse localmente en la memoria temporal del `Frontend` para extraer únicamente metadatos numéricos (ej. `atención_score = 0.82`), asegurando anonimización y protegiendo a menores de edad bajo las leyes colombianas. |
+
+| **RNF-02** | **Arquitectura Híbrida / PWA** | El aplicativo de interfaz (Frontend) debe empaquetarse como una Progressive Web App (PWA) con diseño plenamente *responsive*. Esto es mandatorio para funcionar correctamente en tablets de educación pública, móviles gama baja y PCs con redes inestables o variadas. || ID | Requisito | Descripción | Prioridad |
+
+| **RNF-03** | **Latencia y Rendimiento en IA** | El tiempo de demora sistémica desde que el usuario oprime "Enviar" hasta que la IA comienza la emisión en "Streaming" de su respuesta no debe exceder de **2.5 segundos** con buena conexión, de lo contrario la ilusión conversacional decae. ||---|---|---|---|
+
+| **RNF-04** | **Segregación de Entidades (Multi-Tenant)** | La Base de Datos (SQLAlchemy) debe estar diseñada logica y restrictivamente para separar Colegios. Ningún Súper Profesor debe poder acceder o alterar por endpoint (API) la base de datos de los estudiantes de otra institución educativa paralela. || RF-ES-020 | Enviar mensajes al tutor | El estudiante debe poder enviar mensajes de texto al tutor IA dentro de la sesión de aprendizaje. | 🔴 Alta |
+
+| **RNF-05** | **Disponibilidad Tolerante a Fallos (99.9%)** | Si el servidor principal de IA o la red local colombiana experimentan bloqueos severos, la interfaz del estudiante nunca debe congelarse o mandar "pantallas blancas"; siempre debe proveer alertas asincrónicas de *conexión perdida* de forma amigable (Offline UI). || RF-ES-021 | Recibir explicaciones | El tutor IA debe explicar los temas paso a paso, con ejemplos, analogías y tips, adaptados al nivel del estudiante. | 🔴 Alta |
+
+| **RNF-06** | **Seguridad Infranqueable de Contraseñas** | Bajo ningún motivo las contraseñas temporales ni reales deben guardarse en texto plano en la Base de Datos SQLite/PostgreSQL. Siempre deben pasar por un cifrado *hash* irreversible supervisado por Passlib/Bcrypt. || RF-ES-022 | Recibir evaluaciones automáticas | Después de explicar un tema, el tutor IA debe evaluar automáticamente al estudiante con preguntas, quizzes o ejercicios prácticos. | 🔴 Alta |
+
+| **RNF-07** | **Restricción de Stack Tecnológico** | El `Backend` debe programarse estrictamente bajo el framework **FastAPI / Python (>=3.11)** para asegurar un manejo nativo excelente a hilos paralelos de IA y Websockets. El `Frontend` debe escribirse en **Vite + React (TypeScript)** para controlar la manipulación rigurosa del flujo DOM durante el enganche de Webcams y canvas asincrónicos. || RF-ES-023 | Recibir retroalimentación inmediata | Tras responder una evaluación, el estudiante debe recibir retroalimentación indicando si su respuesta es correcta/incorrecta y por qué. | 🔴 Alta |
+
 | RF-ES-024 | Recibir refuerzo en debilidades | Cuando el estudiante falla en un tema, el tutor IA debe reforzar ese tema específico antes de avanzar, con explicación simplificada y ejemplos adicionales. | 🔴 Alta |
 | RF-ES-025 | Solicitar ejemplos | El estudiante debe poder pedir un ejemplo práctico en cualquier momento escribiendo "ejemplo" o "muéstrame un caso". | 🔴 Alta |
 | RF-ES-026 | Solicitar evaluación | El estudiante debe poder pedir que lo evalúen escribiendo "evaluar", "quiz" o "ponme a prueba". | 🔴 Alta |

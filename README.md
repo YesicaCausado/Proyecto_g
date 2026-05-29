@@ -1,159 +1,168 @@
-# 🧠 NeuroLearn AI# 🧠 NeuroLearn AI
+﻿# 🧠 NeuroLearn AI
 
 
+**Plataforma B2B2C de Aprendizaje Adaptativo con Inferencia Neuroconductual Digital**
 
-## Plataforma Web Progresiva de Aprendizaje Adaptativo con Inferencia Neuroconductual Digital## Plataforma Inteligente de Aprendizaje y Transferencia de Habilidades basada en Modelado Neuroconductual Digital
-
-
-
-> **Proyecto de Grado** — Educación Técnica y Universitaria### Descripción
-
-> Tipo: PWA (Progressive Web App) | Estado: Backend ✅ | Frontend 🔨Plataforma que combina inteligencia artificial adaptativa y modelado de comportamiento digital para optimizar el aprendizaje y permitir la transferencia estructurada de conocimiento experto.
-
-
-
----### Módulos
-
-1. **Modo Aprender** - Chatbot inteligente con IA adaptativa
-
-### 📋 Descripción2. **Entrenar Bot Experto** - Creación de bots de conocimiento
-
-3. **Compartir Conocimiento** - Biblioteca y transferencia de bots
-
-NeuroLearn AI es una plataforma inteligente que combina **inteligencia artificial adaptativa** y **modelado neuroconductual digital** para personalizar el aprendizaje y facilitar la transferencia estructurada de conocimiento experto.
-
-### Tecnologías
-
-El sistema analiza **5 patrones neuroconductuales digitales** en tiempo real mediante **fusión bayesiana multimodal** para inferir el estado cognitivo del usuario y adaptar automáticamente la enseñanza.- **Frontend:** React.js + TypeScript
-
-- **Backend:** Python + FastAPI
-
-### 🧠 Patrones Neuroconductuales- **IA:** Scikit-learn, OpenAI API
-
-- **Base de Datos:** SQLite (dev) / PostgreSQL (prod)
-
-| # | Patrón | Qué detecta |
-
-|---|--------|-------------|### Estructura del Proyecto
-
-| 1 | Ritmo de Interacción | Fatiga, flujo, desconcentración |```
-
-| 2 | Secuencia de Decisión | Duda, dominio, consistencia |proyectog/
-
-| 3 | Microexpresiones Faciales | Frustración, confusión, interés |├── backend/          # FastAPI + Motor IA
-
-| 4 | Prosodia de Voz | Inseguridad, confianza, estrés |│   ├── app/
-
-| 5 | Patrones Predictivos de Error | Sobrecarga inminente, áreas débiles |│   │   ├── api/          # Endpoints REST
-
-│   │   ├── core/         # Configuración central
-
-### 🎯 Módulos del MVP│   │   ├── models/       # Modelos de base de datos
-
-│   │   ├── schemas/      # Schemas Pydantic
-
-| Módulo | Descripción | Estado |│   │   ├── services/     # Lógica de negocio
-
-|--------|-------------|--------|│   │   ├── ai/           # Motor de IA y chatbots
-
-| **Chatbot Adaptativo** | Chat IA que ajusta dificultad según estado cognitivo | ✅ Backend listo |│   │   │   ├── chatbot/      # Chatbot adaptativo
-
-| **Motor Neuroconductual** | 5 patrones + fusión bayesiana + 8 estados | ✅ Backend listo |│   │   │   ├── cognitive/    # Inferencia neuroconductual
-
-| **Bot Experto** | Profesores/expertos entrenan bots con su conocimiento | ✅ Backend listo |│   │   │   └── expert_bot/   # Bot experto entrenable
-
-| **Autenticación** | Registro, login, JWT, perfiles | ✅ Backend listo |│   │   └── db/           # Base de datos
-
-| **Frontend PWA** | React + TypeScript, instalable, responsive | 🔨 En desarrollo |│   ├── tests/
-
-│   └── requirements.txt
-
-### 🔧 Tecnologías├── frontend/         # React.js
-
-└── data/             # Datos de entrenamiento
-
-| Capa | Tecnología |```
-
-|------|-----------|
-
-| Frontend | React 18 + TypeScript + Tailwind CSS |### Instalación
-
-| Backend | Python 3.11 + FastAPI |```bash
-
-| IA/ML | Scikit-learn + NumPy + OpenAI API (opcional) |# Backend
-
-| Base de datos | SQLite (dev) / PostgreSQL (prod) |cd backend
-
-| Auth | JWT (python-jose + bcrypt) |pip install -r requirements.txt
-
-| Validación | Pydantic v2 |uvicorn app.main:app --reload
-
-
-
-### 📁 Estructura del Proyecto# Frontend
-
-cd frontend
-
-```npm install
-
-proyectog/npm start
-
-├── backend/                    # ✅ IMPLEMENTADO```
-
-│   ├── app/
-│   │   ├── ai/
-│   │   │   ├── chatbot/           # Chatbot adaptativo (1,016 líneas)
-│   │   │   ├── cognitive/         # Motor neuroconductual (1,386 líneas)
-│   │   │   └── expert_bot/        # Entrenador de bots (482 líneas)
-│   │   ├── api/                   # Endpoints REST (auth, chat, bots)
-│   │   ├── core/                  # Configuración central
-│   │   ├── db/                    # SQLAlchemy + SQLite
-│   │   ├── models/                # User, LearningSession, ExpertBot
-│   │   ├── schemas/               # Validación Pydantic
-│   │   └── main.py                # FastAPI entry point
-│   └── requirements.txt
-│
-├── frontend/                   # 🔨 POR CONSTRUIR
-│   ├── src/
-│   │   ├── pages/                 # Login, Dashboard, Chat, Bots
-│   │   ├── components/            # UI components
-│   │   └── services/              # API calls
-│   └── package.json
-│
-├── docs/                       # 📄 Documentación
-│   ├── IDEA_DEFINITIVA.md         # Concepto completo del proyecto
-│   ├── ANALISIS_GARTNER_MQ.md    # Análisis de mercado
-│   └── MATRIZ_COMPETITIVA.md     # Comparación competitiva
-│
-└── README.md                   # Este archivo
-```
-
-### 🚀 Instalación
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# Frontend (cuando esté listo)
-cd frontend
-npm install
-npm run dev
-```
-
-### 📖 Documentación
-
-- 📄 [Idea Definitiva del Proyecto](docs/IDEA_DEFINITIVA.md)
-- 📊 [Análisis Gartner Magic Quadrant](docs/ANALISIS_GARTNER_MQ.md)
-- 📋 [Matriz Competitiva](docs/MATRIZ_COMPETITIVA.md)
-
-### 👥 Roles de Usuario
-
-- **Estudiante** → Chat con IA adaptativa, progreso cognitivo, biblioteca de bots
-- **Profesor** → Crear bots expertos, ver reportes de estudiantes
-- **Experto** → Entrenar bots con conocimiento práctico, compartir
+> **Proyecto de Grado** | PWA (Progressive Web App) | Colombia — Saber 11 ICFES
 
 ---
 
-*Desarrollado con ❤️ y 🧠 — Febrero 2026*
+## 📋 Descripción
+
+NeuroLearn AI es una plataforma educativa SaaS institucional que combina **inteligencia artificial adaptativa** y **análisis neuroconductual en tiempo real** para personalizar el aprendizaje de bachilleres colombianos en las 5 habilidades transversales con peores resultados Saber 11.
+
+El sistema analiza 5 patrones de comportamiento digital mediante **fusión bayesiana multimodal** para inferir el estado cognitivo del estudiante (Flujo, Fatiga, Frustración, etc.) y adaptar automáticamente la pedagogía de la IA.
+
+---
+
+## 🎯 Las 5 Habilidades Transversales (Saber 11)
+
+| # | Habilidad | Problema detectado |
+|---|-----------|-------------------|
+| 1 | Pensamiento Lógico-Matemático | 60% en niveles 1-2 |
+| 2 | Comprensión Lectora y Pensamiento Crítico | Baja inferencia y análisis |
+| 3 | Inglés Comunicativo | 75% en nivel A- (pre-básico) |
+| 4 | Competencias Ciudadanas y Sociales | No comprenden democracia ni derechos |
+| 5 | Pensamiento Científico | No aplican método científico |
+
+---
+
+## 👥 Roles del Sistema
+
+| Rol | Descripción |
+|-----|-------------|
+| **Estudiante** | Aprende con el tutor IA adaptativo, visualiza su progreso cognitivo |
+| **Profesor** | Crea bots expertos con su material, monitorea alertas neuroconductuales |
+| **Súper Profesor (Rector)** | Gestiona licencias institucionales, dashboards macro del colegio |
+| **Sistema IA** | Motor neuroconductual automatizado — analiza y adapta en tiempo real |
+
+---
+
+## 🧠 Patrones Neuroconductuales
+
+| # | Patrón | Señal capturada |
+|---|--------|----------------|
+| 1 | Ritmo de Interacción | Velocidad de escritura, pausas, CPM |
+| 2 | Secuencia de Decisión | Uso de backspace, tiempo de hesitación |
+| 3 | Microexpresiones Faciales | Atención, frustración, curiosidad (cámara) |
+| 4 | Prosodia de Voz | Tono, temblor, energía vocal (micrófono) |
+| 5 | Patrón Predictivo de Error | Historial + contexto → probabilidad de fallo |
+
+---
+
+## 🏗️ Arquitectura del Proyecto
+
+```
+proyectog/
+│
+├── backend/                        # ✅ API REST — FastAPI + Python 3.11
+│   ├── app/
+│   │   ├── main.py                 # Entry point FastAPI
+│   │   ├── api/                    # Endpoints REST
+│   │   │   ├── auth.py             # Login / Registro / JWT
+│   │   │   ├── chat.py             # Sesiones de tutoría IA
+│   │   │   ├── expert_bot.py       # CRUD de bots expertos
+│   │   │   └── classroom.py        # Gestión de aulas / clases
+│   │   ├── ai/                     # Motor de IA
+│   │   │   ├── chatbot/            # Chatbot adaptativo
+│   │   │   ├── cognitive/          # Motor neuroconductual (fusión bayesiana)
+│   │   │   ├── expert_bot/         # Entrenador y persistencia de bots
+│   │   │   └── providers/          # Groq / Gemini / Fallback local
+│   │   ├── core/                   # Configuración central (settings)
+│   │   ├── db/                     # SQLAlchemy + SQLite/PostgreSQL
+│   │   ├── models/                 # ORM: User, LearningSession, ExpertBot, Classroom
+│   │   ├── schemas/                # Validación Pydantic
+│   │   └── services/               # Lógica de negocio reutilizable
+│   ├── data/
+│   │   └── trained_bots/           # Bots pre-entrenados (5 habilidades Saber 11)
+│   ├── tests/                      # Pruebas unitarias e integración
+│   └── requirements.txt
+│
+├── frontend/                       # 🔨 PWA — React 18 + TypeScript + Tailwind CSS
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── auth/               # LoginPage, RegisterPage
+│   │   │   ├── student/            # StudentDashboard, ChatPage, BotsPage, MyClassesPage
+│   │   │   └── teacher/            # TeacherDashboard, CreateClassroomPage, ClassroomDetailPage
+│   │   ├── components/             # Layout, ProtectedRoute, CognitiveDashboard
+│   │   ├── hooks/                  # useBehavioralMetrics, useFacialDetection, useVoiceProsody
+│   │   ├── context/                # AuthContext
+│   │   ├── services/               # api.ts (cliente HTTP)
+│   │   └── types/                  # Tipos TypeScript globales
+│   └── package.json
+│
+├── docs/                           # 📄 Documentación del proyecto
+│   ├── REQUISITOS_FUNCIONALES.md   # 87 requisitos organizados por actor
+│   ├── IDEA_DEFINITIVA.md          # Concepto y propuesta de valor
+│   ├── DIAGRAMAS_UML.md            # Diagramas de arquitectura
+│   ├── ESTUDIO_VIABILIDAD.md       # Análisis de viabilidad técnica y económica
+│   ├── ANALISIS_GARTNER_MQ.md      # Posicionamiento en el mercado
+│   ├── MATRIZ_COMPETITIVA.md       # Comparación con competidores
+│   ├── CRONOGRAMA.md               # Plan de desarrollo
+│   └── PROMPTS_MOCKUPS_IA.md       # Prompts para generadores de UI/mockups
+│
+└── README.md
+```
+
+---
+
+## 🔧 Stack Tecnológico
+
+| Capa | Tecnología |
+|------|-----------|
+| **Frontend** | React 18 + TypeScript + Vite + Tailwind CSS |
+| **Backend** | Python 3.11 + FastAPI + Uvicorn |
+| **Base de datos** | SQLite (desarrollo) / PostgreSQL (producción) |
+| **ORM** | SQLAlchemy |
+| **Auth** | JWT (python-jose) + Bcrypt (passlib) |
+| **IA Generativa** | Groq (LLaMA 3) → Gemini (fallback) → Local (fallback) |
+| **Análisis conductual** | NumPy + Scikit-learn |
+| **Validación** | Pydantic v2 |
+
+---
+
+## 🚀 Instalación y Ejecución
+
+### Backend
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Documentación interactiva: http://localhost:8000/docs
+```
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+# App en: http://localhost:5173
+```
+
+---
+
+## 📊 Estado del Proyecto
+
+| Módulo | Estado |
+|--------|--------|
+| API REST (auth, chat, bots, classroom) | ✅ Implementado |
+| Motor Neuroconductual (5 patrones + fusión bayesiana) | ✅ Implementado |
+| Chatbot Adaptativo con decisiones pedagógicas | ✅ Implementado |
+| Bots pre-entrenados (5 habilidades Saber 11) | ✅ Implementado |
+| Frontend React PWA (6 vistas principales) | 🔨 En desarrollo |
+| Integración IA Generativa (Groq / Gemini) | ⏳ Pendiente |
+| Despliegue en producción | ⏳ Pendiente |
+
+---
+
+## 📖 Documentación
+
+- 📋 [Requisitos Funcionales (87 RF)](docs/REQUISITOS_FUNCIONALES.md)
+- 💡 [Idea Definitiva del Proyecto](docs/IDEA_DEFINITIVA.md)
+- 📐 [Diagramas UML y Arquitectura](docs/DIAGRAMAS_UML.md)
+- 📊 [Análisis de Viabilidad](docs/ESTUDIO_VIABILIDAD.md)
+- 🗓️ [Cronograma de Desarrollo](docs/CRONOGRAMA.md)
+
+---
+
+*NeuroLearn AI — Proyecto de Grado 2026 🇨🇴*

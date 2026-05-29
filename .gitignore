@@ -1,17 +1,49 @@
+# === DEPENDENCIAS ===
 node_modules/
+.venv/
+env/
+venv/
+
+# === BUILD Y DIST ===
 dist/
+build/
+*.egg-info/
+
+# === PYTHON CACHE ===
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-env/
-venv/
-.venv/
+.pytest_cache/
+
+# === BASE DE DATOS ===
+*.db
+*.sqlite
+*.sqlite3
+
+# === VARIABLES DE ENTORNO ===
 .env
 .env.local
+.env.production
+.env.*.local
+
+# === EDITORES E IDEs ===
 .vscode/
+.idea/
+*.suo
+*.user
+
+# === SISTEMA OPERATIVO ===
 .DS_Store
-.pytest_cache/
-coverage/
+Thumbs.db
+
+# === LOGS Y COBERTURA ===
 *.log
+coverage/
+htmlcov/
+
+# === FRONTEND BUILD ===
+frontend/dist/
+frontend/.env
