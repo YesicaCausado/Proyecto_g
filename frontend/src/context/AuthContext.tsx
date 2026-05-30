@@ -2,6 +2,23 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import api from '../services/api';
 import type { User, LoginRequest, RegisterRequest, Token } from '../types';
 
+// ─── MODO DEMO (sin backend) ──────────────────────────────────────────────────
+// Cambiar a false cuando el backend esté listo y se quiera activar el login real
+const DEMO_MODE = true;
+
+const DEMO_USER: User = {
+  id: 1,
+  username: 'demo',
+  email: 'demo@neurolearn.app',
+  full_name: 'Usuario Demo',
+  role: 'estudiante',
+  is_active: true,
+  is_expert: false,
+  created_at: new Date().toISOString(),
+  cognitive_profile: null,
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -22,6 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Al iniciar, verificar si hay token guardado y cargar usuario
   useEffect(() => {
     const loadUser = async () => {
+      if (DEMO_MODE) {
+        setUser(DEMO_USER);
+        setLoading(false);
+        return;
+      }
       if (token) {
         try {
           const { data } = await api.get<User>('/auth/me');
@@ -39,18 +61,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   const login = async (loginData: LoginRequest) => {
+    if (DEMO_MODE) { setUser(DEMO_USER); return; }
     const { data } = await api.post<Token>('/auth/login', loginData);
     localStorage.setItem('token', data.access_token);
     setToken(data.access_token);
-
     const { data: userData } = await api.get<User>('/auth/me');
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
 
   const register = async (registerData: RegisterRequest) => {
+    if (DEMO_MODE) { setUser(DEMO_USER); return; }
     await api.post('/auth/register', registerData);
-    // Después de registrar, hacer login automático
     await login({ username: registerData.username, password: registerData.password });
   };
 
