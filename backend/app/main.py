@@ -6,10 +6,9 @@ Servicio dedicado a gestión de bots y chat adaptativo
 Ejecutar con (desarrollo local):
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-En Vercel: el routePrefix "/api" en experimentalServices monta este
-servicio bajo /api, por lo que los routers usan prefijo /v1 → /api/v1.
+En Vercel (version 2): la ruta /api/(.*) llega completa al handler,
+por lo que los routers usan el prefijo /api/v1 tanto en local como en Vercel.
 """
-import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,11 +26,6 @@ import app.models.classroom     # noqa: F401
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 Base.metadata.create_all(bind=engine)
 
-# En Vercel el routePrefix "/api" ya añade /api → los routers usan /v1
-# En local el proxy de Vite reenvía /api → localhost:8000, routers usan /api/v1
-_IS_VERCEL = os.environ.get("VERCEL", "") == "1"
-_ROUTER_PREFIX = "/v1" if _IS_VERCEL else "/api/v1"
-
 # Crear aplicación
 app = FastAPI(
     title=settings.APP_NAME,
@@ -41,8 +35,8 @@ app = FastAPI(
         "modelado neuroconductual digital."
     ),
     version=settings.APP_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
 )
 
 # CORS
@@ -54,11 +48,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rutas
-app.include_router(auth.router,         prefix=_ROUTER_PREFIX)
-app.include_router(chat.router,         prefix=_ROUTER_PREFIX)
-app.include_router(expert_bot.router,   prefix=_ROUTER_PREFIX)
-app.include_router(classroom_api.router, prefix=_ROUTER_PREFIX)
+# Rutas — prefijo /api/v1 tanto en local como en Vercel
+app.include_router(auth.router,          prefix="/api/v1")
+app.include_router(chat.router,          prefix="/api/v1")
+app.include_router(expert_bot.router,    prefix="/api/v1")
+app.include_router(classroom_api.router, prefix="/api/v1")
 
 
 @app.get("/")
