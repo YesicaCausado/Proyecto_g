@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # Auth Service - Autenticación con Neon PostgreSQL
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: neurolearn-auth-service
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=postgresql://neondb_owner:npg_MAed8LuD7yOz@ep-restless-river-am0m57yj-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      - SECRET_KEY=your-secret-key-change-in-production
+      - BOT_SERVICE_URL=http://bot-service:8000
+    depends_on:
+      - bot-service
+    networks:
+      - neurolearn
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Bot Service - Gestión de Bots y Chat
+  bot-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: neurolearn-bot-service
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./bots.db
+      - SECRET_KEY=neurolearn-secret-key-cambiar-en-produccion-2026
+      - AUTH_SERVICE_URL=http://auth-service:8000
+    networks:
+      - neurolearn
+    volumes:
+      - ./backend/bots.db:/app/bots.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Frontend - React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: neurolearn-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8001
+      - VITE_AUTH_URL=http://localhost:8002
+    depends_on:
+      - bot-service
+      - auth-service
+    networks:
+      - neurolearn
+
+networks:
+  neurolearn:
+    driver: bridge
+
+volumes:
+  bots_data:
+    driver: local

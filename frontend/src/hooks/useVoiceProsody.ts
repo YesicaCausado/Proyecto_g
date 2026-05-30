@@ -29,8 +29,11 @@ export interface VoiceProsodyControls {
   snapshot: VoiceSnapshot;
   isStreaming: boolean;
   permissionDenied: boolean;
+  errorMessage: string | null;
+  hardwareAvailable: boolean;        // false si el dispositivo no tiene micrófono
   startMic: () => Promise<void>;
   stopMic: () => void;
+  resetError: () => void;
 }
 
 const DEFAULT_SNAPSHOT: VoiceSnapshot = {
@@ -61,6 +64,26 @@ export function useVoiceProsody(): VoiceProsodyControls {
   const [snapshot, setSnapshot] = useState<VoiceSnapshot>(DEFAULT_SNAPSHOT);
   const [isStreaming, setIsStreaming] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hardwareAvailable, setHardwareAvailable] = useState(true);
+
+  const resetError = useCallback(() => {
+    setPermissionDenied(false);
+    setErrorMessage(null);
+  }, []);
+
+  // Detectar si hay micrófono disponible al montar el hook
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setHardwareAvailable(false);
+      return;
+    }
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const hasMic = devices.some((d) => d.kind === 'audioinput');
+      setHardwareAvailable(hasMic);
+      if (!hasMic) setErrorMessage('Este dispositivo no tiene micrófono disponible.');
+    }).catch(() => setHardwareAvailable(false));
+  }, []);
 
   const analyzeAudio = useCallback(() => {
     const analyser = analyserRef.current;
@@ -172,9 +195,16 @@ export function useVoiceProsody(): VoiceProsodyControls {
       setIsStreaming(true);
       setPermissionDenied(false);
     } catch (err: unknown) {
-      const error = err as { name?: string };
+      const error = err as { name?: string; message?: string };
       if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
         setPermissionDenied(true);
+        setErrorMessage('Permiso de micrófono denegado. Haz clic en el candado de la barra de dirección y permite el micrófono.');
+      } else if (error?.name === 'NotFoundError') {
+        setErrorMessage('No se encontró ningún micrófono en este dispositivo.');
+      } else if (error?.name === 'NotReadableError') {
+        setErrorMessage('El micrófono está siendo usado por otra aplicación. Ciérrala e intenta de nuevo.');
+      } else {
+        setErrorMessage(`Error al activar micrófono: ${error?.message || 'desconocido'}`);
       }
       console.warn('Micrófono no disponible:', err);
     }
@@ -207,5 +237,5 @@ export function useVoiceProsody(): VoiceProsodyControls {
     };
   }, []);
 
-  return { snapshot, isStreaming, permissionDenied, startMic, stopMic };
+  return { snapshot, isStreaming, permissionDenied, errorMessage, hardwareAvailable, startMic, stopMic, resetError };
 }

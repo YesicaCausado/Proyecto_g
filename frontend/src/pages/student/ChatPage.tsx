@@ -247,37 +247,93 @@ export default function ChatPage() {
               </span>
             )}
             {/* Botón Cámara - Patrón 3 */}
-            <button
-              onClick={() => facial.isStreaming ? facial.stopCamera() : facial.startCamera()}
-              title={facial.permissionDenied ? "Permiso de cámara denegado" : facial.isStreaming ? "Desactivar cámara" : "Activar cámara (Patrón 3)"}
-              className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1 ${
-                facial.isStreaming
-                  ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500"
-                  : facial.permissionDenied
-                  ? "bg-red-50 text-red-400 cursor-not-allowed"
-                  : "text-gray-400 hover:text-green-600 hover:bg-green-50"
-              }`}
-              disabled={facial.permissionDenied}
-            >
-              {facial.isStreaming ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
-              {facial.isStreaming && <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />}
-            </button>
+            {facial.hardwareAvailable ? (
+              <div className="relative group">
+                <button
+                  onClick={() => {
+                    if (facial.errorMessage) facial.resetError();
+                    facial.isStreaming ? facial.stopCamera() : facial.startCamera();
+                  }}
+                  title={
+                    facial.errorMessage ? facial.errorMessage
+                    : facial.isStreaming ? "Desactivar cámara"
+                    : "Activar cámara (Patrón 3)"
+                  }
+                  className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1 ${
+                    facial.isStreaming
+                      ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500"
+                      : facial.errorMessage
+                      ? "bg-orange-50 text-orange-500 hover:bg-orange-100"
+                      : "text-gray-400 hover:text-green-600 hover:bg-green-50"
+                  }`}
+                >
+                  {facial.isStreaming ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
+                  {facial.isStreaming && <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />}
+                  {facial.errorMessage && !facial.isStreaming && <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />}
+                </button>
+                {facial.errorMessage && (
+                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="font-medium mb-1">⚠️ Cámara no disponible</p>
+                    <p>{facial.errorMessage}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="relative group">
+                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin cámara — P3 desactivado">
+                  <CameraOff className="w-4 h-4" />
+                </span>
+                <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="font-medium mb-1">📷 Sin cámara detectada</p>
+                  <p>El Patrón 3 (microexpresión facial) no está disponible en este dispositivo.</p>
+                  <p className="mt-1 text-gray-300">El sistema funciona con P1 + P2 + P5.</p>
+                </div>
+              </div>
+            )}
             {/* Botón Micrófono - Patrón 4 */}
-            <button
-              onClick={() => voice.isStreaming ? voice.stopMic() : voice.startMic()}
-              title={voice.permissionDenied ? "Permiso de micrófono denegado" : voice.isStreaming ? "Desactivar micrófono" : "Activar micrófono (Patrón 4)"}
-              className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
-                voice.isStreaming
-                  ? "bg-blue-50 text-blue-600 hover:bg-red-50 hover:text-red-500"
-                  : voice.permissionDenied
-                  ? "bg-red-50 text-red-400 cursor-not-allowed"
-                  : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-              }`}
-              disabled={voice.permissionDenied}
-            >
-              {voice.isStreaming ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-              {voice.isStreaming && voice.snapshot.is_active && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />}
-            </button>
+            {voice.hardwareAvailable ? (
+              <div className="relative group">
+                <button
+                  onClick={() => {
+                    if (voice.errorMessage) voice.resetError();
+                    voice.isStreaming ? voice.stopMic() : voice.startMic();
+                  }}
+                  title={
+                    voice.errorMessage ? voice.errorMessage
+                    : voice.isStreaming ? "Desactivar micrófono"
+                    : "Activar micrófono (Patrón 4)"
+                  }
+                  className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
+                    voice.isStreaming
+                      ? "bg-blue-50 text-blue-600 hover:bg-red-50 hover:text-red-500"
+                      : voice.errorMessage
+                      ? "bg-orange-50 text-orange-500 hover:bg-orange-100"
+                      : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                  }`}
+                >
+                  {voice.isStreaming ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  {voice.isStreaming && voice.snapshot.is_active && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />}
+                  {voice.errorMessage && !voice.isStreaming && <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />}
+                </button>
+                {voice.errorMessage && (
+                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="font-medium mb-1">⚠️ Micrófono no disponible</p>
+                    <p>{voice.errorMessage}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="relative group">
+                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin micrófono — P4 desactivado">
+                  <MicOff className="w-4 h-4" />
+                </span>
+                <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="font-medium mb-1">🎤 Sin micrófono detectado</p>
+                  <p>El Patrón 4 (prosodia de voz) no está disponible en este dispositivo.</p>
+                  <p className="mt-1 text-gray-300">El sistema funciona con P1 + P2 + P5.</p>
+                </div>
+              </div>
+            )}
             <button
               onClick={() => setShowDashboard(!showDashboard)}
               className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-gray-400 hover:text-accent-500 hover:bg-accent-50"}`}

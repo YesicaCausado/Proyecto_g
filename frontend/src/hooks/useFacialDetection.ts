@@ -26,8 +26,11 @@ export interface FacialDetectionControls {
   snapshot: FacialSnapshot;
   isStreaming: boolean;
   permissionDenied: boolean;
+  errorMessage: string | null;
+  hardwareAvailable: boolean;        // false si el dispositivo no tiene cámara
   startCamera: () => Promise<void>;
   stopCamera: () => void;
+  resetError: () => void;
 }
 
 const DEFAULT_SNAPSHOT: FacialSnapshot = {
@@ -51,6 +54,26 @@ export function useFacialDetection(): FacialDetectionControls {
   const [snapshot, setSnapshot] = useState<FacialSnapshot>(DEFAULT_SNAPSHOT);
   const [isStreaming, setIsStreaming] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hardwareAvailable, setHardwareAvailable] = useState(true);
+
+  const resetError = useCallback(() => {
+    setPermissionDenied(false);
+    setErrorMessage(null);
+  }, []);
+
+  // Detectar si hay cámara disponible al montar el hook
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setHardwareAvailable(false);
+      return;
+    }
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      const hasCamera = devices.some((d) => d.kind === 'videoinput');
+      setHardwareAvailable(hasCamera);
+      if (!hasCamera) setErrorMessage('Este dispositivo no tiene cámara disponible.');
+    }).catch(() => setHardwareAvailable(false));
+  }, []);
 
   // Crear el elemento video una sola vez
   if (!videoRef.current) {
@@ -189,11 +212,19 @@ export function useFacialDetection(): FacialDetectionControls {
       animRef.current = requestAnimationFrame(analyzeFrame);
     } catch (err: unknown) {
       runningRef.current = false;
-      const e = err as { name?: string };
+      const e = err as { name?: string; message?: string };
       if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
         setPermissionDenied(true);
+        setErrorMessage('Permiso de cámara denegado. Haz clic en el candado de la barra de dirección y permite la cámara.');
         console.warn('[FacialDetection] Permiso de camara denegado');
+      } else if (e?.name === 'NotFoundError') {
+        setErrorMessage('No se encontró ninguna cámara en este dispositivo.');
+        console.warn('[FacialDetection] Cámara no encontrada');
+      } else if (e?.name === 'NotReadableError') {
+        setErrorMessage('La cámara está siendo usada por otra aplicación. Ciérrala e intenta de nuevo.');
+        console.warn('[FacialDetection] Cámara en uso');
       } else {
+        setErrorMessage(`Error al activar cámara: ${e?.message || 'desconocido'}`);
         console.warn('[FacialDetection] Error:', err);
       }
     }
@@ -227,5 +258,5 @@ export function useFacialDetection(): FacialDetectionControls {
     };
   }, []);
 
-  return { snapshot, isStreaming, permissionDenied, startCamera, stopCamera };
+  return { snapshot, isStreaming, permissionDenied, errorMessage, hardwareAvailable, startCamera, stopCamera, resetError };
 }

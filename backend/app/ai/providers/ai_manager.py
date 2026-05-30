@@ -2,9 +2,10 @@
 NeuroLearn AI - Gestor de Proveedores de IA
 
 Cadena de fallback ($0 de costo):
-1. Groq (Llama 3) → 14,400 req/día gratis
-2. Google Gemini   → 1,500 req/día gratis  
-3. Local           → Templates + JSON curado (siempre funciona)
+1. Groq qwen/qwen3-32b       →  6,000 TPM  (mejor calidad)
+2. Groq llama-3.1-8b-instant → 20,000 TPM  (respaldo rápido, misma key)
+3. Google Gemini              →  1,500 req/día gratis
+4. Local                      → Templates + JSON curado (siempre funciona)
 
 El conocimiento curado (JSON de los bots) se inyecta como contexto
 en el system prompt, y la IA genera respuestas naturales basadas
@@ -35,14 +36,25 @@ class AIManager:
         self.providers = []
         self.active_provider: Optional[str] = None
 
-        # Registrar proveedores en orden de prioridad
+        # Proveedor 1: Groq modelo principal (qwen3-32b — mayor calidad)
         if groq_api_key:
             self.providers.append({
                 "name": "groq",
                 "provider": GroqProvider(api_key=groq_api_key, model=groq_model),
             })
-            logger.info("✅ Proveedor Groq (Llama 3) registrado")
+            logger.info(f"✅ Proveedor Groq principal registrado: {groq_model}")
 
+            # Proveedor 2: Groq modelo de respaldo (llama-3.1-8b-instant — 20K TPM)
+            # Solo se agrega si el modelo principal NO es ya el de respaldo
+            fallback_model = "llama-3.1-8b-instant"
+            if groq_model != fallback_model:
+                self.providers.append({
+                    "name": "groq-fallback",
+                    "provider": GroqProvider(api_key=groq_api_key, model=fallback_model),
+                })
+                logger.info(f"✅ Proveedor Groq respaldo registrado: {fallback_model} (20K TPM)")
+
+        # Proveedor 3: Google Gemini (1,500 req/día gratis)
         if gemini_api_key:
             self.providers.append({
                 "name": "gemini",

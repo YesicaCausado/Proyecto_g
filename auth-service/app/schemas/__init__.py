@@ -1,0 +1,1 @@
+"""Schemas - Auth Service"""

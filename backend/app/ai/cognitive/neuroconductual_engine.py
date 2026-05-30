@@ -211,27 +211,43 @@ class InteractionRhythmAnalyzer:
     - Tendencias a largo plazo (mejora/deterioro)
     """
 
+    # Valores poblacionales de referencia (media estudiante universitario).
+    # Se usan desde el mensaje 1 y se reemplazan con datos reales a partir del 3er evento.
+    _POPULATION_BASELINE = {
+        "avg_rt": 3500.0,       # ms  — tiempo de respuesta promedio
+        "std_rt": 1200.0,       # ms  — variabilidad normal
+        "avg_speed": 140.0,     # cpm — velocidad de escritura promedio
+        "avg_pause": 1500.0,    # ms  — pausa media antes de escribir
+        "error_rate": 0.15,     # 15 % de interacciones con error
+        "avg_response_time": 3500.0,
+        "std_response_time": 1200.0,
+        "avg_typing_speed": 140.0,
+    }
+
     def __init__(self):
         self.events: deque = deque(maxlen=200)
-        self.baseline: Optional[Dict] = None
-        self.baseline_events_needed = 10
+        # Arrancamos con valores poblacionales para poder analizar desde el 1er mensaje
+        self.baseline: Dict = dict(self._POPULATION_BASELINE)
+        self._baseline_from_data: bool = False  # True cuando hay suficientes datos propios
+        self.baseline_events_needed = 3          # Bajado de 10→3 para personalizar rápido
 
     def add_event(self, event: BehavioralEvent):
         self.events.append(event)
-        if self.baseline is None and len(self.events) >= self.baseline_events_needed:
+        # Reconstruir el baseline con datos reales en cuanto haya suficientes
+        if not self._baseline_from_data and len(self.events) >= self.baseline_events_needed:
             self._build_baseline()
 
     def _build_baseline(self):
-        events = list(self.events)[:self.baseline_events_needed]
+        events = list(self.events)[:max(self.baseline_events_needed, len(self.events))]
         rts = [e.response_time_ms for e in events if e.response_time_ms > 0]
         speeds = [e.typing_speed_cpm for e in events if e.typing_speed_cpm > 0]
         pauses = [e.pause_duration_ms for e in events if e.pause_duration_ms > 0]
         errors = sum(1 for e in events if e.error_occurred)
-        avg_rt = float(np.mean(rts)) if rts else 2000.0
-        std_rt = float(np.std(rts)) if len(rts) > 1 else 500.0
-        avg_speed = float(np.mean(speeds)) if speeds else 150.0
-        avg_pause = float(np.mean(pauses)) if pauses else 1000.0
-        error_rate = errors / len(events) if events else 0.2
+        avg_rt = float(np.mean(rts)) if rts else self._POPULATION_BASELINE["avg_rt"]
+        std_rt = float(np.std(rts)) if len(rts) > 1 else self._POPULATION_BASELINE["std_rt"]
+        avg_speed = float(np.mean(speeds)) if speeds else self._POPULATION_BASELINE["avg_speed"]
+        avg_pause = float(np.mean(pauses)) if pauses else self._POPULATION_BASELINE["avg_pause"]
+        error_rate = errors / len(events) if events else self._POPULATION_BASELINE["error_rate"]
         self.baseline = {
             "avg_rt": avg_rt,
             "std_rt": std_rt,
@@ -243,11 +259,13 @@ class InteractionRhythmAnalyzer:
             "std_response_time": std_rt,
             "avg_typing_speed": avg_speed,
         }
+        self._baseline_from_data = True
 
     def analyze(self) -> ModalityScore:
+        # Activo desde el 1er evento (baseline poblacional garantiza que nunca es None)
         score = ModalityScore(modality=ModalityType.INTERACTION_RHYTHM,
-                              is_active=len(self.events) >= 3)
-        if not score.is_active or self.baseline is None:
+                              is_active=len(self.events) >= 1)
+        if not score.is_active:
             score.confidence = 0.1
             return score
 
@@ -264,7 +282,7 @@ class InteractionRhythmAnalyzer:
             CognitiveStateEnum.CURIOSITY.value: self._curiosity(m),
             CognitiveStateEnum.NORMAL.value: 0.3,
         }
-        score.confidence = min(len(self.events) / 20, 1.0) * 0.9
+        score.confidence = min(len(self.events) / 20, 1.0) * (0.9 if self._baseline_from_data else 0.5)
         if m.get("rt_trend", 0) > 0.3:
             score.insights.append("Tiempos de respuesta en aumento progresivo")
         if m.get("speed_decay", 0) > 0.2:
@@ -397,7 +415,8 @@ class InteractionRhythmAnalyzer:
 
     def reset(self):
         self.events.clear()
-        self.baseline = None
+        self.baseline = dict(self._POPULATION_BASELINE)
+        self._baseline_from_data = False
 
 
 # =============================================================================
@@ -455,7 +474,7 @@ class DecisionSequenceAnalyzer:
 
     def analyze(self) -> ModalityScore:
         score = ModalityScore(modality=ModalityType.DECISION_SEQUENCE,
-                              is_active=len(self.decisions) >= 3)
+                              is_active=len(self.decisions) >= 1)
         if not score.is_active:
             score.confidence = 0.1
             return score
@@ -617,7 +636,7 @@ class FacialMicroexpressionAnalyzer:
 
     def analyze(self) -> ModalityScore:
         score = ModalityScore(modality=ModalityType.FACIAL_MICROEXPRESSION,
-                              is_active=len(self.facial_data) >= 5)
+                              is_active=len(self.facial_data) >= 1)
         if not score.is_active:
             score.confidence = 0.0
             return score
@@ -781,7 +800,7 @@ class VoiceProsodyAnalyzer:
 
     def analyze(self) -> ModalityScore:
         score = ModalityScore(modality=ModalityType.VOICE_PROSODY,
-                              is_active=len(self.voice_data) >= 5)
+                              is_active=len(self.voice_data) >= 1)
         if not score.is_active:
             score.confidence = 0.0
             return score
@@ -935,7 +954,7 @@ class ErrorPredictionAnalyzer:
     def predict_error(self, current_metrics: Dict,
                       other_modality_scores: Optional[Dict[str, Dict]] = None) -> ModalityScore:
         score = ModalityScore(modality=ModalityType.ERROR_PREDICTION,
-                              is_active=len(self.interaction_history) >= 5)
+                              is_active=len(self.interaction_history) >= 3)
         if not score.is_active:
             score.confidence = 0.1
             score.raw_metrics = {"error_probability": self.prior_error_rate}
