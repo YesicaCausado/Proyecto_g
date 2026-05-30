@@ -1,11 +1,15 @@
 """
-� NeuroLearn Bot Service - Punto de Entrada Principal
+NeuroLearn Bot Service - Punto de Entrada Principal
 
 Servicio dedicado a gestión de bots y chat adaptativo
 
-Ejecutar con:
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+Ejecutar con (desarrollo local):
+    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+En Vercel: el routePrefix "/api" en experimentalServices monta este
+servicio bajo /api, por lo que los routers usan prefijo /v1 → /api/v1.
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,8 +24,13 @@ import app.models.learning      # noqa: F401
 import app.models.expert_bot    # noqa: F401
 import app.models.classroom     # noqa: F401
 
-# Crear tablas
+# Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 Base.metadata.create_all(bind=engine)
+
+# En Vercel el routePrefix "/api" ya añade /api → los routers usan /v1
+# En local el proxy de Vite reenvía /api → localhost:8000, routers usan /api/v1
+_IS_VERCEL = os.environ.get("VERCEL", "") == "1"
+_ROUTER_PREFIX = "/v1" if _IS_VERCEL else "/api/v1"
 
 # Crear aplicación
 app = FastAPI(
@@ -46,10 +55,10 @@ app.add_middleware(
 )
 
 # Rutas
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(chat.router, prefix="/api/v1")
-app.include_router(expert_bot.router, prefix="/api/v1")
-app.include_router(classroom_api.router, prefix="/api/v1")
+app.include_router(auth.router,         prefix=_ROUTER_PREFIX)
+app.include_router(chat.router,         prefix=_ROUTER_PREFIX)
+app.include_router(expert_bot.router,   prefix=_ROUTER_PREFIX)
+app.include_router(classroom_api.router, prefix=_ROUTER_PREFIX)
 
 
 @app.get("/")
