@@ -1,0 +1,13 @@
+# Ignorar en el deploy de Vercel
+backend/.venv
+backend/__pycache__
+backend/**/__pycache__
+backend/**/*.pyc
+backend/data/trained_bots/
+backend/tests/
+backend/scripts/
+backend/*.db
+backend/server.log
+backend/.env
+.env
+.venv

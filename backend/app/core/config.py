@@ -42,8 +42,13 @@ class Settings(BaseSettings):
     DOUBT_THRESHOLD: float = 0.6
     MASTERY_THRESHOLD: float = 0.85
 
-    # CORS
-    ALLOWED_ORIGINS: list = ["http://localhost:5173", "http://localhost:8002", "*"]
+    # CORS — en Vercel se agrega el dominio de producción automáticamente
+    ALLOWED_ORIGINS: list = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8002",
+        "*",  # Vercel genera dominios dinámicos en preview
+    ]
 
     class Config:
         env_file = ".env"
