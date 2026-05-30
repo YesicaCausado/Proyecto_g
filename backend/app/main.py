@@ -5,10 +5,17 @@ Servicio dedicado a gestión de bots y chat adaptativo
 
 Ejecutar con (desarrollo local):
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-En Vercel (version 2): la ruta /api/(.*) llega completa al handler,
-por lo que los routers usan el prefijo /api/v1 tanto en local como en Vercel.
 """
+import sys
+import os
+
+# Garantiza que el directorio 'backend/' esté en sys.path.
+# Necesario cuando Vercel ejecuta la lambda desde /var/task con
+# el entrypoint en /var/task/backend/app/main.py.
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
