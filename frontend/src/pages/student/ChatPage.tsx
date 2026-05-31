@@ -1,6 +1,7 @@
 ﻿import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
+import { DEMO_MODE, demoStartSession, demoSendMessage } from "../../services/demoChat";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
 import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
@@ -64,10 +65,17 @@ export default function ChatPage() {
     if (!skill) return;
     setSending(true);
     try {
-      const { data } = await api.post<ChatMessageResponse>("/chat/start", {
-        topic: skill.topic,
-        difficulty: "medium",
-      });
+      let data: ChatMessageResponse;
+      if (DEMO_MODE) {
+        await new Promise((r) => setTimeout(r, 600)); // simula latencia
+        data = demoStartSession(skillKey);
+      } else {
+        const res = await api.post<ChatMessageResponse>("/chat/start", {
+          topic: skill.topic,
+          difficulty: "medium",
+        });
+        data = res.data;
+      }
       setSessionActive(true);
       setLastResponse(data);
       metrics.onBotMessageReceived();
@@ -113,36 +121,43 @@ export default function ChatPage() {
     setSending(true);
 
     try {
-      const { data } = await api.post<ChatMessageResponse>("/chat/message", {
-        message: msgContent,
-        response_time_ms:  behavioralMetrics.response_time_ms,
-        typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
-        corrections:       behavioralMetrics.corrections,
-        pause_before_ms:   behavioralMetrics.pause_before_ms,
-        ...(facial.isStreaming && facial.snapshot.is_active ? {
-          facial_data: {
-            emotion: facial.snapshot.valence > 0.2 ? "happy" : facial.snapshot.valence < -0.2 ? "worried" : "neutral",
-            valence: facial.snapshot.valence,
-            arousal: facial.snapshot.arousal,
-            attention_score: facial.snapshot.attention_score,
-            blink_rate: facial.snapshot.blink_rate,
-            brow_furrow: facial.snapshot.brow_furrow,
-            smile_intensity: facial.snapshot.smile_intensity,
-            gaze_direction: facial.snapshot.gaze_direction,
-          }
-        } : {}),
-        ...(voice.isStreaming ? {
-          voice_data: {
-            pitch_mean_hz:       voice.snapshot.pitch_mean_hz,
-            volume_db:           voice.snapshot.volume_db,
-            speech_rate_wpm:     voice.snapshot.speech_rate_wpm,
-            voice_tremor:        voice.snapshot.voice_tremor,
-            energy_level:        voice.snapshot.energy_level,
-            filler_words_count:  voice.snapshot.filler_words_count,
-            silence_duration_ms: voice.snapshot.silence_duration_ms,
-          }
-        } : {}),
-      });
+      let data: ChatMessageResponse;
+      if (DEMO_MODE) {
+        await new Promise((r) => setTimeout(r, 800));
+        data = demoSendMessage(msgContent);
+      } else {
+        const res = await api.post<ChatMessageResponse>("/chat/message", {
+          message: msgContent,
+          response_time_ms:  behavioralMetrics.response_time_ms,
+          typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
+          corrections:       behavioralMetrics.corrections,
+          pause_before_ms:   behavioralMetrics.pause_before_ms,
+          ...(facial.isStreaming && facial.snapshot.is_active ? {
+            facial_data: {
+              emotion: facial.snapshot.valence > 0.2 ? "happy" : facial.snapshot.valence < -0.2 ? "worried" : "neutral",
+              valence: facial.snapshot.valence,
+              arousal: facial.snapshot.arousal,
+              attention_score: facial.snapshot.attention_score,
+              blink_rate: facial.snapshot.blink_rate,
+              brow_furrow: facial.snapshot.brow_furrow,
+              smile_intensity: facial.snapshot.smile_intensity,
+              gaze_direction: facial.snapshot.gaze_direction,
+            }
+          } : {}),
+          ...(voice.isStreaming ? {
+            voice_data: {
+              pitch_mean_hz:       voice.snapshot.pitch_mean_hz,
+              volume_db:           voice.snapshot.volume_db,
+              speech_rate_wpm:     voice.snapshot.speech_rate_wpm,
+              voice_tremor:        voice.snapshot.voice_tremor,
+              energy_level:        voice.snapshot.energy_level,
+              filler_words_count:  voice.snapshot.filler_words_count,
+              silence_duration_ms: voice.snapshot.silence_duration_ms,
+            }
+          } : {}),
+        });
+        data = res.data;
+      }
 
       setLastResponse(data);
       metrics.onBotMessageReceived();
