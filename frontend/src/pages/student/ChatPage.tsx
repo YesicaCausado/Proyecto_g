@@ -1,7 +1,7 @@
 ﻿import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
-import { DEMO_MODE, demoStartSession, demoSendMessage } from "../../services/demoChat";
+import { demoStartSession, demoSendMessage } from "../../services/demoChat";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
 import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
@@ -87,15 +87,17 @@ export default function ChatPage() {
     setSending(true);
     try {
       let data: ChatMessageResponse;
-      if (DEMO_MODE) {
-        await new Promise((r) => setTimeout(r, 600)); // simula latencia
-        data = demoStartSession(skillKey);
-      } else {
+      // Intentar siempre el backend real primero; solo si falla → mock
+      try {
         const res = await api.post<ChatMessageResponse>("/chat/start", {
           topic: skill.topic,
           difficulty: "medium",
         });
         data = res.data;
+      } catch {
+        // Backend no disponible → demo mock
+        await new Promise((r) => setTimeout(r, 600));
+        data = demoStartSession(skillKey);
       }
       setSessionActive(true);
       setLastResponse(data);
@@ -143,10 +145,8 @@ export default function ChatPage() {
 
     try {
       let data: ChatMessageResponse;
-      if (DEMO_MODE) {
-        await new Promise((r) => setTimeout(r, 800));
-        data = demoSendMessage(msgContent);
-      } else {
+      // Intentar backend real; si falla → demo mock
+      try {
         const res = await api.post<ChatMessageResponse>("/chat/message", {
           message: msgContent,
           response_time_ms:  behavioralMetrics.response_time_ms,
@@ -178,6 +178,9 @@ export default function ChatPage() {
           } : {}),
         });
         data = res.data;
+      } catch {
+        await new Promise((r) => setTimeout(r, 800));
+        data = demoSendMessage(msgContent);
       }
 
       setLastResponse(data);

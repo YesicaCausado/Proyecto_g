@@ -40,7 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       if (DEMO_MODE) {
-        setUser(DEMO_USER);
+        // Intentar login real con usuario demo para obtener JWT verdadero
+        try {
+          const { data: tokenData } = await api.post<Token>('/auth/login', {
+            username: 'demo',
+            password: 'demo1234',
+          });
+          localStorage.setItem('token', tokenData.access_token);
+          setToken(tokenData.access_token);
+          const { data: userData } = await api.get<User>('/auth/me');
+          setUser(userData);
+        } catch {
+          // Backend no disponible → usar usuario demo local sin JWT
+          setUser(DEMO_USER);
+        }
         setLoading(false);
         return;
       }
@@ -58,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     };
     loadUser();
-  }, [token]);
+  }, []);
 
   const login = async (loginData: LoginRequest) => {
     if (DEMO_MODE) { setUser(DEMO_USER); return; }

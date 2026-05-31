@@ -1,12 +1,14 @@
 /**
  * demoChat.ts
- * Simula las respuestas del backend para DEMO_MODE.
- * Se usa cuando DEMO_MODE = true en AuthContext, permitiendo
- * navegar por todo el chat sin necesitar backend.
+ * Modo demo: cuando DEMO_MODE = true en AuthContext,
+ * el frontend intenta login con demo/demo1234 para obtener JWT real
+ * y usar la IA del backend. Solo si eso falla, se usan estas
+ * respuestas simuladas locales como último recurso.
  */
 
 import type { ChatMessageResponse } from "../types";
 
+// DEMO_MODE: true = auto-login como demo, con fallback a mock si no hay backend
 const DEMO_MODE = true;
 export { DEMO_MODE };
 

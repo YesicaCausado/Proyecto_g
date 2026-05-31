@@ -33,6 +33,34 @@ import app.models.classroom     # noqa: F401
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 Base.metadata.create_all(bind=engine)
 
+# ─── Usuario demo (DEMO_MODE del frontend) ────────────────────────────────────
+def _ensure_demo_user():
+    """Crea el usuario demo si no existe — permite que el frontend funcione sin registro."""
+    from app.db.database import SessionLocal
+    from app.models.user import User, UserRole
+    from passlib.context import CryptContext
+    db = SessionLocal()
+    try:
+        exists = db.query(User).filter(User.username == "demo").first()
+        if not exists:
+            pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            user = User(
+                username="demo",
+                email="demo@neurolearn.app",
+                full_name="Usuario Demo",
+                hashed_password=pwd.hash("demo1234"),
+                role=UserRole.ESTUDIANTE,
+                is_active=True,
+            )
+            db.add(user)
+            db.commit()
+            import logging
+            logging.getLogger(__name__).info("✅ Usuario demo creado: demo / demo1234")
+    finally:
+        db.close()
+
+_ensure_demo_user()
+
 # Crear aplicación
 app = FastAPI(
     title=settings.APP_NAME,
