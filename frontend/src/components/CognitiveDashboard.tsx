@@ -279,9 +279,26 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
         </div>
         {/* Detalles en vivo de facial */}
         {isFacialLive && facialSnapshot && (
-          <div className="mt-2 text-xs text-gray-500 space-y-0.5 bg-amber-50 rounded-lg px-2 py-1.5">
-            <p>👁 Gaze: <span className="font-medium text-amber-700">{facialSnapshot.gaze_direction}</span></p>
-            <p>😊 Sonrisa: {Math.round(facialSnapshot.smile_intensity * 100)}% · Parpadeo: {facialSnapshot.blink_rate.toFixed(0)}/min</p>
+          <div className="mt-2 text-xs text-gray-500 space-y-1 bg-amber-50 rounded-lg px-2 py-2">
+            <div className="flex items-center justify-between">
+              <span>👁 Mirada:</span>
+              <span className="font-medium text-amber-700">{facialSnapshot.gaze_direction === 'screen' ? '✅ Pantalla' : facialSnapshot.gaze_direction === 'away' ? '↗ Desviada' : facialSnapshot.gaze_direction === 'down' ? '↓ Abajo' : '↑ Arriba'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>😊 Emoción:</span>
+              <span className="font-medium text-amber-700">
+                {facialSnapshot.valence > 0.2 ? '😊 Positiva' : facialSnapshot.valence < -0.2 ? '😟 Negativa' : '😐 Neutral'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>🏃 Movimiento:</span>
+              <span className="font-medium text-amber-700">{Math.round(facialSnapshot.motion_level * 100)}%</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>😌 Ceño:</span>
+              <span className="font-medium text-amber-700">{facialSnapshot.brow_furrow > 0.4 ? '😠 Fruncido' : '😌 Relajado'}</span>
+            </div>
+            <MetricBar value={facialSnapshot.attention_score} color="amber" label="Atención visual" />
           </div>
         )}
         {/* Detalles en vivo de voz */}

@@ -140,9 +140,9 @@ export function useFacialDetection(): FacialDetectionControls {
     const elapsed = (Date.now() - startTimeRef.current) / 60000;
     const blink_rate = elapsed > 0 ? Math.min(blinks / elapsed, 40) : 15;
 
-    const hasFace = totalLum > 20 && totalLum < 240;
+    const hasFace = totalLum > 8 && totalLum < 248; // umbral amplio — solo excluye negro/blanco total
     const isStable = motion < 0.15;
-    const attention_score = hasFace ? (isStable ? 0.85 : Math.max(0.4, 0.85 - motion)) : 0.1;
+    const attention_score = hasFace ? (isStable ? 0.85 : Math.max(0.4, 0.85 - motion)) : 0.3;
 
     // Centroide de luminancia -> gaze
     let sx = 0, sy = 0, sw = 0;
@@ -177,7 +177,7 @@ export function useFacialDetection(): FacialDetectionControls {
       brow_furrow:     +brow_furrow.toFixed(3),
       smile_intensity: +smile_intensity.toFixed(3),
       motion_level:    +motion.toFixed(3),
-      is_active:       hasFace,
+      is_active:       true, // activo siempre que el video sea legible (readyState >= 2)
     });
 
     // ~10 fps
