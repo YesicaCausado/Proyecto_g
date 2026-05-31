@@ -28,6 +28,7 @@ export interface FacialDetectionControls {
   permissionDenied: boolean;
   errorMessage: string | null;
   hardwareAvailable: boolean;        // false si el dispositivo no tiene cámara
+  videoRef: React.RefObject<HTMLVideoElement | null>;  // para mostrar el preview
   startCamera: () => Promise<void>;
   stopCamera: () => void;
   resetError: () => void;
@@ -258,5 +259,5 @@ export function useFacialDetection(): FacialDetectionControls {
     };
   }, []);
 
-  return { snapshot, isStreaming, permissionDenied, errorMessage, hardwareAvailable, startCamera, stopCamera, resetError };
+  return { snapshot, isStreaming, permissionDenied, errorMessage, hardwareAvailable, videoRef, startCamera, stopCamera, resetError };
 }

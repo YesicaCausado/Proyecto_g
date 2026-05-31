@@ -9,6 +9,27 @@ import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
 
+/** Mini-componente que adjunta el stream del videoRef al <video> React */
+function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
+  const previewRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const src = videoRef.current?.srcObject;
+    if (previewRef.current && src) {
+      previewRef.current.srcObject = src as MediaStream;
+      previewRef.current.play().catch(() => {/* autoplay blocked, ok */});
+    }
+  }, [videoRef]);
+  return (
+    <video
+      ref={previewRef}
+      autoPlay
+      playsInline
+      muted
+      className="w-full h-full object-cover scale-x-[-1]" // espejo como selfie
+    />
+  );
+}
+
 const SKILLS = [
   { key: "matematicas", name: "Pensamiento Lógico-Matemático", topic: "Razonamiento cuantitativo y matemáticas para Saber 11", icon: "🧮", color: "from-blue-500 to-blue-600" },
   { key: "lectora",     name: "Comprensión Lectora",           topic: "Comprensión lectora y lectura crítica para Saber 11",  icon: "📖", color: "from-amber-500 to-orange-500" },
@@ -241,7 +262,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-64px)] bg-gray-50">
       {/* Chat Panel */}
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0 relative">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -365,6 +386,31 @@ export default function ChatPage() {
             </button>
           </div>
         </div>
+
+        {/* Preview de cámara — cuadrito flotante esquina inferior derecha */}
+        {facial.isStreaming && (
+          <div className="absolute bottom-20 right-4 z-30 group">
+            <div className="relative w-36 h-28 rounded-xl overflow-hidden shadow-2xl border-2 border-green-400 bg-black">
+              {/* El elemento <video> existe en el DOM; lo clonamos visualmente con un canvas
+                  o simplemente referenciamos el mismo stream en un <video> React */}
+              <VideoPreview videoRef={facial.videoRef} />
+              {/* Indicador "EN VIVO" */}
+              <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-black/60 rounded-full px-1.5 py-0.5">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-white text-[9px] font-semibold tracking-wide">EN VIVO</span>
+              </div>
+              {/* Botón cerrar encima del cuadrito */}
+              <button
+                onClick={facial.stopCamera}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                title="Apagar cámara"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <p className="text-center text-[10px] text-gray-400 mt-1">Análisis facial activo</p>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
