@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { DEMO_MODE } from '../../services/demoChat';
 import type { ExpertBot, Classroom } from '../../types';
 import {
   Brain,
@@ -36,6 +37,10 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (DEMO_MODE) {
+        setLoading(false);
+        return; // en demo no hay backend — bots y clases quedan vacíos
+      }
       try {
         const [botsRes, classesRes] = await Promise.all([
           api.get('/bots/').catch(() => ({ data: { bots: [] } })),

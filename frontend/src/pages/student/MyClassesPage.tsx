@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../services/api';
+import { DEMO_MODE } from '../../services/demoChat';
 import type { Classroom } from '../../types';
 import { Users, KeyRound, Loader2, CheckCircle } from 'lucide-react';
 
@@ -13,6 +14,7 @@ export default function MyClassesPage() {
   const [fetched, setFetched] = useState(false);
 
   const fetchClasses = async () => {
+    if (DEMO_MODE) { setFetched(true); return; }
     setLoading(true);
     try {
       const { data } = await api.get('/classrooms/my-enrolled');

@@ -320,6 +320,15 @@ async def list_public_bots(
     return BotListResponse(bots=bot_responses, total=len(bot_responses))
 
 
+@router.get("/", response_model=BotListResponse)
+async def list_bots_root(
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Alias de /public — lista bots disponibles (sin autenticación requerida)"""
+    return await list_public_bots(category=category, db=db)
+
+
 @router.post("/{bot_id}/publish")
 async def publish_bot(
     bot_id: int,

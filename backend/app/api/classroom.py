@@ -128,6 +128,45 @@ async def list_my_classrooms(
     return ClassroomListResponse(classrooms=result, total=len(result))
 
 
+@router.get("/my-enrolled", response_model=ClassroomListResponse)
+async def list_enrolled_classrooms(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Listar las clases en las que está inscrito el estudiante actual"""
+    require_student(current_user)
+
+    enrollments = db.query(Enrollment).filter(
+        Enrollment.student_id == current_user.id,
+        Enrollment.is_active == True,
+    ).all()
+
+    result = []
+    for e in enrollments:
+        c = db.query(Classroom).filter(Classroom.id == e.classroom_id).first()
+        if not c or not c.is_active:
+            continue
+        student_count = db.query(Enrollment).filter(
+            Enrollment.classroom_id == c.id,
+            Enrollment.is_active == True,
+        ).count()
+        result.append(ClassroomResponse(
+            id=c.id,
+            teacher_id=c.teacher_id,
+            name=c.name,
+            description=c.description,
+            subject=c.subject,
+            grade=c.grade,
+            invite_code=c.invite_code,
+            is_active=c.is_active,
+            max_students=c.max_students,
+            student_count=student_count,
+            created_at=c.created_at,
+        ))
+
+    return ClassroomListResponse(classrooms=result, total=len(result))
+
+
 @router.get("/{classroom_id}", response_model=ClassroomResponse)
 async def get_classroom(
     classroom_id: int,
