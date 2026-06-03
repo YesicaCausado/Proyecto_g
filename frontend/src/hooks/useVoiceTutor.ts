@@ -5,11 +5,11 @@
  *  • SpeechRecognition  → STT: convierte lo que dice el usuario en texto
  *  • SpeechSynthesis    → TTS: el tutor responde hablando en voz alta
  *
- * Se activa automáticamente cuando cámara + micrófono están encendidos.
+ * Voz fija: Sofía (es-BO) — sin selector de voces en el frontend.
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
-// ── Tipos de Web Speech API (no incluidos en lib.dom.d.ts estándar) ──────────
+// ── Tipos de Web Speech API ──────────────────────────────────────────────────
 interface ISpeechRecognition extends EventTarget {
   lang: string;
   continuous: boolean;
@@ -45,17 +45,16 @@ interface ISpeechRecognitionErrorEvent extends Event {
   message: string;
 }
 
-// ── Tipos ────────────────────────────────────────────────────────────────────
-
+// ── Tipos exportados ─────────────────────────────────────────────────────────
 export interface VoiceTutorState {
-  isVoiceMode: boolean;       // modo tutor de voz activo
-  isListening: boolean;       // STT escuchando activamente
-  isSpeaking: boolean;        // TTS hablando ahora mismo
-  liveTranscript: string;     // lo que el usuario está diciendo ahora (parcial)
-  lastUserText: string;       // último texto confirmado del usuario
-  lastBotText: string;        // último texto del bot que se está leyendo
-  subtitlesEnabled: boolean;  // subtítulos visibles
-  supported: boolean;         // Web Speech API disponible
+  isVoiceMode: boolean;
+  isListening: boolean;
+  isSpeaking: boolean;
+  liveTranscript: string;
+  lastUserText: string;
+  lastBotText: string;
+  subtitlesEnabled: boolean;
+  supported: boolean;
 }
 
 export interface VoiceTutorControls extends VoiceTutorState {
@@ -64,89 +63,93 @@ export interface VoiceTutorControls extends VoiceTutorState {
   toggleSubtitles: () => void;
   speakText: (text: string, onEnd?: () => void) => void;
   stopSpeaking: () => void;
-  // Voces disponibles / selección
-  availableVoices: () => Array<{ name: string; lang: string }>; 
-  selectVoice: (name: string) => void;
 }
 
-// ── Helper: limpiar texto para TTS (quita markdown) ──────────────────────────
-
+// ── Limpia markdown para TTS ─────────────────────────────────────────────────
 function stripMarkdown(text: string): string {
   return text
-    .replace(/\*\*(.*?)\*\*/g, '$1!')        // negrita → añade ! para énfasis
+    .replace(/\*\*(.*?)\*\*/g, '$1!')
     .replace(/\*(.*?)\*/g, '$1')
     .replace(/`(.*?)`/g, '$1')
     .replace(/#{1,6}\s/g, '')
     .replace(/>\s/g, '')
-    .replace(/\n\n+/g, '... ')              // párrafos → pausa larga
-    .replace(/\n/g, ', ')                   // saltos de línea → pausa corta
+    .replace(/\n\n+/g, '... ')
+    .replace(/\n/g, ', ')
     .replace(/([.!?])\s+/g, '$1 ')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────────────
+// ── Selecciona voz Sofía de Bolivia (fija, sin opción al usuario) ────────────
+function pickSofiaVoice(): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices();
+  const isFemale = (v: SpeechSynthesisVoice) =>
+    /female|mujer|woman|femenin|sof[ií]a|salom[eé]|m[oó]nica|luc[ií]a|paulina|helena|laura|sabina/i.test(v.name);
 
+  return (
+    voices.find(v => /sof[ií]a/i.test(v.name) && v.lang === 'es-BO') ||
+    voices.find(v => /sof[ií]a/i.test(v.name) && v.lang.startsWith('es')) ||
+    voices.find(v => /sof[ií]a/i.test(v.name)) ||
+    voices.find(v => v.lang.startsWith('es') && isFemale(v)) ||
+    voices.find(v => v.lang === 'es-BO') ||
+    voices.find(v => v.lang.startsWith('es')) ||
+    voices[0] ||
+    null
+  );
+}
+
+// ── Hook principal ────────────────────────────────────────────────────────────
 export function useVoiceTutor(
-  onTranscript: (text: string) => void,  // callback cuando el usuario termina de hablar
+  onTranscript: (text: string) => void,
 ): VoiceTutorControls {
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const synthRef       = useRef<SpeechSynthesis | null>(null);
   const silenceTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeRef      = useRef(false); // evita re-iniciar si ya está corriendo
+  const activeRef      = useRef(false);
 
-  const [isVoiceMode,     setIsVoiceMode]     = useState(false);
-  const [isListening,     setIsListening]     = useState(false);
-  const [isSpeaking,      setIsSpeaking]      = useState(false);
-  const [liveTranscript,  setLiveTranscript]  = useState('');
-  const [lastUserText,    setLastUserText]     = useState('');
-  const [lastBotText,     setLastBotText]      = useState('');
-  const [subtitlesEnabled,setSubtitlesEnabled] = useState(true);
-  const [voicesList, setVoicesList] = useState<Array<{ name: string; lang: string }>>([]);
-  const selectedVoiceNameRef = useRef<string | null>(null);
+  const [isVoiceMode,      setIsVoiceMode]      = useState(false);
+  const [isListening,      setIsListening]      = useState(false);
+  const [isSpeaking,       setIsSpeaking]       = useState(false);
+  const [liveTranscript,   setLiveTranscript]   = useState('');
+  const [lastUserText,     setLastUserText]      = useState('');
+  const [lastBotText,      setLastBotText]       = useState('');
+  const [subtitlesEnabled, setSubtitlesEnabled]  = useState(true);
 
-  // Detectar soporte
   const SpeechRecognitionAPI =
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   const supported = !!(SpeechRecognitionAPI && window.speechSynthesis);
 
-  // ── TTS: hablar ─────────────────────────────────────────────────────────────
+  // Precargar voces al montar (el navegador las carga de forma asíncrona)
+  useEffect(() => {
+    if (!window.speechSynthesis) return;
+    const load = () => { window.speechSynthesis.getVoices(); };
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
+
+  // ── TTS ──────────────────────────────────────────────────────────────────────
   const speakText = useCallback((text: string, onEnd?: () => void) => {
     if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel(); // cortar cualquier audio anterior
+    window.speechSynthesis.cancel();
 
     const clean = stripMarkdown(text);
     if (!clean) return;
 
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang   = 'es-BO';  // Bolivia — para que el navegador prefiera Sofía
+    utterance.lang   = 'es-BO';
     utterance.rate   = 1.12;
     utterance.pitch  = 1.3;
     utterance.volume = 1.0;
 
-    // ── Selección de voz: Sofía de Bolivia primero, luego cualquier española ─
-    const voices = window.speechSynthesis.getVoices();
-
-    const chosen =
-      // 1. Si el usuario eligió manualmente desde el selector
-      (selectedVoiceNameRef.current ? voices.find(v => v.name === selectedVoiceNameRef.current) : undefined) ||
-      // 2. Sofía — voz oficial Microsoft Bolivia (es-BO)
-      voices.find(v => /sof[ií]a/i.test(v.name)) ||
-      // 3. Cualquier voz es-BO
-      voices.find(v => v.lang === 'es-BO') ||
-      // 4. Cualquier voz en español
-      voices.find(v => v.lang.startsWith('es')) ||
-      // 5. Primera disponible
-      voices[0];
-
-    if (chosen) utterance.voice = chosen;
+    const voice = pickSofiaVoice();
+    if (voice) utterance.voice = voice;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend   = () => {
       setIsSpeaking(false);
       onEnd?.();
-      // Reanudar escucha después de que el tutor termina de hablar
       if (activeRef.current) _startListening();
     };
     utterance.onerror = () => {
@@ -157,30 +160,7 @@ export function useVoiceTutor(
     setLastBotText(clean.slice(0, 120) + (clean.length > 120 ? '…' : ''));
     synthRef.current = window.speechSynthesis;
     window.speechSynthesis.speak(utterance);
-  }, []);
-
-  // ── Gestión de voces: listar y seleccionar (expuesto al UI) ──────────────
-  useEffect(() => {
-    if (!window.speechSynthesis) return;
-    const update = () => {
-      const v = window.speechSynthesis.getVoices().map(s => ({ name: s.name, lang: s.lang }));
-      setVoicesList(v);
-      // seleccionar automáticamente la mejor voz femenina/española si no hay selección
-      if (!selectedVoiceNameRef.current && v.length > 0) {
-        const auto =
-          // Sofía Bolivia — Microsoft Sofía es-BO
-          v.find(x => /sof[ií]a/i.test(x.name) && x.lang === 'es-BO') ||
-          v.find(x => /sof[ií]a/i.test(x.name) && x.lang.startsWith('es')) ||
-          v.find(x => /sof[ií]a/i.test(x.name)) ||
-          v.find(x => x.lang === 'es-BO') ||
-          v.find(x => x.lang.startsWith('es')) ||
-          v[0];
-        if (auto) selectedVoiceNameRef.current = auto.name;
-      }
-    };
-    update();
-    window.speechSynthesis.onvoiceschanged = update;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopSpeaking = useCallback(() => {
@@ -188,12 +168,7 @@ export function useVoiceTutor(
     setIsSpeaking(false);
   }, []);
 
-  const availableVoices = useCallback(() => voicesList, [voicesList]);
-  const selectVoice = useCallback((name: string) => {
-    selectedVoiceNameRef.current = name;
-  }, []);
-
-  // ── STT: escuchar ───────────────────────────────────────────────────────────
+  // ── STT ──────────────────────────────────────────────────────────────────────
   const _startListening = useCallback(() => {
     if (!SpeechRecognitionAPI || !activeRef.current) return;
     if (recognitionRef.current) {
@@ -201,9 +176,9 @@ export function useVoiceTutor(
     }
 
     const recognition = new SpeechRecognitionAPI() as ISpeechRecognition;
-    recognition.lang           = 'es-CO';
-    recognition.continuous     = true;
-    recognition.interimResults = true;
+    recognition.lang            = 'es-BO';
+    recognition.continuous      = true;
+    recognition.interimResults  = true;
     recognition.maxAlternatives = 1;
 
     let finalText = '';
@@ -218,19 +193,18 @@ export function useVoiceTutor(
         if (event.results[i].isFinal) finalText += t;
         else interim += t;
       }
+      // Mostrar transcripción en vivo en el input
       setLiveTranscript(interim || finalText);
 
-      // Reset silence timer cada vez que hay texto
       if (silenceTimer.current) clearTimeout(silenceTimer.current);
       if (finalText.trim()) {
-        // Enviar después de 1.5s de silencio
+        // Enviar tras 1.5 s de silencio
         silenceTimer.current = setTimeout(() => {
           const trimmed = finalText.trim();
           if (trimmed && activeRef.current) {
             setLastUserText(trimmed);
             setLiveTranscript('');
             onTranscript(trimmed);
-            // Pausar escucha mientras el bot habla
             recognition.stop();
           }
         }, 1500);
@@ -238,16 +212,14 @@ export function useVoiceTutor(
     };
 
     recognition.onerror = (e: ISpeechRecognitionErrorEvent) => {
-      if (e.error === 'no-speech') return; // silencio normal, ignorar
+      if (e.error === 'no-speech') return;
       console.warn('[VoiceTutor] STT error:', e.error);
       setIsListening(false);
-      // Reintentar en 2s si el modo está activo
       if (activeRef.current) setTimeout(_startListening, 2000);
     };
 
     recognition.onend = () => {
       setIsListening(false);
-      // Si el modo sigue activo y no está hablando, reanudar
       if (activeRef.current && !window.speechSynthesis?.speaking) {
         setTimeout(_startListening, 500);
       }
@@ -257,7 +229,7 @@ export function useVoiceTutor(
     try { recognition.start(); } catch { /* ya corriendo */ }
   }, [onTranscript]);
 
-  // ── Activar/Desactivar modo ─────────────────────────────────────────────────
+  // ── Activar / Desactivar modo voz ────────────────────────────────────────────
   const startVoiceMode = useCallback(() => {
     if (!supported) return;
     activeRef.current = true;
@@ -281,7 +253,7 @@ export function useVoiceTutor(
 
   const toggleSubtitles = useCallback(() => setSubtitlesEnabled(v => !v), []);
 
-  // Cleanup al desmontar
+  // Cleanup
   useEffect(() => {
     return () => {
       activeRef.current = false;
@@ -305,7 +277,5 @@ export function useVoiceTutor(
     toggleSubtitles,
     speakText,
     stopSpeaking,
-    availableVoices,
-    selectVoice,
   };
 }

@@ -84,16 +84,16 @@ export default function ChatPage() {
     await sendMessageWithText(transcript);
   });
 
-  // Auto-activar modo voz cuando c�mara + micr�fono est�n ambos activos
+  // Auto-activar modo voz cuando el micrófono está activo
   useEffect(() => {
     if (!voiceTutor.supported || !sessionActive) return;
-    if (facial.isStreaming && voice.isStreaming && !voiceTutor.isVoiceMode) {
+    if (voice.isStreaming && !voiceTutor.isVoiceMode) {
       voiceTutor.startVoiceMode();
-    } else if ((!facial.isStreaming || !voice.isStreaming) && voiceTutor.isVoiceMode) {
+    } else if (!voice.isStreaming && voiceTutor.isVoiceMode) {
       voiceTutor.stopVoiceMode();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facial.isStreaming, voice.isStreaming, sessionActive]);
+  }, [voice.isStreaming, sessionActive]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
