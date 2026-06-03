@@ -18,7 +18,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url: string = error.config?.url ?? '';
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
+    // Solo redirigir a login si NO es una llamada de autenticación y hay un token real
+    // (evita loop infinito en DEMO_MODE cuando el backend retorna 401 durante init)
+    if (error.response?.status === 401 && !isAuthEndpoint && localStorage.getItem('token')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
