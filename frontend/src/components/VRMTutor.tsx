@@ -143,6 +143,25 @@ const VRMTutor = forwardRef<VRMTutorHandle, Props>(
           VRMUtils.rotateVRM0(vrm);
           vrmRef.current = vrm;
           scene.add(vrm.scene);
+
+          // ─── Pose inicial: brazos colgando naturalmente ──────────────
+          if (vrm.humanoid) {
+            // Bajar brazos a los costados (rotación en Z hacia abajo)
+            const leftUpper  = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
+            const rightUpper = vrm.humanoid.getNormalizedBoneNode("rightUpperArm");
+            const leftLower  = vrm.humanoid.getNormalizedBoneNode("leftLowerArm");
+            const rightLower = vrm.humanoid.getNormalizedBoneNode("rightLowerArm");
+            const leftHand   = vrm.humanoid.getNormalizedBoneNode("leftHand");
+            const rightHand  = vrm.humanoid.getNormalizedBoneNode("rightHand");
+
+            if (leftUpper)  { leftUpper.rotation.z  =  1.1;  leftUpper.rotation.x  = 0.05; }
+            if (rightUpper) { rightUpper.rotation.z = -1.1;  rightUpper.rotation.x = 0.05; }
+            if (leftLower)  { leftLower.rotation.z  =  0.0;  leftLower.rotation.x  = 0.05; }
+            if (rightLower) { rightLower.rotation.z =  0.0;  rightLower.rotation.x = 0.05; }
+            if (leftHand)   { leftHand.rotation.z   =  0.05; leftHand.rotation.x   = 0;    }
+            if (rightHand)  { rightHand.rotation.z  = -0.05; rightHand.rotation.x  = 0;    }
+          }
+
           setLoadState("loaded");
           onLoad?.();
         },
@@ -169,7 +188,7 @@ const VRMTutor = forwardRef<VRMTutorHandle, Props>(
         if (vrm) {
           vrm.update(delta);
 
-          // ─── Animación idle: respiración ────────────────────────────────
+          // ─── Animación idle: respiración + brazos abajo ─────────────────
           const t = clockRef.current.elapsedTime;
           if (vrm.humanoid) {
             const spine = vrm.humanoid.getNormalizedBoneNode("spine");
@@ -182,6 +201,12 @@ const VRMTutor = forwardRef<VRMTutorHandle, Props>(
               head.rotation.y = Math.sin(t * 0.3) * 0.03;
               head.rotation.x = -0.05 + Math.sin(t * 0.4) * 0.01;
             }
+            // Mantener brazos colgando + micro-balanceo de respiración
+            const leftUpper  = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
+            const rightUpper = vrm.humanoid.getNormalizedBoneNode("rightUpperArm");
+            const breathe = Math.sin(t * 0.5) * 0.012;
+            if (leftUpper)  leftUpper.rotation.z  =  1.1 + breathe;
+            if (rightUpper) rightUpper.rotation.z = -1.1 - breathe;
           }
 
           // ─── Parpadeo automático ─────────────────────────────────────────
