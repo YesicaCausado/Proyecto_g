@@ -133,12 +133,10 @@ export default function ChatPage() {
         action: data.action,
         suggestions: data.suggestions,
       }]);
-      // TTS + VRM: leer bienvenida en voz alta y animar avatar
-      if (voiceTutor.isVoiceMode) {
-        voiceTutor.speakText(data.message);
-        const wordCount = data.message.split(" ").length;
-        vrmRef.current?.speak(wordCount * 350);
-      }
+      // TTS + VRM: siempre leer la bienvenida en voz alta y animar labios
+      const wordCountStart = data.message.split(" ").length;
+      vrmRef.current?.speak(wordCountStart * 380);
+      voiceTutor.speakText(data.message, () => vrmRef.current?.stopSpeak());
       if (data.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
@@ -233,12 +231,10 @@ export default function ChatPage() {
           suggestions: data.suggestions,
         },
       ]);
-      // TTS + VRM: leer respuesta en voz alta y animar avatar
-      if (voiceTutor.isVoiceMode) {
-        voiceTutor.speakText(data.message);
-        const wordCount = data.message.split(" ").length;
-        vrmRef.current?.speak(wordCount * 350);
-      }
+      // TTS + VRM: siempre leer la respuesta en voz alta y animar labios
+      const wordCountMsg = data.message.split(" ").length;
+      vrmRef.current?.speak(wordCountMsg * 380);
+      voiceTutor.speakText(data.message, () => vrmRef.current?.stopSpeak());
       if (data.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
@@ -327,6 +323,40 @@ export default function ChatPage() {
               <span className="flex items-center gap-1 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium animate-pulse">
                 🎙 Tutor Voz
               </span>
+            )}
+            {/* Selector de voz TTS */}
+            {voiceTutor.availableVoices().length > 0 && (
+              <div className="flex items-center gap-1 ml-1">
+                <select
+                  onChange={(e) => voiceTutor.selectVoice(e.target.value)}
+                  className="text-xs rounded-lg border border-violet-200 px-2 py-1 bg-white text-gray-700 max-w-[140px] truncate"
+                  title="Seleccionar voz del tutor"
+                  defaultValue=""
+                >
+                  <option value="" disabled>🎙 Voz del tutor</option>
+                  {voiceTutor.availableVoices()
+                    .sort((a, b) => {
+                      // español primero, Salomé al tope
+                      const aEs = a.lang.startsWith('es') ? 0 : 1;
+                      const bEs = b.lang.startsWith('es') ? 0 : 1;
+                      const aSal = /salom/i.test(a.name) ? -1 : 0;
+                      const bSal = /salom/i.test(b.name) ? -1 : 0;
+                      return aSal - bSal || aEs - bEs;
+                    })
+                    .map((v) => (
+                      <option key={v.name} value={v.name}>
+                        {/salom/i.test(v.name) ? '⭐ ' : v.lang.startsWith('es') ? '🇨🇴 ' : ''}{v.name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  onClick={() => voiceTutor.speakText('¡Hola! Soy tu tutora NeuroLearn, lista para ayudarte a aprender.')}
+                  className="text-xs px-2 py-1 rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors whitespace-nowrap"
+                  title="Probar voz seleccionada"
+                >
+                  ▶ Probar
+                </button>
+              </div>
             )}
           </div>
           <div className="flex items-center gap-2">

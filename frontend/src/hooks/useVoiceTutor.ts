@@ -62,8 +62,11 @@ export interface VoiceTutorControls extends VoiceTutorState {
   startVoiceMode: () => void;
   stopVoiceMode: () => void;
   toggleSubtitles: () => void;
-  speakText: (text: string) => void;
+  speakText: (text: string, onEnd?: () => void) => void;
   stopSpeaking: () => void;
+  // Voces disponibles / selección
+  availableVoices: () => Array<{ name: string; lang: string }>; 
+  selectVoice: (name: string) => void;
 }
 
 // ── Helper: limpiar texto para TTS (quita markdown) ──────────────────────────
@@ -98,6 +101,8 @@ export function useVoiceTutor(
   const [lastUserText,    setLastUserText]     = useState('');
   const [lastBotText,     setLastBotText]      = useState('');
   const [subtitlesEnabled,setSubtitlesEnabled] = useState(true);
+  const [voicesList, setVoicesList] = useState<Array<{ name: string; lang: string }>>([]);
+  const selectedVoiceNameRef = useRef<string | null>(null);
 
   // Detectar soporte
   const SpeechRecognitionAPI =
@@ -105,7 +110,7 @@ export function useVoiceTutor(
   const supported = !!(SpeechRecognitionAPI && window.speechSynthesis);
 
   // ── TTS: hablar ─────────────────────────────────────────────────────────────
-  const speakText = useCallback((text: string) => {
+  const speakText = useCallback((text: string, onEnd?: () => void) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel(); // cortar cualquier audio anterior
 
@@ -113,34 +118,80 @@ export function useVoiceTutor(
     if (!clean) return;
 
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang  = 'es-CO';  // español colombiano
-    utterance.rate  = 1.05;     // un poco más rápido que normal — natural
-    utterance.pitch = 1.05;
+    utterance.lang   = 'es-CO';
+    utterance.rate   = 1.12;    // un poco más rápida — suena juvenil/animada
+    utterance.pitch  = 1.25;    // tono más agudo — voz femenina joven
     utterance.volume = 1.0;
 
-    // Seleccionar voz española si está disponible
+    // ── Prioridad de voz (de mayor a menor) ─────────────────────────────────
     const voices = window.speechSynthesis.getVoices();
-    const esVoice = voices.find(v =>
-      v.lang.startsWith('es') && (v.name.includes('Google') || v.name.includes('Microsoft'))
-    ) || voices.find(v => v.lang.startsWith('es'));
-    if (esVoice) utterance.voice = esVoice;
+
+    const pick = (fn: (v: SpeechSynthesisVoice) => boolean) => voices.find(fn);
+
+    const chosen =
+      // 1. Salomé — voz colombiana oficial de Microsoft/Google
+      pick(v => /salom[eé]/i.test(v.name)) ||
+      // 2. Cualquier voz femenina en español de Colombia
+      pick(v => v.lang === 'es-CO' && /female|femenin|mujer|woman/i.test(v.name)) ||
+      // 3. Voz femenina en español (cualquier variante)
+      pick(v => v.lang.startsWith('es') && /female|femenin|mujer|woman/i.test(v.name)) ||
+      // 4. Google/Microsoft español (suelen ser femeninas por defecto)
+      pick(v => v.lang.startsWith('es') && /google|microsoft/i.test(v.name)) ||
+      // 5. Cualquier voz en español
+      pick(v => v.lang.startsWith('es')) ||
+      // 6. Primera disponible
+      voices[0];
+
+    if (chosen) utterance.voice = chosen;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend   = () => {
       setIsSpeaking(false);
+      onEnd?.();
       // Reanudar escucha después de que el tutor termina de hablar
       if (activeRef.current) _startListening();
     };
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      onEnd?.();
+    };
 
     setLastBotText(clean.slice(0, 120) + (clean.length > 120 ? '…' : ''));
     synthRef.current = window.speechSynthesis;
     window.speechSynthesis.speak(utterance);
   }, []);
 
+  // ── Gestión de voces: listar y seleccionar (expuesto al UI) ──────────────
+  useEffect(() => {
+    if (!window.speechSynthesis) return;
+    const update = () => {
+      const v = window.speechSynthesis.getVoices().map(s => ({ name: s.name, lang: s.lang }));
+      setVoicesList(v);
+      // seleccionar automáticamente la mejor voz femenina/española si no hay selección
+      if (!selectedVoiceNameRef.current && v.length > 0) {
+        const auto =
+          v.find(x => /salom[eé]/i.test(x.name)) ||
+          v.find(x => x.lang === 'es-CO' && /female|femenin|mujer|woman/i.test(x.name)) ||
+          v.find(x => x.lang.startsWith('es') && /female|femenin|mujer|woman/i.test(x.name)) ||
+          v.find(x => x.lang.startsWith('es') && /google|microsoft/i.test(x.name)) ||
+          v.find(x => x.lang.startsWith('es')) ||
+          v[0];
+        if (auto) selectedVoiceNameRef.current = auto.name;
+      }
+    };
+    update();
+    window.speechSynthesis.onvoiceschanged = update;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
+
   const stopSpeaking = useCallback(() => {
     window.speechSynthesis?.cancel();
     setIsSpeaking(false);
+  }, []);
+
+  const availableVoices = useCallback(() => voicesList, [voicesList]);
+  const selectVoice = useCallback((name: string) => {
+    selectedVoiceNameRef.current = name;
   }, []);
 
   // ── STT: escuchar ───────────────────────────────────────────────────────────
@@ -255,5 +306,7 @@ export function useVoiceTutor(
     toggleSubtitles,
     speakText,
     stopSpeaking,
+    availableVoices,
+    selectVoice,
   };
 }
