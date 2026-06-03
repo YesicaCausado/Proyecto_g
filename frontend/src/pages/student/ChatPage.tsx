@@ -33,11 +33,11 @@ function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement
 }
 
 const SKILLS = [
-  { key: "matematicas", name: "Pensamiento L�gico-Matem�tico", topic: "Razonamiento cuantitativo y matem�ticas para Saber 11", icon: "??", color: "from-blue-500 to-blue-600" },
-  { key: "lectora",     name: "Comprensi�n Lectora",           topic: "Comprensi�n lectora y lectura cr�tica para Saber 11",  icon: "??", color: "from-amber-500 to-orange-500" },
-  { key: "ingles",      name: "Ingl�s Comunicativo",           topic: "Competencia comunicativa en ingl�s para Saber 11",     icon: "??", color: "from-green-500 to-emerald-600" },
-  { key: "ciudadanas",  name: "Competencias Ciudadanas",       topic: "Competencias ciudadanas y sociales para Saber 11",     icon: "???", color: "from-purple-500 to-violet-600" },
-  { key: "cientifico",  name: "Pensamiento Cient�fico",        topic: "Pensamiento cient�fico y ciencias naturales para Saber 11", icon: "??", color: "from-cyan-500 to-teal-600" },
+  { key: "matematicas", name: "Pensamiento Lógico-Matemático", topic: "Razonamiento cuantitativo y matemáticas para Saber 11", icon: "🧮", color: "from-blue-500 to-blue-600" },
+  { key: "lectora",     name: "Comprensión Lectora",           topic: "Comprensión lectora y lectura crítica para Saber 11",  icon: "📖", color: "from-amber-500 to-orange-500" },
+  { key: "ingles",      name: "Inglés Comunicativo",           topic: "Competencia comunicativa en inglés para Saber 11",     icon: "🌎", color: "from-green-500 to-emerald-600" },
+  { key: "ciudadanas",  name: "Competencias Ciudadanas",       topic: "Competencias ciudadanas y sociales para Saber 11",     icon: "🏛️", color: "from-purple-500 to-violet-600" },
+  { key: "cientifico",  name: "Pensamiento Científico",        topic: "Pensamiento científico y ciencias naturales para Saber 11", icon: "🔬", color: "from-cyan-500 to-teal-600" },
 ];
 
 const STATE_LABELS: Record<string, { label: string; color: string }> = {
@@ -46,8 +46,8 @@ const STATE_LABELS: Record<string, { label: string; color: string }> = {
   overload:    { label: "Sobrecarga",  color: "bg-red-100 text-red-700" },
   doubt:       { label: "Duda",        color: "bg-yellow-100 text-yellow-700" },
   mastery:     { label: "Dominio",     color: "bg-emerald-100 text-emerald-700" },
-  flow:        { label: "Flujo ?",    color: "bg-blue-100 text-blue-700" },
-  frustration: { label: "Frustraci�n", color: "bg-red-100 text-red-700" },
+  flow:        { label: "Flujo ✨",    color: "bg-blue-100 text-blue-700" },
+  frustration: { label: "Frustración", color: "bg-red-100 text-red-700" },
   curiosity:   { label: "Curiosidad",  color: "bg-violet-100 text-violet-700" },
   focused:     { label: "Enfocado",    color: "bg-green-100 text-green-700" },
   learning:    { label: "Aprendiendo", color: "bg-blue-100 text-blue-700" },
@@ -77,7 +77,7 @@ export default function ChatPage() {
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
 
-  // Tutor de Voz � STT escucha al usuario, TTS responde en voz alta
+  // Tutor de Voz — STT escucha al usuario, TTS responde en voz alta
   const voiceTutor = useVoiceTutor(async (transcript) => {
     if (!transcript.trim() || sending) return;
     setInput(transcript);
@@ -109,7 +109,7 @@ export default function ChatPage() {
     setSending(true);
     try {
       let data: ChatMessageResponse;
-      // Intentar siempre el backend real primero; solo si falla ? mock
+      // Intentar siempre el backend real primero; solo si falla → mock
       try {
         const res = await api.post<ChatMessageResponse>("/chat/start", {
           topic: skill.topic,
@@ -117,7 +117,7 @@ export default function ChatPage() {
         });
         data = res.data;
       } catch {
-        // Backend no disponible ? demo mock
+        // Backend no disponible → demo mock
         await new Promise((r) => setTimeout(r, 600));
         data = demoStartSession(skillKey);
       }
@@ -178,7 +178,7 @@ export default function ChatPage() {
 
     try {
       let data: ChatMessageResponse;
-      // Intentar backend real; si falla ? demo mock
+      // Intentar backend real; si falla → demo mock
       try {
         const res = await api.post<ChatMessageResponse>("/chat/message", {
           message: msgContent,
@@ -242,7 +242,7 @@ export default function ChatPage() {
       console.error("Error sending message:", err);
       setMessages((prev) => [
         ...prev,
-        { id: (Date.now() + 1).toString(), role: "bot", content: "? Error de conexi�n. Intenta de nuevo.", timestamp: new Date() },
+        { id: (Date.now() + 1).toString(), role: "bot", content: "❌ Error de conexión. Intenta de nuevo.", timestamp: new Date() },
       ]);
     } finally {
       setSending(false);
@@ -267,10 +267,10 @@ export default function ChatPage() {
     return (
       <div className="p-6 md:p-8 max-w-4xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">?? Elige tu habilidad</h1>
+          <h1 className="text-2xl font-bold text-gray-900">🎓 Elige tu habilidad</h1>
           <p className="text-gray-500 mt-1">Selecciona la competencia que quieres practicar</p>
           <p className="text-xs text-gray-400 mt-2">
-            El sistema monitorear� tus 5 patrones neuroconductuales en tiempo real
+            El sistema monitoreará tus 5 patrones neuroconductuales en tiempo real
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -287,14 +287,14 @@ export default function ChatPage() {
                 {skill.icon}
               </div>
               <h3 className="font-semibold text-gray-900">{skill.name}</h3>
-              <p className="text-xs text-gray-400 mt-1">Saber 11 � IA Adaptativa</p>
+              <p className="text-xs text-gray-400 mt-1">Saber 11 • IA Adaptativa</p>
             </button>
           ))}
         </div>
         {sending && (
           <div className="flex items-center justify-center gap-2 mt-6 text-primary-600">
             <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Iniciando sesi�n de aprendizaje...</span>
+            <span>Iniciando sesión de aprendizaje...</span>
           </div>
         )}
       </div>
@@ -315,13 +315,13 @@ export default function ChatPage() {
             <div>
               <h2 className="font-semibold text-gray-900 text-sm">Tutor NeuroLearn</h2>
               <p className="text-xs text-gray-500">
-                {SKILLS.find((s) => s.key === selectedSkill)?.name || "Sesi�n activa"}
+                {SKILLS.find((s) => s.key === selectedSkill)?.name || "Sesión activa"}
               </p>
             </div>
             {/* Badge Modo Tutor Voz */}
             {voiceTutor.isVoiceMode && (
               <span className="flex items-center gap-1 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium animate-pulse">
-                ?? Tutor Voz
+                🎙 Tutor Voz
               </span>
             )}
           </div>
@@ -331,7 +331,7 @@ export default function ChatPage() {
                 {stateInfo.label}
               </span>
             )}
-            {/* Bot�n C�mara - Patr�n 3 */}
+            {/* Botón Cámara - Patrón 3 */}
             {facial.hardwareAvailable ? (
               <div className="relative group">
                 <button
@@ -341,8 +341,8 @@ export default function ChatPage() {
                   }}
                   title={
                     facial.errorMessage ? facial.errorMessage
-                    : facial.isStreaming ? "Desactivar c�mara"
-                    : "Activar c�mara (Patr�n 3)"
+                    : facial.isStreaming ? "Desactivar cámara"
+                    : "Activar cámara (Patrón 3)"
                   }
                   className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1 ${
                     facial.isStreaming
@@ -358,24 +358,24 @@ export default function ChatPage() {
                 </button>
                 {facial.errorMessage && (
                   <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    <p className="font-medium mb-1">?? C�mara no disponible</p>
+                    <p className="font-medium mb-1">⚠️ Cámara no disponible</p>
                     <p>{facial.errorMessage}</p>
                   </div>
                 )}
               </div>
             ) : (
               <div className="relative group">
-                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin c�mara � P3 desactivado">
+                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin cámara — P3 desactivado">
                   <CameraOff className="w-4 h-4" />
                 </span>
                 <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="font-medium mb-1">?? Sin c�mara detectada</p>
-                  <p>El Patr�n 3 (microexpresi�n facial) no est� disponible en este dispositivo.</p>
+                  <p className="font-medium mb-1">📷 Sin cámara detectada</p>
+                  <p>El Patrón 3 (microexpresión facial) no está disponible en este dispositivo.</p>
                   <p className="mt-1 text-gray-300">El sistema funciona con P1 + P2 + P5.</p>
                 </div>
               </div>
             )}
-            {/* Bot�n Micr�fono - Patr�n 4 */}
+            {/* Botón Micrófono - Patrón 4 */}
             {voice.hardwareAvailable ? (
               <div className="relative group">
                 <button
@@ -385,8 +385,8 @@ export default function ChatPage() {
                   }}
                   title={
                     voice.errorMessage ? voice.errorMessage
-                    : voice.isStreaming ? "Desactivar micr�fono"
-                    : "Activar micr�fono (Patr�n 4)"
+                    : voice.isStreaming ? "Desactivar micrófono"
+                    : "Activar micrófono (Patrón 4)"
                   }
                   className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
                     voice.isStreaming
@@ -402,28 +402,28 @@ export default function ChatPage() {
                 </button>
                 {voice.errorMessage && (
                   <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    <p className="font-medium mb-1">?? Micr�fono no disponible</p>
+                    <p className="font-medium mb-1">⚠️ Micrófono no disponible</p>
                     <p>{voice.errorMessage}</p>
                   </div>
                 )}
               </div>
             ) : (
               <div className="relative group">
-                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin micr�fono � P4 desactivado">
+                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin micrófono — P4 desactivado">
                   <MicOff className="w-4 h-4" />
                 </span>
                 <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="font-medium mb-1">?? Sin micr�fono detectado</p>
-                  <p>El Patr�n 4 (prosodia de voz) no est� disponible en este dispositivo.</p>
+                  <p className="font-medium mb-1">🎤 Sin micrófono detectado</p>
+                  <p>El Patrón 4 (prosodia de voz) no está disponible en este dispositivo.</p>
                   <p className="mt-1 text-gray-300">El sistema funciona con P1 + P2 + P5.</p>
                 </div>
               </div>
             )}
-            {/* Bot�n Subt�tulos � solo visible en modo voz */}
+            {/* Botón Subtítulos — solo visible en modo voz */}
             {voiceTutor.isVoiceMode && (
               <button
                 onClick={voiceTutor.toggleSubtitles}
-                title={voiceTutor.subtitlesEnabled ? "Ocultar subt�tulos" : "Mostrar subt�tulos"}
+                title={voiceTutor.subtitlesEnabled ? "Ocultar subtítulos" : "Mostrar subtítulos"}
                 className={`p-2 rounded-lg transition-colors ${
                   voiceTutor.subtitlesEnabled
                     ? "bg-violet-50 text-violet-600"
@@ -433,13 +433,13 @@ export default function ChatPage() {
                 <Captions className="w-4 h-4" />
               </button>
             )}
-            {/* Bot�n avatar VRM */}
+            {/* Botón avatar VRM */}
             <button
               onClick={() => setShowAvatar(!showAvatar)}
               className={`p-2 rounded-lg transition-colors text-sm ${showAvatar ? "bg-violet-50 text-violet-600" : "text-gray-400 hover:text-violet-500 hover:bg-violet-50"}`}
               title="Avatar tutor 3D"
             >
-              Tutor
+              🧑‍🏫
             </button>
             <button
               onClick={() => setShowDashboard(!showDashboard)}
@@ -451,14 +451,14 @@ export default function ChatPage() {
             <button
               onClick={endSession}
               className="p-2 text-gray-400 hover:text-danger-500 hover:bg-red-50 rounded-lg transition-colors"
-              title="Terminar sesi�n"
+              title="Terminar sesión"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Preview de c�mara � cuadrito flotante esquina inferior derecha */}
+        {/* Preview de cámara — cuadrito flotante esquina inferior derecha */}
         {facial.isStreaming && (
           <div className="absolute bottom-20 right-4 z-30 group">
             <div className="relative w-36 h-28 rounded-xl overflow-hidden shadow-2xl border-2 border-green-400 bg-black">
@@ -470,16 +470,16 @@ export default function ChatPage() {
                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
                 <span className="text-white text-[9px] font-semibold tracking-wide">EN VIVO</span>
               </div>
-              {/* Bot�n cerrar encima del cuadrito */}
+              {/* Botón cerrar encima del cuadrito */}
               <button
                 onClick={facial.stopCamera}
                 className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                title="Apagar c�mara"
+                title="Apagar cámara"
               >
                 <X className="w-3 h-3" />
               </button>
             </div>
-            <p className="text-center text-[10px] text-gray-400 mt-1">An�lisis facial activo</p>
+            <p className="text-center text-[10px] text-gray-400 mt-1">Análisis facial activo</p>
           </div>
         )}
 
@@ -519,11 +519,11 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Overlay de subt�tulos (TTS) � aparece en la parte inferior cuando el tutor habla */}
+        {/* Overlay de subtítulos (TTS) — aparece en la parte inferior cuando el tutor habla */}
         {voiceTutor.subtitlesEnabled && voiceTutor.isSpeaking && voiceTutor.lastBotText && (
           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-xl pointer-events-none">
             <div className="bg-black/75 text-white text-sm rounded-xl px-4 py-2.5 text-center leading-relaxed backdrop-blur-sm">
-              <span className="mr-1.5 text-violet-300">??</span>
+              <span className="mr-1.5 text-violet-300">🔊</span>
               {voiceTutor.lastBotText}
             </div>
           </div>
@@ -554,7 +554,7 @@ export default function ChatPage() {
             <div className="px-4 pb-1 max-w-4xl mx-auto w-full">
               <div className="flex items-center gap-2 text-xs text-violet-600">
                 <span className="w-2 h-2 bg-violet-500 rounded-full animate-pulse" />
-                <span>El tutor est� respondiendo en voz alta...</span>
+                <span>El tutor está respondiendo en voz alta...</span>
                 <button
                   onClick={voiceTutor.stopSpeaking}
                   className="ml-auto text-violet-400 hover:text-violet-600 underline"
@@ -568,11 +568,11 @@ export default function ChatPage() {
           {metrics.isLongPause && sessionActive && !sending && (
           <div className="px-4 pb-1 max-w-4xl mx-auto w-full animate-fadeIn">
             <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
-              <span className="text-base">??</span>
+              <span className="text-base">🤔</span>
               <span>
-                <strong>�Necesitas ayuda?</strong> Llevas{" "}
+                <strong>¿Necesitas ayuda?</strong> Llevas{" "}
                 {Math.round(metrics.realTimePauseMs / 1000)}s sin responder.
-                Escribe <em>"no entiendo"</em> o <em>"dame una pista"</em> y el tutor te gu�a.
+                Escribe <em>"no entiendo"</em> o <em>"dame una pista"</em> y el tutor te guía.
               </span>
             </div>
           </div>
@@ -621,7 +621,7 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Panel Avatar VRM � aparece entre el chat y el dashboard */}
+      {/* Panel Avatar VRM — aparece entre el chat y el dashboard */}
       {showAvatar && (
         <div className="w-52 flex-shrink-0 bg-gradient-to-b from-violet-50 to-purple-50 border-l border-violet-100 flex flex-col">
           {/* Canvas del avatar */}
