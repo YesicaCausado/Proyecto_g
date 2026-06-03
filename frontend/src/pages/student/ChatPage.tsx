@@ -9,6 +9,7 @@ import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import { useVoiceTutor } from "../../hooks/useVoiceTutor";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
+import VRMTutor, { type VRMTutorHandle, type CognitiveEmotion } from "../../components/VRMTutor";
 
 /** Mini-componente que adjunta el stream del videoRef al <video> React */
 function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
@@ -70,6 +71,8 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const vrmRef = useRef<VRMTutorHandle>(null);
+  const [showAvatar, setShowAvatar] = useState(true);
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
@@ -130,8 +133,15 @@ export default function ChatPage() {
         action: data.action,
         suggestions: data.suggestions,
       }]);
-      // TTS: leer bienvenida en voz alta si modo tutor voz activo
-      if (voiceTutor.isVoiceMode) voiceTutor.speakText(data.message);
+      // TTS + VRM: leer bienvenida en voz alta y animar avatar
+      if (voiceTutor.isVoiceMode) {
+        voiceTutor.speakText(data.message);
+        const wordCount = data.message.split(" ").length;
+        vrmRef.current?.speak(wordCount * 350);
+      }
+      if (data.cognitive_state) {
+        vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
+      }
     } catch (err) {
       console.error("Error starting session:", err);
     } finally {
@@ -223,8 +233,15 @@ export default function ChatPage() {
           suggestions: data.suggestions,
         },
       ]);
-      // TTS: leer respuesta en voz alta si modo tutor voz activo
-      if (voiceTutor.isVoiceMode) voiceTutor.speakText(data.message);
+      // TTS + VRM: leer respuesta en voz alta y animar avatar
+      if (voiceTutor.isVoiceMode) {
+        voiceTutor.speakText(data.message);
+        const wordCount = data.message.split(" ").length;
+        vrmRef.current?.speak(wordCount * 350);
+      }
+      if (data.cognitive_state) {
+        vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
+      }
     } catch (err) {
       console.error("Error sending message:", err);
       setMessages((prev) => [
@@ -420,6 +437,14 @@ export default function ChatPage() {
                 <Captions className="w-4 h-4" />
               </button>
             )}
+            {/* Botón avatar VRM */}
+            <button
+              onClick={() => setShowAvatar(!showAvatar)}
+              className={`p-2 rounded-lg transition-colors text-sm ${showAvatar ? "bg-violet-50 text-violet-600" : "text-gray-400 hover:text-violet-500 hover:bg-violet-50"}`}
+              title="Avatar tutor 3D"
+            >
+              🧑‍🏫
+            </button>
             <button
               onClick={() => setShowDashboard(!showDashboard)}
               className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-gray-400 hover:text-accent-500 hover:bg-accent-50"}`}
@@ -599,6 +624,35 @@ export default function ChatPage() {
           )}
         </div>
       </div>
+
+      {/* Panel Avatar VRM — aparece entre el chat y el dashboard */}
+      {showAvatar && (
+        <div className="w-52 flex-shrink-0 bg-gradient-to-b from-violet-50 to-purple-50 border-l border-violet-100 flex flex-col">
+          {/* Canvas del avatar */}
+          <div className="flex-1 min-h-0">
+            <VRMTutor
+              ref={vrmRef}
+              className="w-full h-full"
+              vrmPath="/tutor.vrm"
+            />
+          </div>
+          {/* Info estado cognitivo */}
+          {lastResponse?.cognitive_state && (
+            <div className="px-3 py-2 border-t border-violet-100 bg-white/60">
+              <p className="text-[10px] text-violet-500 text-center font-medium">
+                Estado: {STATE_LABELS[lastResponse.cognitive_state]?.label || lastResponse.cognitive_state}
+              </p>
+            </div>
+          )}
+          {/* Indicador TTS */}
+          {voiceTutor.isSpeaking && (
+            <div className="px-3 py-1.5 bg-violet-100 flex items-center justify-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-violet-500 rounded-full animate-ping" />
+              <span className="text-[10px] text-violet-600 font-medium">Hablando...</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Panel Neuroconductual */}
       <CognitiveDashboard
