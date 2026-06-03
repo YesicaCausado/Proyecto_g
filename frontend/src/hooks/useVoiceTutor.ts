@@ -73,12 +73,14 @@ export interface VoiceTutorControls extends VoiceTutorState {
 
 function stripMarkdown(text: string): string {
   return text
-    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1!')        // negrita → añade ! para énfasis
     .replace(/\*(.*?)\*/g, '$1')
     .replace(/`(.*?)`/g, '$1')
     .replace(/#{1,6}\s/g, '')
     .replace(/>\s/g, '')
-    .replace(/\n+/g, '. ')
+    .replace(/\n\n+/g, '... ')              // párrafos → pausa larga
+    .replace(/\n/g, ', ')                   // saltos de línea → pausa corta
+    .replace(/([.!?])\s+/g, '$1 ')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -118,28 +120,24 @@ export function useVoiceTutor(
     if (!clean) return;
 
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang   = 'es-CO';
-    utterance.rate   = 1.12;    // un poco más rápida — suena juvenil/animada
-    utterance.pitch  = 1.25;    // tono más agudo — voz femenina joven
+    utterance.lang   = 'es-BO';  // Bolivia — para que el navegador prefiera Sofía
+    utterance.rate   = 1.12;
+    utterance.pitch  = 1.3;
     utterance.volume = 1.0;
 
-    // ── Prioridad de voz (de mayor a menor) ─────────────────────────────────
+    // ── Selección de voz: Sofía de Bolivia primero, luego cualquier española ─
     const voices = window.speechSynthesis.getVoices();
 
-    const pick = (fn: (v: SpeechSynthesisVoice) => boolean) => voices.find(fn);
-
     const chosen =
-      // 1. Salomé — voz colombiana oficial de Microsoft/Google
-      pick(v => /salom[eé]/i.test(v.name)) ||
-      // 2. Cualquier voz femenina en español de Colombia
-      pick(v => v.lang === 'es-CO' && /female|femenin|mujer|woman/i.test(v.name)) ||
-      // 3. Voz femenina en español (cualquier variante)
-      pick(v => v.lang.startsWith('es') && /female|femenin|mujer|woman/i.test(v.name)) ||
-      // 4. Google/Microsoft español (suelen ser femeninas por defecto)
-      pick(v => v.lang.startsWith('es') && /google|microsoft/i.test(v.name)) ||
-      // 5. Cualquier voz en español
-      pick(v => v.lang.startsWith('es')) ||
-      // 6. Primera disponible
+      // 1. Si el usuario eligió manualmente desde el selector
+      (selectedVoiceNameRef.current ? voices.find(v => v.name === selectedVoiceNameRef.current) : undefined) ||
+      // 2. Sofía — voz oficial Microsoft Bolivia (es-BO)
+      voices.find(v => /sof[ií]a/i.test(v.name)) ||
+      // 3. Cualquier voz es-BO
+      voices.find(v => v.lang === 'es-BO') ||
+      // 4. Cualquier voz en español
+      voices.find(v => v.lang.startsWith('es')) ||
+      // 5. Primera disponible
       voices[0];
 
     if (chosen) utterance.voice = chosen;
@@ -170,10 +168,11 @@ export function useVoiceTutor(
       // seleccionar automáticamente la mejor voz femenina/española si no hay selección
       if (!selectedVoiceNameRef.current && v.length > 0) {
         const auto =
-          v.find(x => /salom[eé]/i.test(x.name)) ||
-          v.find(x => x.lang === 'es-CO' && /female|femenin|mujer|woman/i.test(x.name)) ||
-          v.find(x => x.lang.startsWith('es') && /female|femenin|mujer|woman/i.test(x.name)) ||
-          v.find(x => x.lang.startsWith('es') && /google|microsoft/i.test(x.name)) ||
+          // Sofía Bolivia — Microsoft Sofía es-BO
+          v.find(x => /sof[ií]a/i.test(x.name) && x.lang === 'es-BO') ||
+          v.find(x => /sof[ií]a/i.test(x.name) && x.lang.startsWith('es')) ||
+          v.find(x => /sof[ií]a/i.test(x.name)) ||
+          v.find(x => x.lang === 'es-BO') ||
           v.find(x => x.lang.startsWith('es')) ||
           v[0];
         if (auto) selectedVoiceNameRef.current = auto.name;
