@@ -118,10 +118,10 @@ const VRMTutor = forwardRef<VRMTutorHandle, Props>(
       // Escena
       const scene = new THREE.Scene();
 
-      // Cámara — encuadra busto del avatar
-      const camera = new THREE.PerspectiveCamera(30, canvas.clientWidth / canvas.clientHeight, 0.1, 20);
-      camera.position.set(0, 1.35, 1.8);
-      camera.lookAt(0, 1.2, 0);
+      // Cámara — encuadra cuerpo completo del avatar
+      const camera = new THREE.PerspectiveCamera(28, canvas.clientWidth / canvas.clientHeight, 0.1, 20);
+      camera.position.set(0, 0.9, 3.2);
+      camera.lookAt(0, 0.8, 0);
 
       // Iluminación
       const ambient = new THREE.AmbientLight(0xffffff, 0.7);
