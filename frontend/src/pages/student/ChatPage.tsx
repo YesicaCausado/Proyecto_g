@@ -3,10 +3,11 @@ import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
 import { demoStartSession, demoSendMessage } from "../../services/demoChat";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
-import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff } from "lucide-react";
+import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
+import { useVoiceTutor } from "../../hooks/useVoiceTutor";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
 
 /** Mini-componente que adjunta el stream del videoRef al <video> React */
@@ -73,6 +74,24 @@ export default function ChatPage() {
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
 
+  // Tutor de Voz — STT escucha al usuario, TTS responde en voz alta
+  const voiceTutor = useVoiceTutor(async (transcript) => {
+    if (!transcript.trim() || sending) return;
+    setInput(transcript);
+    await sendMessageWithText(transcript);
+  });
+
+  // Auto-activar modo voz cuando cámara + micrófono estén ambos activos
+  useEffect(() => {
+    if (!voiceTutor.supported || !sessionActive) return;
+    if (facial.isStreaming && voice.isStreaming && !voiceTutor.isVoiceMode) {
+      voiceTutor.startVoiceMode();
+    } else if ((!facial.isStreaming || !voice.isStreaming) && voiceTutor.isVoiceMode) {
+      voiceTutor.stopVoiceMode();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facial.isStreaming, voice.isStreaming, sessionActive]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -111,6 +130,8 @@ export default function ChatPage() {
         action: data.action,
         suggestions: data.suggestions,
       }]);
+      // TTS: leer bienvenida en voz alta si modo tutor voz activo
+      if (voiceTutor.isVoiceMode) voiceTutor.speakText(data.message);
     } catch (err) {
       console.error("Error starting session:", err);
     } finally {
@@ -128,8 +149,12 @@ export default function ChatPage() {
 
   const sendMessage = async () => {
     if (!input.trim() || sending) return;
+    await sendMessageWithText(input.trim());
+  };
 
-    const msgContent = input.trim();
+  const sendMessageWithText = async (msgContent: string) => {
+    if (!msgContent.trim() || sending) return;
+
     const behavioralMetrics = metrics.getMetrics(msgContent);
 
     const userMsg: ChatMessage = {
@@ -198,6 +223,8 @@ export default function ChatPage() {
           suggestions: data.suggestions,
         },
       ]);
+      // TTS: leer respuesta en voz alta si modo tutor voz activo
+      if (voiceTutor.isVoiceMode) voiceTutor.speakText(data.message);
     } catch (err) {
       console.error("Error sending message:", err);
       setMessages((prev) => [
@@ -278,6 +305,12 @@ export default function ChatPage() {
                 {SKILLS.find((s) => s.key === selectedSkill)?.name || "Sesión activa"}
               </p>
             </div>
+            {/* Badge Modo Tutor Voz */}
+            {voiceTutor.isVoiceMode && (
+              <span className="flex items-center gap-1 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium animate-pulse">
+                🎙 Tutor Voz
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {stateKey && (
@@ -373,6 +406,20 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
+            {/* Botón Subtítulos — solo visible en modo voz */}
+            {voiceTutor.isVoiceMode && (
+              <button
+                onClick={voiceTutor.toggleSubtitles}
+                title={voiceTutor.subtitlesEnabled ? "Ocultar subtítulos" : "Mostrar subtítulos"}
+                className={`p-2 rounded-lg transition-colors ${
+                  voiceTutor.subtitlesEnabled
+                    ? "bg-violet-50 text-violet-600"
+                    : "text-gray-400 hover:text-violet-500 hover:bg-violet-50"
+                }`}
+              >
+                <Captions className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => setShowDashboard(!showDashboard)}
               className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-gray-400 hover:text-accent-500 hover:bg-accent-50"}`}
@@ -451,10 +498,53 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Overlay de subtítulos (TTS) — aparece en la parte inferior cuando el tutor habla */}
+        {voiceTutor.subtitlesEnabled && voiceTutor.isSpeaking && voiceTutor.lastBotText && (
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-xl pointer-events-none">
+            <div className="bg-black/75 text-white text-sm rounded-xl px-4 py-2.5 text-center leading-relaxed backdrop-blur-sm">
+              <span className="mr-1.5 text-violet-300">🔊</span>
+              {voiceTutor.lastBotText}
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div className="bg-white border-t border-gray-200 px-4 py-3 flex-shrink-0">
-          {/* Hint de pausa larga: el motor detecta que el estudiante está bloqueado */}
-        {metrics.isLongPause && sessionActive && !sending && (
+          {/* Indicador STT: transcript en vivo mientras el usuario habla */}
+          {voiceTutor.isListening && voiceTutor.liveTranscript && (
+            <div className="px-4 pb-1 max-w-4xl mx-auto w-full animate-fadeIn">
+              <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-xs text-violet-700">
+                <span className="w-2 h-2 bg-violet-500 rounded-full animate-ping flex-shrink-0" />
+                <span className="italic">"{voiceTutor.liveTranscript}"</span>
+              </div>
+            </div>
+          )}
+          {/* Indicador mic pulsante cuando escucha y no hay transcript */}
+          {voiceTutor.isListening && !voiceTutor.liveTranscript && (
+            <div className="px-4 pb-1 max-w-4xl mx-auto w-full">
+              <div className="flex items-center gap-2 text-xs text-violet-500">
+                <span className="w-2 h-2 bg-violet-400 rounded-full animate-ping" />
+                <span>Escuchando... habla con tu tutor</span>
+              </div>
+            </div>
+          )}
+          {/* Indicador TTS: tutor hablando */}
+          {voiceTutor.isSpeaking && (
+            <div className="px-4 pb-1 max-w-4xl mx-auto w-full">
+              <div className="flex items-center gap-2 text-xs text-violet-600">
+                <span className="w-2 h-2 bg-violet-500 rounded-full animate-pulse" />
+                <span>El tutor está respondiendo en voz alta...</span>
+                <button
+                  onClick={voiceTutor.stopSpeaking}
+                  className="ml-auto text-violet-400 hover:text-violet-600 underline"
+                >
+                  Detener
+                </button>
+              </div>
+            </div>
+          )}
+          {/* Hint de pausa larga */}
+          {metrics.isLongPause && sessionActive && !sending && (
           <div className="px-4 pb-1 max-w-4xl mx-auto w-full animate-fadeIn">
             <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
               <span className="text-base">🤔</span>

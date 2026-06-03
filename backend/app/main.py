@@ -31,7 +31,11 @@ import app.models.expert_bot    # noqa: F401
 import app.models.classroom     # noqa: F401
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).error(f"⚠️ No se pudo crear las tablas: {e}. El backend arrancará sin DB.")
 
 # ─── Usuario demo (DEMO_MODE del frontend) ────────────────────────────────────
 def _ensure_demo_user():
@@ -39,27 +43,34 @@ def _ensure_demo_user():
     from app.db.database import SessionLocal
     from app.models.user import User, UserRole
     from passlib.context import CryptContext
-    db = SessionLocal()
     try:
-        exists = db.query(User).filter(User.username == "demo").first()
-        if not exists:
-            pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-            user = User(
-                username="demo",
-                email="demo@neurolearn.app",
-                full_name="Usuario Demo",
-                hashed_password=pwd.hash("demo1234"),
-                role=UserRole.ESTUDIANTE,
-                is_active=True,
-            )
-            db.add(user)
-            db.commit()
-            import logging
-            logging.getLogger(__name__).info("✅ Usuario demo creado: demo / demo1234")
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            exists = db.query(User).filter(User.username == "demo").first()
+            if not exists:
+                pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+                user = User(
+                    username="demo",
+                    email="demo@neurolearn.app",
+                    full_name="Usuario Demo",
+                    hashed_password=pwd.hash("demo1234"),
+                    role=UserRole.ESTUDIANTE,
+                    is_active=True,
+                )
+                db.add(user)
+                db.commit()
+                import logging
+                logging.getLogger(__name__).info("✅ Usuario demo creado: demo / demo1234")
+        finally:
+            db.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuario demo (sin DB): {e}")
 
-_ensure_demo_user()
+try:
+    _ensure_demo_user()
+except Exception:
+    pass
 
 # Crear aplicación
 app = FastAPI(
