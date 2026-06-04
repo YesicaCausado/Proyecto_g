@@ -174,15 +174,21 @@ export default function ChatPage() {
     setSending(true);
     try {
       let data: ChatMessageResponse;
-      // Intentar siempre el backend real primero; solo si falla → mock
       try {
         const res = await api.post<ChatMessageResponse>("/chat/start", {
           topic: skill.topic,
           difficulty: "medium",
         });
         data = res.data;
-      } catch {
-        // Backend no disponible → demo mock
+      } catch (err: any) {
+        // Solo usar demo si el backend es inalcanzable (sin respuesta de red)
+        // Si hay respuesta HTTP (400, 500, 503) mostrar el error real al usuario
+        if (err?.response) {
+          const detail = err.response.data?.detail || `Error ${err.response.status}`;
+          throw new Error(`Backend: ${detail}`);
+        }
+        // Sin respuesta → backend offline → demo mock
+        console.warn("Backend offline, usando demo:", err?.message);
         await new Promise((r) => setTimeout(r, 600));
         data = demoStartSession(skillKey);
       }
@@ -208,8 +214,16 @@ export default function ChatPage() {
       // Detectar quiz en la respuesta
       const startQuiz = parseQuizFromMessage(data.message);
       setCurrentQuiz(startQuiz);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error starting session:", err);
+      // Mostrar error en pantalla como mensaje del bot
+      setSessionActive(true);
+      setMessages([{
+        id: Date.now().toString(),
+        role: "bot",
+        content: `⚠️ **No se pudo iniciar la sesión:** ${err?.message ?? "Error desconocido"}\n\n💡 Si estás en Vercel, verifica que **GROQ_API_KEY** esté configurada en Settings → Environment Variables.`,
+        timestamp: new Date(),
+      }]);
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -251,13 +265,11 @@ export default function ChatPage() {
         const skill = SKILLS.find((s) => s.key === selectedSkill);
         const res = await api.post<ChatMessageResponse>("/chat/message", {
           message: msgContent,
-          // ── Stateless: enviamos tema e historial para serverless (Vercel) ──
           topic: skill?.topic ?? "Tema general",
           history: messages.slice(-10).map((m) => ({
             role: m.role === "bot" ? "assistant" : "user",
             content: m.content,
           })),
-          // ── Métricas de comportamiento ──
           response_time_ms:  behavioralMetrics.response_time_ms,
           typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
           corrections:       behavioralMetrics.corrections,
@@ -287,7 +299,24 @@ export default function ChatPage() {
           } : {}),
         });
         data = res.data;
-      } catch {
+      } catch (err: any) {
+        // Solo usar demo si el backend es inalcanzable (sin respuesta de red)
+        if (err?.response) {
+          const detail = err.response.data?.detail || `Error ${err.response.status}`;
+          // Mostrar error de la IA directamente en el chat como mensaje del bot
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: (Date.now() + 1).toString(),
+              role: "bot",
+              content: `⚠️ **Error del tutor:** ${detail}\n\nVerifica que la variable **GROQ_API_KEY** esté configurada en Vercel (Settings → Environment Variables).`,
+              timestamp: new Date(),
+            },
+          ]);
+          return;
+        }
+        // Backend offline → demo
+        console.warn("Backend offline, usando demo:", err?.message);
         await new Promise((r) => setTimeout(r, 800));
         data = demoSendMessage(msgContent);
       }
