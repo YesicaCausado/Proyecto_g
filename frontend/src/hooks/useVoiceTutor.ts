@@ -63,6 +63,9 @@ export interface VoiceTutorControls extends VoiceTutorState {
   toggleSubtitles: () => void;
   speakText: (text: string, onEnd?: () => void) => void;
   stopSpeaking: () => void;
+  /** Push-to-talk: pulsa → empieza, suelta → envía transcript */
+  startPTT: () => void;
+  stopPTT: () => void;
 }
 
 // ── Limpia markdown para TTS ─────────────────────────────────────────────────
@@ -253,6 +256,57 @@ export function useVoiceTutor(
 
   const toggleSubtitles = useCallback(() => setSubtitlesEnabled(v => !v), []);
 
+  // ── Push-to-talk (Modo Live) ──────────────────────────────────────────────
+  const startPTT = useCallback(() => {
+    if (!SpeechRecognitionAPI) return;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* ok */ }
+    }
+    const recognition = new SpeechRecognitionAPI() as ISpeechRecognition;
+    recognition.lang            = 'es-BO';
+    recognition.continuous      = false;  // una sola frase por pulsación
+    recognition.interimResults  = true;
+    recognition.maxAlternatives = 1;
+
+    let captured = '';
+
+    recognition.onstart = () => setIsListening(true);
+
+    recognition.onresult = (event: ISpeechRecognitionEvent) => {
+      let interim = '';
+      captured = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) captured += t;
+        else interim += t;
+      }
+      setLiveTranscript(interim || captured);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setLiveTranscript('');
+      const trimmed = captured.trim();
+      if (trimmed) {
+        setLastUserText(trimmed);
+        onTranscript(trimmed);
+      }
+    };
+
+    recognition.onerror = (e: ISpeechRecognitionErrorEvent) => {
+      if (e.error === 'no-speech') return;
+      setIsListening(false);
+      setLiveTranscript('');
+    };
+
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch { /* ya corriendo */ }
+  }, [onTranscript]);
+
+  const stopPTT = useCallback(() => {
+    recognitionRef.current?.stop();
+  }, []);
+
   // Cleanup
   useEffect(() => {
     return () => {
@@ -277,5 +331,7 @@ export function useVoiceTutor(
     toggleSubtitles,
     speakText,
     stopSpeaking,
+    startPTT,
+    stopPTT,
   };
 }

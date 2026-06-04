@@ -3,13 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
 import { demoStartSession, demoSendMessage } from "../../services/demoChat";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
-import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
+import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions, Radio } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import { useVoiceTutor } from "../../hooks/useVoiceTutor";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
-import VRMTutor, { type VRMTutorHandle, type CognitiveEmotion } from "../../components/VRMTutor";
+import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
+import LiveModeView from "../../components/LiveModeView";
 
 /** Mini-componente que adjunta el stream del videoRef al <video> React */
 function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
@@ -72,7 +73,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const vrmRef = useRef<VRMTutorHandle>(null);
-  const [showAvatar, setShowAvatar] = useState(true);
+  const [showLiveMode, setShowLiveMode] = useState(false);
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
@@ -433,14 +434,7 @@ export default function ChatPage() {
                 <Captions className="w-4 h-4" />
               </button>
             )}
-            {/* Botón avatar VRM */}
-            <button
-              onClick={() => setShowAvatar(!showAvatar)}
-              className={`p-2 rounded-lg transition-colors text-sm ${showAvatar ? "bg-violet-50 text-violet-600" : "text-gray-400 hover:text-violet-500 hover:bg-violet-50"}`}
-              title="Avatar tutor 3D"
-            >
-              🧑‍🏫
-            </button>
+            {/* Botón avatar VRM — eliminado, usa Modo Live */}
             <button
               onClick={() => setShowDashboard(!showDashboard)}
               className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-gray-400 hover:text-accent-500 hover:bg-accent-50"}`}
@@ -618,37 +612,26 @@ export default function ChatPage() {
               </div>
             </div>
           )}
+
+          {/* ── Botón Modo Live ─────────────────────────────────────────── */}
+          <div className="mt-3 max-w-4xl mx-auto w-full">
+            <button
+              onClick={() => setShowLiveMode(true)}
+              disabled={!voice.hardwareAvailable}
+              className={`w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                voice.hardwareAvailable
+                  ? 'bg-gradient-to-r from-violet-600 to-purple-700 text-white hover:from-violet-500 hover:to-purple-600 shadow-md hover:shadow-violet-300/40'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              }`}
+              title={voice.hardwareAvailable ? 'Iniciar clase en vivo con el tutor animado' : 'Necesitas micrófono para usar el Modo Live'}
+            >
+              <Radio className="w-4 h-4" />
+              🎬 Modo Live
+              {!voice.hardwareAvailable && <span className="text-xs font-normal ml-1">(requiere micrófono)</span>}
+            </button>
+          </div>
         </div>
       </div>
-
-      {/* Panel Avatar VRM — aparece entre el chat y el dashboard */}
-      {showAvatar && (
-        <div className="w-52 flex-shrink-0 bg-gradient-to-b from-violet-50 to-purple-50 border-l border-violet-100 flex flex-col">
-          {/* Canvas del avatar */}
-          <div className="flex-1 min-h-0">
-            <VRMTutor
-              ref={vrmRef}
-              className="w-full h-full"
-              vrmPath="/tutor.vrm"
-            />
-          </div>
-          {/* Info estado cognitivo */}
-          {lastResponse?.cognitive_state && (
-            <div className="px-3 py-2 border-t border-violet-100 bg-white/60">
-              <p className="text-[10px] text-violet-500 text-center font-medium">
-                Estado: {STATE_LABELS[lastResponse.cognitive_state]?.label || lastResponse.cognitive_state}
-              </p>
-            </div>
-          )}
-          {/* Indicador TTS */}
-          {voiceTutor.isSpeaking && (
-            <div className="px-3 py-1.5 bg-violet-100 flex items-center justify-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-violet-500 rounded-full animate-ping" />
-              <span className="text-[10px] text-violet-600 font-medium">Hablando...</span>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Panel Neuroconductual */}
       <CognitiveDashboard
@@ -659,6 +642,21 @@ export default function ChatPage() {
         voiceSnapshot={voice.snapshot}
         voiceActive={voice.isStreaming}
       />
+
+      {/* Modo Live — overlay full-screen */}
+      {showLiveMode && (
+        <LiveModeView
+          vrmRef={vrmRef}
+          voiceTutor={voiceTutor}
+          lastResponse={lastResponse}
+          facial={facial}
+          voice={voice}
+          onExit={() => {
+            voiceTutor.stopVoiceMode();
+            setShowLiveMode(false);
+          }}
+        />
+      )}
     </div>
   );
 }
