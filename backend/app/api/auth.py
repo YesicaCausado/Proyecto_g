@@ -19,7 +19,8 @@ from app.schemas.schemas import UserCreate, UserLogin, UserResponse, Token
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# auto_error=False → si no hay token, devuelve None en vez de lanzar 401
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 # ── Usuario de demostración (sin base de datos) ───────────────────────────────
