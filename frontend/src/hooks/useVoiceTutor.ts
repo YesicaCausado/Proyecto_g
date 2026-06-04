@@ -66,6 +66,8 @@ export interface VoiceTutorControls extends VoiceTutorState {
   /** Push-to-talk: pulsa → empieza, suelta → envía transcript */
   startPTT: () => void;
   stopPTT: () => void;
+  /** Cambia el idioma del TTS (afecta selección de voz y lang) */
+  setLanguage: (lang: 'es' | 'en') => void;
 }
 
 // ── Limpia markdown para TTS ─────────────────────────────────────────────────
@@ -80,15 +82,16 @@ function stripMarkdown(text: string): string {
     .replace(/\n/g, ', ')
     .replace(/([.!?])\s+/g, '$1 ')
     .replace(/\s{2,}/g, ' ')
+    // Quitar emojis para que el TTS no los pronuncie
+    .replace(/(\ud83c[\udf00-\udfff]|\ud83d[\udc00-\ude4f]|\ud83d[\ude80-\udeff]|\ud83e[\udd00-\uddff]|[\u2600-\u27bf]|[\u2b00-\u2bff]|\ufe0f)/g, '')
     .trim();
 }
 
-// ── Selecciona voz Sofía de Bolivia (fija, sin opción al usuario) ────────────
+// ── Selecciona voz Sofía de Bolivia (español) ─────────────────────────────────
 function pickSofiaVoice(): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices();
   const isFemale = (v: SpeechSynthesisVoice) =>
     /female|mujer|woman|femenin|sof[ií]a|salom[eé]|m[oó]nica|luc[ií]a|paulina|helena|laura|sabina/i.test(v.name);
-
   return (
     voices.find(v => /sof[ií]a/i.test(v.name) && v.lang === 'es-BO') ||
     voices.find(v => /sof[ií]a/i.test(v.name) && v.lang.startsWith('es')) ||
@@ -96,7 +99,19 @@ function pickSofiaVoice(): SpeechSynthesisVoice | null {
     voices.find(v => v.lang.startsWith('es') && isFemale(v)) ||
     voices.find(v => v.lang === 'es-BO') ||
     voices.find(v => v.lang.startsWith('es')) ||
-    voices[0] ||
+    voices[0] || null
+  );
+}
+
+// ── Selecciona voz inglesa natural ────────────────────────────────────────────
+function pickEnglishVoice(): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices();
+  return (
+    voices.find(v => /zira|aria|natasha|samantha|karen|moira|tessa|siri/i.test(v.name)) ||
+    voices.find(v => v.lang === 'en-US' && /female|woman/i.test(v.name)) ||
+    voices.find(v => v.lang === 'en-GB' && /female|woman/i.test(v.name)) ||
+    voices.find(v => v.lang === 'en-US') ||
+    voices.find(v => v.lang.startsWith('en')) ||
     null
   );
 }
@@ -110,6 +125,8 @@ export function useVoiceTutor(
   const synthRef       = useRef<SpeechSynthesis | null>(null);
   const silenceTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef      = useRef(false);
+  const ttsActiveRef   = useRef(false);   // true mientras el TTS está hablando → STT NO escucha
+  const languageRef    = useRef<'es' | 'en'>('es'); // idioma actual del tutor
 
   const [isVoiceMode,      setIsVoiceMode]      = useState(false);
   const [isListening,      setIsListening]      = useState(false);
@@ -135,32 +152,45 @@ export function useVoiceTutor(
   // ── TTS ──────────────────────────────────────────────────────────────────────
   const speakText = useCallback((text: string, onEnd?: () => void) => {
     if (!window.speechSynthesis) return;
+
+    // ★ CRÍTICO: detener STT antes de hablar para evitar auto-escucha (feedback loop)
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch { /* ok */ }
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+    ttsActiveRef.current = true;
+
     window.speechSynthesis.cancel();
 
     const clean = stripMarkdown(text);
-    if (!clean) return;
+    if (!clean) { ttsActiveRef.current = false; return; }
 
+    const isEn = languageRef.current === 'en';
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang   = 'es-BO';
-    utterance.rate   = 1.12;
-    utterance.pitch  = 1.3;
+    utterance.lang   = isEn ? 'en-US' : 'es-BO';
+    utterance.rate   = 1.1;
+    utterance.pitch  = isEn ? 1.1 : 1.3;
     utterance.volume = 1.0;
 
-    const voice = pickSofiaVoice();
+    const voice = isEn ? pickEnglishVoice() : pickSofiaVoice();
     if (voice) utterance.voice = voice;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend   = () => {
+      ttsActiveRef.current = false;
       setIsSpeaking(false);
       onEnd?.();
-      if (activeRef.current) _startListening();
+      // Reanudar STT solo si el modo voz sigue activo (con delay para que el eco se disipe)
+      if (activeRef.current) setTimeout(_startListening, 900);
     };
     utterance.onerror = () => {
+      ttsActiveRef.current = false;
       setIsSpeaking(false);
       onEnd?.();
     };
 
-    setLastBotText(clean.slice(0, 120) + (clean.length > 120 ? '…' : ''));
+    setLastBotText(clean.slice(0, 140) + (clean.length > 140 ? '…' : ''));
     synthRef.current = window.speechSynthesis;
     window.speechSynthesis.speak(utterance);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,8 +253,9 @@ export function useVoiceTutor(
 
     recognition.onend = () => {
       setIsListening(false);
-      if (activeRef.current && !window.speechSynthesis?.speaking) {
-        setTimeout(_startListening, 500);
+      // Solo reanudar si el modo está activo Y el TTS NO está hablando
+      if (activeRef.current && !ttsActiveRef.current && !window.speechSynthesis?.speaking) {
+        setTimeout(_startListening, 800);
       }
     };
 
@@ -256,8 +287,18 @@ export function useVoiceTutor(
 
   const toggleSubtitles = useCallback(() => setSubtitlesEnabled(v => !v), []);
 
+  const setLanguage = useCallback((lang: 'es' | 'en') => {
+    languageRef.current = lang;
+  }, []);
+
   // ── Push-to-talk (Modo Live) ──────────────────────────────────────────────
   const startPTT = useCallback(() => {
+    // Detener TTS si estaba hablando (usuario interrumpe al tutor)
+    if (ttsActiveRef.current || window.speechSynthesis?.speaking) {
+      window.speechSynthesis?.cancel();
+      ttsActiveRef.current = false;
+      setIsSpeaking(false);
+    }
     if (!SpeechRecognitionAPI) return;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch { /* ok */ }
@@ -333,5 +374,6 @@ export function useVoiceTutor(
     stopSpeaking,
     startPTT,
     stopPTT,
+    setLanguage,
   };
 }

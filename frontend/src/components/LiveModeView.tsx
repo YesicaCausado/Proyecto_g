@@ -7,11 +7,12 @@
  * - Panel derecho con patrones neuroconductuales activos
  * - Opción de encender cámara dentro del modo
  */
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { X, Camera, CameraOff, Mic } from 'lucide-react';
 import VRMTutor, { type VRMTutorHandle } from './VRMTutor';
 import type { VoiceTutorControls } from '../hooks/useVoiceTutor';
 import type { ChatMessageResponse } from '../types';
+import QuizPanel, { parseQuizFromMessage, type QuizData } from './QuizPanel';
 
 // ── Video preview (espejo de cámara) ─────────────────────────────────────────
 function VideoPreviewLive({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
@@ -56,6 +57,8 @@ export interface LiveModeViewProps {
   vrmRef: React.MutableRefObject<VRMTutorHandle | null>;
   voiceTutor: VoiceTutorControls;
   lastResponse: ChatMessageResponse | null;
+  /** Enviar un mensaje a la IA desde dentro del Modo Live */
+  onSendMessage: (text: string) => void;
   facial: {
     isStreaming: boolean;
     hardwareAvailable: boolean;
@@ -86,6 +89,7 @@ export default function LiveModeView({
   vrmRef,
   voiceTutor,
   lastResponse,
+  onSendMessage,
   facial,
   voice,
   onExit,
@@ -93,12 +97,40 @@ export default function LiveModeView({
   const stateKey  = lastResponse?.cognitive_state || '';
   const stateInfo = STATE_LABELS_DARK[stateKey] || { label: stateKey || 'Normal', color: 'bg-gray-700 text-gray-300' };
 
+  // Quiz dentro del Modo Live
+  const [liveQuiz, setLiveQuiz] = useState<QuizData | null>(null);
+
+  // Detectar quiz cuando llega nueva respuesta
+  useEffect(() => {
+    if (lastResponse?.message) {
+      const q = parseQuizFromMessage(lastResponse.message);
+      setLiveQuiz(q);
+    }
+  }, [lastResponse?.message]);
+
+  // Recomendación contextual basada en estado cognitivo
+  const getTip = () => {
+    const r = lastResponse;
+    if (!r) return null;
+    if (r.cognitive_state === 'fatigue') return { icon: '😴', text: 'Detectamos fatiga. El tutor está simplificando las explicaciones.' };
+    if (r.cognitive_state === 'overload') return { icon: '🧠', text: 'Hay sobrecarga cognitiva. Repasando el concepto paso a paso.' };
+    if (r.cognitive_state === 'confusion' || r.cognitive_state === 'doubt') return { icon: '🤔', text: 'El tutor detectó confusión y está usando ejemplos más concretos.' };
+    if (r.cognitive_state === 'mastery' || r.cognitive_state === 'mastering') return { icon: '🏆', text: '¡Excelente dominio! Aumentando la dificultad para seguir progresando.' };
+    if (r.cognitive_state === 'flow') return { icon: '🌊', text: 'Estás en estado de flujo. ¡Rendimiento óptimo de aprendizaje!' };
+    if ((r.engagement_score ?? 0.5) < 0.4) return { icon: '💡', text: 'El tutor está adaptando el contenido para mantener tu interés.' };
+    if ((r.error_risk ?? 0) > 0.65) return { icon: '⚠️', text: 'Alto riesgo de error detectado. Reforzando con ejemplos adicionales.' };
+    if (r.should_pause) return { icon: '⏸️', text: 'Recomendamos una pausa corta para consolidar el aprendizaje.' };
+    return null;
+  };
+
+  const tip = getTip();
+
   const PATTERNS = [
-    { key: 'P1', name: 'Tipeo',          active: true },
-    { key: 'P2', name: 'Comportamiento', active: true },
-    { key: 'P3', name: 'Facial',         active: facial.isStreaming },
-    { key: 'P4', name: 'Voz',            active: voice.isStreaming },
-    { key: 'P5', name: 'Contexto IA',    active: !!lastResponse },
+    { key: 'P1', name: 'Tipeo',          active: true,                    desc: 'Velocidad y correcciones' },
+    { key: 'P2', name: 'Comportamiento', active: true,                    desc: 'Pausas y patrones' },
+    { key: 'P3', name: 'Facial',         active: facial.isStreaming,       desc: 'Microexpresiones' },
+    { key: 'P4', name: 'Voz',            active: voice.isStreaming,        desc: 'Prosodia y energía' },
+    { key: 'P5', name: 'Contexto IA',    active: !!lastResponse,           desc: 'Adaptación cognitiva' },
   ];
 
   return (
@@ -176,11 +208,21 @@ export default function LiveModeView({
         </div>
 
         {/* ── Panel derecho: Patrones activos ──────────────────────────────── */}
-        <div className="w-64 bg-gray-900 border-l border-gray-800 flex flex-col p-4 gap-3 overflow-y-auto flex-shrink-0">
+        <div className="w-72 bg-gray-900 border-l border-gray-800 flex flex-col p-4 gap-3 overflow-y-auto flex-shrink-0">
 
           <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-            📊 Patrones Activos
+            📊 Panel en Vivo
           </h3>
+
+          {/* Recomendación contextual IA */}
+          {tip && (
+            <div className="bg-violet-950/70 border border-violet-800 rounded-xl p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-base">{tip.icon}</span>
+                <p className="text-violet-300 text-xs leading-relaxed">{tip.text}</p>
+              </div>
+            </div>
+          )}
 
           {/* Estado cognitivo */}
           <div className="bg-gray-800 rounded-xl p-3">
@@ -188,37 +230,51 @@ export default function LiveModeView({
             <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${stateInfo.color}`}>
               {stateInfo.label}
             </span>
+            {lastResponse?.confidence !== undefined && (
+              <p className="text-gray-600 text-[10px] mt-2">
+                Confianza IA: {Math.round(lastResponse.confidence * 100)}%
+              </p>
+            )}
           </div>
 
-          {/* Engagement + Riesgo de error */}
+          {/* Métricas en tiempo real */}
           {lastResponse && (
             <div className="bg-gray-800 rounded-xl p-3 space-y-3">
+              <p className="text-gray-500 text-xs font-medium">Métricas en tiempo real</p>
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <p className="text-gray-500 text-xs">Engagement</p>
+                  <p className="text-gray-400 text-xs">Engagement</p>
                   <span className="text-blue-300 text-xs font-semibold">
                     {Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%
                   </span>
                 </div>
                 <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-400 rounded-full transition-all duration-700"
-                    style={{ width: `${Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%` }}
-                  />
+                  <div className="h-full bg-blue-400 rounded-full transition-all duration-700"
+                    style={{ width: `${Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%` }} />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <p className="text-gray-500 text-xs">Riesgo de error</p>
-                  <span className={`text-xs font-semibold ${(lastResponse.error_risk ?? 0) > 0.5 ? 'text-red-400' : 'text-green-400'}`}>
+                  <p className="text-gray-400 text-xs">Atención</p>
+                  <span className="text-green-300 text-xs font-semibold">
+                    {Math.round((lastResponse.attention_level ?? 0.5) * 100)}%
+                  </span>
+                </div>
+                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-green-400 rounded-full transition-all duration-700"
+                    style={{ width: `${Math.round((lastResponse.attention_level ?? 0.5) * 100)}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-gray-400 text-xs">Riesgo de error</p>
+                  <span className={`text-xs font-semibold ${(lastResponse.error_risk ?? 0) > 0.5 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {Math.round((lastResponse.error_risk ?? 0) * 100)}%
                   </span>
                 </div>
                 <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${(lastResponse.error_risk ?? 0) > 0.5 ? 'bg-red-400' : 'bg-green-400'}`}
-                    style={{ width: `${Math.round((lastResponse.error_risk ?? 0) * 100)}%` }}
-                  />
+                  <div className={`h-full rounded-full transition-all duration-700 ${(lastResponse.error_risk ?? 0) > 0.5 ? 'bg-red-400' : 'bg-emerald-400'}`}
+                    style={{ width: `${Math.round((lastResponse.error_risk ?? 0) * 100)}%` }} />
                 </div>
               </div>
             </div>
@@ -227,66 +283,90 @@ export default function LiveModeView({
           {/* Lista de patrones */}
           <div className="bg-gray-800 rounded-xl p-3">
             <p className="text-gray-500 text-xs mb-3">
-              Modalidades ({PATTERNS.filter(p => p.active).length}/5 activas)
+              Modalidades activas ({PATTERNS.filter(p => p.active).length}/5)
             </p>
             <div className="space-y-2">
               {PATTERNS.map((p) => (
                 <div key={p.key} className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors ${p.active ? 'bg-green-400' : 'bg-gray-600'}`} />
-                  <span className={`text-xs flex-1 ${p.active ? 'text-gray-200' : 'text-gray-600'}`}>
-                    {p.key} · {p.name}
-                  </span>
-                  {p.active && <span className="text-green-500 text-[10px]">✓</span>}
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${p.active ? 'bg-green-400' : 'bg-gray-600'}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-xs ${p.active ? 'text-gray-200' : 'text-gray-600'}`}>
+                      {p.key} · {p.name}
+                    </span>
+                    {p.active && (
+                      <p className="text-[10px] text-gray-600 leading-none mt-0.5">{p.desc}</p>
+                    )}
+                  </div>
+                  {p.active && <span className="text-green-500 text-[10px] flex-shrink-0">✓</span>}
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Análisis facial */}
+          {/* Análisis facial en vivo */}
           {facial.isStreaming && facial.snapshot?.is_active && (
             <div className="bg-gray-800 rounded-xl p-3">
-              <p className="text-gray-500 text-xs mb-2">Análisis facial</p>
-              <div className="space-y-1 text-xs">
+              <p className="text-gray-500 text-xs mb-2 font-medium">Análisis facial</p>
+              <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Emoción</span>
-                  <span className={
-                    facial.snapshot.valence > 0.2 ? 'text-green-400' :
-                    facial.snapshot.valence < -0.2 ? 'text-red-400' : 'text-gray-400'
-                  }>
-                    {facial.snapshot.valence > 0.2 ? '😊 Positivo' :
-                     facial.snapshot.valence < -0.2 ? '😟 Negativo' : '😐 Neutro'}
+                  <span className={facial.snapshot.valence > 0.2 ? 'text-green-400' : facial.snapshot.valence < -0.2 ? 'text-red-400' : 'text-gray-400'}>
+                    {facial.snapshot.valence > 0.2 ? '😊 Positivo' : facial.snapshot.valence < -0.2 ? '😟 Preocupado' : '😐 Neutro'}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Atención</span>
-                  <span className="text-blue-400">
-                    {Math.round((facial.snapshot.attention_score ?? 0) * 100)}%
-                  </span>
+                  <span className="text-gray-500">Atención visual</span>
+                  <span className="text-blue-400">{Math.round((facial.snapshot.attention_score ?? 0) * 100)}%</span>
+                </div>
+                <div className="h-1 bg-gray-700 rounded-full overflow-hidden mt-1">
+                  <div className="h-full bg-blue-400 rounded-full transition-all"
+                    style={{ width: `${Math.round((facial.snapshot.attention_score ?? 0) * 100)}%` }} />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Análisis de voz */}
+          {/* Análisis de voz en vivo */}
           {voice.isStreaming && voice.snapshot?.is_active && (
             <div className="bg-gray-800 rounded-xl p-3">
-              <p className="text-gray-500 text-xs mb-2">Análisis de voz</p>
-              <div className="space-y-1 text-xs">
+              <p className="text-gray-500 text-xs mb-2 font-medium">Análisis de voz</p>
+              <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Energía</span>
                   <span className="text-violet-400">
-                    {(voice.snapshot.energy_level ?? 0) > 0.6 ? '🔥 Alta' :
-                     (voice.snapshot.energy_level ?? 0) > 0.3 ? '⚡ Media' : '💤 Baja'}
+                    {(voice.snapshot.energy_level ?? 0) > 0.6 ? '🔥 Alta' : (voice.snapshot.energy_level ?? 0) > 0.3 ? '⚡ Media' : '💤 Baja'}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Velocidad</span>
-                  <span className="text-blue-400">
-                    {Math.round(voice.snapshot.speech_rate_wpm ?? 0)} wpm
-                  </span>
+                  <span className="text-blue-400">{Math.round(voice.snapshot.speech_rate_wpm ?? 0)} wpm</span>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Quiz en Modo Live */}
+          {liveQuiz && (
+            <div>
+              <QuizPanel
+                quiz={liveQuiz}
+                dark={true}
+                onAnswer={(key, text) => {
+                  setLiveQuiz(null);
+                  onSendMessage(`Mi respuesta es ${key}) ${text}`);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Botón quiz rápido */}
+          {!liveQuiz && lastResponse && (
+            <button
+              onClick={() => onSendMessage("Dame un quiz de opción múltiple (A, B, C, D) sobre lo que acabamos de ver.")}
+              className="w-full py-2 rounded-xl text-xs font-medium text-violet-400 border border-violet-800 hover:bg-violet-900/40 transition-colors"
+            >
+              🧠 Quiz de verificación
+            </button>
           )}
         </div>
       </div>

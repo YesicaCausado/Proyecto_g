@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
 import { demoStartSession, demoSendMessage } from "../../services/demoChat";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
-import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions, Radio } from "lucide-react";
+import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
@@ -11,6 +11,7 @@ import { useVoiceTutor } from "../../hooks/useVoiceTutor";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
 import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
 import LiveModeView from "../../components/LiveModeView";
+import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
 
 /** Mini-componente que adjunta el stream del videoRef al <video> React */
 function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
@@ -74,6 +75,7 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const vrmRef = useRef<VRMTutorHandle>(null);
   const [showLiveMode, setShowLiveMode] = useState(false);
+  const [currentQuiz, setCurrentQuiz] = useState<QuizData | null>(null);
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
@@ -84,6 +86,12 @@ export default function ChatPage() {
     setInput(transcript);
     await sendMessageWithText(transcript);
   });
+
+  // Cambiar idioma del tutor según la habilidad (inglés → voz en inglés)
+  useEffect(() => {
+    voiceTutor.setLanguage(selectedSkill === 'ingles' ? 'en' : 'es');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSkill]);
 
   // Auto-activar modo voz cuando el micrófono está activo
   useEffect(() => {
@@ -141,6 +149,9 @@ export default function ChatPage() {
       if (data.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
+      // Detectar quiz en la respuesta
+      const startQuiz = parseQuizFromMessage(data.message);
+      setCurrentQuiz(startQuiz);
     } catch (err) {
       console.error("Error starting session:", err);
     } finally {
@@ -239,6 +250,9 @@ export default function ChatPage() {
       if (data.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
+      // Detectar quiz en la respuesta
+      const msgQuiz = parseQuizFromMessage(data.message);
+      setCurrentQuiz(msgQuiz);
     } catch (err) {
       console.error("Error sending message:", err);
       setMessages((prev) => [
@@ -435,6 +449,19 @@ export default function ChatPage() {
               </button>
             )}
             {/* Botón avatar VRM — eliminado, usa Modo Live */}
+            {/* Botón Modo Live — compacto en el header */}
+            <button
+              onClick={() => setShowLiveMode(true)}
+              disabled={!voice.hardwareAvailable}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                voice.hardwareAvailable
+                  ? 'bg-violet-600 text-white hover:bg-violet-500 shadow-sm'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              }`}
+              title={voice.hardwareAvailable ? 'Modo Live con tutor animado' : 'Requiere micrófono'}
+            >
+              🎬 Live
+            </button>
             <button
               onClick={() => setShowDashboard(!showDashboard)}
               className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-gray-400 hover:text-accent-500 hover:bg-accent-50"}`}
@@ -613,23 +640,31 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* ── Botón Modo Live ─────────────────────────────────────────── */}
-          <div className="mt-3 max-w-4xl mx-auto w-full">
-            <button
-              onClick={() => setShowLiveMode(true)}
-              disabled={!voice.hardwareAvailable}
-              className={`w-full py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
-                voice.hardwareAvailable
-                  ? 'bg-gradient-to-r from-violet-600 to-purple-700 text-white hover:from-violet-500 hover:to-purple-600 shadow-md hover:shadow-violet-300/40'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-              title={voice.hardwareAvailable ? 'Iniciar clase en vivo con el tutor animado' : 'Necesitas micrófono para usar el Modo Live'}
-            >
-              <Radio className="w-4 h-4" />
-              🎬 Modo Live
-              {!voice.hardwareAvailable && <span className="text-xs font-normal ml-1">(requiere micrófono)</span>}
-            </button>
-          </div>
+          {/* ── Quiz interactivo ────────────────────────────────────────── */}
+          {currentQuiz && (
+            <div className="px-0 pb-2 max-w-4xl mx-auto w-full animate-fadeIn">
+              <QuizPanel
+                quiz={currentQuiz}
+                onAnswer={(key, text) => {
+                  setCurrentQuiz(null);
+                  sendMessageWithText(`Mi respuesta es ${key}) ${text}`);
+                }}
+              />
+            </div>
+          )}
+
+          {/* ── Botón para pedir quiz ────────────────────────────────────── */}
+          {!currentQuiz && sessionActive && (
+            <div className="max-w-4xl mx-auto w-full mb-2 flex justify-end">
+              <button
+                onClick={() => sendMessageWithText("Dame un quiz de opción múltiple (A, B, C, D) sobre lo que acabamos de ver para verificar que aprendí.")}
+                disabled={sending}
+                className="text-xs text-violet-500 hover:text-violet-700 border border-violet-200 hover:bg-violet-50 px-3 py-1 rounded-full transition-colors disabled:opacity-40"
+              >
+                🧠 Quiz rápido
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -649,6 +684,7 @@ export default function ChatPage() {
           vrmRef={vrmRef}
           voiceTutor={voiceTutor}
           lastResponse={lastResponse}
+          onSendMessage={sendMessageWithText}
           facial={facial}
           voice={voice}
           onExit={() => {

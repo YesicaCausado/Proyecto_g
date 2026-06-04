@@ -202,12 +202,28 @@ const VRMTutor = forwardRef<VRMTutorHandle, Props>(
               head.rotation.y = Math.sin(t * 0.3) * 0.03;
               head.rotation.x = -0.05 + Math.sin(t * 0.4) * 0.01;
             }
-            // Mantener brazos colgando + micro-balanceo de respiración
+            // ─── Brazos: idle o gesto al hablar ────────────────────────────
             const leftUpper2  = vrm.humanoid.getNormalizedBoneNode("leftUpperArm");
             const rightUpper2 = vrm.humanoid.getNormalizedBoneNode("rightUpperArm");
+            const leftLower2  = vrm.humanoid.getNormalizedBoneNode("leftLowerArm");
+            const rightLower2 = vrm.humanoid.getNormalizedBoneNode("rightLowerArm");
             const breathe = Math.sin(t * 0.5) * 0.012;
-            if (leftUpper2)  leftUpper2.rotation.z  = -1.4 - breathe;
-            if (rightUpper2) rightUpper2.rotation.z =  1.4 + breathe;
+
+            if (speakRef.current) {
+              // Gesto natural al hablar: brazos ligeramente levantados y moviéndose
+              const g1 = Math.sin(t * 1.8) * 0.18;
+              const g2 = Math.sin(t * 1.8 + Math.PI) * 0.14;
+              if (leftUpper2)  { leftUpper2.rotation.z = -1.15 - breathe; leftUpper2.rotation.x = 0.28 + g1; }
+              if (rightUpper2) { rightUpper2.rotation.z = 1.15 + breathe; rightUpper2.rotation.x = 0.28 + g2; }
+              if (leftLower2)  { leftLower2.rotation.z  = 0.25 + g2 * 0.4; leftLower2.rotation.x = 0.15; }
+              if (rightLower2) { rightLower2.rotation.z = -0.25 - g1 * 0.4; rightLower2.rotation.x = 0.15; }
+            } else {
+              // Idle: brazos colgando naturalmente
+              if (leftUpper2)  leftUpper2.rotation.z  = -1.4 - breathe;
+              if (rightUpper2) rightUpper2.rotation.z =  1.4 + breathe;
+              if (leftLower2)  leftLower2.rotation.z   = 0;
+              if (rightLower2) rightLower2.rotation.z  = 0;
+            }
           }
 
           // ─── Parpadeo automático ─────────────────────────────────────────
