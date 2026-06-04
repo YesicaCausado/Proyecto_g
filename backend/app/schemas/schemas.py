@@ -51,13 +51,15 @@ class StartSessionRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(..., min_length=1)
+    topic: Optional[str] = None          # ← NUEVO: tema para modo stateless
+    history: Optional[List[Dict[str, Any]]] = None  # ← NUEVO: historial para serverless
     response_time_ms: float = Field(default=0, ge=0)
     typing_speed_cpm: float = Field(default=0, ge=0)
     corrections: int = Field(default=0, ge=0)
     pause_before_ms: float = Field(default=0, ge=0)
     # Datos multimodales opcionales (Patrones 3-4)
-    facial_data: Optional[Dict[str, Any]] = None   # Microexpresión facial
-    voice_data: Optional[Dict[str, Any]] = None     # Prosodia de voz
+    facial_data: Optional[Dict[str, Any]] = None
+    voice_data: Optional[Dict[str, Any]] = None
 
 
 class ChatMessageResponse(BaseModel):

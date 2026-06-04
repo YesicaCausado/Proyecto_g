@@ -26,24 +26,42 @@ export interface QuizPanelProps {
   dark?: boolean;
 }
 
-// ── Parser: detecta quiz en texto del bot ─────────────────────────────────────
+// ── Parser: detecta quiz con EXACTAMENTE 4 opciones A, B, C, D ──────────────
 export function parseQuizFromMessage(text: string): QuizData | null {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const optionLines = lines.filter(l => /^[A-Da-d][\)\.]\s+.+/.test(l));
-  if (optionLines.length < 2) return null;
 
-  const firstIdx = lines.findIndex(l => /^[A-Da-d][\)\.]\s+/.test(l));
-  if (firstIdx < 0) return null;
+  // Buscar exactamente A, B, C y D (no más, no menos)
+  const findOpt = (key: string) =>
+    lines.find(l => new RegExp(`^${key}[\\)\\.:]\\s+.+`).test(l));
 
-  const question = lines.slice(0, firstIdx).join(' ').trim() ||
-    lines.slice(Math.max(0, firstIdx - 2), firstIdx).join(' ').trim();
+  const optA = findOpt('A');
+  const optB = findOpt('B');
+  const optC = findOpt('C');
+  const optD = findOpt('D');
 
-  const options: QuizOption[] = optionLines.map(line => ({
-    key: line[0].toUpperCase(),
-    text: line.replace(/^[A-Da-d][\)\.]\s+/, '').trim(),
-  }));
+  // Requiere las 4 opciones exactas
+  if (!optA || !optB || !optC || !optD) return null;
 
-  return { question, options };
+  const firstOptIdx = lines.findIndex(l => /^A[\)\.:]\s+/.test(l));
+  if (firstOptIdx < 0) return null;
+
+  // La pregunta son las líneas anteriores a A (excluir la línea "❓" sola)
+  const questionLines = lines
+    .slice(Math.max(0, firstOptIdx - 4), firstOptIdx)
+    .filter(l => l !== '❓');
+  const question = questionLines.join(' ').replace(/^❓\s*\*?\*?/, '').replace(/\*\*/g, '').trim();
+
+  const parseOpt = (line: string) => line.replace(/^[A-D][\)\.:]\s+/, '').trim();
+
+  return {
+    question,
+    options: [
+      { key: 'A', text: parseOpt(optA) },
+      { key: 'B', text: parseOpt(optB) },
+      { key: 'C', text: parseOpt(optC) },
+      { key: 'D', text: parseOpt(optD) },
+    ],
+  };
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────

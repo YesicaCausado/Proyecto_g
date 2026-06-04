@@ -53,6 +53,8 @@ export interface VoiceTutorState {
   liveTranscript: string;
   lastUserText: string;
   lastBotText: string;
+  /** Subtítulo progresivo: se actualiza palabra a palabra mientras el TTS habla */
+  subtitleProgress: string;
   subtitlesEnabled: boolean;
   supported: boolean;
 }
@@ -85,6 +87,13 @@ function stripMarkdown(text: string): string {
     // Quitar emojis para que el TTS no los pronuncie
     .replace(/(\ud83c[\udf00-\udfff]|\ud83d[\udc00-\ude4f]|\ud83d[\ude80-\udeff]|\ud83e[\udd00-\uddff]|[\u2600-\u27bf]|[\u2b00-\u2bff]|\ufe0f)/g, '')
     .trim();
+}
+
+// ── Detecta el idioma predominante del texto ──────────────────────────────────
+function detectLanguage(text: string): 'es' | 'en' {
+  const esMatches = (text.match(/\b(el|la|los|las|de|que|en|y|a|es|un|una|por|con|para|como|más|pero|no|se|su|al|del|esto|este|esta|son|fue|hay|si|ya|también|muy|todo|cuando|donde|porque|bien|después|antes|desde|sobre|entre|hasta|sin|cada|solo|otro|puede|tiene|qué|cómo|dónde|cuándo|quién|cual|si|yo|tú|él|ella|nosotros|vamos|hacer|saber|ver|dar|decir|ir|tener|estar|haber|poder|querer|saber|llegar|pasar|deber|poner|parecer|quedar|creer|llevar|dejar|seguir|encontrar|llamar|venir|pensar|salir|volver|tomar|conocer|vivir|sentir|tratar|mirar|contar|empezar|esperar|buscar|existir|entrar|trabajar|escribir|perder|producir|ocurrir|entender|pedir|recibir|recordar|terminar|permitir|aparecer|conseguir|comenzar|servir|sacar|necesitar|mantener|resultar|leer|caer|cambiar|presentar|crear|abrir|considerar|oír|puede|tiene|hace|dice|sabe)\b/gi) || []).length;
+  const enMatches = (text.match(/\b(the|a|an|and|or|but|in|on|at|to|for|of|with|by|from|is|are|was|were|be|been|have|has|had|do|does|did|will|would|could|should|this|that|these|those|i|you|he|she|it|we|they|not|can|what|when|where|who|how|if|then|so|all|some|more|also|just|like|get|make|know|think|see|look|use|find|go|say|take|come|time|good|new|first|last|great|important|between|without|about|after|before|during|through|because|which|while|although|however|therefore|thus)\b/gi) || []).length;
+  return enMatches > esMatches ? 'en' : 'es';
 }
 
 // ── Selecciona voz Sofía de Bolivia (español) ─────────────────────────────────
@@ -134,7 +143,9 @@ export function useVoiceTutor(
   const [liveTranscript,   setLiveTranscript]   = useState('');
   const [lastUserText,     setLastUserText]      = useState('');
   const [lastBotText,      setLastBotText]       = useState('');
+  const [subtitleProgress, setSubtitleProgress] = useState('');
   const [subtitlesEnabled, setSubtitlesEnabled]  = useState(true);
+  const subtitleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const SpeechRecognitionAPI =
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -163,10 +174,19 @@ export function useVoiceTutor(
 
     window.speechSynthesis.cancel();
 
+    // Limpiar intervalo de subtítulos previo
+    if (subtitleTimerRef.current) clearInterval(subtitleTimerRef.current);
+    setSubtitleProgress('');
+
     const clean = stripMarkdown(text);
     if (!clean) { ttsActiveRef.current = false; return; }
 
-    const isEn = languageRef.current === 'en';
+    // ── Auto-detectar idioma del texto ──────────────────────────────────────
+    const detectedLang = detectLanguage(clean);
+    const isEn = detectedLang === 'en';
+    // Actualizar languageRef para que STT también use el idioma correcto
+    languageRef.current = detectedLang;
+
     const utterance = new SpeechSynthesisUtterance(clean);
     utterance.lang   = isEn ? 'en-US' : 'es-BO';
     utterance.rate   = 1.1;
@@ -176,8 +196,26 @@ export function useVoiceTutor(
     const voice = isEn ? pickEnglishVoice() : pickSofiaVoice();
     if (voice) utterance.voice = voice;
 
-    utterance.onstart = () => setIsSpeaking(true);
+    // ── Subtítulos progresivos: avanza 3 palabras cada ~300ms ───────────────
+    const words = clean.split(' ');
+    const msPerWord = Math.max(120, 60000 / (utterance.rate * 140)); // ms por palabra
+    let wordIdx = 0;
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      subtitleTimerRef.current = setInterval(() => {
+        wordIdx = Math.min(wordIdx + 3, words.length);
+        setSubtitleProgress(words.slice(0, wordIdx).join(' '));
+        if (wordIdx >= words.length) {
+          clearInterval(subtitleTimerRef.current!);
+          subtitleTimerRef.current = null;
+        }
+      }, msPerWord * 3);
+    };
+
     utterance.onend   = () => {
+      if (subtitleTimerRef.current) { clearInterval(subtitleTimerRef.current); subtitleTimerRef.current = null; }
+      setSubtitleProgress('');
       ttsActiveRef.current = false;
       setIsSpeaking(false);
       onEnd?.();
@@ -185,6 +223,8 @@ export function useVoiceTutor(
       if (activeRef.current) setTimeout(_startListening, 900);
     };
     utterance.onerror = () => {
+      if (subtitleTimerRef.current) { clearInterval(subtitleTimerRef.current); subtitleTimerRef.current = null; }
+      setSubtitleProgress('');
       ttsActiveRef.current = false;
       setIsSpeaking(false);
       onEnd?.();
@@ -365,6 +405,7 @@ export function useVoiceTutor(
     liveTranscript,
     lastUserText,
     lastBotText,
+    subtitleProgress,
     subtitlesEnabled,
     supported,
     startVoiceMode,

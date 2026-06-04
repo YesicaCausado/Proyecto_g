@@ -13,7 +13,63 @@ import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor
 import LiveModeView from "../../components/LiveModeView";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
 
-/** Mini-componente que adjunta el stream del videoRef al <video> React */
+/** Renderiza texto con markdown básico como JSX */
+function BotMessage({ content }: { content: string }) {
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let listBuffer: string[] = [];
+  let olBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length) {
+      elements.push(
+        <ul key={`ul-${elements.length}`} className="list-none space-y-0.5 my-1 pl-1">
+          {listBuffer.map((item, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-sm">
+              <span className="text-violet-400 mt-0.5 flex-shrink-0">•</span>
+              <span dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
+            </li>
+          ))}
+        </ul>
+      );
+      listBuffer = [];
+    }
+    if (olBuffer.length) {
+      elements.push(
+        <ol key={`ol-${elements.length}`} className="list-none space-y-0.5 my-1 pl-1">
+          {olBuffer.map((item, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-sm">
+              <span className="text-violet-500 font-bold flex-shrink-0">{i + 1}.</span>
+              <span dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
+            </li>
+          ))}
+        </ol>
+      );
+      olBuffer = [];
+    }
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) { flushList(); elements.push(<div key={idx} className="h-1" />); return; }
+    if (trimmed.startsWith('• ') || trimmed.startsWith('- ')) { olBuffer.length && flushList(); listBuffer.push(trimmed.slice(2)); return; }
+    if (/^\d+\.\s/.test(trimmed)) { listBuffer.length && flushList(); olBuffer.push(trimmed.replace(/^\d+\.\s/, '')); return; }
+    flushList();
+    if (trimmed.startsWith('## ')) { elements.push(<h3 key={idx} className="font-bold text-sm mt-2 mb-0.5 text-gray-800">{trimmed.slice(3)}</h3>); return; }
+    if (trimmed.startsWith('# '))  { elements.push(<h2 key={idx} className="font-bold text-base mt-2 mb-1 text-gray-800">{trimmed.slice(2)}</h2>); return; }
+    if (trimmed.startsWith('━'))   { elements.push(<hr key={idx} className="border-gray-200 my-2" />); return; }
+    elements.push(<p key={idx} className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: inlineMarkdown(trimmed) }} />);
+  });
+  flushList();
+  return <div className="space-y-0.5">{elements}</div>;
+}
+
+function inlineMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded text-xs font-mono text-violet-700">$1</code>');
+}
 function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const previewRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -192,8 +248,16 @@ export default function ChatPage() {
       let data: ChatMessageResponse;
       // Intentar backend real; si falla → demo mock
       try {
+        const skill = SKILLS.find((s) => s.key === selectedSkill);
         const res = await api.post<ChatMessageResponse>("/chat/message", {
           message: msgContent,
+          // ── Stateless: enviamos tema e historial para serverless (Vercel) ──
+          topic: skill?.topic ?? "Tema general",
+          history: messages.slice(-10).map((m) => ({
+            role: m.role === "bot" ? "assistant" : "user",
+            content: m.content,
+          })),
+          // ── Métricas de comportamiento ──
           response_time_ms:  behavioralMetrics.response_time_ms,
           typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
           corrections:       behavioralMetrics.corrections,
@@ -509,7 +573,10 @@ export default function ChatPage() {
           {messages.map((msg) => (
             <div key={msg.id} className={`flex animate-fadeIn ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[85%] md:max-w-[70%] ${msg.role === "user" ? "chat-bubble-user" : "chat-bubble-bot"}`}>
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                {msg.role === "bot"
+                  ? <BotMessage content={msg.content} />
+                  : <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                }
                 {msg.suggestions && msg.suggestions.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {msg.suggestions.map((sug, i) => (
@@ -540,12 +607,16 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Overlay de subtítulos (TTS) — aparece en la parte inferior cuando el tutor habla */}
-        {voiceTutor.subtitlesEnabled && voiceTutor.isSpeaking && voiceTutor.lastBotText && (
-          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-xl pointer-events-none">
-            <div className="bg-black/75 text-white text-sm rounded-xl px-4 py-2.5 text-center leading-relaxed backdrop-blur-sm">
-              <span className="mr-1.5 text-violet-300">🔊</span>
-              {voiceTutor.lastBotText}
+        {/* Overlay de subtítulos progresivos — avanza palabra a palabra */}
+        {voiceTutor.subtitlesEnabled && voiceTutor.isSpeaking && voiceTutor.subtitleProgress && (
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-2xl pointer-events-none">
+            <div className="bg-black/80 text-white text-sm rounded-2xl px-5 py-3 text-center leading-relaxed backdrop-blur-sm shadow-xl border border-violet-500/30">
+              <span className="mr-1.5 text-violet-400 text-xs font-semibold uppercase tracking-widest">🔊 Tutor</span>
+              <br />
+              <span className="text-base">
+                {voiceTutor.subtitleProgress}
+                <span className="inline-block w-2 h-[1em] bg-violet-400 ml-1 animate-pulse align-middle rounded-sm" />
+              </span>
             </div>
           </div>
         )}
