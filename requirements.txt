@@ -1,17 +1,14 @@
-# Backend dependencies para Vercel
-# Python 3.11 (declarado en vercel.json)
-fastapi==0.104.1
-uvicorn==0.24.0
-sqlalchemy==2.0.23
-pydantic==2.5.2
-pydantic-settings==2.1.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-python-multipart==0.0.6
-numpy==1.26.2
-httpx==0.25.2
-python-dotenv==1.0.0
-groq==0.4.2
-google-generativeai==0.3.2
-openai==1.6.1
+# Backend para Vercel — sin versiones fijas para compatibilidad con Python 3.14
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt
+python-multipart
+httpx
+python-dotenv
+groq
+openai
