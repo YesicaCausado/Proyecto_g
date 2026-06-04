@@ -2,6 +2,7 @@
 NeuroLearn Bot Service - Configuración Central
 Separado del servicio de autenticación
 """
+import os
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -10,29 +11,39 @@ class Settings(BaseSettings):
     # App
     APP_NAME: str = "NeuroLearn Bot Service"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+    
+    # Detectar entorno
+    ENVIRONMENT: str = os.getenv("VERCEL_ENV", "development")  # production, preview, development
+    IS_PRODUCTION: bool = os.getenv("VERCEL_ENV") == "production"
 
-    # Database - SQLite local para caché de bots
-    DATABASE_URL: str = "sqlite:///./bots.db"
+    # Database - PostgreSQL en Vercel, SQLite en desarrollo
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///./bots.db"
+    )
 
     # Security - Igual que Auth Service para verificar tokens
-    SECRET_KEY: str = "neurolearn-secret-key-cambiar-en-produccion-2026"
+    SECRET_KEY: str = os.getenv(
+        "SECRET_KEY",
+        "neurolearn-secret-key-cambiar-en-produccion-2026"
+    )
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 horas
 
     # Auth Service - Para validar tokens
-    AUTH_SERVICE_URL: str = "http://localhost:8002"
+    AUTH_SERVICE_URL: str = os.getenv("AUTH_SERVICE_URL", "http://localhost:8002")
     
     # OpenAI (opcional - para chatbot avanzado)
-    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     OPENAI_MODEL: str = "gpt-3.5-turbo"
 
     # Groq (gratuito - IA principal)
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3-32b")
 
     # Google Gemini (gratuito - fallback)
-    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = "gemini-2.0-flash"
 
     # Configuración de Inferencia Neuroconductual
