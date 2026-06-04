@@ -1,22 +1,44 @@
 """
 NeuroLearn AI - API de Autenticación
+Soporta modo con DB (local/producción) y modo demo (Vercel sin DB).
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
+from dataclasses import dataclass, field
+from typing import Optional
 
-from app.db.database import get_db
+from app.db.database import get_db, IS_DB_DISABLED
 from app.core.config import settings
-from app.models.user import User
+from app.models.user import User as UserModel
 from app.schemas.schemas import UserCreate, UserLogin, UserResponse, Token
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+# ── Usuario de demostración (sin base de datos) ───────────────────────────────
+@dataclass
+class DemoUser:
+    """Sustituye al modelo ORM cuando IS_DB_DISABLED=True."""
+    id: int = 1
+    username: str = "demo"
+    email: str = "demo@neurolearn.ai"
+    full_name: str = "Usuario Demo"
+    role: str = "estudiante"
+    is_active: bool = True
+    is_expert: bool = False
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    cognitive_profile: Optional[dict] = None
+
+
+DEMO_USER = DemoUser()
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -29,16 +51,21 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> User:
-    """Obtiene el usuario actual desde el token JWT"""
+    db: Session = Depends(get_db),
+):
+    """Obtiene el usuario actual. En modo demo devuelve DEMO_USER sin consultar DB."""
+    if IS_DB_DISABLED:
+        return DEMO_USER
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciales inválidas",
@@ -51,8 +78,8 @@ async def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
-    user = db.query(User).filter(User.username == username).first()
+
+    user = db.query(UserModel).filter(UserModel.username == username).first()
     if user is None:
         raise credentials_exception
     return user
@@ -60,15 +87,19 @@ async def get_current_user(
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Registrar un nuevo usuario"""
-    # Verificar si el usuario ya existe
-    if db.query(User).filter(User.username == user_data.username).first():
+    """Registrar un nuevo usuario (deshabilitado en modo demo)."""
+    if IS_DB_DISABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El registro está deshabilitado en modo demo.",
+        )
+
+    if db.query(UserModel).filter(UserModel.username == user_data.username).first():
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
-    if db.query(User).filter(User.email == user_data.email).first():
+    if db.query(UserModel).filter(UserModel.email == user_data.email).first():
         raise HTTPException(status_code=400, detail="El email ya está registrado")
-    
-    # Crear usuario
-    db_user = User(
+
+    db_user = UserModel(
         username=user_data.username,
         email=user_data.email,
         hashed_password=get_password_hash(user_data.password),
@@ -78,25 +109,28 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    
     return db_user
 
 
 @router.post("/login", response_model=Token)
 async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """Iniciar sesión"""
-    user = db.query(User).filter(User.username == user_data.username).first()
+    """Iniciar sesión. En modo demo acepta cualquier contraseña."""
+    if IS_DB_DISABLED:
+        access_token = create_access_token(data={"sub": DEMO_USER.username})
+        return Token(access_token=access_token)
+
+    user = db.query(UserModel).filter(UserModel.username == user_data.username).first()
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña incorrectos",
         )
-    
+
     access_token = create_access_token(data={"sub": user.username})
     return Token(access_token=access_token)
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
-    """Obtener perfil del usuario actual"""
+async def get_me(current_user=Depends(get_current_user)):
+    """Obtener perfil del usuario actual."""
     return current_user
