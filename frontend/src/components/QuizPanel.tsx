@@ -69,11 +69,11 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
   const [selected, setSelected] = useState<string | null>(null);
 
   const base = dark
-    ? 'border border-violet-800 bg-violet-950/50 rounded-2xl p-4'
+    ? 'border-2 border-violet-500 bg-gradient-to-br from-violet-900 via-violet-950 to-black rounded-xl p-3 shadow-2xl shadow-violet-500/20'
     : 'border border-violet-200 bg-violet-50 rounded-2xl p-4';
 
   const btnBase = dark
-    ? 'w-full text-left text-sm px-4 py-2.5 rounded-xl border transition-all flex items-center gap-3 font-medium'
+    ? 'w-full text-left text-xs px-3 py-1.5 rounded-lg border transition-all flex items-center gap-2 font-medium'
     : 'w-full text-left text-sm px-4 py-2.5 rounded-xl border transition-all flex items-center gap-3 font-medium';
 
   const btnIdle = dark
@@ -93,27 +93,27 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
   return (
     <div className={base}>
       {/* Encabezado */}
-      <div className="flex items-center gap-2 mb-3">
-        <HelpCircle className={`w-4 h-4 flex-shrink-0 ${dark ? 'text-violet-400' : 'text-violet-600'}`} />
-        <span className={`text-xs font-semibold uppercase tracking-wide ${dark ? 'text-violet-400' : 'text-violet-600'}`}>
-          Quiz de verificación
+      <div className="flex items-center gap-2 mb-2">
+        <HelpCircle className={`w-3.5 h-3.5 flex-shrink-0 ${dark ? 'text-violet-300' : 'text-violet-600'}`} />
+        <span className={`text-xs font-bold uppercase tracking-wide ${dark ? 'text-violet-300' : 'text-violet-600'}`}>
+          Pregunta
         </span>
         {selected && (
-          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${dark ? 'bg-violet-800 text-violet-300' : 'bg-violet-200 text-violet-700'}`}>
-            Respondido ✓
+          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full text-xs font-medium ${dark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700'}`}>
+            ✓ Respondido
           </span>
         )}
       </div>
 
       {/* Pregunta */}
       {quiz.question && (
-        <p className={`text-sm mb-3 leading-relaxed ${dark ? 'text-gray-200' : 'text-gray-800'}`}>
+        <p className={`text-xs mb-2 leading-snug font-medium ${dark ? 'text-violet-200' : 'text-gray-800'}`}>
           {quiz.question}
         </p>
       )}
 
       {/* Opciones */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {quiz.options.map((opt) => {
           const isSelected = selected === opt.key;
           return (
@@ -124,16 +124,16 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
               className={`${btnBase} ${isSelected ? btnSelected : btnIdle} ${selected && !isSelected ? 'opacity-40' : ''}`}
             >
               {/* Badge de letra */}
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                 isSelected
-                  ? dark ? 'bg-violet-500 text-white' : 'bg-violet-600 text-white'
-                  : dark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'
+                  ? dark ? 'bg-violet-400 text-white' : 'bg-violet-600 text-white'
+                  : dark ? 'bg-gray-700/50 text-gray-400' : 'bg-gray-100 text-gray-500'
               }`}>
                 {opt.key}
               </span>
-              <span className="flex-1">{opt.text}</span>
+              <span className="flex-1 text-xs">{opt.text}</span>
               {isSelected && (
-                <CheckCircle className={`w-4 h-4 flex-shrink-0 ${dark ? 'text-violet-400' : 'text-violet-500'}`} />
+                <CheckCircle className={`w-3.5 h-3.5 flex-shrink-0 ${dark ? 'text-green-400' : 'text-green-500'}`} />
               )}
             </button>
           );
@@ -141,7 +141,7 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
       </div>
 
       {selected && (
-        <p className={`mt-3 text-xs text-center ${dark ? 'text-gray-500' : 'text-gray-400'}`}>
+        <p className={`mt-2 text-xs text-center ${dark ? 'text-gray-500' : 'text-gray-400'}`}>
           El tutor evaluará tu respuesta...
         </p>
       )}

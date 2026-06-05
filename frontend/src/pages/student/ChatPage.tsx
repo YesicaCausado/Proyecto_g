@@ -740,15 +740,16 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* ── Quiz interactivo ────────────────────────────────────────── */}
+          {/* ── Quiz interactivo (modal flotante) ────────────────────────────────────────── */}
           {currentQuiz && (
-            <div className="px-0 pb-2 max-w-4xl mx-auto w-full animate-fadeIn">
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-sm z-50 animate-fadeIn">
               <QuizPanel
                 quiz={currentQuiz}
                 onAnswer={(key, text) => {
                   setCurrentQuiz(null);
                   sendMessageWithText(`Mi respuesta es ${key}) ${text}`);
                 }}
+                dark
               />
             </div>
           )}
