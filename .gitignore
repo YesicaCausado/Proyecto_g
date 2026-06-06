@@ -3,11 +3,17 @@ node_modules/
 .venv/
 env/
 venv/
-
+.env.*
+backend/.env
+auth-service/.env
 # === BUILD Y DIST ===
 dist/
 build/
 *.egg-info/
+.env
+.env.local
+.env.production
+.env.development
 
 # === PYTHON CACHE ===
 __pycache__/
