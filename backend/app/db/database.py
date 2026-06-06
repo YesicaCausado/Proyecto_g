@@ -2,12 +2,15 @@
 NeuroLearn AI - Configuración de Base de Datos
 Supabase PostgreSQL — Production Ready
 """
+from dotenv import load_dotenv
+load_dotenv()
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
-import os
 
+import os
+print("DATABASE_URL =", os.getenv("DATABASE_URL"))
 # Detectar si estamos en un entorno sin base de datos (ej. Vercel sin DATABASE_URL)
 # La variable VERCEL_ENV es establecida automáticamente por Vercel.
 IS_DB_DISABLED = settings.ENVIRONMENT != "development" and not settings.DATABASE_URL.startswith("postgres")
