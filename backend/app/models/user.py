@@ -9,9 +9,10 @@ import enum
 
 
 class UserRole(str, enum.Enum):
-    ESTUDIANTE = "estudiante"
-    PROFESOR = "profesor"
-    ADMIN = "admin"
+    ESTUDIANTE     = "estudiante"
+    PROFESOR       = "profesor"
+    SUPER_PROFESOR = "super_profesor"
+    ADMIN          = "admin"
 
 
 class User(Base):

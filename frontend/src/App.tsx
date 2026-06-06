@@ -15,29 +15,49 @@ import ClassroomDetailPage from './pages/teacher/ClassroomDetailPage';
 
 function DashboardRouter() {
   const { user } = useAuth();
-  if (user?.role === 'profesor') return <TeacherDashboard />;
+  if (user?.role === 'admin')          return <Navigate to="/admin" replace />;
+  if (user?.role === 'super_profesor') return <Navigate to="/super-dashboard" replace />;
+  if (user?.role === 'profesor')       return <TeacherDashboard />;
   return <StudentDashboard />;
-}
-
-function ClassroomsRouter() {
-  const { user } = useAuth();
-  if (user?.role === 'profesor') return <TeacherDashboard />;
-  return <Navigate to='/my-classes' replace />;
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path='/login' element={<LoginPage />} />
-      <Route path='/register' element={<RegisterPage />} />
-      <Route path='/dashboard' element={<ProtectedRoute><Layout><DashboardRouter /></Layout></ProtectedRoute>} />
-      <Route path='/bots' element={<ProtectedRoute role='estudiante'><Layout><BotsPage /></Layout></ProtectedRoute>} />
-      <Route path='/chat' element={<ProtectedRoute role='estudiante'><Layout><ChatPage /></Layout></ProtectedRoute>} />
-      <Route path='/my-classes' element={<ProtectedRoute role='estudiante'><Layout><MyClassesPage /></Layout></ProtectedRoute>} />
-      <Route path='/classrooms' element={<ProtectedRoute role='profesor'><Layout><ClassroomsRouter /></Layout></ProtectedRoute>} />
-      <Route path='/classrooms/new' element={<ProtectedRoute role='profesor'><Layout><CreateClassroomPage /></Layout></ProtectedRoute>} />
-      <Route path='/classrooms/:id' element={<ProtectedRoute role='profesor'><Layout><ClassroomDetailPage /></Layout></ProtectedRoute>} />
-      <Route path='*' element={<Navigate to='/dashboard' replace />} />
+      {/* Públicas */}
+      <Route path="/login"    element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+
+      {/* Dashboard universal — redirige por rol */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute><Layout><DashboardRouter /></Layout></ProtectedRoute>
+      } />
+
+      {/* Estudiante */}
+      <Route path="/bots" element={
+        <ProtectedRoute role="estudiante"><Layout><BotsPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/chat" element={
+        <ProtectedRoute role="estudiante"><Layout><ChatPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/my-classes" element={
+        <ProtectedRoute role="estudiante"><Layout><MyClassesPage /></Layout></ProtectedRoute>
+      } />
+
+      {/* Profesor */}
+      <Route path="/classrooms" element={
+        <ProtectedRoute role="profesor"><Layout><TeacherDashboard /></Layout></ProtectedRoute>
+      } />
+      <Route path="/classrooms/new" element={
+        <ProtectedRoute role="profesor"><Layout><CreateClassroomPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/classrooms/:id" element={
+        <ProtectedRoute role="profesor"><Layout><ClassroomDetailPage /></Layout></ProtectedRoute>
+      } />
+
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

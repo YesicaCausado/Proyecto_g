@@ -13,7 +13,10 @@ class UserCreate(BaseModel):
     email: str = Field(..., max_length=100)
     password: str = Field(..., min_length=6)
     full_name: Optional[str] = None
-    role: str = Field(default="estudiante", pattern="^(estudiante|profesor|admin)$")
+    role: str = Field(
+        default="estudiante",
+        pattern="^(estudiante|profesor|super_profesor|admin)$"
+    )
 
 
 class UserLogin(BaseModel):
@@ -39,6 +42,9 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user_id: Optional[int] = None
+    role: Optional[str] = None
+    full_name: Optional[str] = None
 
 
 # ===== CHAT / APRENDIZAJE =====

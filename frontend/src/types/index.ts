@@ -5,7 +5,7 @@ export interface User {
   username: string;
   email: string;
   full_name: string | null;
-  role: 'estudiante' | 'profesor' | 'admin';
+  role: 'estudiante' | 'profesor' | 'super_profesor' | 'admin';
   is_active: boolean;
   is_expert: boolean;
   created_at: string;
@@ -15,6 +15,9 @@ export interface User {
 export interface Token {
   access_token: string;
   token_type: string;
+  user_id?: number;
+  role?: string;
+  full_name?: string | null;
 }
 
 export interface LoginRequest {
@@ -27,9 +30,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   full_name?: string;
-  role: 'estudiante' | 'profesor';
+  role: 'estudiante' | 'profesor' | 'super_profesor';
 }
-
 // ===== Chat =====
 
 export interface StartSessionRequest {

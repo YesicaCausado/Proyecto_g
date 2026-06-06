@@ -127,8 +127,26 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             detail="Usuario o contraseña incorrectos",
         )
 
-    access_token = create_access_token(data={"sub": user.username})
-    return Token(access_token=access_token)
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cuenta desactivada. Contacta al administrador.",
+        )
+
+    user.last_login = datetime.utcnow()
+    db.commit()
+
+    access_token = create_access_token(data={
+        "sub": user.username,
+        "user_id": user.id,
+        "role": user.role,
+    })
+    return Token(
+        access_token=access_token,
+        user_id=user.id,
+        role=user.role,
+        full_name=user.full_name,
+    )
 
 
 @router.get("/me", response_model=UserResponse)
