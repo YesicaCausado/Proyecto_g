@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     AUTH_SERVICE_URL: str = "http://localhost:8002"
 
     OPENAI_API_KEY: Optional[str] = None
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
-    GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3-32b")
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     COGNITIVE_ANALYSIS_WINDOW: int = 30
     FATIGUE_THRESHOLD: float = 0.7
