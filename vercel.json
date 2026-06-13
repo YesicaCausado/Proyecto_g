@@ -1,10 +1,15 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
   "buildCommand": "pip install --no-cache-dir -r backend/requirements.txt && cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/dist",
   "functions": {
     "api/index.py": {
-      "runtime": "python3.11",
       "memory": 1024,
       "maxDuration": 30
     }
