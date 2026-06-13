@@ -343,9 +343,16 @@ export default function ChatPage() {
       if (data.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
-      // Detectar quiz en la respuesta
-      const msgQuiz = parseQuizFromMessage(data.message);
-      setCurrentQuiz(msgQuiz);
+      
+      // Detectar quiz AUTOMÁTICO: solo si la IA lo incluyó (no manual)
+      const hasAutoQuiz = data.metadata?.has_automatic_quiz === true;
+      if (hasAutoQuiz) {
+        const msgQuiz = parseQuizFromMessage(data.message);
+        if (msgQuiz) {
+          setCurrentQuiz(msgQuiz);
+          console.log("📋 Quiz automático detectado por IA");
+        }
+      }
     } catch (err) {
       console.error("Error sending message:", err);
       setMessages((prev) => [

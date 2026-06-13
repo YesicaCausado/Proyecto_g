@@ -33,15 +33,28 @@ ai_manager = AIManager(
 _SYSTEM_PROMPT = """Eres NeuroLearn, un tutor educativo de IA para estudiantes de bachillerato en Colombia.
 Tu objetivo es preparar al estudiante para las pruebas Saber 11.
 
+━━━ DECISIÓN AUTOMÁTICA DE QUIZZES ━━━
+Incluye un QUIZ AUTOMÁTICO (exacto formato abajo) SOLO CUANDO:
+✓ El estudiante acaba de aprender un concepto importante (completo)
+✓ Ya respondió correctamente 2+ preguntas seguidas sobre el tema
+✓ Es hora de verificar que realmente entendió antes de avanzar
+✓ Ha pasado suficiente tiempo/contenido desde el último quiz
+
+NUNCA hagas quiz si:
+✗ El estudiante preguntó algo específico (responde su pregunta primero)
+✗ Acaba de iniciar la sesión
+✗ Ya falló hace poco (espera a que recupere confianza)
+✗ Dice que no entiende (explica más, quiz después)
+
 ━━━ FORMATO VISUAL OBLIGATORIO ━━━
 Estructura TODAS tus respuestas así:
 • Usa **negritas** para los conceptos clave
 • Usa emojis al inicio de cada bloque: 📚 explicación, 💡 tip, ⚠️ cuidado, 🔑 concepto clave, ✅ correcto
 • Párrafos cortos (máx 2-3 líneas). Separa con línea en blanco.
 • Listas con "•" para enumerar; pasos con "1. 2. 3."
-• Termina SIEMPRE con una sección "❓ **Comprueba tu comprensión**" o un quiz.
+• Si incluyes quiz, termina CON el quiz en formato exacto abajo.
 
-━━━ QUIZZES (formato EXACTO y OBLIGATORIO) ━━━
+━━━ QUIZZES (formato EXACTO y OBLIGATORIO — SOLO si es necesario) ━━━
 Cuando hagas un quiz usa EXACTAMENTE este formato — ni más ni menos de 4 opciones:
 
 ❓ **[Escribe aquí la pregunta]**
@@ -62,7 +75,7 @@ Nunca pongas 2 ni 3 ni 5 opciones. Siempre exactamente A, B, C, D.
 • Responde SIEMPRE en español (salvo si el tema es Inglés)
 • Si el tema es inglés, responde EN INGLÉS con traducciones entre paréntesis
 • Sé cercano, motivador y positivo
-• Máximo 4 bloques por respuesta"""
+• Máximo 4 bloques por respuesta (incluido el quiz si lo hay)"""
 
 
 def _build_system_prompt(topic: str, cognitive_state: str = "normal") -> str:
@@ -81,6 +94,14 @@ def _build_system_prompt(topic: str, cognitive_state: str = "normal") -> str:
         f"📌 TEMA ACTUAL (usa ejemplos ESPECÍFICOS de este tema): **{topic}**\n"
         f"{instruction}"
     )
+
+
+def _has_automatic_quiz(response_text: str) -> bool:
+    """Detecta si la IA decidió incluir un quiz automático en su respuesta."""
+    import re
+    # Busca patrón: ❓ + línea en blanco + A. B. C. D.
+    quiz_pattern = r"❓\s*\*?\*?.*?\n\s*A[\.\)\:]\s+.+\n\s*B[\.\)\:]\s+.+\n\s*C[\.\)\:]\s+.+\n\s*D[\.\)\:]\s+.+"
+    return bool(re.search(quiz_pattern, response_text, re.DOTALL))
 
 
 @router.post("/start", response_model=ChatMessageResponse)
@@ -161,6 +182,9 @@ async def send_message(
         )
 
     logger.info(f"✅ Respuesta IA de: {result['provider']}")
+    
+    # Detectar si la IA incluyó automáticamente un quiz
+    has_quiz = _has_automatic_quiz(result["response"])
 
     return ChatMessageResponse(
         message=result["response"],
@@ -170,7 +194,11 @@ async def send_message(
         confidence=0.8,
         suggestions=[],
         should_pause=False,
-        metadata={"provider": result["provider"], "fallback_used": result.get("fallback_used", False)},
+        metadata={
+            "provider": result["provider"],
+            "fallback_used": result.get("fallback_used", False),
+            "has_automatic_quiz": has_quiz,  # ← Flag para frontend
+        },
     )
 
 
