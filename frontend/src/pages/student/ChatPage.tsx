@@ -12,64 +12,8 @@ import CognitiveDashboard from "../../components/CognitiveDashboard";
 import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
 import LiveModeView from "../../components/LiveModeView";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
+import BotMessageWithActions from "../../components/BotMessageWithActions";
 
-/** Renderiza texto con markdown básico como JSX */
-function BotMessage({ content }: { content: string }) {
-  const lines = content.split('\n');
-  const elements: React.ReactNode[] = [];
-  let listBuffer: string[] = [];
-  let olBuffer: string[] = [];
-
-  const flushList = () => {
-    if (listBuffer.length) {
-      elements.push(
-        <ul key={`ul-${elements.length}`} className="list-none space-y-0.5 my-1 pl-1">
-          {listBuffer.map((item, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-sm">
-              <span className="text-violet-400 mt-0.5 flex-shrink-0">•</span>
-              <span dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
-            </li>
-          ))}
-        </ul>
-      );
-      listBuffer = [];
-    }
-    if (olBuffer.length) {
-      elements.push(
-        <ol key={`ol-${elements.length}`} className="list-none space-y-0.5 my-1 pl-1">
-          {olBuffer.map((item, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-sm">
-              <span className="text-violet-500 font-bold flex-shrink-0">{i + 1}.</span>
-              <span dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
-            </li>
-          ))}
-        </ol>
-      );
-      olBuffer = [];
-    }
-  };
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
-    if (!trimmed) { flushList(); elements.push(<div key={idx} className="h-1" />); return; }
-    if (trimmed.startsWith('• ') || trimmed.startsWith('- ')) { olBuffer.length && flushList(); listBuffer.push(trimmed.slice(2)); return; }
-    if (/^\d+\.\s/.test(trimmed)) { listBuffer.length && flushList(); olBuffer.push(trimmed.replace(/^\d+\.\s/, '')); return; }
-    flushList();
-    if (trimmed.startsWith('## ')) { elements.push(<h3 key={idx} className="font-bold text-sm mt-2 mb-0.5 text-gray-800">{trimmed.slice(3)}</h3>); return; }
-    if (trimmed.startsWith('# '))  { elements.push(<h2 key={idx} className="font-bold text-base mt-2 mb-1 text-gray-800">{trimmed.slice(2)}</h2>); return; }
-    if (trimmed.startsWith('━'))   { elements.push(<hr key={idx} className="border-gray-200 my-2" />); return; }
-    elements.push(<p key={idx} className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: inlineMarkdown(trimmed) }} />);
-  });
-  flushList();
-  return <div className="space-y-0.5">{elements}</div>;
-}
-
-function inlineMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded text-xs font-mono text-violet-700">$1</code>');
-}
 function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const previewRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -126,6 +70,7 @@ export default function ChatPage() {
   const [selectedSkill, setSelectedSkill] = useState(skillParam || "");
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
   const [showDashboard, setShowDashboard] = useState(true);
+  const [quizSuggested, setQuizSuggested] = useState(false); // Flag para mostrar botón "Quiz Sugerido"
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -204,10 +149,10 @@ export default function ChatPage() {
         action: data.action,
         suggestions: data.suggestions,
       }]);
-      // TTS + VRM: siempre leer la bienvenida en voz alta y animar labios
+      // VRM: animar labios (sin TTS automático)
       const wordCountStart = data.message.split(" ").length;
       vrmRef.current?.speak(wordCountStart * 380);
-      voiceTutor.speakText(data.message, () => vrmRef.current?.stopSpeak());
+      // NO llamar speakText aquí - dejar que el usuario presione el botón de "Leer en voz alta"
       if (data.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
@@ -266,6 +211,7 @@ export default function ChatPage() {
         const res = await api.post<ChatMessageResponse>("/chat/message", {
           message: msgContent,
           topic: skill?.topic ?? "Tema general",
+          cognitive_state: lastResponse?.cognitive_state || "normal",
           history: messages.slice(-10).map((m) => ({
             role: m.role === "bot" ? "assistant" : "user",
             content: m.content,
@@ -336,22 +282,28 @@ export default function ChatPage() {
           suggestions: data.suggestions,
         },
       ]);
-      // TTS + VRM: siempre leer la respuesta en voz alta y animar labios
+      // VRM: animar labios (sin TTS automático)
       const wordCountMsg = data.message.split(" ").length;
       vrmRef.current?.speak(wordCountMsg * 380);
-      voiceTutor.speakText(data.message, () => vrmRef.current?.stopSpeak());
+      // NO llamar speakText aquí - dejar que el usuario presione el botón de "Leer en voz alta"
       if (data.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
       
-      // Detectar quiz AUTOMÁTICO: solo si la IA lo incluyó (no manual)
-      const hasAutoQuiz = data.metadata?.has_automatic_quiz === true;
-      if (hasAutoQuiz) {
-        const msgQuiz = parseQuizFromMessage(data.message);
-        if (msgQuiz) {
-          setCurrentQuiz(msgQuiz);
-          console.log("📋 Quiz automático detectado por IA");
-        }
+      // Detectar si la IA SUGIERE un quiz (análisis neuroconductual)
+      const isQuizSuggested = data.metadata?.quiz_suggested === true;
+      setQuizSuggested(isQuizSuggested);
+      
+      if (isQuizSuggested) {
+        console.log("💡 Quiz sugerido por análisis neuroconductual - mostrar botón");
+      }
+      
+      // Detectar si el mensaje contiene un quiz generado (cuando el usuario acepta el sugerido)
+      const generatedQuiz = parseQuizFromMessage(data.message);
+      if (generatedQuiz) {
+        setCurrentQuiz(generatedQuiz);
+        setQuizSuggested(false); // Ocultar botón si se generó el quiz
+        console.log("📋 Quiz generado y mostrado");
       }
     } catch (err) {
       console.error("Error sending message:", err);
@@ -608,10 +560,18 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex animate-fadeIn ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] md:max-w-[70%] ${msg.role === "user" ? "chat-bubble-user" : "chat-bubble-bot"}`}>
+              <div className={`max-w-[85%] md:max-w-[70%] ${msg.role === "user" ? "chat-bubble-user" : ""}`}>
                 {msg.role === "bot"
-                  ? <BotMessage content={msg.content} />
-                  : <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  ? <BotMessageWithActions 
+                      content={msg.content}
+                      messageId={msg.id}
+                      onLike={(id) => sendMessageWithText(`✅ Tu respuesta "me gusta" ha sido registrada para ${id}`)}
+                      onDislike={(id) => sendMessageWithText(`❌ Tu respuesta "no me gusta" ha sido registrada para ${id}`)}
+                      onSpeak={(text, onEnd) => voiceTutor.speakText(text, onEnd)}
+                      onStopSpeak={() => voiceTutor.stopSpeaking()}
+                      onReport={(id) => console.log(`Reporte de mensaje: ${id}`)}
+                    />
+                  : <p className="text-sm whitespace-pre-wrap bg-blue-100 text-blue-900 rounded-lg p-3">{msg.content}</p>
                 }
                 {msg.suggestions && msg.suggestions.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -761,8 +721,27 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* ── Botón para pedir quiz ────────────────────────────────────── */}
-          {!currentQuiz && sessionActive && (
+          {/* ── Botón Quiz Sugerido (análisis neuroconductual) ────────────────────────────────────── */}
+          {!currentQuiz && sessionActive && quizSuggested && (
+            <div className="max-w-4xl mx-auto w-full mb-2 flex justify-center animate-fadeIn">
+              <button
+                onClick={async () => {
+                  setQuizSuggested(false);
+                  // Solicitar quiz explícitamente
+                  await sendMessageWithText("Generame el quiz sobre el tema que acabamos de ver con exactamente 4 opciones (A, B, C, D)");
+                }}
+                disabled={sending}
+                className="text-sm font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white px-6 py-3 rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all disabled:opacity-40 flex items-center gap-2"
+              >
+                <span className="text-lg">📋</span>
+                <span>Quiz Sugerido</span>
+                <span className="text-xs opacity-80">(Recomendado por IA)</span>
+              </button>
+            </div>
+          )}
+
+          {/* ── Botón para pedir quiz manual ────────────────────────────────────── */}
+          {!currentQuiz && sessionActive && !quizSuggested && (
             <div className="max-w-4xl mx-auto w-full mb-2 flex justify-end">
               <button
                 onClick={() => sendMessageWithText("Dame un quiz de opción múltiple (A, B, C, D) sobre lo que acabamos de ver para verificar que aprendí.")}

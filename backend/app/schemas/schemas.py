@@ -59,6 +59,7 @@ class ChatMessageRequest(BaseModel):
     message: str = Field(..., min_length=1)
     topic: Optional[str] = None          # ← NUEVO: tema para modo stateless
     history: Optional[List[Dict[str, Any]]] = None  # ← NUEVO: historial para serverless
+    cognitive_state: Optional[str] = None  # ← Estado cognitivo actual del estudiante
     response_time_ms: float = Field(default=0, ge=0)
     typing_speed_cpm: float = Field(default=0, ge=0)
     corrections: int = Field(default=0, ge=0)

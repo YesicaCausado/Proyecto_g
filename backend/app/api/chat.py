@@ -5,6 +5,7 @@ Stateless para Vercel. Siempre usa IA real (Groq → Gemini). Sin fallback local
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
+from datetime import datetime
 
 from app.db.database import get_db
 from app.api.auth import get_current_user
@@ -16,6 +17,12 @@ from app.schemas.schemas import (
     SessionStatsResponse,
 )
 from app.ai.providers.ai_manager import AIManager
+from app.ai.cognitive.neuroconductual_engine import (
+    NeuroconductualEngine,
+    BehavioralEvent,
+    FacialEvent,
+    VoiceEvent,
+)
 from app.core.config import settings
 import logging
 
@@ -30,21 +37,35 @@ ai_manager = AIManager(
     gemini_model=settings.GEMINI_MODEL,
 )
 
+# Motor Neuroconductual: análisis de patrones digitales
+neuro_engine = NeuroconductualEngine(
+    fatigue_threshold=settings.FATIGUE_THRESHOLD,
+    overload_threshold=settings.OVERLOAD_THRESHOLD,
+    doubt_threshold=settings.DOUBT_THRESHOLD,
+    mastery_threshold=settings.MASTERY_THRESHOLD,
+)
+
 _SYSTEM_PROMPT = """Eres NeuroLearn, un tutor educativo de IA para estudiantes de bachillerato en Colombia.
 Tu objetivo es preparar al estudiante para las pruebas Saber 11.
 
-━━━ DECISIÓN AUTOMÁTICA DE QUIZZES ━━━
-Incluye un QUIZ AUTOMÁTICO (exacto formato abajo) SOLO CUANDO:
-✓ El estudiante acaba de aprender un concepto importante (completo)
-✓ Ya respondió correctamente 2+ preguntas seguidas sobre el tema
-✓ Es hora de verificar que realmente entendió antes de avanzar
-✓ Ha pasado suficiente tiempo/contenido desde el último quiz
+━━━ ANÁLISIS NEUROCONDUCTUAL PARA QUIZZES ━━━
+NO incluyas quizzes directamente en tus respuestas.
+En su lugar, ANALIZA cuándo el estudiante necesita verificación:
 
-NUNCA hagas quiz si:
-✗ El estudiante preguntó algo específico (responde su pregunta primero)
-✗ Acaba de iniciar la sesión
-✗ Ya falló hace poco (espera a que recupere confianza)
-✗ Dice que no entiende (explica más, quiz después)
+SUGIERE QUIZ (menciona "QUIZ_SUGERIDO" al inicio) SOLO SI:
+✓ Acaba de aprender un concepto importante completo
+✓ Respondió correctamente varias preguntas sobre el tema
+✓ Muestra señales de dominio (estado cognitivo: mastery o focused)
+✓ Ha pasado suficiente contenido sin verificación
+✓ NO tiene señales de fatiga, sobrecarga o duda
+
+NUNCA sugieras quiz si:
+✗ Estado cognitivo: fatigue, overload, doubt, confusion, struggling
+✗ Acaba de iniciar sesión (primeros 2-3 mensajes)
+✗ Preguntó algo específico (responde primero)
+✗ Dice que no entiende algo
+
+Si sugieres quiz, inicia tu respuesta con: "QUIZ_SUGERIDO"
 
 ━━━ FORMATO VISUAL OBLIGATORIO ━━━
 Estructura TODAS tus respuestas así:
@@ -52,19 +73,6 @@ Estructura TODAS tus respuestas así:
 • Usa emojis al inicio de cada bloque: 📚 explicación, 💡 tip, ⚠️ cuidado, 🔑 concepto clave, ✅ correcto
 • Párrafos cortos (máx 2-3 líneas). Separa con línea en blanco.
 • Listas con "•" para enumerar; pasos con "1. 2. 3."
-• Si incluyes quiz, termina CON el quiz en formato exacto abajo.
-
-━━━ QUIZZES (formato EXACTO y OBLIGATORIO — SOLO si es necesario) ━━━
-Cuando hagas un quiz usa EXACTAMENTE este formato — ni más ni menos de 4 opciones:
-
-❓ **[Escribe aquí la pregunta]**
-
-A. [Opción A]
-B. [Opción B]
-C. [Opción C]
-D. [Opción D]
-
-Nunca pongas 2 ni 3 ni 5 opciones. Siempre exactamente A, B, C, D.
 
 ━━━ RECOMENDACIONES CONTEXTUALES ━━━
 • Adapta ejemplos al TEMA ACTUAL (nunca uses ejemplos genéricos)
@@ -75,7 +83,7 @@ Nunca pongas 2 ni 3 ni 5 opciones. Siempre exactamente A, B, C, D.
 • Responde SIEMPRE en español (salvo si el tema es Inglés)
 • Si el tema es inglés, responde EN INGLÉS con traducciones entre paréntesis
 • Sé cercano, motivador y positivo
-• Máximo 4 bloques por respuesta (incluido el quiz si lo hay)"""
+• Máximo 4 bloques por respuesta"""
 
 
 def _build_system_prompt(topic: str, cognitive_state: str = "normal") -> str:
@@ -102,6 +110,11 @@ def _has_automatic_quiz(response_text: str) -> bool:
     # Busca patrón: ❓ + línea en blanco + A. B. C. D.
     quiz_pattern = r"❓\s*\*?\*?.*?\n\s*A[\.\)\:]\s+.+\n\s*B[\.\)\:]\s+.+\n\s*C[\.\)\:]\s+.+\n\s*D[\.\)\:]\s+.+"
     return bool(re.search(quiz_pattern, response_text, re.DOTALL))
+
+
+def _quiz_suggested(response_text: str) -> bool:
+    """Detecta si la IA sugirió hacer un quiz basado en análisis neuroconductual."""
+    return response_text.strip().startswith("QUIZ_SUGERIDO")
 
 
 @router.post("/start", response_model=ChatMessageResponse)
@@ -149,57 +162,134 @@ async def send_message(
     Stateless: recibe topic + history en cada request (compatible con Vercel).
     Siempre usa Groq o Gemini, nunca modo local.
     """
-    if not ai_manager.providers:
-        raise HTTPException(
-            status_code=503,
-            detail="No hay proveedores de IA configurados. Añade GROQ_API_KEY en Vercel."
+    try:
+        if not ai_manager.providers:
+            raise HTTPException(
+                status_code=503,
+                detail="No hay proveedores de IA configurados. Añade GROQ_API_KEY en Vercel."
+            )
+
+        topic = request.topic or "Preparación Saber 11"
+        cognitive_state = request.cognitive_state or "normal"
+        active_modalities = []
+        error_risk = 0.0
+        quiz_recommended = False
+        
+        # ═══ ANÁLISIS NEUROCONDUCTUAL (PATRONES ACTIVOS) ═══
+        try:
+            # Procesar datos multimodales si están disponibles
+            now = datetime.now()
+            
+            # Patrón 1: Ritmo de Interacción (datos de comportamiento)
+            if request.response_time_ms > 0 or request.typing_speed_cpm > 0:
+                behavioral_event = BehavioralEvent(
+                    timestamp=now,
+                    response_time_ms=request.response_time_ms,
+                    typing_speed_cpm=request.typing_speed_cpm,
+                    corrections=request.corrections,
+                    pause_duration_ms=request.pause_before_ms,
+                )
+                neuro_engine.add_behavioral_event(behavioral_event)
+            
+            # Patrón 3: Microexpresión Facial
+            if request.facial_data:
+                facial_event = FacialEvent(
+                    timestamp=now,
+                    emotion=request.facial_data.get("emotion", "neutral"),
+                    valence=request.facial_data.get("valence", 0.0),
+                    arousal=request.facial_data.get("arousal", 0.0),
+                    attention_score=request.facial_data.get("attention_score", 0.5),
+                    blink_rate=request.facial_data.get("blink_rate", 0.0),
+                    gaze_direction=request.facial_data.get("gaze_direction", "center"),
+                )
+                neuro_engine.add_facial_event(facial_event)
+            
+            # Patrón 4: Prosodia de Voz
+            if request.voice_data:
+                voice_event = VoiceEvent(
+                    timestamp=now,
+                    pitch_mean_hz=request.voice_data.get("pitch_mean_hz", 0.0),
+                    volume_db=request.voice_data.get("volume_db", 0.0),
+                    speech_rate_wpm=request.voice_data.get("speech_rate_wpm", 0.0),
+                    filler_words_count=request.voice_data.get("filler_words_count", 0),
+                )
+                neuro_engine.add_voice_event(voice_event)
+            
+            # Analizar estado cognitivo inferido por los patrones
+            analysis = neuro_engine.run_inference()
+            
+            if analysis:
+                cognitive_state = analysis.get("state", "normal")
+                active_modalities = analysis.get("active_modalities", [])
+                error_risk = analysis.get("error_risk", 0.0)
+                
+                logger.info(
+                    f"🧠 Estado: {cognitive_state} | "
+                    f"Modalidades: {active_modalities} | "
+                    f"Riesgo: {error_risk:.2f}"
+                )
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Análisis neuroconductual falló: {e}")
+            # Continuar sin análisis - usar estado del request
+        
+        system_prompt = _build_system_prompt(topic, cognitive_state)
+
+        # Reconstruir historial de conversación
+        context_messages: List[Dict] = []
+        if request.history:
+            for msg in request.history[-12:]:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if content and role in ("user", "assistant"):
+                    context_messages.append({"role": role, "content": content})
+
+        result = await ai_manager.generate(
+            prompt=request.message,
+            system_prompt=system_prompt,
+            context_messages=context_messages,
+            temperature=0.7,
+            max_tokens=1024,
         )
 
-    topic = request.topic or "Preparación Saber 11"
-    system_prompt = _build_system_prompt(topic)
+        if not result["response"]:
+            raise HTTPException(
+                status_code=503,
+                detail="La IA no respondió. Puede que se hayan agotado los tokens de Groq. Verifica en console.groq.com"
+            )
 
-    # Reconstruir historial de conversación
-    context_messages: List[Dict] = []
-    if request.history:
-        for msg in request.history[-12:]:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if content and role in ("user", "assistant"):
-                context_messages.append({"role": role, "content": content})
+        logger.info(f"✅ Respuesta IA de: {result['provider']}")
+        
+        # Detectar si la IA sugirió hacer un quiz (análisis neuroconductual)
+        quiz_suggested = _quiz_suggested(result["response"])
+        
+        # Limpiar el marcador QUIZ_SUGERIDO del mensaje
+        clean_message = result["response"].replace("QUIZ_SUGERIDO", "").strip()
 
-    result = await ai_manager.generate(
-        prompt=request.message,
-        system_prompt=system_prompt,
-        context_messages=context_messages,
-        temperature=0.7,
-        max_tokens=1024,
-    )
-
-    if not result["response"]:
-        raise HTTPException(
-            status_code=503,
-            detail="La IA no respondió. Puede que se hayan agotado los tokens de Groq. Verifica en console.groq.com"
+        return ChatMessageResponse(
+            message=clean_message,
+            action="teach",
+            difficulty="medium",
+            cognitive_state=cognitive_state,
+            confidence=0.8,
+            suggestions=[],
+            should_pause=False,
+            metadata={
+                "provider": result["provider"],
+                "fallback_used": result.get("fallback_used", False),
+                "quiz_suggested": quiz_suggested,
+                "active_modalities": active_modalities,
+                "error_risk": error_risk,
+            },
         )
-
-    logger.info(f"✅ Respuesta IA de: {result['provider']}")
-    
-    # Detectar si la IA incluyó automáticamente un quiz
-    has_quiz = _has_automatic_quiz(result["response"])
-
-    return ChatMessageResponse(
-        message=result["response"],
-        action="teach",
-        difficulty="medium",
-        cognitive_state="normal",
-        confidence=0.8,
-        suggestions=[],
-        should_pause=False,
-        metadata={
-            "provider": result["provider"],
-            "fallback_used": result.get("fallback_used", False),
-            "has_automatic_quiz": has_quiz,  # ← Flag para frontend
-        },
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error en /message: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error interno: {str(e)}"
+        )
 
 
 @router.get("/stats", response_model=SessionStatsResponse)
