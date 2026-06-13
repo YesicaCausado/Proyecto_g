@@ -32,6 +32,7 @@ if not _db_url or not _db_url.startswith("postgres"):
     logger.warning("⚠️ DATABASE_URL no configurada — arrancando sin base de datos.")
     engine = None
     SessionLocal = None
+    IS_DB_DISABLED = True
 else:
     try:
         if IS_SERVERLESS:
@@ -53,11 +54,13 @@ else:
                 echo=settings.DEBUG,
             )
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        IS_DB_DISABLED = False
         logger.info("✅ Conexión a Supabase configurada correctamente.")
     except Exception as e:
         logger.error(f"❌ Error configurando base de datos: {e}")
         engine = None
         SessionLocal = None
+        IS_DB_DISABLED = True
 
 Base = declarative_base()
 
