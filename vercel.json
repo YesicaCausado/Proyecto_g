@@ -1,7 +1,17 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm install && npm run build",
+  "buildCommand": "pip install -r backend/requirements.txt && cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.11",
+      "memory": 3008,
+      "maxDuration": 60,
+      "includeFiles": [
+        "backend/**"
+      ]
+    }
+  },
   "rewrites": [
     {
       "source": "/api/v1/:path*",
