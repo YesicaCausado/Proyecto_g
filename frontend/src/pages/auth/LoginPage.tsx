@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Brain, Eye, EyeOff, Loader2 } from 'lucide-react';
 
@@ -102,11 +102,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-6">
-            ¿No tienes cuenta?{' '}
-            <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
-              Regístrate aquí
-            </Link>
+           <p className="text-center text-sm text-gray-400 mt-6">
+            Tu cuenta es asignada por tu institución educativa.
           </p>
         </div>
       </div>
