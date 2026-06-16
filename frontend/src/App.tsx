@@ -4,7 +4,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
 import LoginPage from './pages/auth/LoginPage';
-import RegisterPage from './pages/auth/RegisterPage';
 import StudentDashboard from './pages/student/StudentDashboard';
 import ChatPage from './pages/student/ChatPage';
 import BotsPage from './pages/student/BotsPage';
@@ -12,6 +11,7 @@ import MyClassesPage from './pages/student/MyClassesPage';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import CreateClassroomPage from './pages/teacher/CreateClassroomPage';
 import ClassroomDetailPage from './pages/teacher/ClassroomDetailPage';
+import AdminDashboard from './pages/admin/AdminDashboard';
 
 function DashboardRouter() {
   const { user } = useAuth();
@@ -26,8 +26,6 @@ function AppRoutes() {
     <Routes>
       {/* Públicas */}
       <Route path="/login"    element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-
       {/* Dashboard universal — redirige por rol */}
       <Route path="/dashboard" element={
         <ProtectedRoute><Layout><DashboardRouter /></Layout></ProtectedRoute>
@@ -55,6 +53,10 @@ function AppRoutes() {
         <ProtectedRoute role="profesor"><Layout><ClassroomDetailPage /></Layout></ProtectedRoute>
       } />
 
+      {/* Admin */}
+      <Route path="/admin/*" element={
+        <ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>
+      } />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
