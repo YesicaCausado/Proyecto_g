@@ -32,7 +32,11 @@ import app.models.classroom     # noqa: F401
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 try:
-    Base.metadata.create_all(bind=engine)
+    if engine is not None:
+        Base.metadata.create_all(bind=engine)
+    else:
+        import logging
+        logging.getLogger(__name__).warning("⚠️ engine es None — tablas no creadas. Verifica DATABASE_URL.")
 except Exception as e:
     import logging
     logging.getLogger(__name__).error(f"⚠️ No se pudo crear las tablas: {e}. El backend arrancará sin DB.")
@@ -121,14 +125,20 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Verificación de salud del sistema"""
+    from app.db.database import engine, IS_DB_DISABLED
     from app.api.chat import ai_manager
+
+    db_status = "disabled"
+    if not IS_DB_DISABLED and engine is not None:
+        try:
+            with engine.connect() as conn:
+                conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+            db_status = "connected"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+
     return {
         "status": "healthy",
-        "modules": {
-            "cognitive_engine": "ready",
-            "adaptive_chatbot": "ready",
-            "expert_bot_trainer": "ready",
-            "database": "connected",
-        },
+        "database": db_status,
         "ai_providers": ai_manager.get_status(),
     }

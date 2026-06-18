@@ -94,23 +94,30 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="El registro está deshabilitado en modo demo.",
         )
+    try:
+        if db.query(UserModel).filter(UserModel.username == user_data.username).first():
+            raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
+        if db.query(UserModel).filter(UserModel.email == user_data.email).first():
+            raise HTTPException(status_code=400, detail="El email ya está registrado")
 
-    if db.query(UserModel).filter(UserModel.username == user_data.username).first():
-        raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
-    if db.query(UserModel).filter(UserModel.email == user_data.email).first():
-        raise HTTPException(status_code=400, detail="El email ya está registrado")
-
-    db_user = UserModel(
-        username=user_data.username,
-        email=user_data.email,
-        hashed_password=get_password_hash(user_data.password),
-        full_name=user_data.full_name,
-        role=user_data.role,
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+        db_user = UserModel(
+            username=user_data.username,
+            email=user_data.email,
+            hashed_password=get_password_hash(user_data.password),
+            full_name=user_data.full_name,
+            role=user_data.role,
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Error de base de datos: {str(e)}. Verifica DATABASE_URL en Vercel.",
+        )
 
 
 @router.post("/login", response_model=Token)
@@ -120,7 +127,14 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         access_token = create_access_token(data={"sub": DEMO_USER.username})
         return Token(access_token=access_token)
 
-    user = db.query(UserModel).filter(UserModel.username == user_data.username).first()
+    try:
+        user = db.query(UserModel).filter(UserModel.username == user_data.username).first()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Error de base de datos: {str(e)}. Verifica DATABASE_URL en Vercel.",
+        )
+
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -133,8 +147,11 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             detail="Cuenta desactivada. Contacta al administrador.",
         )
 
-    user.last_login = datetime.utcnow()
-    db.commit()
+    try:
+        user.last_login = datetime.utcnow()
+        db.commit()
+    except Exception:
+        pass  # No es crítico si falla el update de last_login
 
     access_token = create_access_token(data={
         "sub": user.username,

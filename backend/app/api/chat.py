@@ -183,9 +183,10 @@ async def send_message(
             if request.response_time_ms > 0 or request.typing_speed_cpm > 0:
                 behavioral_event = BehavioralEvent(
                     timestamp=now,
+                    event_type="response",
                     response_time_ms=request.response_time_ms,
                     typing_speed_cpm=request.typing_speed_cpm,
-                    corrections=request.corrections,
+                    correction_made=bool(getattr(request, "corrections", 0)),
                     pause_duration_ms=request.pause_before_ms,
                 )
 
