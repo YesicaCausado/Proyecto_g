@@ -43,17 +43,18 @@ except Exception as e:
 
 # ─── Usuario demo (DEMO_MODE del frontend) ────────────────────────────────────
 def _ensure_demo_user():
-    """Crea el usuario demo si no existe — permite que el frontend funcione sin registro."""
+    """Crea los usuarios demo (estudiante y admin) si no existen."""
     from app.db.database import SessionLocal
     from app.models.user import User, UserRole
     from passlib.context import CryptContext
     try:
         db = SessionLocal()
         try:
-            exists = db.query(User).filter(User.username == "demo").first()
-            if not exists:
-                pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-                user = User(
+            pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            
+            # 1. Usuario Demo Estudiante
+            if not db.query(User).filter(User.username == "demo").first():
+                user_std = User(
                     username="demo",
                     email="demo@neurolearn.app",
                     full_name="Usuario Demo",
@@ -61,15 +62,30 @@ def _ensure_demo_user():
                     role=UserRole.ESTUDIANTE,
                     is_active=True,
                 )
-                db.add(user)
-                db.commit()
+                db.add(user_std)
                 import logging
                 logging.getLogger(__name__).info("✅ Usuario demo creado: demo / demo1234")
+            
+            # 2. Usuario Admin (para el nuevo panel administrativo)
+            if not db.query(User).filter(User.username == "admin").first():
+                user_adm = User(
+                    username="admin",
+                    email="admin@neurolearn.app",
+                    full_name="Administrador Sistema",
+                    hashed_password=pwd.hash("admin1234"),
+                    role=UserRole.ADMIN,
+                    is_active=True,
+                )
+                db.add(user_adm)
+                import logging
+                logging.getLogger(__name__).info("✅ Usuario admin creado: admin / admin1234")
+            
+            db.commit()
         finally:
             db.close()
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuario demo (sin DB): {e}")
+        logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuarios demo (sin DB o error): {e}")
 
 try:
     _ensure_demo_user()
