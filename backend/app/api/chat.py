@@ -418,7 +418,9 @@ async def generate_cognitive_quiz(
         f"Genera un quiz de {num_questions} preguntas sobre '{request.topic}' con dificultad '{difficulty}'. "
         f"{'Desempeño histórico del estudiante: ' + str(round(average_performance, 1)) + '%. ' if average_performance > 0 else ''}"
         f"Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown. "
-        f"Explicaciones CONCISAS (máximo 2 oraciones por pregunta)."
+        f"Explicaciones CONCISAS (máximo 2 oraciones por pregunta). "
+        f"CRÍTICO: Cada pregunta DEBE tener los campos: id, question, options, answer, explanation. "
+        f"El campo 'answer' DEBE ser UNO de los valores en 'options'."
         f"{reinforcement_context}"
     )
 
@@ -426,7 +428,7 @@ async def generate_cognitive_quiz(
         f"Genera un quiz educativo ADAPTATIVO sobre '{request.topic}' con exactamente {num_questions} preguntas de selección múltiple. "
         f"Dificultad: {difficulty}. "
         f"{'REFUERZA los conceptos: ' + ', '.join(weak_concepts) + '. ' if weak_concepts else ''}"
-        "Devuelve ÚNICAMENTE este JSON exacto:\n"
+        "Devuelve ÚNICAMENTE este JSON válido:\n"
         '{\n'
         f'  "quiz_title": "{request.topic}",\n'
         f'  "difficulty": "{difficulty}",\n'
@@ -435,13 +437,18 @@ async def generate_cognitive_quiz(
         '      "id": 1,\n'
         '      "question": "Texto de la pregunta",\n'
         '      "options": ["Opción A", "Opción B", "Opción C", "Opción D"],\n'
-        '      "answer": "Opción correcta (debe estar en la lista de options)",\n'
-        '      "explanation": "Explicación BREVE (máximo 2 oraciones) de por qué es correcta"\n'
+        '      "answer": "Opción A",\n'
+        '      "explanation": "Explicación BREVE de por qué es correcta"\n'
         '    }\n'
         '  ]\n'
-        '}\n'
-        f"Asegúrate de generar exactamente {num_questions} preguntas con IDs del 1 al {num_questions}. "
-        f"IMPORTANTE: Mantén las explicaciones breves y concisas para evitar exceder límites de tokens."
+        '}\n\n'
+        f"REGLAS CRÍTICAS:\n"
+        f"1. Genera exactamente {num_questions} preguntas\n"
+        f"2. CADA pregunta debe tener: id, question, options (4 strings), answer (DEBE estar en options), explanation\n"
+        f"3. El answer DEBE ser UNO de los valores en la lista options\n"
+        f"4. IDs deben ir del 1 al {num_questions}\n"
+        f"5. Explicaciones máximo 2 oraciones\n"
+        f"6. JSON debe ser válido y parseable"
     )
 
     # 4. GENERAR QUIZ CON IA
@@ -516,6 +523,29 @@ async def generate_cognitive_quiz(
         
         if not quiz_data["questions"] or len(quiz_data["questions"]) == 0:
             raise ValueError("No se generaron preguntas")
+        
+        # 4b. VALIDAR Y COMPLETAR PREGUNTAS INCOMPLETAS
+        for i, question in enumerate(quiz_data["questions"]):
+            # Verificar campos requeridos
+            if "answer" not in question or question["answer"] is None:
+                # Si falta answer, usar la primera opción como fallback
+                if "options" in question and len(question["options"]) > 0:
+                    question["answer"] = question["options"][0]
+                    logger.warning(f"Pregunta {i+1}: Falta 'answer', usando opción 1 como fallback")
+                else:
+                    raise ValueError(f"Pregunta {i+1} no tiene 'answer' ni 'options' válidos")
+            
+            # Validar que answer esté en options
+            if "options" in question and isinstance(question["options"], list):
+                if question["answer"] not in question["options"]:
+                    logger.warning(f"Pregunta {i+1}: answer '{question['answer']}' no está en options, usando opción 1")
+                    question["answer"] = question["options"][0]
+            
+            # Completar campos opcionales
+            if "explanation" not in question:
+                question["explanation"] = "Sin explicación disponible"
+            if "id" not in question:
+                question["id"] = i + 1
         
         # 4. Guardar en historial del usuario CON INFORMACIÓN DE ADAPTACIÓN
         try:

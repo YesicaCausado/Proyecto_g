@@ -264,32 +264,32 @@ const QuizzesPage: React.FC = () => {
       {quiz && (
         <div>
           {quiz.questions.map((q) => (
-            <div key={q.id} className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
-              <div className="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                <h3 className="font-semibold text-gray-800">Pregunta {q.id}</h3>
+            <div key={q.id} className="bg-white rounded-2xl border border-gray-100 mb-6 overflow-hidden card-shadow">
+              <div className="p-5 border-b border-gray-100 bg-[#f8f9fa] flex justify-between items-center">
+                <h3 className="font-bold text-gray-800 font-heading">Pregunta {q.id}</h3>
                 {isSubmitted && getResultIcon(q.id)}
               </div>
               <div className="p-6">
-                <p className="text-gray-800 text-lg mb-6">{q.question}</p>
+                <p className="text-gray-900 text-[1.1rem] leading-relaxed mb-6 font-medium">{q.question}</p>
                 <div className="space-y-3">
                   {q.options.map((opt, oIndex) => {
                     const isSelected = selectedAnswers[q.id] === opt;
                     const isCorrect = opt === q.answer;
                     
-                    let buttonClass = 'w-full text-left p-4 rounded-lg border transition-all ';
+                    let buttonClass = 'w-full text-left p-4 rounded-xl border-2 transition-all duration-200 text-[15px] ';
                     
                     if (isSubmitted) {
                       if (isCorrect) {
-                        buttonClass += 'bg-green-50 border-green-500 text-green-800 font-medium';
+                        buttonClass += 'bg-[#e8f5e9] border-[#4caf50] text-[#2e7d32] font-bold shadow-sm';
                       } else if (isSelected && !isCorrect) {
-                        buttonClass += 'bg-red-50 border-red-500 text-red-800';
+                        buttonClass += 'bg-[#ffebee] border-[#f44336] text-[#c62828] font-bold';
                       } else {
-                        buttonClass += 'bg-white border-gray-200 text-gray-600 opacity-60';
+                        buttonClass += 'bg-white border-gray-100 text-gray-500 opacity-50';
                       }
                     } else {
                       buttonClass += isSelected 
-                        ? 'bg-primary-50 border-primary-500 text-primary-800 font-medium' 
-                        : 'bg-white border-gray-200 text-gray-700 hover:border-primary-400 hover:bg-gray-50';
+                        ? 'bg-[#e3f2fd] border-[#2196f3] text-[#1565c0] font-bold shadow-sm shadow-blue-500/10 scale-[1.01]' 
+                        : 'bg-white border-gray-200 text-gray-700 hover:border-[#90caf9] hover:bg-gray-50 hover:shadow-sm';
                     }
                     
                     return (
