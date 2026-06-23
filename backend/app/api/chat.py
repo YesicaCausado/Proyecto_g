@@ -22,6 +22,7 @@ from app.schemas.schemas import (
     QuizSubmission,
     QuizHistoryResponse,
     QuizHistoryEntry,
+    QuizAnalysisResponse,
 )
 from app.ai.providers.ai_manager import AIManager
 from app.ai.cognitive.neuroconductual_engine import (
@@ -314,47 +315,117 @@ async def generate_cognitive_quiz(
     db: Session = Depends(get_db)
 ):
     """
-    Genera un quiz en formato Gemini basado en el historial cognitivo del usuario.
-    Automáticamente guarda el quiz en el historial del usuario.
+    Genera un quiz ADAPTATIVO en formato Gemini que:
+    1. Analiza el historial previo del usuario en el tema
+    2. Identifica conceptos débiles de quizzes anteriores
+    3. Ajusta la dificultad según el desempeño histórico
+    4. Genera preguntas de refuerzo si hubo errores previos
     """
     from app.models.learning import QuizHistory
     from datetime import datetime
     
-    # 1. Buscar última sesión del tema para determinar nivel de dominio
-    last_session = db.query(LearningSession).filter(
-        LearningSession.user_id == current_user.id,
-        LearningSession.topic.ilike(f"%{request.topic}%")
-    ).order_by(LearningSession.started_at.desc()).first()
-
-    cognitive_level = last_session.last_cognitive_state if last_session else "normal"
+    import logging
+    logger = logging.getLogger(__name__)
     
-    # 2. Determinar dificultad (puede venir del request o inferirse del estado cognitivo)
+    # 1. ANÁLISIS DEL HISTORIAL - Buscar quizzes previos del mismo tema
+    previous_quizzes = db.query(QuizHistory).filter(
+        QuizHistory.user_id == current_user.id,
+        QuizHistory.topic.ilike(f"%{request.topic}%"),
+        QuizHistory.completed_at.isnot(None)  # Solo los completados
+    ).order_by(QuizHistory.completed_at.desc()).limit(5).all()
+    
+    # Analizar desempeño histórico
+    weak_concepts = []
+    average_performance = 0
+    last_mistakes = []
+    
+    if previous_quizzes:
+        total_performance = 0
+        for pq in previous_quizzes:
+            if pq.performance_score:
+                total_performance += pq.performance_score
+            if pq.weak_concepts:
+                weak_concepts.extend(pq.weak_concepts)
+            if pq.mistakes and len(previous_quizzes) <= 2:  # Solo de los 2 últimos
+                last_mistakes.extend([m.get('question', '') for m in pq.mistakes if isinstance(m, dict)])
+        
+        average_performance = total_performance / len(previous_quizzes) if previous_quizzes else 0
+        weak_concepts = list(set(weak_concepts))[:5]  # Top 5 conceptos débiles únicos
+    
+    # 2. ADAPTACIÓN DE DIFICULTAD basada en desempeño
+    adaptation_note = None
+    
     if request.difficulty:
+        # Usuario especificó dificultad manualmente
         difficulty = request.difficulty
+        adaptation_note = f"Dificultad seleccionada manualmente: {difficulty}"
     else:
-        # Mapeo automático de estado cognitivo a dificultad
-        difficulty_mapping = {
-            "mastery": "Difícil",
-            "flow": "Medio",
-            "normal": "Medio",
-            "doubt": "Fácil",
-            "fatigue": "Fácil",
-            "overload": "Fácil"
-        }
-        difficulty = difficulty_mapping.get(cognitive_level, "Medio")
+        # Ajuste dinámico según promedio histórico
+        if average_performance >= 85:
+            difficulty = "Difícil"
+            adaptation_note = f"🚀 Subiendo a Difícil por promedio histórico del {round(average_performance, 1)}%"
+        elif average_performance >= 60:
+            difficulty = "Medio"
+            adaptation_note = f"📊 Nivel Medio por promedio histórico del {round(average_performance, 1)}%"
+        elif average_performance > 0:
+            difficulty = "Fácil"
+            adaptation_note = f"🔰 Nivel Fácil para reforzar bases (promedio: {round(average_performance, 1)}%)"
+        else:
+            # Sin historial, usar estado cognitivo de sesión
+            last_session = db.query(LearningSession).filter(
+                LearningSession.user_id == current_user.id,
+                LearningSession.topic.ilike(f"%{request.topic}%")
+            ).order_by(LearningSession.started_at.desc()).first()
+            
+            cognitive_level = last_session.last_cognitive_state if last_session else "normal"
+            difficulty_mapping = {
+                "mastery": "Difícil",
+                "flow": "Medio",
+                "normal": "Medio",
+                "doubt": "Fácil",
+                "fatigue": "Fácil",
+                "overload": "Fácil"
+            }
+            difficulty = difficulty_mapping.get(cognitive_level, "Medio")
+            adaptation_note = f"✨ Primer quiz en este tema - Nivel {difficulty} (estado: {cognitive_level})"
     
-    num_questions = request.num_questions or 5
+    num_questions = request.num_questions or 3  # Reducido de 5 a 3 para evitar truncamiento
     
-    # 3. Prompt para generar quiz en formato Gemini
+    # 3. PROMPT ADAPTATIVO con enfoque en conceptos débiles
+    reinforcement_context = ""
+    if weak_concepts:
+        concepts_str = ", ".join(weak_concepts)
+        reinforcement_context = (
+            f"\n\n🎯 REFUERZO DE CONCEPTOS DÉBILES:\n"
+            f"El estudiante ha tenido dificultades con: {concepts_str}.\n"
+            f"Genera al menos {min(2, num_questions)} preguntas enfocadas en estos conceptos, "
+            f"con explicaciones concisas pero claras (máximo 2 oraciones)."
+        )
+        # Actualizar mensaje de adaptación
+        if adaptation_note:
+            adaptation_note += f" | Reforzando: {concepts_str}"
+    
+    if last_mistakes:
+        reinforcement_context += (
+            f"\n\nERRORES RECIENTES:\n"
+            f"En quizzes anteriores falló preguntas similares a:\n" +
+            "\n".join([f"- {m[:100]}" for m in last_mistakes[:3]]) +
+            f"\nGenera preguntas que aborden estos temas desde ángulos diferentes."
+        )
+    
     system_instructions = (
-        f"Eres un experto en evaluación educativa tipo Saber 11 de Colombia. "
+        f"Eres un experto en evaluación educativa ADAPTATIVA tipo Saber 11 de Colombia. "
         f"Genera un quiz de {num_questions} preguntas sobre '{request.topic}' con dificultad '{difficulty}'. "
-        f"Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown."
+        f"{'Desempeño histórico del estudiante: ' + str(round(average_performance, 1)) + '%. ' if average_performance > 0 else ''}"
+        f"Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown. "
+        f"Explicaciones CONCISAS (máximo 2 oraciones por pregunta)."
+        f"{reinforcement_context}"
     )
 
     prompt = (
-        f"Genera un quiz educativo sobre '{request.topic}' con exactamente {num_questions} preguntas de selección múltiple. "
+        f"Genera un quiz educativo ADAPTATIVO sobre '{request.topic}' con exactamente {num_questions} preguntas de selección múltiple. "
         f"Dificultad: {difficulty}. "
+        f"{'REFUERZA los conceptos: ' + ', '.join(weak_concepts) + '. ' if weak_concepts else ''}"
         "Devuelve ÚNICAMENTE este JSON exacto:\n"
         '{\n'
         f'  "quiz_title": "{request.topic}",\n'
@@ -365,13 +436,15 @@ async def generate_cognitive_quiz(
         '      "question": "Texto de la pregunta",\n'
         '      "options": ["Opción A", "Opción B", "Opción C", "Opción D"],\n'
         '      "answer": "Opción correcta (debe estar en la lista de options)",\n'
-        '      "explanation": "Breve explicación de por qué es correcta"\n'
+        '      "explanation": "Explicación BREVE (máximo 2 oraciones) de por qué es correcta"\n'
         '    }\n'
         '  ]\n'
         '}\n'
-        f"Asegúrate de generar exactamente {num_questions} preguntas con IDs del 1 al {num_questions}."
+        f"Asegúrate de generar exactamente {num_questions} preguntas con IDs del 1 al {num_questions}. "
+        f"IMPORTANTE: Mantén las explicaciones breves y concisas para evitar exceder límites de tokens."
     )
 
+    # 4. GENERAR QUIZ CON IA
     import json
     import re
     import logging
@@ -382,7 +455,8 @@ async def generate_cognitive_quiz(
         result = await ai_manager.generate(
             prompt=prompt,
             system_prompt=system_instructions,
-            temperature=0.5
+            temperature=0.5,
+            max_tokens=2000  # Aumentado para asegurar respuesta completa (antes 1024)
         )
     except Exception as ai_error:
         logger.error(f"Error llamando a AI manager: {ai_error}")
@@ -405,7 +479,36 @@ async def generate_cognitive_quiz(
         if json_match:
             response_text = json_match.group(0)
         
-        quiz_data = json.loads(response_text)
+        # Intentar parsear JSON
+        try:
+            quiz_data = json.loads(response_text)
+        except json.JSONDecodeError as json_err:
+            # Si falla, intentar completar el JSON truncado
+            logger.error(f"Error JSON parsing: {json_err}")
+            logger.error(f"Respuesta completa (primeros 2000 chars): {response_text[:2000]}")
+            
+            # Intentar extraer solo las preguntas completas que tengamos
+            if '"questions"' in response_text:
+                # Buscar hasta la última pregunta completa
+                try:
+                    # Encontrar el último cierre de llave de pregunta completo
+                    last_complete_question_idx = response_text.rfind('      "explanation":')
+                    if last_complete_question_idx != -1:
+                        # Buscar el cierre de esa pregunta
+                        next_closing_brace = response_text.find('\n    }', last_complete_question_idx)
+                        if next_closing_brace != -1:
+                            # Cerrar el array y el objeto
+                            truncated_json = response_text[:next_closing_brace + 6] + '\n  ]\n}'
+                            quiz_data = json.loads(truncated_json)
+                            logger.info(f"✅ JSON recuperado con {len(quiz_data.get('questions', []))} preguntas")
+                        else:
+                            raise json_err
+                    else:
+                        raise json_err
+                except:
+                    raise json_err
+            else:
+                raise json_err
         
         # Validar estructura Gemini
         if "quiz_title" not in quiz_data or "questions" not in quiz_data:
@@ -414,25 +517,30 @@ async def generate_cognitive_quiz(
         if not quiz_data["questions"] or len(quiz_data["questions"]) == 0:
             raise ValueError("No se generaron preguntas")
         
-        # 4. Guardar en historial del usuario
+        # 4. Guardar en historial del usuario CON INFORMACIÓN DE ADAPTACIÓN
         try:
             quiz_history_entry = QuizHistory(
                 user_id=current_user.id,
-                session_id=last_session.id if last_session else None,
+                session_id=None,
                 quiz_title=quiz_data["quiz_title"],
                 topic=request.topic,
                 difficulty=quiz_data.get("difficulty", difficulty),
                 questions_count=len(quiz_data["questions"]),
                 quiz_data=quiz_data,
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
+                # Campos de adaptación
+                weak_concepts=weak_concepts if weak_concepts else None,
+                adaptation_applied=adaptation_note if 'adaptation_note' in locals() else None,
+                recommended_difficulty=difficulty
             )
             
             db.add(quiz_history_entry)
             db.commit()
             db.refresh(quiz_history_entry)
+            
+            logger.info(f"Quiz guardado con adaptación: {adaptation_note if 'adaptation_note' in locals() else 'Sin adaptación previa'}")
         except Exception as db_error:
-            import logging
-            logging.warning(f"No se pudo guardar en historial: {db_error}. Quiz generado sin historial.")
+            logger.warning(f"No se pudo guardar en historial: {db_error}. Quiz generado sin historial.")
             # Continuar sin guardar en historial si hay error de BD
         
         return quiz_data
@@ -453,17 +561,24 @@ async def generate_cognitive_quiz(
         )
 
 
-@router.post("/submit-quiz")
+@router.post("/submit-quiz", response_model=QuizAnalysisResponse)
 async def submit_quiz_answers(
     submission: QuizSubmission,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Recibe las respuestas del usuario y actualiza el historial con el puntaje.
+    Recibe las respuestas del usuario, calcula el puntaje y realiza ANÁLISIS ADAPTATIVO:
+    1. Identifica preguntas falladas
+    2. Extrae conceptos débiles
+    3. Recomienda dificultad para el próximo quiz
+    4. Guarda toda la información para adaptación futura
     """
     from app.models.learning import QuizHistory
     from datetime import datetime
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     # Buscar el quiz más reciente del usuario con ese título
     quiz_entry = db.query(QuizHistory).filter(
@@ -475,10 +590,12 @@ async def submit_quiz_answers(
     if not quiz_entry:
         raise HTTPException(status_code=404, detail="Quiz no encontrado en el historial")
     
-    # Calcular puntaje
+    # 1. CALCULAR PUNTAJE Y DETECTAR ERRORES
     quiz_data = quiz_entry.quiz_data
     correct = 0
     total = len(quiz_data["questions"])
+    mistakes_detail = []
+    weak_concepts = []
     
     for question in quiz_data["questions"]:
         question_id = question["id"]
@@ -487,13 +604,87 @@ async def submit_quiz_answers(
         
         if user_answer and user_answer.strip() == correct_answer.strip():
             correct += 1
+        else:
+            # REGISTRAR ERROR DETALLADO
+            mistake_info = {
+                "question_id": question_id,
+                "question": question["question"],
+                "user_answer": user_answer or "Sin respuesta",
+                "correct_answer": correct_answer,
+                "explanation": question.get("explanation", "")
+            }
+            mistakes_detail.append(mistake_info)
+            
+            # EXTRAER CONCEPTOS DÉBILES (mejorado - palabras clave más relevantes)
+            question_text = question["question"].lower()
+            explanation_text = question.get("explanation", "").lower()
+            
+            # Palabras comunes a filtrar (stop words en español)
+            stop_words = {'el', 'la', 'de', 'que', 'y', 'a', 'en', 'un', 'ser', 'se', 'no', 'por', 'con', 'su', 'para', 'como', 'es', 'al', 'lo', 'del', 'las', 'una', 'está', 'este', 'tiene', 'más', 'cuando', 'pero', 'sus', 'les', 'cual', 'cuál', 'cómo', 'qué', 'dónde'}
+            
+            # Extraer palabras significativas (más de 5 letras, no stop words)
+            words = question_text.replace('¿', '').replace('?', '').split()
+            keywords = [word.strip('.,;:()[]') for word in words if len(word) > 5 and word not in stop_words]
+            
+            # Agregar hasta 2 conceptos clave por pregunta fallada
+            if keywords:
+                weak_concepts.extend(keywords[:2])
     
-    # Actualizar historial
+    # 2. CALCULAR MÉTRICAS DE DESEMPEÑO
+    percentage = round((correct / total) * 100, 1) if total > 0 else 0
+    
+    # 3. RECOMENDAR DIFICULTAD PARA PRÓXIMO QUIZ (Lógica Adaptativa Mejorada)
+    current_difficulty = quiz_entry.difficulty or "Medio"
+    
+    # Normalizar dificultad actual
+    difficulty_levels = ["Fácil", "Medio", "Difícil"]
+    
+    if percentage >= 85:
+        # Excelente desempeño (85%+) → Incrementar dificultad
+        if current_difficulty == "Fácil":
+            recommended_difficulty = "Medio"
+            adaptation_message = "🎉 ¡Excelente desempeño! Subiendo a nivel Medio para continuar tu progreso."
+        elif current_difficulty == "Medio":
+            recommended_difficulty = "Difícil"
+            adaptation_message = "🌟 ¡Dominio sobresaliente! Subiendo a nivel Difícil para desafiarte más."
+        else:  # Difícil
+            recommended_difficulty = "Difícil"
+            adaptation_message = "🏆 ¡Nivel experto! Mantén el desafío en Difícil para consolidar tu maestría."
+            
+    elif percentage >= 60:
+        # Buen desempeño (60-84%) → Mantener nivel actual
+        recommended_difficulty = current_difficulty
+        if percentage >= 75:
+            adaptation_message = f"👍 Buen progreso ({percentage}%). Mantén nivel {current_difficulty} para consolidar."
+        else:
+            adaptation_message = f"📚 Progreso adecuado ({percentage}%). Sigue practicando en nivel {current_difficulty}."
+            
+    else:
+        # Desempeño bajo (<60%) → Reducir dificultad
+        if current_difficulty == "Difícil":
+            recommended_difficulty = "Medio"
+            adaptation_message = f"💡 Bajando a nivel Medio para reforzar conceptos fundamentales ({percentage}%)."
+        elif current_difficulty == "Medio":
+            recommended_difficulty = "Fácil"
+            adaptation_message = f"📖 Bajando a nivel Fácil para consolidar las bases ({percentage}%)."
+        else:  # Fácil
+            recommended_difficulty = "Fácil"
+            adaptation_message = f"🔰 Mantén nivel Fácil para dominar los fundamentos ({percentage}%). ¡Tú puedes!"
+    
+    # Limpiar conceptos débiles (únicos, primeros 5)
+    weak_concepts = list(set(weak_concepts))[:5]
+    
+    # 4. ACTUALIZAR HISTORIAL CON ANÁLISIS COMPLETO
     quiz_entry.user_answers = submission.user_answers
     quiz_entry.correct_answers = correct
     quiz_entry.wrong_answers = total - correct
     quiz_entry.user_score = f"{correct}/{total}"
     quiz_entry.completed_at = datetime.utcnow()
+    quiz_entry.performance_score = percentage
+    quiz_entry.mistakes = mistakes_detail
+    quiz_entry.weak_concepts = weak_concepts
+    quiz_entry.recommended_difficulty = recommended_difficulty
+    quiz_entry.adaptation_applied = adaptation_message
     
     if quiz_entry.created_at:
         time_diff = datetime.utcnow() - quiz_entry.created_at
@@ -501,12 +692,18 @@ async def submit_quiz_answers(
     
     db.commit()
     
-    return {
-        "score": f"{correct}/{total}",
-        "correct_answers": correct,
-        "wrong_answers": total - correct,
-        "percentage": round((correct / total) * 100, 1) if total > 0 else 0
-    }
+    logger.info(f"Quiz analizado: {percentage}% - Conceptos débiles: {weak_concepts}")
+    
+    return QuizAnalysisResponse(
+        score=f"{correct}/{total}",
+        correct_answers=correct,
+        wrong_answers=total - correct,
+        percentage=percentage,
+        mistakes=mistakes_detail,
+        weak_concepts=weak_concepts,
+        recommended_difficulty=recommended_difficulty,
+        adaptation_message=adaptation_message
+    )
 
 
 @router.get("/quiz-history", response_model=QuizHistoryResponse)
@@ -515,8 +712,8 @@ async def get_quiz_history(
     db: Session = Depends(get_db)
 ):
     """
-    Devuelve el historial completo de quizzes realizados por el usuario.
-    Compatible con el comando: "mostrar historial de quizzes"
+    Devuelve el historial completo de quizzes con información de adaptación.
+    Incluye: errores, conceptos débiles, y recomendaciones de dificultad.
     """
     from app.models.learning import QuizHistory
     
@@ -526,12 +723,21 @@ async def get_quiz_history(
     
     history_list = []
     for entry in history_entries:
+        # Preparar lista de errores (solo preguntas)
+        mistakes_list = None
+        if entry.mistakes:
+            mistakes_list = [m.get('question', '')[:100] for m in entry.mistakes if isinstance(m, dict)]
+        
         history_list.append(QuizHistoryEntry(
             date=entry.created_at.strftime("%Y-%m-%d"),
             title=entry.quiz_title,
             questions_count=entry.questions_count,
             user_score=entry.user_score,
-            difficulty=entry.difficulty
+            difficulty=entry.difficulty,
+            mistakes=mistakes_list,
+            adaptation=entry.adaptation_applied,
+            performance_score=entry.performance_score,
+            recommended_difficulty=entry.recommended_difficulty
         ))
     
     return QuizHistoryResponse(

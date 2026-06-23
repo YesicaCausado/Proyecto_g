@@ -101,12 +101,16 @@ class QuizRequest(BaseModel):
     difficulty: Optional[str] = None  # Opcional: Fácil/Medio/Difícil
 
 class QuizHistoryEntry(BaseModel):
-    """Entrada individual del historial de quizzes"""
+    """Entrada individual del historial de quizzes con adaptación"""
     date: str  # YYYY-MM-DD
     title: str
     questions_count: int
     user_score: Optional[str] = None  # "X/Y" formato
     difficulty: str
+    mistakes: Optional[List[str]] = None  # Lista de preguntas falladas
+    adaptation: Optional[str] = None  # Descripción de cómo se ajustó el siguiente quiz
+    performance_score: Optional[float] = None  # Porcentaje de aciertos
+    recommended_difficulty: Optional[str] = None  # Dificultad sugerida
 
 class QuizHistoryResponse(BaseModel):
     """Respuesta con el historial completo de quizzes"""
@@ -117,7 +121,18 @@ class QuizSubmission(BaseModel):
     """Envío de respuestas del quiz por parte del usuario"""
     quiz_title: str
     user_answers: Dict[int, str]  # {question_id: selected_answer}
-    
+
+class QuizAnalysisResponse(BaseModel):
+    """Respuesta del análisis de quiz con recomendaciones adaptativas"""
+    score: str
+    correct_answers: int
+    wrong_answers: int
+    percentage: float
+    mistakes: List[Dict[str, Any]]  # Detalles de errores
+    weak_concepts: List[str]  # Conceptos a reforzar
+    recommended_difficulty: str
+    adaptation_message: str
+
 # ===== SCHEMAS LEGACY (mantener compatibilidad) =====
 
 class QuizOption(BaseModel):

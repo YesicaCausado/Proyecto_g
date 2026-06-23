@@ -30,6 +30,27 @@ interface QuizHistoryEntry {
   questions_count: number;
   user_score: string | null;
   difficulty: string;
+  mistakes?: string[] | null;
+  adaptation?: string | null;
+  performance_score?: number | null;
+  recommended_difficulty?: string | null;
+}
+
+interface QuizAnalysisResponse {
+  score: string;
+  correct_answers: number;
+  wrong_answers: number;
+  percentage: number;
+  mistakes: Array<{
+    question_id: number;
+    question: string;
+    user_answer: string;
+    correct_answer: string;
+    explanation: string;
+  }>;
+  weak_concepts: string[];
+  recommended_difficulty: string;
+  adaptation_message: string;
 }
 
 const QuizzesPage: React.FC = () => {
@@ -43,6 +64,7 @@ const QuizzesPage: React.FC = () => {
   const [availableTopics, setAvailableTopics] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<QuizAnalysisResponse | null>(null);
 
   useEffect(() => {
     const fetchTrainedBots = async () => {
@@ -114,7 +136,7 @@ const QuizzesPage: React.FC = () => {
       return;
     }
 
-    // Calcular puntaje localmente
+    // Calcular puntaje localmente (para UI inmediata)
     let currentScore = 0;
     quiz?.questions.forEach((q) => {
       const correctAnswer = q.answer;
@@ -126,14 +148,22 @@ const QuizzesPage: React.FC = () => {
     setScore(currentScore);
     setIsSubmitted(true);
     
-    // Enviar al backend para actualizar historial
+    // Enviar al backend para ANÁLISIS ADAPTATIVO
     try {
       const submission = {
         quiz_title: quiz!.quiz_title,
         user_answers: selectedAnswers
       };
-      await api.post('/chat/submit-quiz', submission);
-      toast.success(`¡Desafío completado! Tu puntaje: ${currentScore} de ${quiz?.questions.length}`);
+      const response = await api.post<QuizAnalysisResponse>('/chat/submit-quiz', submission);
+      
+      // Guardar resultado del análisis adaptativo
+      setAnalysisResult(response.data);
+      
+      // Mostrar mensaje con adaptación
+      toast.success(
+        `¡Desafío completado! ${response.data.score} (${response.data.percentage}%)\n${response.data.adaptation_message}`,
+        { duration: 5000 }
+      );
       
       // Recargar historial después de completar
       loadQuizHistory();
@@ -304,12 +334,42 @@ const QuizzesPage: React.FC = () => {
                     <span className="text-4xl font-bold">{score}/{quiz.questions.length}</span>
                   </div>
                 </div>
-                <p className="text-gray-600 mb-8">
+                <p className="text-gray-600 mb-4">
                   {score / quiz.questions.length >= 0.8 ? '¡Excelente trabajo! Tienes un gran dominio del tema.' :
                    score / quiz.questions.length >= 0.6 ? '¡Buen trabajo! Vas por buen camino.' :
                    'Sigue practicando, usa el Tutor IA para repasar los conceptos.'}
                 </p>
-                <div className="flex gap-4 justify-center">
+                
+                {/* Análisis Adaptativo */}
+                {analysisResult && (
+                  <div className="mt-6 mb-6">
+                    {/* Mensaje de Adaptación */}
+                    <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+                      <p className="text-blue-800 font-medium">{analysisResult.adaptation_message}</p>
+                      {analysisResult.recommended_difficulty && (
+                        <p className="text-blue-700 text-sm mt-1">
+                          Próximo nivel recomendado: <strong>{analysisResult.recommended_difficulty}</strong>
+                        </p>
+                      )}
+                    </div>
+                    
+                    {/* Conceptos a Reforzar */}
+                    {analysisResult.weak_concepts && analysisResult.weak_concepts.length > 0 && (
+                      <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4">
+                        <p className="text-yellow-800 font-medium mb-2">Conceptos a reforzar:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {analysisResult.weak_concepts.map((concept, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
+                              {concept}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="flex gap-4 justify-center mt-8">
                   <button 
                     onClick={handleRetryQuiz} 
                     className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"

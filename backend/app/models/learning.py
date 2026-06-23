@@ -128,6 +128,13 @@ class QuizHistory(Base):
     quiz_data = Column(JSON, nullable=False)  # Guarda el quiz completo
     user_answers = Column(JSON, nullable=True)  # {question_id: user_answer}
     
+    # Sistema de Adaptación Dinámica
+    mistakes = Column(JSON, nullable=True)  # Lista de preguntas falladas con detalles
+    weak_concepts = Column(JSON, nullable=True)  # Conceptos identificados como débiles
+    adaptation_applied = Column(String(500), nullable=True)  # Descripción de ajuste aplicado
+    performance_score = Column(Float, nullable=True)  # Porcentaje de aciertos (0-100)
+    recommended_difficulty = Column(String(20), nullable=True)  # Dificultad sugerida para próximo quiz
+    
     # Metadatos
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
