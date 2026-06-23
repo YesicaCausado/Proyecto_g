@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lightbulb, Loader2, AlertCircle, CheckCircle, XCircle, History } from 'lucide-react';
+import { Lightbulb, Loader2, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import api from '../../services/api';
 import { toast } from 'sonner';
 
