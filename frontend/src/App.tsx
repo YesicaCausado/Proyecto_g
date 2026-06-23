@@ -8,6 +8,7 @@ import StudentDashboard from './pages/student/StudentDashboard';
 import ChatPage from './pages/student/ChatPage';
 import BotsPage from './pages/student/BotsPage';
 import MyClassesPage from './pages/student/MyClassesPage';
+import QuizzesPage from './pages/student/QuizzesPage';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import CreateClassroomPage from './pages/teacher/CreateClassroomPage';
 import ClassroomDetailPage from './pages/teacher/ClassroomDetailPage';
@@ -40,6 +41,9 @@ function AppRoutes() {
       } />
       <Route path="/my-classes" element={
         <ProtectedRoute role="estudiante"><Layout><MyClassesPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/quizzes" element={
+        <ProtectedRoute role="estudiante"><Layout><QuizzesPage /></Layout></ProtectedRoute>
       } />
 
       {/* Profesor */}

@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Sparkles,
   ArrowRight,
+  ClipboardCheck,
 } from 'lucide-react';
 
 const SKILL_ICONS: Record<string, string> = {
@@ -83,7 +84,7 @@ export default function StudentDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Link
           to="/bots"
           className="bg-white border border-gray-200 rounded-xl p-5 hover:border-primary-300 hover:shadow-md transition-all group"
@@ -109,9 +110,30 @@ export default function StudentDashboard() {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Aprender</h3>
-              <p className="text-sm text-gray-500">Chat con tutor IA adaptativo</p>
+              <p className="text-sm text-gray-500">Tutor IA adaptativo</p>
             </div>
           </div>
+        </Link>
+
+        <Link
+          to="/quizzes"
+          className="bg-white border border-gray-200 rounded-xl p-5 hover:border-orange-300 hover:shadow-md transition-all group relative overflow-hidden"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+              <ClipboardCheck className="w-6 h-6 text-orange-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">Desafíos</h3>
+              <p className="text-sm text-gray-500">Quices por nivel</p>
+            </div>
+          </div>
+          {/* Badge de "Nivel Registrado" si hay datos */}
+          {!loading && bots.length > 0 && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <Sparkles className="w-3 h-3" /> ADAPTATIVO
+            </div>
+          )}
         </Link>
 
         <Link

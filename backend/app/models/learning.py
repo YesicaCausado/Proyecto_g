@@ -103,3 +103,35 @@ class ChatMessage(Base):
     
     # Relaciones
     session = relationship("LearningSession", back_populates="messages")
+
+
+class QuizHistory(Base):
+    """Historial acumulativo de quizzes realizados por el usuario"""
+    __tablename__ = "quiz_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("learning_sessions.id"), nullable=True)
+    
+    # Información del quiz
+    quiz_title = Column(String(200), nullable=False)
+    topic = Column(String(200), nullable=False)
+    difficulty = Column(String(20), nullable=False)  # Fácil/Medio/Difícil
+    questions_count = Column(Integer, nullable=False)
+    
+    # Resultados del usuario
+    user_score = Column(String(10), nullable=True)  # Formato "X/Y"
+    correct_answers = Column(Integer, default=0)
+    wrong_answers = Column(Integer, default=0)
+    
+    # Contenido completo del quiz (formato Gemini)
+    quiz_data = Column(JSON, nullable=False)  # Guarda el quiz completo
+    user_answers = Column(JSON, nullable=True)  # {question_id: user_answer}
+    
+    # Metadatos
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    time_spent_seconds = Column(Integer, nullable=True)
+    
+    # Relaciones
+    user = relationship("User", back_populates="quiz_history")

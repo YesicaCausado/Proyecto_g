@@ -10,11 +10,18 @@ from datetime import datetime
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User
+from app.models.learning import LearningSession, CognitiveState
 from app.schemas.schemas import (
     StartSessionRequest,
     ChatMessageRequest,
     ChatMessageResponse,
     SessionStatsResponse,
+    QuizResponse,
+    QuizRequest,
+    QuizResponseGemini,
+    QuizSubmission,
+    QuizHistoryResponse,
+    QuizHistoryEntry,
 )
 from app.ai.providers.ai_manager import AIManager
 from app.ai.cognitive.neuroconductual_engine import (
@@ -300,6 +307,234 @@ async def get_session_stats(current_user: User = Depends(get_current_user)):
     )
 
 
-@router.post("/end")
-async def end_session(current_user: User = Depends(get_current_user)):
-    return {"message": "Sesión finalizada", "stats": {}}
+@router.post("/generate-quiz", response_model=QuizResponseGemini)
+async def generate_cognitive_quiz(
+    request: QuizRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Genera un quiz en formato Gemini basado en el historial cognitivo del usuario.
+    Automáticamente guarda el quiz en el historial del usuario.
+    """
+    from app.models.learning import QuizHistory
+    from datetime import datetime
+    
+    # 1. Buscar última sesión del tema para determinar nivel de dominio
+    last_session = db.query(LearningSession).filter(
+        LearningSession.user_id == current_user.id,
+        LearningSession.topic.ilike(f"%{request.topic}%")
+    ).order_by(LearningSession.started_at.desc()).first()
+
+    cognitive_level = last_session.last_cognitive_state if last_session else "normal"
+    
+    # 2. Determinar dificultad (puede venir del request o inferirse del estado cognitivo)
+    if request.difficulty:
+        difficulty = request.difficulty
+    else:
+        # Mapeo automático de estado cognitivo a dificultad
+        difficulty_mapping = {
+            "mastery": "Difícil",
+            "flow": "Medio",
+            "normal": "Medio",
+            "doubt": "Fácil",
+            "fatigue": "Fácil",
+            "overload": "Fácil"
+        }
+        difficulty = difficulty_mapping.get(cognitive_level, "Medio")
+    
+    num_questions = request.num_questions or 5
+    
+    # 3. Prompt para generar quiz en formato Gemini
+    system_instructions = (
+        f"Eres un experto en evaluación educativa tipo Saber 11 de Colombia. "
+        f"Genera un quiz de {num_questions} preguntas sobre '{request.topic}' con dificultad '{difficulty}'. "
+        f"Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown."
+    )
+
+    prompt = (
+        f"Genera un quiz educativo sobre '{request.topic}' con exactamente {num_questions} preguntas de selección múltiple. "
+        f"Dificultad: {difficulty}. "
+        "Devuelve ÚNICAMENTE este JSON exacto:\n"
+        '{\n'
+        f'  "quiz_title": "{request.topic}",\n'
+        f'  "difficulty": "{difficulty}",\n'
+        '  "questions": [\n'
+        '    {\n'
+        '      "id": 1,\n'
+        '      "question": "Texto de la pregunta",\n'
+        '      "options": ["Opción A", "Opción B", "Opción C", "Opción D"],\n'
+        '      "answer": "Opción correcta (debe estar en la lista de options)",\n'
+        '      "explanation": "Breve explicación de por qué es correcta"\n'
+        '    }\n'
+        '  ]\n'
+        '}\n'
+        f"Asegúrate de generar exactamente {num_questions} preguntas con IDs del 1 al {num_questions}."
+    )
+
+    import json
+    import re
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        result = await ai_manager.generate(
+            prompt=prompt,
+            system_prompt=system_instructions,
+            temperature=0.5
+        )
+    except Exception as ai_error:
+        logger.error(f"Error llamando a AI manager: {ai_error}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al conectar con el servicio de IA: {str(ai_error)}"
+        )
+    
+    try:
+        # Limpiar respuesta de markdown o texto extra
+        response_text = result["response"].strip()
+        logger.info(f"Respuesta IA (primeros 200 chars): {response_text[:200]}")
+        
+        # Remover bloques de código markdown si existen
+        response_text = re.sub(r'```json\s*', '', response_text)
+        response_text = re.sub(r'```\s*', '', response_text)
+        
+        # Extraer JSON si está envuelto en texto
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            response_text = json_match.group(0)
+        
+        quiz_data = json.loads(response_text)
+        
+        # Validar estructura Gemini
+        if "quiz_title" not in quiz_data or "questions" not in quiz_data:
+            raise ValueError("Estructura de quiz inválida")
+        
+        if not quiz_data["questions"] or len(quiz_data["questions"]) == 0:
+            raise ValueError("No se generaron preguntas")
+        
+        # 4. Guardar en historial del usuario
+        try:
+            quiz_history_entry = QuizHistory(
+                user_id=current_user.id,
+                session_id=last_session.id if last_session else None,
+                quiz_title=quiz_data["quiz_title"],
+                topic=request.topic,
+                difficulty=quiz_data.get("difficulty", difficulty),
+                questions_count=len(quiz_data["questions"]),
+                quiz_data=quiz_data,
+                created_at=datetime.utcnow()
+            )
+            
+            db.add(quiz_history_entry)
+            db.commit()
+            db.refresh(quiz_history_entry)
+        except Exception as db_error:
+            import logging
+            logging.warning(f"No se pudo guardar en historial: {db_error}. Quiz generado sin historial.")
+            # Continuar sin guardar en historial si hay error de BD
+        
+        return quiz_data
+        
+    except json.JSONDecodeError as e:
+        import logging
+        logging.error(f"Error JSON parsing: {e}\nRespuesta: {result.get('response', '')}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Error al interpretar la respuesta de la IA. Intenta de nuevo."
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Error generando quiz: {e}\nRespuesta: {result.get('response', '')}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error al generar el quiz: {str(e)}"
+        )
+
+
+@router.post("/submit-quiz")
+async def submit_quiz_answers(
+    submission: QuizSubmission,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Recibe las respuestas del usuario y actualiza el historial con el puntaje.
+    """
+    from app.models.learning import QuizHistory
+    from datetime import datetime
+    
+    # Buscar el quiz más reciente del usuario con ese título
+    quiz_entry = db.query(QuizHistory).filter(
+        QuizHistory.user_id == current_user.id,
+        QuizHistory.quiz_title == submission.quiz_title,
+        QuizHistory.completed_at == None
+    ).order_by(QuizHistory.created_at.desc()).first()
+    
+    if not quiz_entry:
+        raise HTTPException(status_code=404, detail="Quiz no encontrado en el historial")
+    
+    # Calcular puntaje
+    quiz_data = quiz_entry.quiz_data
+    correct = 0
+    total = len(quiz_data["questions"])
+    
+    for question in quiz_data["questions"]:
+        question_id = question["id"]
+        correct_answer = question["answer"]
+        user_answer = submission.user_answers.get(question_id)
+        
+        if user_answer and user_answer.strip() == correct_answer.strip():
+            correct += 1
+    
+    # Actualizar historial
+    quiz_entry.user_answers = submission.user_answers
+    quiz_entry.correct_answers = correct
+    quiz_entry.wrong_answers = total - correct
+    quiz_entry.user_score = f"{correct}/{total}"
+    quiz_entry.completed_at = datetime.utcnow()
+    
+    if quiz_entry.created_at:
+        time_diff = datetime.utcnow() - quiz_entry.created_at
+        quiz_entry.time_spent_seconds = int(time_diff.total_seconds())
+    
+    db.commit()
+    
+    return {
+        "score": f"{correct}/{total}",
+        "correct_answers": correct,
+        "wrong_answers": total - correct,
+        "percentage": round((correct / total) * 100, 1) if total > 0 else 0
+    }
+
+
+@router.get("/quiz-history", response_model=QuizHistoryResponse)
+async def get_quiz_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Devuelve el historial completo de quizzes realizados por el usuario.
+    Compatible con el comando: "mostrar historial de quizzes"
+    """
+    from app.models.learning import QuizHistory
+    
+    history_entries = db.query(QuizHistory).filter(
+        QuizHistory.user_id == current_user.id
+    ).order_by(QuizHistory.created_at.desc()).all()
+    
+    history_list = []
+    for entry in history_entries:
+        history_list.append(QuizHistoryEntry(
+            date=entry.created_at.strftime("%Y-%m-%d"),
+            title=entry.quiz_title,
+            questions_count=entry.questions_count,
+            user_score=entry.user_score,
+            difficulty=entry.difficulty
+        ))
+    
+    return QuizHistoryResponse(
+        history=history_list,
+        total_quizzes=len(history_list)
+    )

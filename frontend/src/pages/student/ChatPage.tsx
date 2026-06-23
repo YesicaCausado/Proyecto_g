@@ -113,62 +113,91 @@ export default function ChatPage() {
     if (skillParam && !sessionActive) setSelectedSkill(skillParam);
   }, [skillParam]);
 
+  /**
+   * Construye el mensaje de error visible para el usuario.
+   * Centralizado para no duplicar el texto de diagnóstico en varios lugares.
+   */
+  const buildBackendErrorMessage = (detail: string) => {
+    const isDev = import.meta.env.DEV;
+    let errorMessage = `⚠️ **No se pudo iniciar la sesión.**\n\n**Detalle:** ${detail}\n\n`;
+    errorMessage += isDev
+      ? `💡 **Diagnóstico Local:**\n- Verifica que tu \`GROQ_API_KEY\` en \`backend/.env\` es válida.\n- Verifica que el backend corre sin errores en el puerto 8000.`
+      : `💡 Si estás en Vercel, verifica que **GROQ_API_KEY** esté configurada en Settings → Environment Variables.`;
+    return errorMessage;
+  };
+
   const startSession = async (skillKey: string) => {
     const skill = SKILLS.find((s) => s.key === skillKey);
     if (!skill) return;
     setSending(true);
+
+    let data: ChatMessageResponse;
+
+    // ── Paso 1: llamada al backend. Solo ESTE bloque decide si hubo
+    // un error real de red/HTTP. Nada de procesamiento de UI aquí. ──
     try {
-      let data: ChatMessageResponse;
-      try {
-        const res = await api.post<ChatMessageResponse>("/chat/start", {
-          topic: skill.topic,
-          difficulty: "medium",
-        });
-        data = res.data;
-      } catch (err: any) {
-        // Solo usar demo si el backend es inalcanzable (sin respuesta de red)
-        // Si hay respuesta HTTP (400, 500, 503) mostrar el error real al usuario
-        if (err?.response) {
-          const detail = err.response.data?.detail || `Error ${err.response.status}`;
-          throw new Error(`Backend: ${detail}`);
-        }
-        // Sin respuesta → backend offline → demo mock
-        console.warn("Backend offline, usando demo:", err?.message);
-        await new Promise((r) => setTimeout(r, 600));
-        data = demoStartSession(skillKey);
+      const res = await api.post<ChatMessageResponse>("/chat/start", {
+        topic: skill.topic,
+        difficulty: "medium",
+      });
+      data = res.data;
+    } catch (err: any) {
+      if (err?.response) {
+        // El backend respondió con un código de error real (400/500/503...)
+        const detail = err.response.data?.detail || `Error ${err.response.status}`;
+        console.error("Error starting session (HTTP):", detail);
+        setSessionActive(true);
+        setMessages([{
+          id: Date.now().toString(),
+          role: "bot",
+          content: buildBackendErrorMessage(detail),
+          timestamp: new Date(),
+        }]);
+        setSending(false);
+        inputRef.current?.focus();
+        return;
       }
+      // Sin respuesta → backend inalcanzable → demo mock
+      console.warn("Backend offline, usando demo:", err?.message);
+      await new Promise((r) => setTimeout(r, 600));
+      data = demoStartSession(skillKey);
+    }
+
+    // ── Paso 2: blindaje de forma de la respuesta.
+    // Si el backend cambia el nombre de un campo, esto evita un crash
+    // silencioso que terminaba mostrándose como "error al iniciar sesión". ──
+    const safeMessage = data?.message ?? "Hola, soy tu tutor. Empecemos.";
+    if (!data?.message) {
+      console.warn("⚠️ La respuesta de /chat/start no trae 'message'. Respuesta recibida:", data);
+    }
+
+    // ── Paso 3: procesamiento de UI. Cualquier fallo aquí es un bug
+    // de frontend, no un error del backend, así que se trata aparte. ──
+    try {
       setSessionActive(true);
       setLastResponse(data);
       metrics.onBotMessageReceived();
       setMessages([{
         id: Date.now().toString(),
         role: "bot",
-        content: data.message,
+        content: safeMessage,
         timestamp: new Date(),
-        cognitive_state: data.cognitive_state,
-        action: data.action,
-        suggestions: data.suggestions,
+        cognitive_state: data?.cognitive_state,
+        action: data?.action,
+        suggestions: data?.suggestions,
       }]);
       // VRM: animar labios (sin TTS automático)
-      const wordCountStart = data.message.split(" ").length;
+      const wordCountStart = safeMessage.split(" ").length;
       vrmRef.current?.speak(wordCountStart * 380);
       // NO llamar speakText aquí - dejar que el usuario presione el botón de "Leer en voz alta"
-      if (data.cognitive_state) {
+      if (data?.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
       // Detectar quiz en la respuesta
-      const startQuiz = parseQuizFromMessage(data.message);
+      const startQuiz = parseQuizFromMessage(safeMessage);
       setCurrentQuiz(startQuiz);
-    } catch (err: any) {
-      console.error("Error starting session:", err);
-      // Mostrar error en pantalla como mensaje del bot
-      setSessionActive(true);
-      setMessages([{
-        id: Date.now().toString(),
-        role: "bot",
-        content: `⚠️ **No se pudo iniciar la sesión:** ${err?.message ?? "Error desconocido"}\n\n💡 Si estás en Vercel, verifica que **GROQ_API_KEY** esté configurada en Settings → Environment Variables.`,
-        timestamp: new Date(),
-      }]);
+    } catch (uiErr) {
+      console.error("Error procesando la respuesta de inicio de sesión (bug de UI):", uiErr);
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -203,70 +232,79 @@ export default function ChatPage() {
     setPrevInput("");
     setSending(true);
 
-    try {
-      let data: ChatMessageResponse;
-      // Intentar backend real; si falla → demo mock
-      try {
-        const skill = SKILLS.find((s) => s.key === selectedSkill);
-        const res = await api.post<ChatMessageResponse>("/chat/message", {
-          message: msgContent,
-          topic: skill?.topic ?? "Tema general",
-          cognitive_state: lastResponse?.cognitive_state || "normal",
-          history: messages.slice(-10).map((m) => ({
-            role: m.role === "bot" ? "assistant" : "user",
-            content: m.content,
-          })),
-          response_time_ms:  behavioralMetrics.response_time_ms,
-          typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
-          corrections:       behavioralMetrics.corrections,
-          pause_before_ms:   behavioralMetrics.pause_before_ms,
-          ...(facial.isStreaming && facial.snapshot.is_active ? {
-            facial_data: {
-              emotion: facial.snapshot.valence > 0.2 ? "happy" : facial.snapshot.valence < -0.2 ? "worried" : "neutral",
-              valence: facial.snapshot.valence,
-              arousal: facial.snapshot.arousal,
-              attention_score: facial.snapshot.attention_score,
-              blink_rate: facial.snapshot.blink_rate,
-              brow_furrow: facial.snapshot.brow_furrow,
-              smile_intensity: facial.snapshot.smile_intensity,
-              gaze_direction: facial.snapshot.gaze_direction,
-            }
-          } : {}),
-          ...(voice.isStreaming ? {
-            voice_data: {
-              pitch_mean_hz:       voice.snapshot.pitch_mean_hz,
-              volume_db:           voice.snapshot.volume_db,
-              speech_rate_wpm:     voice.snapshot.speech_rate_wpm,
-              voice_tremor:        voice.snapshot.voice_tremor,
-              energy_level:        voice.snapshot.energy_level,
-              filler_words_count:  voice.snapshot.filler_words_count,
-              silence_duration_ms: voice.snapshot.silence_duration_ms,
-            }
-          } : {}),
-        });
-        data = res.data;
-      } catch (err: any) {
-        // Solo usar demo si el backend es inalcanzable (sin respuesta de red)
-        if (err?.response) {
-          const detail = err.response.data?.detail || `Error ${err.response.status}`;
-          // Mostrar error de la IA directamente en el chat como mensaje del bot
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: (Date.now() + 1).toString(),
-              role: "bot",
-              content: `⚠️ **Error del tutor:** ${detail}\n\nVerifica que la variable **GROQ_API_KEY** esté configurada en Vercel (Settings → Environment Variables).`,
-              timestamp: new Date(),
-            },
-          ]);
-          return;
-        }
-        // Backend offline → demo
-        console.warn("Backend offline, usando demo:", err?.message);
-        await new Promise((r) => setTimeout(r, 800));
-        data = demoSendMessage(msgContent);
-      }
+    let data: ChatMessageResponse;
 
+    // ── Paso 1: llamada al backend ──
+    try {
+      const skill = SKILLS.find((s) => s.key === selectedSkill);
+      const res = await api.post<ChatMessageResponse>("/chat/message", {
+        message: msgContent,
+        topic: skill?.topic ?? "Tema general",
+        cognitive_state: lastResponse?.cognitive_state || "normal",
+        history: messages.slice(-10).map((m) => ({
+          role: m.role === "bot" ? "assistant" : "user",
+          content: m.content,
+        })),
+        response_time_ms:  behavioralMetrics.response_time_ms,
+        typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
+        corrections:       behavioralMetrics.corrections,
+        pause_before_ms:   behavioralMetrics.pause_before_ms,
+        ...(facial.isStreaming && facial.snapshot.is_active ? {
+          facial_data: {
+            emotion: facial.snapshot.valence > 0.2 ? "happy" : facial.snapshot.valence < -0.2 ? "worried" : "neutral",
+            valence: facial.snapshot.valence,
+            arousal: facial.snapshot.arousal,
+            attention_score: facial.snapshot.attention_score,
+            blink_rate: facial.snapshot.blink_rate,
+            brow_furrow: facial.snapshot.brow_furrow,
+            smile_intensity: facial.snapshot.smile_intensity,
+            gaze_direction: facial.snapshot.gaze_direction,
+          }
+        } : {}),
+        ...(voice.isStreaming ? {
+          voice_data: {
+            pitch_mean_hz:       voice.snapshot.pitch_mean_hz,
+            volume_db:           voice.snapshot.volume_db,
+            speech_rate_wpm:     voice.snapshot.speech_rate_wpm,
+            voice_tremor:        voice.snapshot.voice_tremor,
+            energy_level:        voice.snapshot.energy_level,
+            filler_words_count:  voice.snapshot.filler_words_count,
+            silence_duration_ms: voice.snapshot.silence_duration_ms,
+          }
+        } : {}),
+      });
+      data = res.data;
+    } catch (err: any) {
+      if (err?.response) {
+        const detail = err.response.data?.detail || `Error ${err.response.status}`;
+        console.error("Error sending message (HTTP):", detail);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            role: "bot",
+            content: `⚠️ **Error del tutor:** ${detail}\n\nVerifica que la variable **GROQ_API_KEY** esté configurada en Vercel (Settings → Environment Variables).`,
+            timestamp: new Date(),
+          },
+        ]);
+        setSending(false);
+        inputRef.current?.focus();
+        return;
+      }
+      // Backend offline → demo
+      console.warn("Backend offline, usando demo:", err?.message);
+      await new Promise((r) => setTimeout(r, 800));
+      data = demoSendMessage(msgContent);
+    }
+
+    // ── Paso 2: blindaje de forma de la respuesta ──
+    const safeMessage = data?.message ?? "(El tutor no devolvió contenido. Intenta de nuevo.)";
+    if (!data?.message) {
+      console.warn("⚠️ La respuesta de /chat/message no trae 'message'. Respuesta recibida:", data);
+    }
+
+    // ── Paso 3: procesamiento de UI, separado de errores de red ──
+    try {
       setLastResponse(data);
       metrics.onBotMessageReceived();
 
@@ -275,41 +313,41 @@ export default function ChatPage() {
         {
           id: (Date.now() + 1).toString(),
           role: "bot",
-          content: data.message,
+          content: safeMessage,
           timestamp: new Date(),
-          cognitive_state: data.cognitive_state,
-          action: data.action,
-          suggestions: data.suggestions,
+          cognitive_state: data?.cognitive_state,
+          action: data?.action,
+          suggestions: data?.suggestions,
         },
       ]);
       // VRM: animar labios (sin TTS automático)
-      const wordCountMsg = data.message.split(" ").length;
+      const wordCountMsg = safeMessage.split(" ").length;
       vrmRef.current?.speak(wordCountMsg * 380);
       // NO llamar speakText aquí - dejar que el usuario presione el botón de "Leer en voz alta"
-      if (data.cognitive_state) {
+      if (data?.cognitive_state) {
         vrmRef.current?.setEmotion(data.cognitive_state as CognitiveEmotion);
       }
-      
+
       // Detectar si la IA SUGIERE un quiz (análisis neuroconductual)
-      const isQuizSuggested = data.metadata?.quiz_suggested === true;
+      const isQuizSuggested = data?.metadata?.quiz_suggested === true;
       setQuizSuggested(isQuizSuggested);
-      
+
       if (isQuizSuggested) {
         console.log("💡 Quiz sugerido por análisis neuroconductual - mostrar botón");
       }
-      
+
       // Detectar si el mensaje contiene un quiz generado (cuando el usuario acepta el sugerido)
-      const generatedQuiz = parseQuizFromMessage(data.message);
+      const generatedQuiz = parseQuizFromMessage(safeMessage);
       if (generatedQuiz) {
         setCurrentQuiz(generatedQuiz);
         setQuizSuggested(false); // Ocultar botón si se generó el quiz
         console.log("📋 Quiz generado y mostrado");
       }
-    } catch (err) {
-      console.error("Error sending message:", err);
+    } catch (uiErr) {
+      console.error("Error procesando la respuesta del mensaje (bug de UI):", uiErr);
       setMessages((prev) => [
         ...prev,
-        { id: (Date.now() + 1).toString(), role: "bot", content: "❌ Error de conexión. Intenta de nuevo.", timestamp: new Date() },
+        { id: (Date.now() + 1).toString(), role: "bot", content: "❌ Ocurrió un error procesando la respuesta. Intenta de nuevo.", timestamp: new Date() },
       ]);
     } finally {
       setSending(false);

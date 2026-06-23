@@ -45,3 +45,4 @@ class User(Base):
     learning_sessions = relationship("LearningSession", back_populates="user")
     expert_bots = relationship("ExpertBot", back_populates="creator")
     cognitive_events = relationship("CognitiveEvent", back_populates="user")
+    quiz_history = relationship("QuizHistory", back_populates="user")

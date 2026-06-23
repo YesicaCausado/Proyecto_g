@@ -1,6 +1,8 @@
 """
 NeuroLearn AI - API de Bot Experto
 """
+import os
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Dict, Optional, List
@@ -21,7 +23,7 @@ from app.schemas.schemas import (
 )
 from app.ai.expert_bot.trainer import ExpertBotTrainer
 
-router = APIRouter(prefix="/bots", tags=["Bot Experto"])
+router = APIRouter(prefix="/expert-bot", tags=["Bot Experto"])
 
 # Almacén de entrenamientos activos (en producción usar Redis)
 active_trainers: Dict[int, ExpertBotTrainer] = {}
@@ -375,3 +377,27 @@ async def list_my_bots(
         ],
         "total": len(bots),
     }
+
+
+@router.get("/trained-bots")
+async def get_trained_bots():
+    """
+    Lista todos los bots entrenados disponibles en data/trained_bots/
+    Este endpoint NO requiere autenticación y es usado por el frontend
+    para cargar la lista de temas en la página de Quizzes.
+    """
+    # Obtener el directorio de bots entrenados
+    backend_dir = Path(__file__).parent.parent.parent
+    trained_bots_dir = backend_dir / "data" / "trained_bots"
+    
+    if not trained_bots_dir.exists():
+        return []
+    
+    # Listar todos los archivos .json en el directorio
+    bot_files = [
+        f.name for f in trained_bots_dir.iterdir() 
+        if f.is_file() and f.suffix == '.json'
+    ]
+    
+    return bot_files
+

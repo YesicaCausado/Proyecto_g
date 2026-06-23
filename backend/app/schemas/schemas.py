@@ -74,62 +74,78 @@ class ChatMessageResponse(BaseModel):
     action: str
     difficulty: str
     cognitive_state: str
-    confidence: float = 0.0
-    suggestions: List[str] = []
-    should_pause: bool = False
-    metadata: Dict[str, Any] = {}
-    # Datos multimodales de salida
-    emotional_state: Optional[str] = None
-    attention_level: float = 1.0
-    engagement_score: float = 0.5
-    error_risk: float = 0.0
-    active_modalities: List[str] = []
+    confidence: float
+    suggestions: List[str]
+    should_pause: bool
+    metadata: Dict[str, Any]
 
+# ===== QUIZ COGNITIVO (Formato Gemini) =====
 
-class SessionStatsResponse(BaseModel):
+class QuizQuestionGemini(BaseModel):
+    """Pregunta individual en formato Gemini"""
+    id: int
+    question: str
+    options: List[str]  # Lista simple de opciones
+    answer: str  # La opción correcta textual
+    explanation: str
+
+class QuizResponseGemini(BaseModel):
+    """Respuesta completa del quiz en formato Gemini"""
+    quiz_title: str
+    difficulty: str  # Fácil/Medio/Difícil
+    questions: List[QuizQuestionGemini]
+
+class QuizRequest(BaseModel):
+    topic: str
+    num_questions: Optional[int] = 5
+    difficulty: Optional[str] = None  # Opcional: Fácil/Medio/Difícil
+
+class QuizHistoryEntry(BaseModel):
+    """Entrada individual del historial de quizzes"""
+    date: str  # YYYY-MM-DD
+    title: str
+    questions_count: int
+    user_score: Optional[str] = None  # "X/Y" formato
+    difficulty: str
+
+class QuizHistoryResponse(BaseModel):
+    """Respuesta con el historial completo de quizzes"""
+    history: List[QuizHistoryEntry]
+    total_quizzes: int
+
+class QuizSubmission(BaseModel):
+    """Envío de respuestas del quiz por parte del usuario"""
+    quiz_title: str
+    user_answers: Dict[int, str]  # {question_id: selected_answer}
+    
+# ===== SCHEMAS LEGACY (mantener compatibilidad) =====
+
+class QuizOption(BaseModel):
+    id: str
+    text: str
+
+class QuizQuestion(BaseModel):
+    id: int
+    question: str
+    options: List[QuizOption]
+    correct_option: str
+    explanation: str
+
+class QuizResponse(BaseModel):
     topic: str
     difficulty: str
-    interactions: int
-    cognitive_state: str
-    concepts_taught: int = 0
-    concepts_mastered: int = 0
-    quiz_results: int = 0
-    consecutive_errors: int = 0
-    consecutive_correct: int = 0
-    duration_minutes: float = 0.0
-    cognitive_profile: Dict = {}
+    cognitive_level: str
+    questions: List[QuizQuestion]
 
-    class Config:
-        extra = "ignore"
-
-
-# ===== COGNITIVE EVENTS =====
-
-class CognitiveEventCreate(BaseModel):
-    event_type: str
-    response_time_ms: Optional[float] = None
-    typing_speed_cpm: Optional[float] = None
-    error_occurred: bool = False
-    correction_made: bool = False
-    pause_duration_ms: Optional[float] = None
-    content_length: int = 0
-    metadata: Dict = {}
-
-
-class CognitiveStateResponse(BaseModel):
-    state: str
-    confidence: float
-    factors: Dict[str, float] = {}
-    recommendations: List[str] = []
-    should_adapt: bool = False
-    suggested_difficulty: Optional[str] = None
-    active_modalities: List[str] = []
-    emotional_state: Optional[str] = None
-    attention_level: float = 1.0
-    engagement_score: float = 0.5
-    error_risk: float = 0.0
-    predicted_next_error: Optional[str] = None
-
+class SessionStatsResponse(BaseModel):
+    session_id: int
+    topic: str
+    duration_minutes: float
+    total_messages: int
+    avg_response_time: float
+    mastery_level: float
+    concepts_learned: List[str]
+    cognitive_evolution: List[Dict[str, Any]]
 
 # ===== BOT EXPERTO =====
 

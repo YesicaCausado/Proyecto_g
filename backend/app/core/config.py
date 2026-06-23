@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    AUTH_SERVICE_URL: str = "http://localhost:8002"
+    AUTH_SERVICE_URL: str = "http://localhost:8000"
 
     OPENAI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     ALLOWED_ORIGINS: list = [
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://localhost:3000",
         "*",
     ]
