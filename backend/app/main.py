@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.db.database import engine, Base
-from app.api import auth, chat, custom_chat, expert_bot_router, expert_bot, classroom, user, stats
+from app.api import auth, chat, expert_bot, classroom, stats
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
@@ -116,11 +116,8 @@ app.add_middleware(
 # Rutas — prefijo /api/v1 tanto en local como en Vercel
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(chat.router,          prefix="/api/v1")
-app.include_router(custom_chat.router,    prefix="/api/v1")
-app.include_router(expert_bot_router.router,    prefix="/api/v1")
 app.include_router(expert_bot.router,    prefix="/api/v1/bots")
 app.include_router(classroom.router,     prefix="/api/v1/classrooms")
-app.include_router(user.router,          prefix="/api/v1/users")
 app.include_router(stats.router,         prefix="/api/v1/stats")
 
 

@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 from dataclasses import dataclass, field
 from typing import Optional
 
-from app.db.database import get_db, IS_DB_DISABLED
+from app.db.database import get_db
 from app.core.config import settings
 from app.models.user import User as UserModel
 from app.schemas.schemas import UserCreate, UserLogin, UserResponse, Token
@@ -21,25 +21,6 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # auto_error=False → si no hay token, devuelve None en vez de lanzar 401
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
-
-
-# ── Usuario de demostración (sin base de datos) ───────────────────────────────
-@dataclass
-class DemoUser:
-    """Sustituye al modelo ORM cuando IS_DB_DISABLED=True."""
-    id: int = 1
-    username: str = "demo"
-    email: str = "demo@neurolearn.ai"
-    full_name: str = "Usuario Demo"
-    role: str = "estudiante"
-    is_active: bool = True
-    is_expert: bool = False
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    cognitive_profile: Optional[dict] = None
-
-
-DEMO_USER = DemoUser()
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -63,15 +44,16 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ):
-    """Obtiene el usuario actual. En modo demo devuelve DEMO_USER sin consultar DB."""
-    if IS_DB_DISABLED:
-        return DEMO_USER
-
+    """Obtiene el usuario actual consultando la DB (Supabase/PostgreSQL)."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciales inválidas",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    if not token:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
@@ -88,16 +70,12 @@ async def get_current_user(
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Registrar un nuevo usuario (deshabilitado en modo demo)."""
-    if IS_DB_DISABLED:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="El registro está deshabilitado en modo demo.",
-        )
+    """Registrar un nuevo usuario en la base de datos."""
     try:
         if db.query(UserModel).filter(UserModel.username == user_data.username).first():
             raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
         if db.query(UserModel).filter(UserModel.email == user_data.email).first():
+            raise HTTPException(status_code=400, detail="El email ya está registrado")
             raise HTTPException(status_code=400, detail="El email ya está registrado")
 
         db_user = UserModel(
@@ -122,11 +100,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """Iniciar sesión. En modo demo acepta cualquier contraseña."""
-    if IS_DB_DISABLED:
-        access_token = create_access_token(data={"sub": DEMO_USER.username})
-        return Token(access_token=access_token)
-
+    """Iniciar sesión validando contra la base de datos (Postgres/Supabase)."""
     try:
         user = db.query(UserModel).filter(UserModel.username == user_data.username).first()
     except Exception as e:

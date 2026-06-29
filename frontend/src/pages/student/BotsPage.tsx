@@ -46,45 +46,42 @@ export default function BotsPage() {
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">📚 Habilidades Transversales</h1>
-        <p className="text-gray-500 mt-1">
+    <div className="p-6 md:p-8 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <div className="pb-5 mb-6 border-b border-[#E0E0E0]">
+        <h1 className="text-xl font-semibold text-[#2F3437]">Habilidades Transversales</h1>
+        <p className="text-[#707070] text-sm mt-1">
           5 competencias clave para el Saber 11. Selecciona una para empezar a practicar.
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {SKILLS.map((skill) => (
           <Link
             key={skill.key}
             to={`/chat?skill=${skill.key}`}
-            className="block bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md hover:border-primary-300 transition-all group"
+            className="flex items-start gap-4 bg-white border border-[#E0E0E0] rounded-md p-5 hover:border-[#9B9B9B] transition-colors group"
           >
-            <div className="flex items-start gap-4">
-              <div className={`w-14 h-14 bg-gradient-to-br ${skill.color} rounded-xl flex items-center justify-center text-2xl shadow-sm flex-shrink-0`}>
-                {skill.icon}
+            <div className="w-12 h-12 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center text-2xl flex-shrink-0">
+              {skill.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-medium text-[#2F3437] text-[15px] group-hover:text-[#2F3437] transition-colors">
+                {skill.name}
+              </h3>
+              <p className="text-sm text-[#707070] mt-0.5">{skill.desc}</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {skill.topics.map((topic) => (
+                  <span
+                    key={topic}
+                    className="text-xs bg-[#F7F6F3] text-[#707070] px-2.5 py-1 rounded-md border border-[#E0E0E0]"
+                  >
+                    {topic}
+                  </span>
+                ))}
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900 text-lg group-hover:text-primary-700 transition-colors">
-                  {skill.name}
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">{skill.desc}</p>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {skill.topics.map((topic) => (
-                    <span
-                      key={topic}
-                      className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
-                    >
-                      {topic}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="hidden sm:flex items-center text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-sm font-medium mr-1">Practicar</span>
-                →
-              </div>
+            </div>
+            <div className="hidden sm:flex items-center text-[#9B9B9B] opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+              Practicar →
             </div>
           </Link>
         ))}

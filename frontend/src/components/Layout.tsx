@@ -9,7 +9,9 @@ import {
   Users,
   Menu,
   X,
-  TrendingUp
+  TrendingUp,
+  BookMarked,
+  ChevronRight,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -28,155 +30,178 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = isTeacher
     ? [
-        { to: '/dashboard', icon: Home, label: 'Inicio' },
-        { to: '/classrooms', icon: Users, label: 'Mis Clases' },
+        { to: '/dashboard', icon: Home,    label: 'Inicio'    },
+        { to: '/classrooms', icon: Users,  label: 'Mis Clases'},
       ]
     : [
-        { to: '/dashboard', icon: Home, label: 'Inicio' },
-        { to: '/bots', icon: BookOpen, label: 'Habilidades' },
-        { to: '/chat', icon: MessageSquare, label: 'Aprender' },
-        { to: '/quizzes', icon: BookOpen, label: 'Desafíos' },
-        { to: '/my-classes', icon: Users, label: 'Mis Clases' },
+        { to: '/dashboard',   icon: Home,         label: 'Inicio'      },
+        { to: '/bots',        icon: BookOpen,      label: 'Habilidades' },
+        { to: '/chat',        icon: MessageSquare, label: 'Aprender'    },
+        { to: '/quizzes',     icon: BookOpen,      label: 'Desafíos'    },
+        { to: '/performance', icon: TrendingUp,    label: 'Desempeño'   },
+        { to: '/material',    icon: BookMarked,    label: 'Material'    },
+        { to: '/my-classes',  icon: Users,         label: 'Mis Clases'  },
       ];
 
   const isActive = (path: string) => location.pathname === path;
 
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] flex">
-      {/* Sidebar Desktop */}
-      <aside className="hidden md:flex md:flex-col md:w-[260px] bg-white border-r border-gray-100 z-10 transition-all flex-shrink-0">
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-6 py-8">
-          <div className="w-10 h-10 bg-primary-50 rounded-xl flex items-center justify-center text-primary-500">
-            <Brain className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="font-bold text-gray-900 text-lg font-heading tracking-tight leading-tight">
-              NeuroLearn <span className="text-primary-500">AI</span>
-            </h1>
-            <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Saber 11 Adaptativo</p>
-          </div>
-        </div>
+  const initials = (user?.full_name || user?.username || '?')
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-2 space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[14px] font-semibold transition-all duration-200 ${
-                isActive(item.to)
-                  ? 'bg-primary-500 text-white shadow-sm'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className={`w-5 h-5 ${isActive(item.to) ? 'opacity-100 text-white' : 'opacity-70 text-gray-400'}`} strokeWidth={isActive(item.to) ? 2.5 : 2} />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        
-        {/* Sección de progreso en sidebar */}
-        {!isTeacher && (
-           <div className="px-6 mb-6">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Mi Progreso</div>
-              
-              <div className="bg-gray-50 rounded-xl p-4 mb-3 border border-gray-100">
-                  <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-500 font-medium">Nivel actual</span>
-                      <TrendingUp className="w-3.5 h-3.5 text-primary-500" />
-                  </div>
-                  <div className="font-bold text-gray-900 text-sm">Intermedio</div>
-              </div>
+  // ─── Sidebar inner ─────────────────────────────────────────────────────────
+  const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
+    <div className="flex flex-col h-full" style={{ fontFamily: "'Inter', sans-serif" }}>
 
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                  <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-500 font-medium">Puntos acumulados</span>
-                      <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center">
-                          <span className="text-xs">🏆</span>
-                      </div>
-                  </div>
-                  <div className="font-bold text-gray-900 text-sm">2,450 pts</div>
-              </div>
-           </div>
-        )}
-
-        {/* User Info */}
-        <div className="p-4 mt-auto mb-4">
-          <div className="flex items-center justify-between gap-3 bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 overflow-hidden">
-                <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold text-sm flex-shrink-0">
-                {user?.full_name?.charAt(0) || user?.username?.charAt(0)?.toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">
-                    {user?.full_name || user?.username}
-                </p>
-                <p className="text-[11px] text-gray-500 font-medium capitalize truncate">{user?.role}</p>
-                </div>
-            </div>
-            
-            <button
-              onClick={handleLogout}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
-              title="Cerrar sesión"
-            >
-              <LogOut className="w-[18px] h-[18px]" />
-            </button>
+      {/* Logo */}
+      <div className="px-4 pt-5 pb-4 border-b border-[#E0E0E0]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 bg-[#2F3437] rounded-md flex items-center justify-center flex-shrink-0">
+            <Brain className="w-4 h-4 text-white" />
           </div>
-        </div>
-      </aside>
-
-      {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-100 z-40 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-        <div className="flex items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#e3f2fd] rounded-xl flex items-center justify-center">
-              <Brain className="w-5 h-5 text-[#2196f3]" />
-            </div>
-            <span className="font-bold text-gray-900 font-heading text-lg tracking-tight">NeuroLearn <span className="text-[#2196f3]">AI</span></span>
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold text-[#2F3437] leading-tight tracking-tight">
+              NeuroLearn
+            </p>
+            <p className="text-[10px] text-[#707070] font-medium tracking-wide">Saber 11 ICFES</p>
           </div>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 bg-gray-50 rounded-lg text-gray-600 hover:text-[#2196f3] transition-colors">
-            {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
         </div>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div className="md:hidden fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}>
-          <div className="absolute left-0 top-14 bottom-0 w-64 bg-white border-r shadow-lg p-4 space-y-1"
-            onClick={(e) => e.stopPropagation()}>
-            {navItems.map((item) => (
+      {/* Nav section */}
+      <div className="flex-1 overflow-y-auto py-3 px-2">
+        <p className="px-2 mb-1.5 text-[10px] font-semibold text-[#707070] uppercase tracking-widest">
+          Navegación
+        </p>
+        <nav className="space-y-0.5">
+          {navItems.map((item) => {
+            const active = isActive(item.to);
+            return (
               <Link
                 key={item.to}
                 to={item.to}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive(item.to)
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-50'
+                onClick={() => mobile && setSidebarOpen(false)}
+                className={`group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-colors duration-100 ${
+                  active
+                    ? 'bg-[#E8E6E1] text-[#2F3437]'
+                    : 'text-[#707070] hover:bg-[#EDEDEB] hover:text-[#2F3437]'
                 }`}
               >
-                <item.icon className="w-5 h-5" />
-                {item.label}
+                <item.icon
+                  className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                    active ? 'text-[#2F3437]' : 'text-[#9B9B9B] group-hover:text-[#2F3437]'
+                  }`}
+                  strokeWidth={active ? 2.5 : 2}
+                />
+                <span className="flex-1 truncate">{item.label}</span>
+                {active && (
+                  <ChevronRight className="w-3.5 h-3.5 text-[#9B9B9B] ml-auto flex-shrink-0" />
+                )}
               </Link>
-            ))}
-            <hr className="my-3" />
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-danger-500 hover:bg-red-50 w-full"
-            >
-              <LogOut className="w-5 h-5" />
-              Cerrar sesión
-            </button>
+            );
+          })}
+        </nav>
+
+        {/* Progreso — solo estudiante */}
+        {!isTeacher && (
+          <div className="mt-5">
+            <p className="px-2 mb-1.5 text-[10px] font-semibold text-[#707070] uppercase tracking-widest">
+              Mi progreso
+            </p>
+            <div className="px-2 space-y-1.5">
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-[12px] text-[#707070]">Nivel</span>
+                <span className="text-[12px] font-semibold text-[#2F3437]">Intermedio</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-t border-[#E0E0E0]">
+                <span className="text-[12px] text-[#707070]">Puntos</span>
+                <span className="text-[12px] font-semibold text-[#2F3437]">2 450 pts</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* User footer */}
+      <div className="border-t border-[#E0E0E0] p-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-[#E8E6E1] flex items-center justify-center text-[#2F3437] text-[11px] font-bold flex-shrink-0 select-none">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[12.5px] font-semibold text-[#2F3437] truncate leading-tight">
+              {user?.full_name || user?.username}
+            </p>
+            <p className="text-[10px] text-[#707070] capitalize truncate">{user?.role}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Cerrar sesión"
+            className="p-1.5 rounded-md text-[#9B9B9B] hover:text-[#2F3437] hover:bg-[#EDEDEB] transition-colors flex-shrink-0"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className="flex h-screen bg-white text-[#2F3437]"
+      style={{ fontFamily: "'Inter', sans-serif" }}
+    >
+      {/* ── Sidebar Desktop ── */}
+      <aside
+        className="hidden md:flex md:flex-col md:w-[240px] flex-shrink-0 border-r border-[#E0E0E0]"
+        style={{ background: '#F7F6F3' }}
+      >
+        <SidebarContent />
+      </aside>
+
+      {/* ── Mobile header ── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-[#E0E0E0] z-40 h-12 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-[#2F3437] rounded-md flex items-center justify-center">
+            <Brain className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span
+            className="text-[14px] font-semibold text-[#2F3437] tracking-tight"
+            style={{ fontFamily: "'Inter', sans-serif" }}
+          >
+            NeuroLearn
+          </span>
+        </div>
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-1.5 rounded-md text-[#707070] hover:bg-[#EDEDEB] transition-colors"
+        >
+          {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+      </div>
+
+      {/* ── Mobile sidebar overlay ── */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/20"
+          onClick={() => setSidebarOpen(false)}
+        >
+          <div
+            className="absolute left-0 top-12 bottom-0 w-[240px] border-r border-[#E0E0E0]"
+            style={{ background: '#F7F6F3' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SidebarContent mobile />
           </div>
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="flex-1 md:overflow-y-auto">
-        <div className="pt-14 md:pt-0 min-h-screen">
+      {/* ── Main content ── */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="pt-12 md:pt-0 min-h-full">
           {children}
         </div>
       </main>

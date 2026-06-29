@@ -1,8 +1,14 @@
 import os
-
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings
+
+# Busca el .env en el directorio backend/ independientemente de desde dónde
+# se ejecute uvicorn (raíz del proyecto o dentro de backend/)
+_THIS_FILE = Path(__file__).resolve()               # .../backend/app/core/config.py
+_BACKEND_DIR = _THIS_FILE.parent.parent.parent      # .../backend/
+_ENV_FILE = _BACKEND_DIR / ".env"
 
 class Settings(BaseSettings):
     APP_NAME: str = "NeuroLearn Bot Service"
@@ -41,7 +47,7 @@ class Settings(BaseSettings):
     ]
 
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_FILE)
         case_sensitive = True
         extra = "ignore"
 

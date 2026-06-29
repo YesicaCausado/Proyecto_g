@@ -9,6 +9,8 @@ import ChatPage from './pages/student/ChatPage';
 import BotsPage from './pages/student/BotsPage';
 import MyClassesPage from './pages/student/MyClassesPage';
 import QuizzesPage from './pages/student/QuizzesPage';
+import DesempenoPage from './pages/student/DesempenoPage';
+import MaterialPage from './pages/student/MaterialPage';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import CreateClassroomPage from './pages/teacher/CreateClassroomPage';
 import ClassroomDetailPage from './pages/teacher/ClassroomDetailPage';
@@ -44,6 +46,12 @@ function AppRoutes() {
       } />
       <Route path="/quizzes" element={
         <ProtectedRoute role="estudiante"><Layout><QuizzesPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/performance" element={
+        <ProtectedRoute role="estudiante"><Layout><DesempenoPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/material" element={
+        <ProtectedRoute role="estudiante"><Layout><MaterialPage /></Layout></ProtectedRoute>
       } />
 
       {/* Profesor */}

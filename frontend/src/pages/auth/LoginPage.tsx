@@ -50,21 +50,21 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-[#707070] mb-1">
                 Usuario
               </label>
               <input
                 type="text"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
+                className="w-full px-4 py-2.5 border border-[#E0E0E0] rounded-md focus:ring-1 focus:ring-[#2F3437] focus:border-[#2F3437] outline-none transition-colors text-sm text-[#2F3437]"
                 placeholder="Tu nombre de usuario"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-[#707070] mb-1">
                 Contraseña
               </label>
               <div className="relative">
@@ -72,14 +72,14 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors pr-10"
+                  className="w-full px-4 py-2.5 border border-[#E0E0E0] rounded-md focus:ring-1 focus:ring-[#2F3437] focus:border-[#2F3437] outline-none transition-colors pr-10 text-sm text-[#2F3437]"
                   placeholder="Tu contraseña"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9B9B9B] hover:text-[#707070]"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -89,7 +89,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-[#2F3437] text-white py-2.5 rounded-md text-sm font-medium hover:bg-[#454A4D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -102,7 +102,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-           <p className="text-center text-sm text-gray-400 mt-6">
+           <p className="text-center text-xs text-[#9B9B9B] mt-6">
             Tu cuenta es asignada por tu institución educativa.
           </p>
         </div>

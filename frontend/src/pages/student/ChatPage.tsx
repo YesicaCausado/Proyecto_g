@@ -58,6 +58,26 @@ const STATE_LABELS: Record<string, { label: string; color: string }> = {
   mastering:   { label: "Dominando",   color: "bg-emerald-100 text-emerald-700" },
 };
 
+// ─── Preguntas sugeridas para pantalla inicial ────────────────────────────────
+const SUGGESTED_QUESTIONS = [
+  { text: "Explícame ecuaciones cuadráticas",      icon: "📐", skill: "matematicas" },
+  { text: "¿Cómo analizar un texto crítico?",       icon: "📖", skill: "lectora"     },
+  { text: "Conceptos de química orgánica",          icon: "🔬", skill: "cientifico"  },
+  { text: "¿Qué es la democracia participativa?",   icon: "🏛️", skill: "ciudadanas"  },
+  { text: "How do I improve my English grammar?",   icon: "🌎", skill: "ingles"      },
+];
+
+// Detecta la materia más probable a partir del texto libre del usuario
+const detectSkillFromText = (text: string): string => {
+  const t = text.toLowerCase();
+  if (/matemátic|álgebra|geometr|ecuaci|función|calcul|número|trigono|estadíst|probabil|fraccion|exponente/.test(t)) return "matematicas";
+  if (/texto|leer|lectura|párrafo|crítica|literario|comprens|analiz|argum|discurso|narrat|ensayo/.test(t)) return "lectora";
+  if (/english|inglés|grammar|vocabulary|speaking|writing|pronunci|verb|tense|present|past/.test(t)) return "ingles";
+  if (/química|físic|biolog|ciencias|átomo|célula|ecosistem|energía|mol|organ|reacción|fuerza/.test(t)) return "cientifico";
+  if (/social|ciudadan|democraci|histori|colombia|polític|gobierno|derecho|económ/.test(t)) return "ciudadanas";
+  return "matematicas";
+};
+
 export default function ChatPage() {
   const [searchParams] = useSearchParams();
   const skillParam = searchParams.get("skill");
@@ -71,6 +91,7 @@ export default function ChatPage() {
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
   const [showDashboard, setShowDashboard] = useState(true);
   const [quizSuggested, setQuizSuggested] = useState(false); // Flag para mostrar botón "Quiz Sugerido"
+  const [freeInput, setFreeInput] = useState(""); // Input de la pantalla pre-sesión
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -115,18 +136,12 @@ export default function ChatPage() {
 
   /**
    * Construye el mensaje de error visible para el usuario.
-   * Centralizado para no duplicar el texto de diagnóstico en varios lugares.
+   * @deprecated — Los errores 5xx ahora caen silenciosamente al modo demo.
+   * Se conserva solo por si se necesita en el futuro.
    */
-  const buildBackendErrorMessage = (detail: string) => {
-    const isDev = import.meta.env.DEV;
-    let errorMessage = `⚠️ **No se pudo iniciar la sesión.**\n\n**Detalle:** ${detail}\n\n`;
-    errorMessage += isDev
-      ? `💡 **Diagnóstico Local:**\n- Verifica que tu \`GROQ_API_KEY\` en \`backend/.env\` es válida.\n- Verifica que el backend corre sin errores en el puerto 8000.`
-      : `💡 Si estás en Vercel, verifica que **GROQ_API_KEY** esté configurada en Settings → Environment Variables.`;
-    return errorMessage;
-  };
+  // const buildBackendErrorMessage = ...
 
-  const startSession = async (skillKey: string) => {
+  const startSession = async (skillKey: string, initialMessage?: string) => {
     const skill = SKILLS.find((s) => s.key === skillKey);
     if (!skill) return;
     setSending(true);
@@ -142,23 +157,23 @@ export default function ChatPage() {
       });
       data = res.data;
     } catch (err: any) {
-      if (err?.response) {
-        // El backend respondió con un código de error real (400/500/503...)
+      if (err?.response && err.response.status < 500) {
+        // Error de cliente (4xx) — sí mostrar al usuario
         const detail = err.response.data?.detail || `Error ${err.response.status}`;
-        console.error("Error starting session (HTTP):", detail);
+        console.error("Error starting session (HTTP 4xx):", detail);
         setSessionActive(true);
         setMessages([{
           id: Date.now().toString(),
           role: "bot",
-          content: buildBackendErrorMessage(detail),
+          content: `⚠️ No se pudo conectar con el tutor: ${detail}`,
           timestamp: new Date(),
         }]);
         setSending(false);
         inputRef.current?.focus();
         return;
       }
-      // Sin respuesta → backend inalcanzable → demo mock
-      console.warn("Backend offline, usando demo:", err?.message);
+      // 5xx o sin respuesta (IA no configurada, backend caído) → demo silencioso
+      console.warn("Backend/IA no disponible, usando demo:", err?.response?.status ?? err?.message);
       await new Promise((r) => setTimeout(r, 600));
       data = demoStartSession(skillKey);
     }
@@ -202,6 +217,11 @@ export default function ChatPage() {
       setSending(false);
       inputRef.current?.focus();
     }
+
+    // Si se pasó una pregunta inicial, enviarla automáticamente
+    if (initialMessage) {
+      await sendMessageWithText(initialMessage, skillKey);
+    }
   };
 
   const handleInputChange = (val: string) => {
@@ -216,7 +236,7 @@ export default function ChatPage() {
     await sendMessageWithText(input.trim());
   };
 
-  const sendMessageWithText = async (msgContent: string) => {
+  const sendMessageWithText = async (msgContent: string, skillKeyOverride?: string) => {
     if (!msgContent.trim() || sending) return;
 
     const behavioralMetrics = metrics.getMetrics(msgContent);
@@ -236,7 +256,7 @@ export default function ChatPage() {
 
     // ── Paso 1: llamada al backend ──
     try {
-      const skill = SKILLS.find((s) => s.key === selectedSkill);
+      const skill = SKILLS.find((s) => s.key === (skillKeyOverride ?? selectedSkill));
       const res = await api.post<ChatMessageResponse>("/chat/message", {
         message: msgContent,
         topic: skill?.topic ?? "Tema general",
@@ -275,15 +295,16 @@ export default function ChatPage() {
       });
       data = res.data;
     } catch (err: any) {
-      if (err?.response) {
+      if (err?.response && err.response.status < 500) {
+        // Error de cliente (4xx) — sí mostrar al usuario
         const detail = err.response.data?.detail || `Error ${err.response.status}`;
-        console.error("Error sending message (HTTP):", detail);
+        console.error("Error sending message (HTTP 4xx):", detail);
         setMessages((prev) => [
           ...prev,
           {
             id: (Date.now() + 1).toString(),
             role: "bot",
-            content: `⚠️ **Error del tutor:** ${detail}\n\nVerifica que la variable **GROQ_API_KEY** esté configurada en Vercel (Settings → Environment Variables).`,
+            content: `⚠️ Error al enviar el mensaje: ${detail}`,
             timestamp: new Date(),
           },
         ]);
@@ -291,8 +312,8 @@ export default function ChatPage() {
         inputRef.current?.focus();
         return;
       }
-      // Backend offline → demo
-      console.warn("Backend offline, usando demo:", err?.message);
+      // 5xx o sin respuesta (IA no configurada, backend caído) → demo silencioso
+      console.warn("Backend/IA no disponible, usando demo:", err?.response?.status ?? err?.message);
       await new Promise((r) => setTimeout(r, 800));
       data = demoSendMessage(msgContent);
     }
@@ -367,41 +388,129 @@ export default function ChatPage() {
   const stateKey = lastResponse?.cognitive_state || "";
   const stateInfo = STATE_LABELS[stateKey] || { label: stateKey, color: "bg-gray-100 text-gray-600" };
 
-  // ===== SKILL SELECTION =====
+  // ===== PANTALLA INICIAL (antes de iniciar sesión) =====
   if (!sessionActive) {
+    const handleSuggestedQuestion = (skill: string, text: string) => {
+      if (sending) return;
+      setSelectedSkill(skill);
+      startSession(skill, text);
+    };
+
+    const handleFreeSubmit = () => {
+      if (!freeInput.trim() || sending) return;
+      const skill = detectSkillFromText(freeInput);
+      setSelectedSkill(skill);
+      startSession(skill, freeInput.trim());
+      setFreeInput("");
+    };
+
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">🎓 Elige tu habilidad</h1>
-          <p className="text-gray-500 mt-1">Selecciona la competencia que quieres practicar</p>
-          <p className="text-xs text-gray-400 mt-2">
-            El sistema monitoreará tus 5 patrones neuroconductuales en tiempo real
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {SKILLS.map((skill) => (
-            <button
-              key={skill.key}
-              onClick={() => { setSelectedSkill(skill.key); startSession(skill.key); }}
-              disabled={sending}
-              className={`text-left bg-white border-2 rounded-xl p-5 transition-all hover:shadow-md ${
-                selectedSkill === skill.key ? "border-primary-500 shadow-md" : "border-gray-200 hover:border-primary-300"
-              } disabled:opacity-50`}
-            >
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${skill.color} flex items-center justify-center text-2xl mb-3 shadow-sm`}>
-                {skill.icon}
+      <div className="flex h-[calc(100vh-64px)] bg-gray-50 justify-center">
+        <div className="flex flex-col w-full max-w-2xl">
+          {/* ── Header ── */}
+          <div className="bg-white border-b border-gray-100 px-5 py-4 flex items-center gap-3">
+            <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl flex items-center justify-center text-xl shadow-md flex-shrink-0">
+              🤖
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-gray-900 text-base">Asistente IA</span>
+                <span className="flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-600 border border-violet-200 px-2 py-0.5 rounded-full">
+                  ✦ Con GPT-5
+                </span>
               </div>
-              <h3 className="font-semibold text-gray-900">{skill.name}</h3>
-              <p className="text-xs text-gray-400 mt-1">Saber 11 • IA Adaptativa</p>
-            </button>
-          ))}
-        </div>
-        {sending && (
-          <div className="flex items-center justify-center gap-2 mt-6 text-primary-600">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Iniciando sesión de aprendizaje...</span>
+              <p className="text-xs text-gray-400 mt-0.5">Tu tutor personal para el ICFES</p>
+            </div>
+            <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full shadow-sm flex-shrink-0" title="En línea" />
           </div>
-        )}
+
+          {/* ── Área de mensajes ── */}
+          <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6">
+            {/* Preguntas sugeridas */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Preguntas sugeridas:
+              </p>
+              <div className="space-y-2.5">
+                {SUGGESTED_QUESTIONS.map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSuggestedQuestion(q.skill, q.text)}
+                    disabled={sending}
+                    className="w-full flex items-center gap-3 bg-white rounded-2xl px-4 py-3.5 text-left text-sm text-gray-700 border border-gray-100 hover:border-indigo-200 hover:shadow-sm transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="w-9 h-9 bg-indigo-50 group-hover:bg-indigo-100 rounded-xl flex items-center justify-center text-lg flex-shrink-0 transition-colors">
+                      {q.icon}
+                    </span>
+                    <span className="font-medium group-hover:text-indigo-700 transition-colors">{q.text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Burbuja de bienvenida del bot */}
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center text-sm flex-shrink-0 shadow-sm mt-0.5">
+                🤖
+              </div>
+              <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 max-w-md">
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  ¡Hola! Soy tu asistente de IA para el ICFES. Puedo ayudarte con explicaciones paso a paso, resolver
+                  dudas sobre cualquier tema, y darte consejos de estudio. ¿En qué puedo ayudarte hoy?
+                </p>
+                <p className="text-[10px] text-gray-400 mt-2">
+                  {new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </div>
+            </div>
+
+            {/* Indicador de carga cuando se está iniciando sesión */}
+            {sending && (
+              <div className="flex items-start gap-3 animate-fadeIn">
+                <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center text-sm flex-shrink-0 shadow-sm mt-0.5">
+                  🤖
+                </div>
+                <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-1 py-1">
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Input ── */}
+          <div className="bg-white border-t border-gray-100 px-5 py-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={freeInput}
+                onChange={(e) => setFreeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleFreeSubmit();
+                  }
+                }}
+                placeholder="Escribe tu pregunta aquí..."
+                disabled={sending}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 text-sm disabled:opacity-50 bg-gray-50 transition-all"
+              />
+              <button
+                onClick={handleFreeSubmit}
+                disabled={!freeInput.trim() || sending}
+                className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2 text-center">
+              Presiona Enter para enviar, Shift + Enter para nueva línea
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -598,7 +707,7 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex animate-fadeIn ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] md:max-w-[70%] ${msg.role === "user" ? "chat-bubble-user" : ""}`}>
+              <div className={msg.role === "user" ? "max-w-[80%] md:max-w-[65%]" : "w-full"}>
                 {msg.role === "bot"
                   ? <BotMessageWithActions 
                       content={msg.content}
@@ -609,7 +718,9 @@ export default function ChatPage() {
                       onStopSpeak={() => voiceTutor.stopSpeaking()}
                       onReport={(id) => console.log(`Reporte de mensaje: ${id}`)}
                     />
-                  : <p className="text-sm whitespace-pre-wrap bg-blue-100 text-blue-900 rounded-lg p-3">{msg.content}</p>
+                  : <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                    </div>
                 }
                 {msg.suggestions && msg.suggestions.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -628,12 +739,22 @@ export default function ChatPage() {
             </div>
           ))}
           {sending && (
-            <div className="flex justify-start animate-fadeIn">
-              <div className="chat-bubble-bot">
-                <div className="flex items-center gap-1 py-1">
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
+            <div className="flex justify-start animate-fadeIn w-full">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-base flex-shrink-0 shadow-sm mt-0.5 select-none">
+                  🤖
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-semibold text-gray-600">Asistente IA</span>
+                  </div>
+                  <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3.5 shadow-sm border border-gray-100">
+                    <div className="flex items-center gap-1 py-0.5">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
