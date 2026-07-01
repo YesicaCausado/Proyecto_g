@@ -1,4 +1,4 @@
-/**
+﻿/**
  * QuizPanel — Quiz interactivo en tiempo real
  *
  * Detecta automáticamente preguntas de opción múltiple en las respuestas de la IA.
@@ -69,20 +69,20 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
   const [selected, setSelected] = useState<string | null>(null);
 
   const base = dark
-    ? 'border-2 border-violet-500 bg-gradient-to-br from-violet-900 via-violet-950 to-black rounded-xl p-3 shadow-2xl shadow-violet-500/20'
-    : 'border border-violet-200 bg-violet-50 rounded-2xl p-4';
+    ? 'border-2 border-[#6940A5] bg-gradient-to-br from-[#191919] via-[#191919] to-[#191919] rounded-md p-3 shadow-violet-500/20'
+    : 'border border-[#D9CCE9] bg-[#F7F3FB] rounded-md p-4';
 
   const btnBase = dark
     ? 'w-full text-left text-xs px-3 py-1.5 rounded-lg border transition-all flex items-center gap-2 font-medium'
-    : 'w-full text-left text-sm px-4 py-2.5 rounded-xl border transition-all flex items-center gap-3 font-medium';
+    : 'w-full text-left text-sm px-4 py-2.5 rounded-md border transition-all flex items-center gap-3 font-medium';
 
   const btnIdle = dark
-    ? 'border-gray-700 bg-gray-800/60 text-gray-300 hover:bg-violet-900/60 hover:border-violet-600 hover:text-white'
-    : 'border-gray-200 bg-white text-gray-700 hover:bg-violet-100 hover:border-violet-400';
+    ? 'border-[#37352F] bg-[#2F2D2B]/60 text-[#9B9A97] hover:bg-[#2F2D2B]/60 hover:border-[#6940A5] hover:text-white'
+    : 'border-[#E9E9E7] bg-white text-[#37352F] hover:bg-[#F4EFFB] hover:border-[#6940A5]';
 
   const btnSelected = dark
-    ? 'border-violet-500 bg-violet-700/50 text-white'
-    : 'border-violet-500 bg-violet-100 text-violet-800';
+    ? 'border-[#6940A5] bg-[#5A358F]/50 text-white'
+    : 'border-[#6940A5] bg-[#F4EFFB] text-[#6940A5]';
 
   const handleSelect = (opt: QuizOption) => {
     if (selected) return; // ya respondió
@@ -94,12 +94,12 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
     <div className={base}>
       {/* Encabezado */}
       <div className="flex items-center gap-2 mb-2">
-        <HelpCircle className={`w-3.5 h-3.5 flex-shrink-0 ${dark ? 'text-violet-300' : 'text-violet-600'}`} />
-        <span className={`text-xs font-bold uppercase tracking-wide ${dark ? 'text-violet-300' : 'text-violet-600'}`}>
+        <HelpCircle className={`w-3.5 h-3.5 flex-shrink-0 ${dark ? 'text-[#6940A5]' : 'text-[#6940A5]'}`} />
+        <span className={`text-xs font-bold uppercase tracking-wide ${dark ? 'text-[#6940A5]' : 'text-[#6940A5]'}`}>
           Pregunta
         </span>
         {selected && (
-          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full text-xs font-medium ${dark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700'}`}>
+          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full text-xs font-medium ${dark ? 'bg-[#0F7B6C]/20 text-[#0F7B6C]' : 'bg-[#EEF7F4] text-[#0F7B6C]'}`}>
             ✓ Respondido
           </span>
         )}
@@ -107,7 +107,7 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
 
       {/* Pregunta */}
       {quiz.question && (
-        <p className={`text-xs mb-2 leading-snug font-medium ${dark ? 'text-violet-200' : 'text-gray-800'}`}>
+        <p className={`text-xs mb-2 leading-snug font-medium ${dark ? 'text-[#D9CCE9]' : 'text-[#191919]'}`}>
           {quiz.question}
         </p>
       )}
@@ -126,14 +126,14 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
               {/* Badge de letra */}
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                 isSelected
-                  ? dark ? 'bg-violet-400 text-white' : 'bg-violet-600 text-white'
-                  : dark ? 'bg-gray-700/50 text-gray-400' : 'bg-gray-100 text-gray-500'
+                  ? dark ? 'bg-[#6940A5] text-white' : 'bg-[#6940A5] text-white'
+                  : dark ? 'bg-[#37352F]/50 text-[#9B9A97]' : 'bg-[#F7F6F3] text-[#787774]'
               }`}>
                 {opt.key}
               </span>
               <span className="flex-1 text-xs">{opt.text}</span>
               {isSelected && (
-                <CheckCircle className={`w-3.5 h-3.5 flex-shrink-0 ${dark ? 'text-green-400' : 'text-green-500'}`} />
+                <CheckCircle className={`w-3.5 h-3.5 flex-shrink-0 ${dark ? 'text-[#0F7B6C]' : 'text-[#0F7B6C]'}`} />
               )}
             </button>
           );
@@ -141,7 +141,7 @@ export default function QuizPanel({ quiz, onAnswer, dark = false }: QuizPanelPro
       </div>
 
       {selected && (
-        <p className={`mt-2 text-xs text-center ${dark ? 'text-gray-500' : 'text-gray-400'}`}>
+        <p className={`mt-2 text-xs text-center ${dark ? 'text-[#787774]' : 'text-[#9B9A97]'}`}>
           El tutor evaluará tu respuesta...
         </p>
       )}

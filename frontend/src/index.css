@@ -1,82 +1,100 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 @plugin "daisyui";
 
+/* ── Notion Design System — Paleta completa ─────────────────────────────────── */
 @theme {
-  --color-primary-50: #eef2ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #2563EB; /* primary.600 in original tailwind, now our 500 */
-  --color-primary-600: #1d4ed8;
-  --color-primary-700: #1e3a8a; /* Dark Blue */
-  --color-primary-800: #3730a3;
-  --color-primary-900: #312e81;
+  /* Azul Notion */
+  --color-primary-50:  #EAF4FB;
+  --color-primary-100: #C8E5F5;
+  --color-primary-200: #99CCEA;
+  --color-primary-300: #5AAFD8;
+  --color-primary-400: #2E96C7;
+  --color-primary-500: #0B6E99;   /* Notion Blue */
+  --color-primary-600: #095E85;
+  --color-primary-700: #074D6E;
+  --color-primary-800: #053C56;
+  --color-primary-900: #032B3F;
 
-  --color-secondary-400: #a7f3d0;
-  --color-secondary-500: #4CAF50; /* Green */
-  --color-secondary-600: #059669;
+  /* Verde Notion */
+  --color-secondary-400: #5DC8B4;
+  --color-secondary-500: #0F7B6C;  /* Notion Green */
+  --color-secondary-600: #0A6459;
 
-  --color-accent-400: #fde047;
-  --color-accent-500: #FF9800; /* Orange */
-  --color-accent-600: #d97706;
-  
-  --color-success-500: #4CAF50;
-  --color-warning-500: #f59e0b;
-  --color-danger-500: #ef4444;
+  /* Naranja Notion */
+  --color-accent-400:  #F2C84B;
+  --color-accent-500:  #D9730D;    /* Notion Orange */
+  --color-accent-600:  #B8600B;
 
-  --color-purple-500: #7C3AED;
+  /* Semánticos */
+  --color-success-500: #0F7B6C;
+  --color-warning-500: #DFAB01;
+  --color-danger-500:  #E03E3E;
+
+  /* Morado Notion */
+  --color-purple-500:  #6940A5;
 }
 
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
 body {
-  @apply bg-white text-[#2F3437] antialiased;
+  background: #FFFFFF;
+  color: #37352F;
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 15px;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
-  font-family: 'Inter', sans-serif;
-  font-weight: 600;
-  color: #2F3437;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: #191919;
 }
 
-/* Scrollbar Notion-style */
+/* ── Scrollbar Notion ───────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D5D5D5; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #B0B0B0; }
+::-webkit-scrollbar-thumb { background: #E9E9E7; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #9B9A97; }
 
-/* card-shadow → borde fino Notion en lugar de sombra */
-.card-shadow {
-  border: 1px solid #E0E0E0;
-  box-shadow: none;
-}
-.card-hover:hover {
-  border-color: #C0C0C0;
-  box-shadow: none;
-  transform: none;
-}
+/* ── Card helpers ───────────────────────────────────────────────────────────── */
+.card-shadow { border: 1px solid #E9E9E7; box-shadow: none; }
+.card-hover:hover { border-color: #9B9A97; box-shadow: none; transform: none; }
 
-/* Burbujas del chat */
+/* ── Chat bubbles ───────────────────────────────────────────────────────────── */
 .chat-bubble-bot {
-  @apply bg-white border border-[#E0E0E0] rounded-lg rounded-tl-sm px-4 py-3 text-sm leading-relaxed;
+  background: #FFFFFF;
+  border: 1px solid #E9E9E7;
+  border-radius: 8px;
+  border-top-left-radius: 2px;
+  padding: 12px 16px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
 }
 .chat-bubble-user {
-  @apply bg-[#2F3437] text-white rounded-lg rounded-tr-sm px-4 py-3 text-sm;
+  background: #37352F;
+  color: #FFFFFF;
+  border-radius: 8px;
+  border-top-right-radius: 2px;
+  padding: 10px 16px;
+  font-size: 0.9375rem;
 }
 
+/* ── Animations (200ms estilo Notion) ───────────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
 }
-.animate-fadeIn { animation: fadeIn 0.4s ease-out; }
+.animate-fadeIn { animation: fadeIn 200ms ease-out; }
 
 @keyframes pulse-dot {
   0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+  40%           { transform: scale(1); }
 }
 .typing-dot {
-  @apply inline-block w-2.5 h-2.5 bg-primary-300 rounded-full mx-[3px];
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: #9B9A97;
+  border-radius: 50%;
+  margin: 0 2px;
   animation: pulse-dot 1.4s infinite ease-in-out both;
 }
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }

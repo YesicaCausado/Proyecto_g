@@ -61,18 +61,18 @@ interface HistoryEntry {
 }
 
 const SUBJECTS: Subject[] = [
-  { id: 'matematicas', label: 'Matemáticas', desc: 'Álgebra, geometría y más', icon: Calculator, color: 'from-blue-500 to-blue-600', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', btnColor: 'bg-blue-600 hover:bg-blue-700' },
-  { id: 'lectura', label: 'Lectura Crítica', desc: 'Comprensión y análisis', icon: BookOpen, color: 'from-purple-500 to-purple-600', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', btnColor: 'bg-purple-600 hover:bg-purple-700' },
-  { id: 'ciencias', label: 'Ciencias', desc: 'Física, química y biología', icon: FlaskConical, color: 'from-green-500 to-green-600', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', btnColor: 'bg-green-600 hover:bg-green-700' },
-  { id: 'sociales', label: 'Sociales', desc: 'Historia y geografía', icon: Globe, color: 'from-orange-500 to-orange-600', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', btnColor: 'bg-orange-600 hover:bg-orange-700' },
-  { id: 'ingles', label: 'Inglés', desc: 'Grammar, vocabulary & more', icon: Languages, color: 'from-pink-500 to-pink-600', bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', btnColor: 'bg-pink-600 hover:bg-pink-700' },
+  { id: 'matematicas', label: 'Matemáticas', desc: 'Álgebra, geometría y más', icon: Calculator, color: 'from-[#0B6E99] to-[#0B6E99]', bg: 'bg-[#E5F3FF]', text: 'text-[#0B6E99]', border: 'border-[#BFDFF0]', btnColor: 'bg-[#0B6E99] hover:bg-[#095E85]' },
+  { id: 'lectura', label: 'Lectura Crítica', desc: 'Comprensión y análisis', icon: BookOpen, color: 'from-[#6940A5] to-[#6940A5]', bg: 'bg-[#F7F3FB]', text: 'text-[#6940A5]', border: 'border-[#D9CCE9]', btnColor: 'bg-[#6940A5] hover:bg-[#5A358F]' },
+  { id: 'ciencias', label: 'Ciencias', desc: 'Física, química y biología', icon: FlaskConical, color: 'from-[#0F7B6C] to-[#0F7B6C]', bg: 'bg-[#EEF7F4]', text: 'text-[#0F7B6C]', border: 'border-[#B7DDD6]', btnColor: 'bg-[#0F7B6C] hover:bg-[#0A6459]' },
+  { id: 'sociales', label: 'Sociales', desc: 'Historia y geografía', icon: Globe, color: 'from-[#D9730D] to-[#D9730D]', bg: 'bg-[#FDF4EC]', text: 'text-[#D9730D]', border: 'border-[#F2D2B7]', btnColor: 'bg-[#D9730D] hover:bg-[#B8600B]' },
+  { id: 'ingles', label: 'Inglés', desc: 'Grammar, vocabulary & more', icon: Languages, color: 'from-[#AD1A72] to-[#AD1A72]', bg: 'bg-[#FCF0F7]', text: 'text-[#AD1A72]', border: 'border-[#EDB8D4]', btnColor: 'bg-[#AD1A72] hover:bg-[#8F1562]' },
 ];
 
 const DIFF_LABELS: Record<Difficulty, string> = { facil: 'Fácil', medio: 'Medio', dificil: 'Difícil' };
 const DIFF_COLORS: Record<Difficulty, string> = {
-  facil: 'bg-green-100 text-green-800 border-green-300',
-  medio: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  dificil: 'bg-red-100 text-red-800 border-red-300',
+  facil: 'bg-[#EEF7F4] text-[#37352F] border-[#B7DDD6]',
+  medio: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',
+  dificil: 'bg-[#FDEEEE] text-[#37352F] border-[#F4BDBD]',
 };
 
 function formatTime(seconds: number): string {
@@ -216,10 +216,10 @@ export default function QuizzesPage() {
 
   const getResultIcon = (q: QuizQuestion) => {
     const answer = selectedAnswers[q.id];
-    if (!answer) return <AlertCircle className="w-5 h-5 text-gray-400" />;
+    if (!answer) return <AlertCircle className="w-5 h-5 text-[#9B9A97]" />;
     return answer === q.correct_answer
-      ? <CheckCircle className="w-5 h-5 text-green-500" />
-      : <XCircle className="w-5 h-5 text-red-500" />;
+      ? <CheckCircle className="w-5 h-5 text-[#0F7B6C]" />
+      : <XCircle className="w-5 h-5 text-[#E03E3E]" />;
   };
 
   const answeredCount = Object.keys(selectedAnswers).length;
@@ -230,15 +230,15 @@ export default function QuizzesPage() {
   if (screen === 'generating') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
-        <div className="w-16 h-16 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center">
-          <Loader2 className="w-7 h-7 text-[#9B9B9B] animate-spin" />
+        <div className="w-16 h-16 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center">
+          <Loader2 className="w-7 h-7 text-[#9B9A97] animate-spin" />
         </div>
         <div className="text-center">
-          <h2 className="text-base font-semibold text-[#2F3437] mb-1">Generando tu quiz…</h2>
-          <p className="text-[#707070] text-sm">
-            La IA está preparando 10 preguntas de <span className="font-medium text-[#2F3437]">{selectedSubject?.label}</span>
+          <h2 className="text-base font-semibold text-[#37352F] mb-1">Generando tu quiz…</h2>
+          <p className="text-[#787774] text-sm">
+            La IA está preparando 10 preguntas de <span className="font-medium text-[#37352F]">{selectedSubject?.label}</span>
           </p>
-          <p className="text-[#9B9B9B] text-xs mt-1">Nivel: {DIFF_LABELS[difficulty]}</p>
+          <p className="text-[#9B9A97] text-xs mt-1">Nivel: {DIFF_LABELS[difficulty]}</p>
         </div>
       </div>
     );
@@ -248,14 +248,14 @@ export default function QuizzesPage() {
   if (screen === 'select') {
     return (
       <div className="p-6 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
-        <div className="pb-5 mb-6 border-b border-[#E0E0E0] flex items-center justify-between">
+        <div className="pb-5 mb-6 border-b border-[#E9E9E7] flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-[#2F3437]">Desafíos</h1>
-            <p className="text-[#707070] text-sm mt-1">Elige una materia, selecciona el nivel y pon a prueba tu conocimiento</p>
+            <h1 className="text-xl font-semibold text-[#37352F]">Desafíos</h1>
+            <p className="text-[#787774] text-sm mt-1">Elige una materia, selecciona el nivel y pon a prueba tu conocimiento</p>
           </div>
           <button
             onClick={() => { setScreen('history'); loadHistory(); }}
-            className="flex items-center gap-2 px-4 py-2 border border-[#E0E0E0] bg-white text-[#707070] hover:bg-[#F7F6F3] hover:text-[#2F3437] rounded-md transition-colors text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 border border-[#E9E9E7] bg-white text-[#787774] hover:bg-[#F7F6F3] hover:text-[#37352F] rounded-md transition-colors text-sm font-medium"
           >
             <Trophy className="w-4 h-4" />
             Historial
@@ -263,16 +263,16 @@ export default function QuizzesPage() {
         </div>
 
         {/* Difficulty selector */}
-        <div className="flex items-center gap-3 mb-6 p-4 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md">
-          <span className="text-sm font-medium text-[#2F3437]">Nivel de dificultad:</span>
+        <div className="flex items-center gap-3 mb-6 p-4 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md">
+          <span className="text-sm font-medium text-[#37352F]">Nivel de dificultad:</span>
           {(['facil', 'medio', 'dificil'] as Difficulty[]).map(d => (
             <button
               key={d}
               onClick={() => setDifficulty(d)}
               className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-all ${
                 difficulty === d
-                  ? 'bg-[#2F3437] text-white border-[#2F3437]'
-                  : 'bg-white text-[#707070] border-[#E0E0E0] hover:border-[#9B9B9B]'
+                  ? 'bg-[#37352F] text-white border-[#37352F]'
+                  : 'bg-white text-[#787774] border-[#E9E9E7] hover:border-[#9B9A97]'
               }`}
             >
               {DIFF_LABELS[d]}
@@ -285,25 +285,25 @@ export default function QuizzesPage() {
           {SUBJECTS.map(s => {
             const Icon = s.icon;
             return (
-              <div key={s.id} className="bg-white border border-[#E0E0E0] rounded-md hover:border-[#9B9B9B] transition-colors overflow-hidden">
+              <div key={s.id} className="bg-white border border-[#E9E9E7] rounded-md hover:border-[#9B9A97] transition-colors overflow-hidden">
                 <div className="p-5">
                   <div className="flex items-start gap-3 mb-3">
-                    <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center flex-shrink-0">
-                      <Icon className="w-5 h-5 text-[#707070]" />
+                    <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-5 h-5 text-[#787774]" />
                     </div>
                     <div>
-                      <h3 className="font-medium text-[#2F3437] text-sm">{s.label}</h3>
-                      <p className="text-xs text-[#9B9B9B] mt-0.5">{s.desc}</p>
+                      <h3 className="font-medium text-[#37352F] text-sm">{s.label}</h3>
+                      <p className="text-xs text-[#9B9A97] mt-0.5">{s.desc}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between mb-4">
                     <span className={`text-xs font-medium px-2 py-1 rounded-md border ${DIFF_COLORS[difficulty]}`}>{DIFF_LABELS[difficulty]}</span>
-                    <span className="text-xs text-[#9B9B9B]">10 preguntas</span>
+                    <span className="text-xs text-[#9B9A97]">10 preguntas</span>
                   </div>
                   <button
                     onClick={() => handleStartQuiz(s)}
                     disabled={isLoading}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-md text-white text-sm font-medium bg-[#2F3437] hover:bg-[#454A4D] transition-colors disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-md text-white text-sm font-medium bg-[#37352F] hover:bg-[#2F2D2B] transition-colors disabled:opacity-50"
                   >
                     {isLoading && selectedSubject?.id === s.id
                       ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -325,11 +325,11 @@ export default function QuizzesPage() {
       <div className="p-6 max-w-3xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => setScreen('select')} className="flex items-center gap-2 text-[#707070] hover:text-[#2F3437] transition-colors text-sm">
+          <button onClick={() => setScreen('select')} className="flex items-center gap-2 text-[#787774] hover:text-[#37352F] transition-colors text-sm">
             <ArrowLeft className="w-4 h-4" /> Salir
           </button>
-          <h2 className="text-sm font-medium text-[#2F3437] truncate max-w-xs">{quiz.quiz_title}</h2>
-          <div className="flex items-center gap-4 text-sm text-[#707070]">
+          <h2 className="text-sm font-medium text-[#37352F] truncate max-w-xs">{quiz.quiz_title}</h2>
+          <div className="flex items-center gap-4 text-sm text-[#787774]">
             <span className="flex items-center gap-1">
               <Target className="w-4 h-4" />
               {answeredCount}/{totalQuestions}
@@ -342,9 +342,9 @@ export default function QuizzesPage() {
         </div>
 
         {/* Progress bar */}
-        <div className="w-full bg-[#E0E0E0] rounded-full h-1.5 mb-8">
+        <div className="w-full bg-[#E9E9E7] rounded-full h-1.5 mb-8">
           <div
-            className="bg-[#2F3437] h-1.5 rounded-full transition-all"
+            className="bg-[#37352F] h-1.5 rounded-full transition-all"
             style={{ width: `${totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0}%` }}
           />
         </div>
@@ -356,23 +356,23 @@ export default function QuizzesPage() {
             const isCorrect = isSubmitted && selected === q.correct_answer;
             const isWrong = isSubmitted && selected && selected !== q.correct_answer;
             return (
-              <div key={q.id} className="bg-white border border-[#E0E0E0] rounded-md p-5">
+              <div key={q.id} className="bg-white border border-[#E9E9E7] rounded-md p-5">
                 <div className="flex items-start gap-3 mb-4">
-                  <span className="flex-shrink-0 w-6 h-6 bg-[#F7F6F3] border border-[#E0E0E0] text-[#707070] rounded-md flex items-center justify-center text-xs font-semibold">
+                  <span className="flex-shrink-0 w-6 h-6 bg-[#F7F6F3] border border-[#E9E9E7] text-[#787774] rounded-md flex items-center justify-center text-xs font-semibold">
                     {idx + 1}
                   </span>
-                  <p className="text-[#2F3437] text-sm font-medium leading-snug">{q.question}</p>
+                  <p className="text-[#37352F] text-sm font-medium leading-snug">{q.question}</p>
                   {isSubmitted && <span className="ml-auto flex-shrink-0">{getResultIcon(q)}</span>}
                 </div>
                 <div className="space-y-2">
                   {q.options.map(opt => {
                     const isSelected = selected === opt.letter;
-                    let btnClass = 'border border-[#E0E0E0] bg-[#F7F6F3] text-[#707070] hover:border-[#9B9B9B]';
+                    let btnClass = 'border border-[#E9E9E7] bg-[#F7F6F3] text-[#787774] hover:border-[#9B9A97]';
                     if (isSubmitted) {
-                      if (opt.letter === q.correct_answer) btnClass = 'border-2 border-green-500 bg-green-50 text-green-800 font-medium';
-                      else if (isSelected && isWrong) btnClass = 'border-2 border-red-400 bg-red-50 text-red-800';
+                      if (opt.letter === q.correct_answer) btnClass = 'border-2 border-[#0F7B6C] bg-[#EEF7F4] text-[#37352F] font-medium';
+                      else if (isSelected && isWrong) btnClass = 'border-2 border-[#E03E3E] bg-[#FDEEEE] text-[#37352F]';
                     } else if (isSelected) {
-                      btnClass = 'border-2 border-[#2F3437] bg-[#F7F6F3] text-[#2F3437] font-medium';
+                      btnClass = 'border-2 border-[#37352F] bg-[#F7F6F3] text-[#37352F] font-medium';
                     }
                     return (
                       <button
@@ -388,7 +388,7 @@ export default function QuizzesPage() {
                   })}
                 </div>
                 {isSubmitted && q.explanation && (
-                  <div className={`mt-3 p-3 rounded-md text-sm border ${isCorrect ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
+                  <div className={`mt-3 p-3 rounded-md text-sm border ${isCorrect ? 'bg-[#EEF7F4] text-[#37352F] border-[#B7DDD6]' : 'bg-[#FDEEEE] text-[#37352F] border-[#F4BDBD]'}`}>
                     <span className="font-semibold">Explicación: </span>{q.explanation}
                   </div>
                 )}
@@ -400,11 +400,11 @@ export default function QuizzesPage() {
         {/* Submit button */}
         {!isSubmitted && (
           <div className="mt-8 flex flex-col items-center gap-2">
-            <p className="text-sm text-[#9B9B9B]">{totalQuestions - answeredCount} pregunta(s) sin responder</p>
+            <p className="text-sm text-[#9B9A97]">{totalQuestions - answeredCount} pregunta(s) sin responder</p>
             <button
               onClick={handleSubmit}
               disabled={answeredCount < totalQuestions}
-              className="px-8 py-2.5 bg-[#2F3437] text-white rounded-md font-medium hover:bg-[#454A4D] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-8 py-2.5 bg-[#37352F] text-white rounded-md font-medium hover:bg-[#2F2D2B] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Enviar Respuestas
             </button>
@@ -416,7 +416,7 @@ export default function QuizzesPage() {
             <button
               onClick={() => { loadHistory(); setScreen('results'); }}
               disabled={isAnalyzing}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#2F3437] text-white rounded-md font-medium hover:bg-[#454A4D] transition-colors disabled:opacity-70"
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#37352F] text-white rounded-md font-medium hover:bg-[#2F2D2B] transition-colors disabled:opacity-70"
             >
               {isAnalyzing
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Analizando...</>
@@ -440,55 +440,55 @@ export default function QuizzesPage() {
     return (
       <div className="p-6 max-w-3xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => setScreen('select')} className="flex items-center gap-2 text-[#707070] hover:text-[#2F3437] transition-colors text-sm">
+          <button onClick={() => setScreen('select')} className="flex items-center gap-2 text-[#787774] hover:text-[#37352F] transition-colors text-sm">
             <ArrowLeft className="w-4 h-4" /> Volver
           </button>
-          <h2 className="text-sm font-medium text-[#2F3437]">Resultados</h2>
+          <h2 className="text-sm font-medium text-[#37352F]">Resultados</h2>
           <div />
         </div>
 
         {/* Score card */}
-        <div className={`border rounded-md p-8 text-center mb-5 ${passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <Trophy className={`w-10 h-10 mx-auto mb-2 ${passed ? 'text-green-600' : 'text-red-500'}`} />
-          <div className={`text-5xl font-bold mb-1 ${passed ? 'text-green-700' : 'text-red-600'}`}>{percentage}%</div>
-          <p className={`text-sm ${passed ? 'text-green-700' : 'text-red-600'}`}>{passed ? '¡Excelente trabajo!' : 'Sigue practicando'}</p>
+        <div className={`border rounded-md p-8 text-center mb-5 ${passed ? 'bg-[#EEF7F4] border-[#B7DDD6]' : 'bg-[#FDEEEE] border-[#F4BDBD]'}`}>
+          <Trophy className={`w-10 h-10 mx-auto mb-2 ${passed ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`} />
+          <div className={`text-5xl font-bold mb-1 ${passed ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>{percentage}%</div>
+          <p className={`text-sm ${passed ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>{passed ? '¡Excelente trabajo!' : 'Sigue practicando'}</p>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-5">
           {[
-            { icon: CheckCircle, label: 'Correctas',   value: currentScore,        color: 'text-green-600' },
-            { icon: XCircle,     label: 'Incorrectas', value: totalQ - currentScore, color: 'text-red-600' },
-            { icon: Clock,       label: 'Tiempo',      value: formatTime(duration), color: 'text-[#707070]' },
+            { icon: CheckCircle, label: 'Correctas',   value: currentScore,        color: 'text-[#0F7B6C]' },
+            { icon: XCircle,     label: 'Incorrectas', value: totalQ - currentScore, color: 'text-[#E03E3E]' },
+            { icon: Clock,       label: 'Tiempo',      value: formatTime(duration), color: 'text-[#787774]' },
           ].map(({ icon: Icon, label, value, color }) => (
-            <div key={label} className="bg-white border border-[#E0E0E0] rounded-md p-4 text-center">
+            <div key={label} className="bg-white border border-[#E9E9E7] rounded-md p-4 text-center">
               <Icon className={`w-5 h-5 mx-auto mb-1 ${color}`} />
               <div className={`text-xl font-semibold ${color}`}>{value}</div>
-              <div className="text-xs text-[#9B9B9B]">{label}</div>
+              <div className="text-xs text-[#9B9A97]">{label}</div>
             </div>
           ))}
         </div>
 
         {/* Analysis */}
         {analysis && (
-          <div className="bg-white border border-[#E0E0E0] rounded-md p-5 mb-5 space-y-3">
+          <div className="bg-white border border-[#E9E9E7] rounded-md p-5 mb-5 space-y-3">
             {analysis.adaptation_message && (
-              <p className="text-sm text-[#2F3437] bg-[#F7F6F3] border border-[#E0E0E0] rounded-md px-3 py-2">{analysis.adaptation_message}</p>
+              <p className="text-sm text-[#37352F] bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-3 py-2">{analysis.adaptation_message}</p>
             )}
             {analysis.weak_concepts?.length > 0 && (
               <div>
-                <p className="text-sm font-medium text-[#2F3437] mb-2">Conceptos a reforzar:</p>
+                <p className="text-sm font-medium text-[#37352F] mb-2">Conceptos a reforzar:</p>
                 <div className="flex flex-wrap gap-2">
                   {analysis.weak_concepts.map((c, i) => (
-                    <span key={i} className="px-2 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded-md text-xs">{c}</span>
+                    <span key={i} className="px-2 py-1 bg-[#FCF6E5] border border-[#EDD88A] text-[#DFAB01] rounded-md text-xs">{c}</span>
                   ))}
                 </div>
               </div>
             )}
             {analysis.recommended_difficulty && (
-              <p className="text-sm text-[#707070]">
+              <p className="text-sm text-[#787774]">
                 Próximo nivel recomendado:{' '}
-                <span className={`font-medium px-2 py-0.5 rounded-md border text-xs ${DIFF_COLORS[analysis.recommended_difficulty as Difficulty] ?? 'bg-[#F7F6F3] text-[#707070] border-[#E0E0E0]'}`}>
+                <span className={`font-medium px-2 py-0.5 rounded-md border text-xs ${DIFF_COLORS[analysis.recommended_difficulty as Difficulty] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
                   {DIFF_LABELS[analysis.recommended_difficulty as Difficulty] ?? analysis.recommended_difficulty}
                 </span>
               </p>
@@ -498,13 +498,13 @@ export default function QuizzesPage() {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-3 justify-center mb-8">
-          <button onClick={handleRetryQuiz} className="flex items-center gap-2 px-5 py-2.5 bg-[#2F3437] text-white rounded-md text-sm font-medium hover:bg-[#454A4D] transition-colors">
+          <button onClick={handleRetryQuiz} className="flex items-center gap-2 px-5 py-2.5 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors">
             <RotateCcw className="w-4 h-4" /> Repetir Quiz
           </button>
-          <button onClick={() => setScreen('select')} className="flex items-center gap-2 px-5 py-2.5 border border-[#E0E0E0] text-[#707070] rounded-md text-sm font-medium hover:bg-[#F7F6F3] transition-colors">
+          <button onClick={() => setScreen('select')} className="flex items-center gap-2 px-5 py-2.5 border border-[#E9E9E7] text-[#787774] rounded-md text-sm font-medium hover:bg-[#F7F6F3] transition-colors">
             <ArrowLeft className="w-4 h-4" /> Cambiar Materia
           </button>
-          <button onClick={() => { setScreen('history'); loadHistory(); }} className="flex items-center gap-2 px-5 py-2.5 border border-[#E0E0E0] text-[#707070] rounded-md text-sm font-medium hover:bg-[#F7F6F3] transition-colors">
+          <button onClick={() => { setScreen('history'); loadHistory(); }} className="flex items-center gap-2 px-5 py-2.5 border border-[#E9E9E7] text-[#787774] rounded-md text-sm font-medium hover:bg-[#F7F6F3] transition-colors">
             <Trophy className="w-4 h-4" /> Ver Historial
           </button>
         </div>
@@ -512,20 +512,20 @@ export default function QuizzesPage() {
         {/* Question review */}
         {quiz && (
           <div>
-            <h3 className="text-sm font-semibold text-[#2F3437] mb-4">Revisión de preguntas</h3>
+            <h3 className="text-sm font-semibold text-[#37352F] mb-4">Revisión de preguntas</h3>
             <div className="space-y-3">
               {quiz.questions.map((q, idx) => {
                 const answer = selectedAnswers[q.id];
                 const correct = answer === q.correct_answer;
                 return (
-                  <div key={q.id} className={`rounded-md border p-4 ${correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                  <div key={q.id} className={`rounded-md border p-4 ${correct ? 'border-[#B7DDD6] bg-[#EEF7F4]' : 'border-[#F4BDBD] bg-[#FDEEEE]'}`}>
                     <div className="flex items-start gap-3">
-                      {correct ? <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />}
+                      {correct ? <CheckCircle className="w-4 h-4 text-[#0F7B6C] flex-shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 text-[#E03E3E] flex-shrink-0 mt-0.5" />}
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-[#2F3437] mb-1">{idx + 1}. {q.question}</p>
-                        <p className="text-xs text-[#707070]">Tu respuesta: <span className={`font-semibold ${correct ? 'text-green-700' : 'text-red-700'}`}>{answer || 'Sin respuesta'}</span></p>
-                        {!correct && <p className="text-xs text-[#707070]">Correcta: <span className="font-semibold text-green-700">{q.correct_answer}</span></p>}
-                        {q.explanation && <p className="text-xs text-[#9B9B9B] mt-1 italic">{q.explanation}</p>}
+                        <p className="text-sm font-medium text-[#37352F] mb-1">{idx + 1}. {q.question}</p>
+                        <p className="text-xs text-[#787774]">Tu respuesta: <span className={`font-semibold ${correct ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>{answer || 'Sin respuesta'}</span></p>
+                        {!correct && <p className="text-xs text-[#787774]">Correcta: <span className="font-semibold text-[#0F7B6C]">{q.correct_answer}</span></p>}
+                        {q.explanation && <p className="text-xs text-[#9B9A97] mt-1 italic">{q.explanation}</p>}
                       </div>
                     </div>
                   </div>
@@ -542,23 +542,23 @@ export default function QuizzesPage() {
   if (screen === 'history') {
     return (
       <div className="p-6 max-w-4xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
-        <div className="pb-5 mb-6 border-b border-[#E0E0E0] flex items-center justify-between">
-          <button onClick={() => setScreen('select')} className="flex items-center gap-2 text-[#707070] hover:text-[#2F3437] transition-colors text-sm">
+        <div className="pb-5 mb-6 border-b border-[#E9E9E7] flex items-center justify-between">
+          <button onClick={() => setScreen('select')} className="flex items-center gap-2 text-[#787774] hover:text-[#37352F] transition-colors text-sm">
             <ArrowLeft className="w-4 h-4" /> Volver
           </button>
-          <h2 className="text-sm font-semibold text-[#2F3437]">Historial de Desafíos</h2>
+          <h2 className="text-sm font-semibold text-[#37352F]">Historial de Desafíos</h2>
           <div />
         </div>
 
         {historyLoading ? (
           <div className="flex justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-[#9B9B9B]" />
+            <Loader2 className="w-6 h-6 animate-spin text-[#9B9A97]" />
           </div>
         ) : quizHistory.length === 0 ? (
-          <div className="text-center py-16 text-[#9B9B9B]">
+          <div className="text-center py-16 text-[#9B9A97]">
             <Trophy className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium text-[#707070]">Aún no has hecho ningún quiz</p>
-            <button onClick={() => setScreen('select')} className="mt-4 px-5 py-2 bg-[#2F3437] text-white rounded-md text-sm font-medium hover:bg-[#454A4D] transition-colors">
+            <p className="text-sm font-medium text-[#787774]">Aún no has hecho ningún quiz</p>
+            <button onClick={() => setScreen('select')} className="mt-4 px-5 py-2 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors">
               Empezar ahora
             </button>
           </div>
@@ -569,24 +569,24 @@ export default function QuizzesPage() {
               const passedH = pctH >= 60;
               const diff = (entry.difficulty ?? 'medio') as Difficulty;
               return (
-                <div key={entry.id} className="bg-white border border-[#E0E0E0] rounded-md p-4 flex items-center gap-4 hover:border-[#9B9B9B] transition-colors">
-                  <div className={`w-12 h-12 rounded-md flex items-center justify-center text-sm font-semibold text-white flex-shrink-0 ${passedH ? 'bg-green-600' : 'bg-[#2F3437]'}`}>
+                <div key={entry.id} className="bg-white border border-[#E9E9E7] rounded-md p-4 flex items-center gap-4 hover:border-[#9B9A97] transition-colors">
+                  <div className={`w-12 h-12 rounded-md flex items-center justify-center text-sm font-semibold text-white flex-shrink-0 ${passedH ? 'bg-[#0F7B6C]' : 'bg-[#37352F]'}`}>
                     {pctH}%
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-[#2F3437] text-sm truncate">{entry.quiz_title}</p>
+                    <p className="font-medium text-[#37352F] text-sm truncate">{entry.quiz_title}</p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[diff] ?? 'bg-[#F7F6F3] text-[#707070] border-[#E0E0E0]'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[diff] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
                         {DIFF_LABELS[diff] ?? diff}
                       </span>
-                      <span className="text-xs text-[#9B9B9B]">{entry.user_score ?? Math.round((entry.performance_score ?? 0) * (entry.questions_count ?? 10))}/{entry.questions_count ?? 10} correctas</span>
-                      <span className="text-xs text-[#9B9B9B]">{new Date(entry.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                      <span className="text-xs text-[#9B9A97]">{entry.user_score ?? Math.round((entry.performance_score ?? 0) * (entry.questions_count ?? 10))}/{entry.questions_count ?? 10} correctas</span>
+                      <span className="text-xs text-[#9B9A97]">{new Date(entry.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                     </div>
                   </div>
                   {entry.recommended_difficulty && (
                     <div className="text-right flex-shrink-0">
-                      <p className="text-xs text-[#9B9B9B]">Recomendado</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[entry.recommended_difficulty as Difficulty] ?? 'bg-[#F7F6F3] text-[#707070] border-[#E0E0E0]'}`}>
+                      <p className="text-xs text-[#9B9A97]">Recomendado</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[entry.recommended_difficulty as Difficulty] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
                         {DIFF_LABELS[entry.recommended_difficulty as Difficulty] ?? entry.recommended_difficulty}
                       </span>
                     </div>

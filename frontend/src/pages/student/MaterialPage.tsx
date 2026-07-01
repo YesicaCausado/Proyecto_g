@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   FileText, Download, Eye, Search,
   BookOpen, Calculator, MessageSquare,
@@ -207,13 +207,13 @@ const EXTERNAL_RESOURCES: ExternalResource[] = [
 
 // ─── Estilos por materia ──────────────────────────────────────────────────────
 const SUBJECT_STYLES: Record<SubjectKey, { label: string; Icon: React.ElementType; color: string; bg: string; text: string; badge: string }> = {
-  todos:       { label: 'Todos',          Icon: Layers,       color: '#64748b', bg: 'bg-gray-100',    text: 'text-gray-600',    badge: 'bg-gray-100 text-gray-600'    },
-  lectura:     { label: 'Lectura Crítica',Icon: BookOpen,     color: '#f59e0b', bg: 'bg-amber-50',    text: 'text-amber-600',   badge: 'bg-amber-100 text-amber-700'  },
-  matematicas: { label: 'Matemáticas',    Icon: Calculator,   color: '#2563EB', bg: 'bg-blue-50',     text: 'text-blue-600',    badge: 'bg-blue-100 text-blue-700'    },
-  ciencias:    { label: 'Ciencias',       Icon: Zap,          color: '#06b6d4', bg: 'bg-cyan-50',     text: 'text-cyan-600',    badge: 'bg-cyan-100 text-cyan-700'    },
-  sociales:    { label: 'Sociales',       Icon: Users,        color: '#8b5cf6', bg: 'bg-violet-50',   text: 'text-violet-600',  badge: 'bg-violet-100 text-violet-700'},
-  ingles:      { label: 'Inglés',         Icon: MessageSquare,color: '#10b981', bg: 'bg-emerald-50',  text: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700'},
-  general:     { label: 'General',        Icon: GraduationCap,color: '#2563EB', bg: 'bg-indigo-50',   text: 'text-indigo-600',  badge: 'bg-indigo-100 text-indigo-700'},
+  todos:       { label: 'Todos',          Icon: Layers,       color: '#787774', bg: 'bg-[#F7F6F3]',  text: 'text-[#787774]',  badge: 'bg-[#F7F6F3] text-[#787774]'  },
+  lectura:     { label: 'Lectura Crítica',Icon: BookOpen,     color: '#D9730D', bg: 'bg-[#FDF4EC]',  text: 'text-[#D9730D]',  badge: 'bg-[#FDF4EC] text-[#D9730D]'  },
+  matematicas: { label: 'Matemáticas',    Icon: Calculator,   color: '#0B6E99', bg: 'bg-[#E5F3FF]',  text: 'text-[#0B6E99]',  badge: 'bg-[#E5F3FF] text-[#0B6E99]'  },
+  ciencias:    { label: 'Ciencias',       Icon: Zap,          color: '#DFAB01', bg: 'bg-[#FCF6E5]',  text: 'text-[#DFAB01]',  badge: 'bg-[#FCF6E5] text-[#DFAB01]'  },
+  sociales:    { label: 'Sociales',       Icon: Users,        color: '#6940A5', bg: 'bg-[#F7F3FB]',  text: 'text-[#6940A5]',  badge: 'bg-[#F4EFFB] text-[#6940A5]'  },
+  ingles:      { label: 'Inglés',         Icon: MessageSquare,color: '#0F7B6C', bg: 'bg-[#EEF7F4]',  text: 'text-[#0F7B6C]',  badge: 'bg-[#EEF7F4] text-[#0F7B6C]'  },
+  general:     { label: 'General',        Icon: GraduationCap,color: '#0B6E99', bg: 'bg-[#E5F3FF]',  text: 'text-[#0B6E99]',  badge: 'bg-[#E5F3FF] text-[#0B6E99]'  },
 };
 
 const TYPE_LABELS: Record<MaterialType, string> = {
@@ -229,9 +229,9 @@ const EXT_TYPE_LABELS: Record<ExternalType, string> = {
 };
 
 const DIFF_COLORS: Record<string, string> = {
-  'Fácil':   'bg-emerald-50 text-emerald-700',
-  'Medio':   'bg-amber-50 text-amber-700',
-  'Difícil': 'bg-red-50 text-red-600',
+  'Fácil':   'bg-[#EEF7F4] text-[#0F7B6C]',
+  'Medio':   'bg-[#FCF6E5] text-[#DFAB01]',
+  'Difícil': 'bg-[#FDEEEE] text-[#E03E3E]',
 };
 
 const FILTER_TABS: { key: SubjectKey; label: string; Icon: React.ElementType }[] = [
@@ -248,30 +248,30 @@ const FILTER_TABS: { key: SubjectKey; label: string; Icon: React.ElementType }[]
 function PDFViewer({ material, onClose }: { material: Material; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white border border-[#E0E0E0] rounded-md w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden"
+      <div className="bg-white border border-[#E9E9E7] rounded-md w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E0E0E0]">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E9E9E7]">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4 text-[#707070]" />
+            <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-[#787774]" />
             </div>
             <div className="min-w-0">
-              <p className="font-medium text-[#2F3437] text-sm truncate">{material.title}</p>
-              <p className="text-[11px] text-[#9B9B9B]">{material.pages} páginas</p>
+              <p className="font-medium text-[#37352F] text-sm truncate">{material.title}</p>
+              <p className="text-[11px] text-[#9B9A97]">{material.pages} páginas</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 ml-4">
             <a href={material.file} download
-              className="flex items-center gap-1.5 bg-[#2F3437] hover:bg-[#454A4D] text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
+              className="flex items-center gap-1.5 bg-[#37352F] hover:bg-[#2F2D2B] text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
               <Download className="w-3.5 h-3.5" /> Descargar
             </a>
             <a href={material.file} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 bg-[#F7F6F3] hover:bg-[#E8E6E1] border border-[#E0E0E0] text-[#707070] text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
+              className="flex items-center gap-1.5 bg-[#F7F6F3] hover:bg-[#F1F1EF] border border-[#E9E9E7] text-[#787774] text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
               <ExternalLink className="w-3.5 h-3.5" /> Abrir
             </a>
             <button onClick={onClose}
-              className="w-7 h-7 rounded-md text-[#9B9B9B] hover:text-[#2F3437] hover:bg-[#F7F6F3] flex items-center justify-center transition-colors text-lg font-bold border border-[#E0E0E0]">
+              className="w-7 h-7 rounded-md text-[#9B9A97] hover:text-[#37352F] hover:bg-[#F7F6F3] flex items-center justify-center transition-colors text-lg font-bold border border-[#E9E9E7]">
               ×
             </button>
           </div>
@@ -294,45 +294,45 @@ function ExternalResourceCard({ r }: { r: ExternalResource }) {
   const style = SUBJECT_STYLES[r.subject];
   const Icon  = style.Icon;
   return (
-    <div className="bg-white border border-[#E0E0E0] rounded-md overflow-hidden flex flex-col group hover:border-[#9B9B9B] transition-colors">
+    <div className="bg-white border border-[#E9E9E7] rounded-md overflow-hidden flex flex-col group hover:border-[#9B9A97] transition-colors">
       <div className="p-5 flex flex-col flex-1">
         {/* Top row */}
         <div className="flex items-start justify-between mb-4">
-          <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center flex-shrink-0">
-            <Icon className="w-5 h-5 text-[#707070]" strokeWidth={1.8} />
+          <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+            <Icon className="w-5 h-5 text-[#787774]" strokeWidth={1.8} />
           </div>
           <div className="flex flex-col items-end gap-1.5 ml-2">
             {r.recommended && (
-              <span className="bg-[#F7F6F3] text-[#707070] text-[10px] font-medium px-2 py-0.5 rounded-md border border-[#E0E0E0]">
+              <span className="bg-[#F7F6F3] text-[#787774] text-[10px] font-medium px-2 py-0.5 rounded-md border border-[#E9E9E7]">
                 ⭐ Recomendado
               </span>
             )}
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#F7F6F3] border border-[#E0E0E0] text-[#707070]">
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#F7F6F3] border border-[#E9E9E7] text-[#787774]">
               {SUBJECT_STYLES[r.subject].label}
             </span>
           </div>
         </div>
         {/* Title + description */}
-        <h3 className="font-medium text-[#2F3437] text-sm leading-snug mb-2">
+        <h3 className="font-medium text-[#37352F] text-sm leading-snug mb-2">
           {r.title}
         </h3>
-        <p className="text-[#9B9B9B] text-xs leading-relaxed flex-1 mb-4">{r.description}</p>
+        <p className="text-[#9B9A97] text-xs leading-relaxed flex-1 mb-4">{r.description}</p>
         {/* Meta */}
         <div className="flex flex-wrap gap-2 mb-4">
-          <span className="flex items-center gap-1 text-[11px] text-[#9B9B9B]">
+          <span className="flex items-center gap-1 text-[11px] text-[#9B9A97]">
             <Globe className="w-3.5 h-3.5" /> {EXT_TYPE_LABELS[r.type]}
           </span>
-          <span className="text-[#D5D5D5]">·</span>
-          <span className="text-[11px] text-[#9B9B9B]">{r.source}</span>
+          <span className="text-[#E9E9E7]">·</span>
+          <span className="text-[11px] text-[#9B9A97]">{r.source}</span>
         </div>
         {/* Action */}
         <div className="flex gap-2 mt-auto">
           <a href={r.url} target="_blank" rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-2 bg-[#2F3437] hover:bg-[#454A4D] text-white text-sm font-medium py-2.5 rounded-md transition-colors">
+            className="flex-1 flex items-center justify-center gap-2 bg-[#37352F] hover:bg-[#2F2D2B] text-white text-sm font-medium py-2.5 rounded-md transition-colors">
             <Globe className="w-4 h-4" /> Abrir
           </a>
           <a href={r.url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 bg-[#F7F6F3] hover:bg-[#E8E6E1] border border-[#E0E0E0] text-[#707070] text-sm font-medium py-2.5 px-3 rounded-md transition-colors">
+            className="flex items-center justify-center gap-2 bg-[#F7F6F3] hover:bg-[#F1F1EF] border border-[#E9E9E7] text-[#787774] text-sm font-medium py-2.5 px-3 rounded-md transition-colors">
             <ExternalLink className="w-4 h-4" />
           </a>
         </div>
@@ -346,46 +346,46 @@ function MaterialCard({ m, onView }: { m: Material; onView: (m: Material) => voi
   const style = SUBJECT_STYLES[m.subject];
   const Icon  = style.Icon;
   return (
-    <div className="bg-white border border-[#E0E0E0] rounded-md overflow-hidden flex flex-col group hover:border-[#9B9B9B] transition-colors">
+    <div className="bg-white border border-[#E9E9E7] rounded-md overflow-hidden flex flex-col group hover:border-[#9B9A97] transition-colors">
       <div className="p-5 flex flex-col flex-1">
         {/* Top: icon + badges */}
         <div className="flex items-start justify-between mb-4">
-          <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center flex-shrink-0">
-            <Icon className="w-5 h-5 text-[#707070]" strokeWidth={1.8} />
+          <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+            <Icon className="w-5 h-5 text-[#787774]" strokeWidth={1.8} />
           </div>
           <div className="flex flex-col items-end gap-1.5 ml-2">
             {m.recommended && (
-              <span className="bg-[#F7F6F3] text-[#707070] text-[10px] font-medium px-2 py-0.5 rounded-md border border-[#E0E0E0]">
+              <span className="bg-[#F7F6F3] text-[#787774] text-[10px] font-medium px-2 py-0.5 rounded-md border border-[#E9E9E7]">
                 ⭐ Recomendado
               </span>
             )}
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#F7F6F3] border border-[#E0E0E0] text-[#707070]">
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#F7F6F3] border border-[#E9E9E7] text-[#787774]">
               {SUBJECT_STYLES[m.subject].label}
             </span>
           </div>
         </div>
 
         {/* Title + description */}
-        <h3 className="font-medium text-[#2F3437] text-sm leading-snug mb-2">
+        <h3 className="font-medium text-[#37352F] text-sm leading-snug mb-2">
           {m.title}
         </h3>
-        <p className="text-[#9B9B9B] text-xs leading-relaxed flex-1 mb-4">
+        <p className="text-[#9B9A97] text-xs leading-relaxed flex-1 mb-4">
           {m.description}
         </p>
 
         {/* Metadata row */}
         <div className="flex flex-wrap gap-2 mb-4">
-          <span className="flex items-center gap-1 text-[11px] text-[#9B9B9B]">
+          <span className="flex items-center gap-1 text-[11px] text-[#9B9A97]">
             <FileText className="w-3.5 h-3.5" /> {m.pages} págs.
           </span>
-          <span className="text-[#D5D5D5]">·</span>
-          <span className="flex items-center gap-1 text-[11px] text-[#9B9B9B]">
+          <span className="text-[#E9E9E7]">·</span>
+          <span className="flex items-center gap-1 text-[11px] text-[#9B9A97]">
             <BookMarked className="w-3.5 h-3.5" /> {TYPE_LABELS[m.type]}
           </span>
           {m.year && (
             <>
-              <span className="text-[#D5D5D5]">·</span>
-              <span className="text-[11px] text-[#9B9B9B]">{m.year}</span>
+              <span className="text-[#E9E9E7]">·</span>
+              <span className="text-[11px] text-[#9B9A97]">{m.year}</span>
             </>
           )}
           {m.difficulty && (
@@ -398,15 +398,15 @@ function MaterialCard({ m, onView }: { m: Material; onView: (m: Material) => voi
         {/* Actions */}
         <div className="flex gap-2 mt-auto">
           <button onClick={() => onView(m)}
-            className="flex-1 flex items-center justify-center gap-2 bg-[#2F3437] hover:bg-[#454A4D] text-white text-sm font-medium py-2.5 rounded-md transition-colors">
+            className="flex-1 flex items-center justify-center gap-2 bg-[#37352F] hover:bg-[#2F2D2B] text-white text-sm font-medium py-2.5 rounded-md transition-colors">
             <Eye className="w-4 h-4" /> Ver
           </button>
           <a href={m.file} download
-            className="flex items-center justify-center gap-2 bg-[#F7F6F3] hover:bg-[#E8E6E1] border border-[#E0E0E0] text-[#707070] text-sm py-2.5 px-4 rounded-md transition-colors">
+            className="flex items-center justify-center gap-2 bg-[#F7F6F3] hover:bg-[#F1F1EF] border border-[#E9E9E7] text-[#787774] text-sm py-2.5 px-4 rounded-md transition-colors">
             <Download className="w-4 h-4" />
           </a>
           <a href={m.file} target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 bg-[#F7F6F3] hover:bg-[#E8E6E1] border border-[#E0E0E0] text-[#707070] text-sm py-2.5 px-3 rounded-md transition-colors">
+            className="flex items-center justify-center gap-2 bg-[#F7F6F3] hover:bg-[#F1F1EF] border border-[#E9E9E7] text-[#787774] text-sm py-2.5 px-3 rounded-md transition-colors">
             <ExternalLink className="w-4 h-4" />
           </a>
         </div>
@@ -440,14 +440,14 @@ export default function MaterialPage() {
   return (
     <div className="p-6 md:p-10 max-w-[1400px] mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* ── Header ── */}
-      <div className="pb-6 mb-6 border-b border-[#E0E0E0]">
-        <h1 className="text-xl font-semibold text-[#2F3437] flex items-center gap-3">
-          <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center">
-            <BookMarked className="w-4 h-4 text-[#707070]" />
+      <div className="pb-6 mb-6 border-b border-[#E9E9E7]">
+        <h1 className="text-xl font-semibold text-[#37352F] flex items-center gap-3">
+          <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center">
+            <BookMarked className="w-4 h-4 text-[#787774]" />
           </div>
           Material de Estudio
         </h1>
-        <p className="text-[#707070] mt-1 text-sm">Documentos oficiales y guías para prepararte al Saber 11</p>
+        <p className="text-[#787774] mt-1 text-sm">Documentos oficiales y guías para prepararte al Saber 11</p>
       </div>
 
       {/* ── Stats banner ── */}
@@ -460,13 +460,13 @@ export default function MaterialPage() {
         ].map((s, i) => {
           const Icon = s.icon;
           return (
-            <div key={i} className="bg-white border border-[#E0E0E0] rounded-md p-4 flex items-center gap-3">
-              <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center flex-shrink-0">
-                <Icon className="w-4 h-4 text-[#9B9B9B]" />
+            <div key={i} className="bg-white border border-[#E9E9E7] rounded-md p-4 flex items-center gap-3">
+              <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+                <Icon className="w-4 h-4 text-[#9B9A97]" />
               </div>
               <div>
-                <p className="text-xl font-semibold text-[#2F3437]">{s.value}</p>
-                <p className="text-xs text-[#9B9B9B]">{s.label}</p>
+                <p className="text-xl font-semibold text-[#37352F]">{s.value}</p>
+                <p className="text-xs text-[#9B9A97]">{s.label}</p>
               </div>
             </div>
           );
@@ -475,11 +475,11 @@ export default function MaterialPage() {
 
       {/* ── Recomendados ── */}
       {recommended.length > 0 && (
-        <div className="bg-[#F7F6F3] border border-[#E0E0E0] rounded-md p-5 mb-6">
+        <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md p-5 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-base">⭐</span>
-            <h2 className="font-semibold text-[#2F3437] text-sm">Documentos Recomendados</h2>
-            <span className="text-xs text-[#707070] font-medium bg-white border border-[#E0E0E0] px-2.5 py-1 rounded-md ml-1">
+            <h2 className="font-semibold text-[#37352F] text-sm">Documentos Recomendados</h2>
+            <span className="text-xs text-[#787774] font-medium bg-white border border-[#E9E9E7] px-2.5 py-1 rounded-md ml-1">
               Empieza por aquí
             </span>
           </div>
@@ -489,23 +489,23 @@ export default function MaterialPage() {
               const Icon  = style.Icon;
               return (
                 <div key={m.id}
-                  className="flex-shrink-0 w-60 bg-white border border-[#E0E0E0] rounded-md p-4 flex flex-col gap-3">
+                  className="flex-shrink-0 w-60 bg-white border border-[#E9E9E7] rounded-md p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center flex-shrink-0">
-                      <Icon className="w-4 h-4 text-[#707070]" />
+                    <div className="w-9 h-9 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+                      <Icon className="w-4 h-4 text-[#787774]" />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium text-[#2F3437] text-xs leading-tight truncate">{m.title}</p>
-                      <p className="text-[11px] text-[#9B9B9B]">{m.pages} páginas · {TYPE_LABELS[m.type]}</p>
+                      <p className="font-medium text-[#37352F] text-xs leading-tight truncate">{m.title}</p>
+                      <p className="text-[11px] text-[#9B9A97]">{m.pages} páginas · {TYPE_LABELS[m.type]}</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => setViewing(m)}
-                      className="flex-1 flex items-center justify-center gap-1.5 bg-[#2F3437] hover:bg-[#454A4D] text-white text-xs font-medium py-2 rounded-md transition-colors">
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-[#37352F] hover:bg-[#2F2D2B] text-white text-xs font-medium py-2 rounded-md transition-colors">
                       <Eye className="w-3.5 h-3.5" /> Ver
                     </button>
                     <a href={m.file} download
-                      className="flex items-center justify-center gap-1.5 bg-[#F7F6F3] hover:bg-[#E8E6E1] border border-[#E0E0E0] text-[#707070] text-xs py-2 px-3 rounded-md transition-colors">
+                      className="flex items-center justify-center gap-1.5 bg-[#F7F6F3] hover:bg-[#F1F1EF] border border-[#E9E9E7] text-[#787774] text-xs py-2 px-3 rounded-md transition-colors">
                       <Download className="w-3.5 h-3.5" />
                     </a>
                   </div>
@@ -519,23 +519,23 @@ export default function MaterialPage() {
       {/* ── Search + Filter ── */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B9B9B]" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B9A97]" />
           <input
             type="text"
             placeholder="Buscar materiales..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E0E0E0] rounded-md text-sm focus:outline-none focus:border-[#2F3437] focus:ring-1 focus:ring-[#2F3437] transition-all text-[#2F3437]"
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E9E9E7] rounded-md text-sm focus:outline-none focus:border-[#37352F] focus:ring-1 focus:ring-[#37352F] transition-all text-[#37352F]"
           />
         </div>
-        <div className="flex items-center gap-2 text-sm text-[#9B9B9B]">
+        <div className="flex items-center gap-2 text-sm text-[#9B9A97]">
           <Filter className="w-4 h-4" />
           <span>{filtered.length} PDFs · {filteredExternal.length} en línea</span>
         </div>
       </div>
 
       {/* ── Subject filter tabs ── */}
-      <div className="flex flex-wrap gap-1.5 mb-5 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md p-1">
+      <div className="flex flex-wrap gap-1.5 mb-5 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md p-1">
         {FILTER_TABS.map(t => {
           const Icon = t.Icon;
           return (
@@ -544,8 +544,8 @@ export default function MaterialPage() {
               onClick={() => setActiveTab(t.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all ${
                 activeTab === t.key
-                  ? 'bg-white text-[#2F3437] border border-[#E0E0E0]'
-                  : 'text-[#707070] hover:text-[#2F3437]'
+                  ? 'bg-white text-[#37352F] border border-[#E9E9E7]'
+                  : 'text-[#787774] hover:text-[#37352F]'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -558,11 +558,11 @@ export default function MaterialPage() {
       {/* ── Grid de materiales ── */}
       {filtered.length === 0 ? (
         <div className="text-center py-12">
-          <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center mx-auto mb-3">
-            <FileText className="w-5 h-5 text-[#9B9B9B]" />
+          <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center mx-auto mb-3">
+            <FileText className="w-5 h-5 text-[#9B9A97]" />
           </div>
-          <p className="text-sm font-medium text-[#707070]">No se encontraron materiales</p>
-          <p className="text-xs text-[#9B9B9B] mt-1">Intenta otra búsqueda o categoría</p>
+          <p className="text-sm font-medium text-[#787774]">No se encontraron materiales</p>
+          <p className="text-xs text-[#9B9A97] mt-1">Intenta otra búsqueda o categoría</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -576,14 +576,14 @@ export default function MaterialPage() {
       {filteredExternal.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center gap-3 mb-5">
-            <div className="w-7 h-7 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md flex items-center justify-center flex-shrink-0">
-              <Globe className="w-4 h-4 text-[#707070]" />
+            <div className="w-7 h-7 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+              <Globe className="w-4 h-4 text-[#787774]" />
             </div>
             <div>
-              <h2 className="font-semibold text-[#2F3437] text-sm">Recursos en Línea</h2>
-              <p className="text-xs text-[#9B9B9B]">Plataformas y portales oficiales</p>
+              <h2 className="font-semibold text-[#37352F] text-sm">Recursos en Línea</h2>
+              <p className="text-xs text-[#9B9A97]">Plataformas y portales oficiales</p>
             </div>
-            <span className="ml-auto text-xs text-[#707070] font-medium bg-[#F7F6F3] border border-[#E0E0E0] px-3 py-1 rounded-md">
+            <span className="ml-auto text-xs text-[#787774] font-medium bg-[#F7F6F3] border border-[#E9E9E7] px-3 py-1 rounded-md">
               {filteredExternal.length} recursos
             </span>
           </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import type { Classroom, Enrollment, ClassroomStats } from '../../types';
@@ -71,9 +71,9 @@ export default function ClassroomDetailPage() {
 
   const riskColor = (level: string) => {
     switch (level) {
-      case 'high': return 'bg-red-100 text-red-700';
-      case 'medium': return 'bg-amber-100 text-amber-700';
-      default: return 'bg-green-100 text-green-700';
+      case 'high': return 'bg-[#FDEEEE] text-[#E03E3E]';
+      case 'medium': return 'bg-[#FCF6E5] text-[#DFAB01]';
+      default: return 'bg-[#EEF7F4] text-[#0F7B6C]';
     }
   };
 
@@ -97,30 +97,30 @@ export default function ClassroomDetailPage() {
     <div className="p-6 md:p-8 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
       <button
         onClick={() => navigate('/classrooms')}
-        className="flex items-center gap-1 text-xs text-[#707070] hover:text-[#2F3437] mb-6 transition-colors"
+        className="flex items-center gap-1 text-xs text-[#787774] hover:text-[#37352F] mb-6 transition-colors"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         Mis Clases
       </button>
 
       {/* Header */}
-      <div className="bg-white border border-[#E0E0E0] rounded-md p-6 mb-5">
+      <div className="bg-white border border-[#E9E9E7] rounded-md p-6 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold text-[#2F3437]">
+            <h1 className="text-xl font-semibold text-[#37352F]">
               {stats?.classroom_name || `Clase #${id}`}
             </h1>
-            <p className="text-[#707070] text-sm mt-1">
+            <p className="text-[#787774] text-sm mt-1">
               {stats?.total_students || 0} estudiantes inscritos
             </p>
           </div>
           {classroom?.invite_code && (
             <button
               onClick={copyCode}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md text-sm font-mono hover:border-[#9B9B9B] transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-sm font-mono hover:border-[#9B9A97] transition-colors"
             >
-              {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-[#9B9B9B]" />}
-              <span className="tracking-widest text-[#2F3437]">{classroom.invite_code}</span>
+              {copied ? <Check className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4 text-[#9B9A97]" />}
+              <span className="tracking-widest text-[#37352F]">{classroom.invite_code}</span>
             </button>
           )}
         </div>
@@ -135,16 +135,16 @@ export default function ClassroomDetailPage() {
             { label: 'Progreso Prom.', value: `${stats.avg_progress.toFixed(0)}%` },
             { label: 'En riesgo',     value: stats.students_at_risk },
           ].map((s) => (
-            <div key={s.label} className="bg-white border border-[#E0E0E0] rounded-md p-4 text-center">
-              <p className="text-xl font-semibold text-[#2F3437]">{s.value}</p>
-              <p className="text-xs text-[#707070] mt-1">{s.label}</p>
+            <div key={s.label} className="bg-white border border-[#E9E9E7] rounded-md p-4 text-center">
+              <p className="text-xl font-semibold text-[#37352F]">{s.value}</p>
+              <p className="text-xs text-[#787774] mt-1">{s.label}</p>
             </div>
           ))}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md p-1 mb-5">
+      <div className="flex gap-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md p-1 mb-5">
         {[
           { key: 'students' as const, label: 'Estudiantes', icon: Users },
           { key: 'stats' as const, label: 'Estadísticas', icon: BarChart3 },
@@ -155,14 +155,14 @@ export default function ClassroomDetailPage() {
             onClick={() => setTab(t.key)}
             className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
               tab === t.key
-                ? 'bg-white text-[#2F3437] border border-[#E0E0E0]'
-                : 'text-[#707070] hover:text-[#2F3437]'
+                ? 'bg-white text-[#37352F] border border-[#E9E9E7]'
+                : 'text-[#787774] hover:text-[#37352F]'
             }`}
           >
             <t.icon className="w-3.5 h-3.5" />
             {t.label}
             {t.key === 'alerts' && alerts.length > 0 && (
-              <span className="bg-[#2F3437] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
+              <span className="bg-[#37352F] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
                 {alerts.length}
               </span>
             )}
@@ -172,44 +172,44 @@ export default function ClassroomDetailPage() {
 
       {/* Tab Content */}
       {tab === 'students' && (
-        <div className="bg-white border border-[#E0E0E0] rounded-md overflow-hidden">
+        <div className="bg-white border border-[#E9E9E7] rounded-md overflow-hidden">
           {students.length === 0 ? (
-            <div className="text-center py-12 text-[#707070]">
-              <Users className="w-10 h-10 mx-auto mb-2 text-[#D5D5D5]" />
+            <div className="text-center py-12 text-[#787774]">
+              <Users className="w-10 h-10 mx-auto mb-2 text-[#E9E9E7]" />
               <p className="text-sm">Aún no hay estudiantes inscritos</p>
-              <p className="text-xs mt-1 text-[#9B9B9B]">Comparte el código de invitación con tus estudiantes</p>
+              <p className="text-xs mt-1 text-[#9B9A97]">Comparte el código de invitación con tus estudiantes</p>
             </div>
           ) : (
             <table className="w-full">
-              <thead className="bg-[#F7F6F3] border-b border-[#E0E0E0]">
+              <thead className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
                 <tr>
-                  <th className="text-left text-[11px] font-medium text-[#707070] uppercase px-5 py-3">Estudiante</th>
-                  <th className="text-center text-[11px] font-medium text-[#707070] uppercase px-3 py-3">Progreso</th>
-                  <th className="text-center text-[11px] font-medium text-[#707070] uppercase px-3 py-3">Sesiones</th>
-                  <th className="text-center text-[11px] font-medium text-[#707070] uppercase px-3 py-3">Riesgo</th>
+                  <th className="text-left text-[11px] font-medium text-[#787774] uppercase px-5 py-3">Estudiante</th>
+                  <th className="text-center text-[11px] font-medium text-[#787774] uppercase px-3 py-3">Progreso</th>
+                  <th className="text-center text-[11px] font-medium text-[#787774] uppercase px-3 py-3">Sesiones</th>
+                  <th className="text-center text-[11px] font-medium text-[#787774] uppercase px-3 py-3">Riesgo</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E0E0E0]">
+              <tbody className="divide-y divide-[#E9E9E7]">
                 {students.map((s) => (
                   <tr key={s.id} className="hover:bg-[#F7F6F3] transition-colors">
                     <td className="px-5 py-3">
                       <div>
-                        <p className="font-medium text-[#2F3437] text-sm">{s.student_name || s.student_username}</p>
-                        <p className="text-xs text-[#9B9B9B]">@{s.student_username}</p>
+                        <p className="font-medium text-[#37352F] text-sm">{s.student_name || s.student_username}</p>
+                        <p className="text-xs text-[#9B9A97]">@{s.student_username}</p>
                       </div>
                     </td>
                     <td className="px-3 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        <div className="w-16 h-1 bg-[#E0E0E0] rounded-full overflow-hidden">
+                        <div className="w-16 h-1 bg-[#E9E9E7] rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-[#2F3437] rounded-full"
+                            className="h-full bg-[#37352F] rounded-full"
                             style={{ width: `${Math.min(s.overall_progress, 100)}%` }}
                           />
                         </div>
-                        <span className="text-xs text-[#707070]">{s.overall_progress.toFixed(0)}%</span>
+                        <span className="text-xs text-[#787774]">{s.overall_progress.toFixed(0)}%</span>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-center text-sm text-[#707070]">{s.total_sessions}</td>
+                    <td className="px-3 py-3 text-center text-sm text-[#787774]">{s.total_sessions}</td>
                     <td className="px-3 py-3 text-center">
                       <span className={`text-xs px-2.5 py-1 rounded-md font-medium ${riskColor(s.risk_level)}`}>
                         {riskLabel(s.risk_level)}
@@ -224,9 +224,9 @@ export default function ClassroomDetailPage() {
       )}
 
       {tab === 'stats' && stats && (
-        <div className="bg-white border border-[#E0E0E0] rounded-md p-6">
-          <h3 className="font-medium text-[#2F3437] text-sm mb-4 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-[#9B9B9B]" />
+        <div className="bg-white border border-[#E9E9E7] rounded-md p-6">
+          <h3 className="font-medium text-[#37352F] text-sm mb-4 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-[#9B9A97]" />
             Resumen de la Clase
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -236,9 +236,9 @@ export default function ClassroomDetailPage() {
               { label: 'Estudiantes activos',   value: `${stats.active_students} / ${stats.total_students}` },
               { label: 'Estudiantes en riesgo', value: stats.students_at_risk },
             ].map((s) => (
-              <div key={s.label} className="p-4 bg-[#F7F6F3] border border-[#E0E0E0] rounded-md">
-                <p className="text-xs text-[#707070]">{s.label}</p>
-                <p className="text-lg font-semibold text-[#2F3437] mt-1">{s.value}</p>
+              <div key={s.label} className="p-4 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md">
+                <p className="text-xs text-[#787774]">{s.label}</p>
+                <p className="text-lg font-semibold text-[#37352F] mt-1">{s.value}</p>
               </div>
             ))}
           </div>
@@ -246,23 +246,23 @@ export default function ClassroomDetailPage() {
       )}
 
       {tab === 'alerts' && (
-        <div className="bg-white border border-[#E0E0E0] rounded-md p-6">
+        <div className="bg-white border border-[#E9E9E7] rounded-md p-6">
           {alerts.length === 0 ? (
-            <div className="text-center py-8 text-[#707070]">
-              <Check className="w-8 h-8 mx-auto mb-2 text-green-500" />
+            <div className="text-center py-8 text-[#787774]">
+              <Check className="w-8 h-8 mx-auto mb-2 text-[#0F7B6C]" />
               <p className="font-medium text-sm">Sin alertas</p>
-              <p className="text-xs mt-1 text-[#9B9B9B]">Todos los estudiantes van bien por ahora</p>
+              <p className="text-xs mt-1 text-[#9B9A97]">Todos los estudiantes van bien por ahora</p>
             </div>
           ) : (
             <div className="space-y-3">
               {alerts.map((a) => (
-                <div key={a.id} className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-md">
-                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <div key={a.id} className="flex items-center gap-3 p-4 bg-[#FDEEEE] border border-[#F4BDBD] rounded-md">
+                  <AlertTriangle className="w-4 h-4 text-[#E03E3E] flex-shrink-0" />
                   <div>
-                    <p className="font-medium text-red-800 text-sm">
+                    <p className="font-medium text-[#37352F] text-sm">
                       {a.student_name || a.student_username} necesita atención
                     </p>
-                    <p className="text-xs text-red-600 mt-0.5">
+                    <p className="text-xs text-[#E03E3E] mt-0.5">
                       Progreso: {a.overall_progress.toFixed(0)}% • Sesiones: {a.total_sessions} • Riesgo: {riskLabel(a.risk_level)}
                     </p>
                   </div>

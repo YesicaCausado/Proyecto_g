@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
+﻿import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
@@ -60,20 +60,20 @@ export default function AdminDashboard() {
     ?? 'A';
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
 
       {/* ── SIDEBAR ─────────────────────────────────────────────── */}
-      <aside className="w-64 bg-gray-900 text-white flex flex-col shrink-0 shadow-xl">
+      <aside className="w-64 bg-[#191919] text-white flex flex-col shrink-0">
 
         {/* Logo */}
-        <div className="px-6 py-5 border-b border-gray-700/60">
+        <div className="px-6 py-5 border-b border-[#37352F]/60">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shrink-0">
+            <div className="w-9 h-9 bg-[#37352F] rounded-md flex items-center justify-center shrink-0">
               <Brain className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
               <p className="font-bold text-sm leading-tight">NeuroLearn IA</p>
-              <p className="text-xs text-indigo-400 leading-tight">Panel Administrador</p>
+              <p className="text-xs text-[#0B6E99] leading-tight">Panel Administrador</p>
             </div>
           </div>
         </div>
@@ -88,16 +88,16 @@ export default function AdminDashboard() {
               className={({ isActive }) =>
                 `group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-[#37352F] text-white'
+                    : 'text-[#9B9A97] hover:text-white hover:bg-[#2F2D2B]'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`} />
+                  <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#787774] group-hover:text-[#9B9A97]'}`} />
                   <span className="flex-1 font-medium">{item.label}</span>
-                  {isActive && <ChevronRight className="w-3 h-3 text-indigo-300" />}
+                  {isActive && <ChevronRight className="w-3 h-3 text-[#BFDFF0]" />}
                 </>
               )}
             </NavLink>
@@ -105,24 +105,24 @@ export default function AdminDashboard() {
         </nav>
 
         {/* Perfil y logout */}
-        <div className="px-3 py-4 border-t border-gray-700/60 space-y-2">
+        <div className="px-3 py-4 border-t border-[#37352F]/60 space-y-2">
           {/* Info del usuario */}
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+            <div className="w-8 h-8 bg-[#37352F] rounded-full flex items-center justify-center text-xs font-bold shrink-0">
               {inicial}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-white truncate">
                 {user?.full_name ?? user?.username}
               </p>
-              <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+              <p className="text-xs text-[#9B9A97] truncate">{user?.email}</p>
             </div>
           </div>
 
           {/* Botón cerrar sesión */}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-red-600/20 hover:border-red-500/30 border border-transparent transition-all duration-150"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#9B9A97] hover:text-white hover:bg-[#E03E3E]/20 hover:border-[#E03E3E]/30 border border-transparent transition-all duration-150"
           >
             <LogOut className="w-4 h-4" />
             <span>Cerrar sesión</span>
@@ -134,12 +134,12 @@ export default function AdminDashboard() {
       <main className="flex-1 flex flex-col overflow-hidden">
 
         {/* Topbar */}
-        <header className="h-14 bg-white border-b border-gray-200 flex items-center px-6 shrink-0">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+        <header className="h-14 bg-white border-b border-[#E9E9E7] flex items-center px-6 shrink-0">
+          <div className="flex items-center gap-2 text-sm text-[#787774]">
             <GraduationCap className="w-4 h-4" />
             <span>Administración del Sistema</span>
             <ChevronRight className="w-3 h-3" />
-            <span className="text-gray-900 font-medium">NeuroLearn IA</span>
+            <span className="text-[#191919] font-medium">NeuroLearn IA</span>
           </div>
         </header>
 
@@ -164,12 +164,12 @@ export default function AdminDashboard() {
 function PlaceholderPage({ title }: { title: string }) {
   return (
     <div className="p-8">
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center">
-        <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-          <Settings className="w-6 h-6 text-gray-400" />
+      <div className="bg-white rounded-md border border-[#E9E9E7] p-12 text-center">
+        <div className="w-12 h-12 bg-[#F7F6F3] rounded-md flex items-center justify-center mx-auto mb-4">
+          <Settings className="w-6 h-6 text-[#9B9A97]" />
         </div>
-        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-        <p className="text-gray-400 text-sm mt-1">Módulo en desarrollo — próximamente disponible</p>
+        <h2 className="text-lg font-semibold text-[#191919]">{title}</h2>
+        <p className="text-[#9B9A97] text-sm mt-1">Módulo en desarrollo — próximamente disponible</p>
       </div>
     </div>
   );

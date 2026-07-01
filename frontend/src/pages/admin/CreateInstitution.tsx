@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   School, User, Mail, Hash, Users, BookOpen,
   Save, Eye, EyeOff, Copy, CheckCircle, ArrowLeft,
@@ -86,10 +86,10 @@ export default function CreateInstitution() {
   if (credentials) {
     return (
       <div className="p-8 max-w-2xl">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-md border border-[#E9E9E7] overflow-hidden">
 
           {/* Cabecera verde */}
-          <div className="bg-emerald-500 px-6 py-5">
+          <div className="bg-[#0F7B6C] px-6 py-5">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-white" />
@@ -98,13 +98,13 @@ export default function CreateInstitution() {
                 <h2 className="font-bold text-white text-lg leading-tight">
                   Institución creada exitosamente
                 </h2>
-                <p className="text-emerald-100 text-sm">{credentials.institution_name}</p>
+                <p className="text-[#EEF7F4] text-sm">{credentials.institution_name}</p>
               </div>
             </div>
           </div>
 
           <div className="p-6">
-            <p className="text-sm text-gray-600 mb-5 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <p className="text-sm text-[#787774] mb-5 bg-[#FCF6E5] border border-[#EDD88A] rounded-lg px-4 py-3">
               ⚠️ <strong>Guarda estas credenciales ahora.</strong> La contraseña temporal
               no se podrá ver de nuevo. El rector deberá cambiarla en su primer inicio de sesión.
             </p>
@@ -130,8 +130,8 @@ export default function CreateInstitution() {
             </div>
 
             {/* Instrucciones */}
-            <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-600 space-y-1 mb-6">
-              <p className="font-medium text-gray-800 mb-2">Próximos pasos:</p>
+            <div className="bg-[#F7F6F3] rounded-lg p-4 text-sm text-[#787774] space-y-1 mb-6">
+              <p className="font-medium text-[#191919] mb-2">Próximos pasos:</p>
               <p>1. Comparte el usuario y contraseña temporal con el rector.</p>
               <p>2. El rector inicia sesión en <strong>/login</strong> y cambia su contraseña.</p>
               <p>3. El rector crea las cuentas de profesores desde su panel.</p>
@@ -141,13 +141,13 @@ export default function CreateInstitution() {
             <div className="flex gap-3">
               <button
                 onClick={() => { setCredentials(null); setForm(EMPTY_FORM); }}
-                className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                className="flex-1 px-4 py-2.5 bg-[#37352F] text-white rounded-lg text-sm font-medium hover:bg-[#2F2D2B] transition-colors"
               >
                 Registrar otra institución
               </button>
               <Link
                 to="/admin"
-                className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors text-center"
+                className="flex-1 px-4 py-2.5 bg-[#F7F6F3] text-[#37352F] rounded-lg text-sm font-medium hover:bg-[#E9E9E7] transition-colors text-center"
               >
                 Volver al inicio
               </Link>
@@ -166,13 +166,13 @@ export default function CreateInstitution() {
       <div className="mb-7">
         <Link
           to="/admin/instituciones"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-3 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-[#787774] hover:text-[#191919] mb-3 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Instituciones
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900">Registrar nueva institución</h1>
-        <p className="text-gray-500 text-sm mt-1">
+        <h1 className="text-2xl font-bold text-[#191919]">Registrar nueva institución</h1>
+        <p className="text-[#787774] text-sm mt-1">
           Al guardar se crean automáticamente las credenciales temporales del rector.
         </p>
       </div>
@@ -181,7 +181,7 @@ export default function CreateInstitution() {
 
         {/* Error global */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+          <div className="bg-[#FDEEEE] border border-[#F4BDBD] rounded-lg px-4 py-3 text-sm text-[#E03E3E]">
             {error}
           </div>
         )}
@@ -189,7 +189,7 @@ export default function CreateInstitution() {
         {/* ── Bloque 1: Datos del colegio ── */}
         <FormSection
           title="Datos de la institución educativa"
-          icon={<School className="w-4 h-4 text-indigo-600" />}
+          icon={<School className="w-4 h-4 text-[#0B6E99]" />}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
@@ -218,7 +218,7 @@ export default function CreateInstitution() {
         {/* ── Bloque 2: Datos del rector ── */}
         <FormSection
           title="Datos del rector — Super Profesor"
-          icon={<User className="w-4 h-4 text-indigo-600" />}
+          icon={<User className="w-4 h-4 text-[#0B6E99]" />}
           subtitle="Este perfil tendrá acceso para gestionar profesores y licencias de su institución"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -257,7 +257,7 @@ export default function CreateInstitution() {
         {/* ── Bloque 3: Límites de licencia ── */}
         <FormSection
           title="Límites de licencia"
-          icon={<Users className="w-4 h-4 text-indigo-600" />}
+          icon={<Users className="w-4 h-4 text-[#0B6E99]" />}
           badge="Gestión de licencias — próximamente"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -291,7 +291,7 @@ export default function CreateInstitution() {
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center gap-2 px-7 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm text-sm"
+            className="inline-flex items-center gap-2 px-7 py-3 bg-[#37352F] text-white rounded-md font-medium hover:bg-[#2F2D2B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
           >
             {loading ? (
               <>
@@ -326,17 +326,17 @@ interface FormSectionProps {
 
 function FormSection({ title, icon, subtitle, badge, children }: FormSectionProps) {
   return (
-    <section className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+    <section className="bg-white rounded-md p-6 border border-[#E9E9E7]">
       <div className="flex items-start justify-between mb-5">
         <div>
-          <h2 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
+          <h2 className="font-semibold text-[#191919] flex items-center gap-2 text-sm">
             {icon}
             {title}
           </h2>
-          {subtitle && <p className="text-xs text-gray-500 mt-1 ml-6">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-[#787774] mt-1 ml-6">{subtitle}</p>}
         </div>
         {badge && (
-          <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full shrink-0 ml-4">
+          <span className="text-xs text-[#9B9A97] bg-[#F7F6F3] px-2.5 py-1 rounded-full shrink-0 ml-4">
             {badge}
           </span>
         )}
@@ -361,10 +361,10 @@ interface FieldProps {
 function Field({ label, name, value, onChange, placeholder, type = 'text', required, icon, hint }: FieldProps) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-700 mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-[#37352F] mb-1.5">{label}</label>
       <div className="relative">
         {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9A97] pointer-events-none">
             {icon}
           </div>
         )}
@@ -376,10 +376,10 @@ function Field({ label, name, value, onChange, placeholder, type = 'text', requi
           placeholder={placeholder}
           required={required}
           min={type === 'number' ? 1 : undefined}
-          className={`w-full border border-gray-300 rounded-lg py-2.5 pr-3 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow ${icon ? 'pl-9' : 'pl-3'}`}
+          className={`w-full border border-[#E9E9E7] rounded-lg py-2.5 pr-3 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0B6E99] focus:border-transparent transition-shadow ${icon ? 'pl-9' : 'pl-3'}`}
         />
       </div>
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-[#9B9A97] mt-1">{hint}</p>}
     </div>
   );
 }
@@ -396,10 +396,10 @@ interface CredentialRowProps {
 
 function CredentialRow({ label, value, visible, copied, onCopy, showToggle, onToggle }: CredentialRowProps) {
   return (
-    <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+    <div className="flex items-center gap-3 bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg px-4 py-3">
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-        <p className="font-mono text-sm font-semibold text-gray-900 truncate">
+        <p className="text-xs text-[#787774] mb-0.5">{label}</p>
+        <p className="font-mono text-sm font-semibold text-[#191919] truncate">
           {visible ? value : '••••••••••••'}
         </p>
       </div>
@@ -407,7 +407,7 @@ function CredentialRow({ label, value, visible, copied, onCopy, showToggle, onTo
         <button
           type="button"
           onClick={onToggle}
-          className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+          className="text-[#9B9A97] hover:text-[#787774] transition-colors p-1"
           title={visible ? 'Ocultar' : 'Mostrar'}
         >
           {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -416,11 +416,11 @@ function CredentialRow({ label, value, visible, copied, onCopy, showToggle, onTo
       <button
         type="button"
         onClick={onCopy}
-        className="text-gray-400 hover:text-indigo-600 transition-colors p-1"
+        className="text-[#9B9A97] hover:text-[#0B6E99] transition-colors p-1"
         title="Copiar"
       >
         {copied
-          ? <CheckCircle className="w-4 h-4 text-emerald-500" />
+          ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" />
           : <Copy className="w-4 h-4" />
         }
       </button>

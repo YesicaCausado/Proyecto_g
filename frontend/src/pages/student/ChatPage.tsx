@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+﻿import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
 import { demoStartSession, demoSendMessage } from "../../services/demoChat";
@@ -35,27 +35,27 @@ function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement
 }
 
 const SKILLS = [
-  { key: "matematicas", name: "Pensamiento Lógico-Matemático", topic: "Razonamiento cuantitativo y matemáticas para Saber 11", icon: "🧮", color: "from-blue-500 to-blue-600" },
-  { key: "lectora",     name: "Comprensión Lectora",           topic: "Comprensión lectora y lectura crítica para Saber 11",  icon: "📖", color: "from-amber-500 to-orange-500" },
-  { key: "ingles",      name: "Inglés Comunicativo",           topic: "Competencia comunicativa en inglés para Saber 11",     icon: "🌎", color: "from-green-500 to-emerald-600" },
-  { key: "ciudadanas",  name: "Competencias Ciudadanas",       topic: "Competencias ciudadanas y sociales para Saber 11",     icon: "🏛️", color: "from-purple-500 to-violet-600" },
+  { key: "matematicas", name: "Pensamiento Lógico-Matemático", topic: "Razonamiento cuantitativo y matemáticas para Saber 11", icon: "🧮", color: "from-[#0B6E99] to-[#0B6E99]" },
+  { key: "lectora",     name: "Comprensión Lectora",           topic: "Comprensión lectora y lectura crítica para Saber 11",  icon: "📖", color: "from-[#D9730D] to-[#D9730D]" },
+  { key: "ingles",      name: "Inglés Comunicativo",           topic: "Competencia comunicativa en inglés para Saber 11",     icon: "🌎", color: "from-[#0F7B6C] to-[#0F7B6C]" },
+  { key: "ciudadanas",  name: "Competencias Ciudadanas",       topic: "Competencias ciudadanas y sociales para Saber 11",     icon: "🏛️", color: "from-[#6940A5] to-[#6940A5]" },
   { key: "cientifico",  name: "Pensamiento Científico",        topic: "Pensamiento científico y ciencias naturales para Saber 11", icon: "🔬", color: "from-cyan-500 to-teal-600" },
 ];
 
 const STATE_LABELS: Record<string, { label: string; color: string }> = {
-  normal:      { label: "Normal",      color: "bg-gray-100 text-gray-600" },
-  fatigue:     { label: "Fatiga",      color: "bg-amber-100 text-amber-700" },
-  overload:    { label: "Sobrecarga",  color: "bg-red-100 text-red-700" },
-  doubt:       { label: "Duda",        color: "bg-yellow-100 text-yellow-700" },
-  mastery:     { label: "Dominio",     color: "bg-emerald-100 text-emerald-700" },
-  flow:        { label: "Flujo ✨",    color: "bg-blue-100 text-blue-700" },
-  frustration: { label: "Frustración", color: "bg-red-100 text-red-700" },
-  curiosity:   { label: "Curiosidad",  color: "bg-violet-100 text-violet-700" },
-  focused:     { label: "Enfocado",    color: "bg-green-100 text-green-700" },
-  learning:    { label: "Aprendiendo", color: "bg-blue-100 text-blue-700" },
-  struggling:  { label: "Dificultad",  color: "bg-amber-100 text-amber-700" },
-  confused:    { label: "Confundido",  color: "bg-red-100 text-red-700" },
-  mastering:   { label: "Dominando",   color: "bg-emerald-100 text-emerald-700" },
+  normal:      { label: "Normal",      color: "bg-[#F7F6F3] text-[#787774]" },
+  fatigue:     { label: "Fatiga",      color: "bg-[#FCF6E5] text-[#DFAB01]" },
+  overload:    { label: "Sobrecarga",  color: "bg-[#FDEEEE] text-[#E03E3E]" },
+  doubt:       { label: "Duda",        color: "bg-[#FCF6E5] text-[#DFAB01]" },
+  mastery:     { label: "Dominio",     color: "bg-[#EEF7F4] text-[#0F7B6C]" },
+  flow:        { label: "Flujo ✨",    color: "bg-[#E5F3FF] text-[#0B6E99]" },
+  frustration: { label: "Frustración", color: "bg-[#FDEEEE] text-[#E03E3E]" },
+  curiosity:   { label: "Curiosidad",  color: "bg-[#F4EFFB] text-[#6940A5]" },
+  focused:     { label: "Enfocado",    color: "bg-[#EEF7F4] text-[#0F7B6C]" },
+  learning:    { label: "Aprendiendo", color: "bg-[#E5F3FF] text-[#0B6E99]" },
+  struggling:  { label: "Dificultad",  color: "bg-[#FCF6E5] text-[#DFAB01]" },
+  confused:    { label: "Confundido",  color: "bg-[#FDEEEE] text-[#E03E3E]" },
+  mastering:   { label: "Dominando",   color: "bg-[#EEF7F4] text-[#0F7B6C]" },
 };
 
 // ─── Preguntas sugeridas para pantalla inicial ────────────────────────────────
@@ -386,7 +386,7 @@ export default function ChatPage() {
   };
 
   const stateKey = lastResponse?.cognitive_state || "";
-  const stateInfo = STATE_LABELS[stateKey] || { label: stateKey, color: "bg-gray-100 text-gray-600" };
+  const stateInfo = STATE_LABELS[stateKey] || { label: stateKey, color: "bg-[#F7F6F3] text-[#787774]" };
 
   // ===== PANTALLA INICIAL (antes de iniciar sesión) =====
   if (!sessionActive) {
@@ -405,30 +405,30 @@ export default function ChatPage() {
     };
 
     return (
-      <div className="flex h-[calc(100vh-64px)] bg-gray-50 justify-center">
+      <div className="flex h-[calc(100vh-64px)] bg-[#F7F6F3] justify-center">
         <div className="flex flex-col w-full max-w-2xl">
           {/* ── Header ── */}
-          <div className="bg-white border-b border-gray-100 px-5 py-4 flex items-center gap-3">
-            <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-2xl flex items-center justify-center text-xl shadow-md flex-shrink-0">
+          <div className="bg-white border-b border-[#E9E9E7] px-5 py-4 flex items-center gap-3">
+            <div className="w-11 h-11 bg-[#37352F] rounded-md flex items-center justify-center text-xl flex-shrink-0">
               🤖
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-gray-900 text-base">Asistente IA</span>
-                <span className="flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-600 border border-violet-200 px-2 py-0.5 rounded-full">
+                <span className="font-bold text-[#191919] text-base">Asistente IA</span>
+                <span className="flex items-center gap-1 text-[10px] font-bold bg-[#F7F3FB] text-[#6940A5] border border-[#D9CCE9] px-2 py-0.5 rounded-full">
                   ✦ Con GPT-5
                 </span>
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">Tu tutor personal para el ICFES</p>
+              <p className="text-xs text-[#9B9A97] mt-0.5">Tu tutor personal para el ICFES</p>
             </div>
-            <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full shadow-sm flex-shrink-0" title="En línea" />
+            <span className="w-2.5 h-2.5 bg-[#0F7B6C] rounded-full flex-shrink-0" title="En línea" />
           </div>
 
           {/* ── Área de mensajes ── */}
           <div className="flex-1 overflow-y-auto px-5 py-6 space-y-6">
             {/* Preguntas sugeridas */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              <p className="text-xs font-semibold text-[#9B9A97] uppercase tracking-wide mb-3">
                 Preguntas sugeridas:
               </p>
               <div className="space-y-2.5">
@@ -437,12 +437,12 @@ export default function ChatPage() {
                     key={i}
                     onClick={() => handleSuggestedQuestion(q.skill, q.text)}
                     disabled={sending}
-                    className="w-full flex items-center gap-3 bg-white rounded-2xl px-4 py-3.5 text-left text-sm text-gray-700 border border-gray-100 hover:border-indigo-200 hover:shadow-sm transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center gap-3 bg-white rounded-md px-4 py-3.5 text-left text-sm text-[#37352F] border border-[#E9E9E7] hover:border-[#BFDFF0] hover:shadow-sm transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span className="w-9 h-9 bg-indigo-50 group-hover:bg-indigo-100 rounded-xl flex items-center justify-center text-lg flex-shrink-0 transition-colors">
+                    <span className="w-9 h-9 bg-[#E5F3FF] group-hover:bg-[#E5F3FF] rounded-md flex items-center justify-center text-lg flex-shrink-0 transition-colors">
                       {q.icon}
                     </span>
-                    <span className="font-medium group-hover:text-indigo-700 transition-colors">{q.text}</span>
+                    <span className="font-medium group-hover:text-[#0B6E99] transition-colors">{q.text}</span>
                   </button>
                 ))}
               </div>
@@ -450,15 +450,15 @@ export default function ChatPage() {
 
             {/* Burbuja de bienvenida del bot */}
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center text-sm flex-shrink-0 shadow-sm mt-0.5">
+              <div className="w-8 h-8 bg-[#37352F] rounded-md flex items-center justify-center text-sm flex-shrink-0 mt-0.5">
                 🤖
               </div>
-              <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 max-w-md">
-                <p className="text-sm text-gray-700 leading-relaxed">
+              <div className="bg-white rounded-md rounded-tl-sm px-4 py-3 border border-[#E9E9E7] max-w-md">
+                <p className="text-sm text-[#37352F] leading-relaxed">
                   ¡Hola! Soy tu asistente de IA para el ICFES. Puedo ayudarte con explicaciones paso a paso, resolver
                   dudas sobre cualquier tema, y darte consejos de estudio. ¿En qué puedo ayudarte hoy?
                 </p>
-                <p className="text-[10px] text-gray-400 mt-2">
+                <p className="text-[10px] text-[#9B9A97] mt-2">
                   {new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
@@ -467,10 +467,10 @@ export default function ChatPage() {
             {/* Indicador de carga cuando se está iniciando sesión */}
             {sending && (
               <div className="flex items-start gap-3 animate-fadeIn">
-                <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center text-sm flex-shrink-0 shadow-sm mt-0.5">
+                <div className="w-8 h-8 bg-[#37352F] rounded-md flex items-center justify-center text-sm flex-shrink-0 mt-0.5">
                   🤖
                 </div>
-                <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100">
+                <div className="bg-white rounded-md rounded-tl-sm px-4 py-3 border border-[#E9E9E7]">
                   <div className="flex items-center gap-1 py-1">
                     <span className="typing-dot" />
                     <span className="typing-dot" />
@@ -482,7 +482,7 @@ export default function ChatPage() {
           </div>
 
           {/* ── Input ── */}
-          <div className="bg-white border-t border-gray-100 px-5 py-4">
+          <div className="bg-white border-t border-[#E9E9E7] px-5 py-4">
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -496,17 +496,17 @@ export default function ChatPage() {
                 }}
                 placeholder="Escribe tu pregunta aquí..."
                 disabled={sending}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 text-sm disabled:opacity-50 bg-gray-50 transition-all"
+                className="flex-1 px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99] text-sm disabled:opacity-50 bg-[#F7F6F3] transition-all"
               />
               <button
                 onClick={handleFreeSubmit}
                 disabled={!freeInput.trim() || sending}
-                className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+                className="p-2.5 bg-[#37352F] text-white rounded-md hover:bg-[#2F2D2B] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               </button>
             </div>
-            <p className="text-[10px] text-gray-400 mt-2 text-center">
+            <p className="text-[10px] text-[#9B9A97] mt-2 text-center">
               Presiona Enter para enviar, Shift + Enter para nueva línea
             </p>
           </div>
@@ -517,24 +517,24 @@ export default function ChatPage() {
 
   // ===== CHAT VIEW =====
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-gray-50">
+    <div className="flex h-[calc(100vh-64px)] bg-[#F7F6F3]">
       {/* Chat Panel */}
       <div className="flex flex-col flex-1 min-w-0 relative">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <div className="bg-white border-b border-[#E9E9E7] px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-accent-600 rounded-xl flex items-center justify-center">
+            <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-accent-600 rounded-md flex items-center justify-center">
               <Brain className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900 text-sm">Tutor NeuroLearn</h2>
-              <p className="text-xs text-gray-500">
+              <h2 className="font-semibold text-[#191919] text-sm">Tutor NeuroLearn</h2>
+              <p className="text-xs text-[#787774]">
                 {SKILLS.find((s) => s.key === selectedSkill)?.name || "Sesión activa"}
               </p>
             </div>
             {/* Badge Modo Tutor Voz */}
             {voiceTutor.isVoiceMode && (
-              <span className="flex items-center gap-1 text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium animate-pulse">
+              <span className="flex items-center gap-1 text-xs bg-[#F4EFFB] text-[#6940A5] px-2 py-0.5 rounded-full font-medium animate-pulse">
                 🎙 Tutor Voz
               </span>
             )}
@@ -560,18 +560,18 @@ export default function ChatPage() {
                   }
                   className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1 ${
                     facial.isStreaming
-                      ? "bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500"
+                      ? "bg-[#EEF7F4] text-[#0F7B6C] hover:bg-[#FDEEEE] hover:text-[#E03E3E]"
                       : facial.errorMessage
-                      ? "bg-orange-50 text-orange-500 hover:bg-orange-100"
-                      : "text-gray-400 hover:text-green-600 hover:bg-green-50"
+                      ? "bg-[#FDF4EC] text-[#D9730D] hover:bg-[#FDF4EC]"
+                      : "text-[#9B9A97] hover:text-[#0F7B6C] hover:bg-[#EEF7F4]"
                   }`}
                 >
                   {facial.isStreaming ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
-                  {facial.isStreaming && <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />}
-                  {facial.errorMessage && !facial.isStreaming && <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />}
+                  {facial.isStreaming && <span className="w-1.5 h-1.5 bg-[#0F7B6C] rounded-full animate-pulse" />}
+                  {facial.errorMessage && !facial.isStreaming && <span className="w-1.5 h-1.5 bg-[#D9730D] rounded-full" />}
                 </button>
                 {facial.errorMessage && (
-                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-[#191919] text-white text-xs rounded-lg p-3 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                     <p className="font-medium mb-1">⚠️ Cámara no disponible</p>
                     <p>{facial.errorMessage}</p>
                   </div>
@@ -579,13 +579,13 @@ export default function ChatPage() {
               </div>
             ) : (
               <div className="relative group">
-                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin cámara — P3 desactivado">
+                <span className="p-2 rounded-lg flex items-center gap-1 text-[#9B9A97] cursor-default" title="Sin cámara — P3 desactivado">
                   <CameraOff className="w-4 h-4" />
                 </span>
-                <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-[#191919] text-white text-xs rounded-lg p-3 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                   <p className="font-medium mb-1">📷 Sin cámara detectada</p>
                   <p>El Patrón 3 (microexpresión facial) no está disponible en este dispositivo.</p>
-                  <p className="mt-1 text-gray-300">El sistema funciona con P1 + P2 + P5.</p>
+                  <p className="mt-1 text-[#9B9A97]">El sistema funciona con P1 + P2 + P5.</p>
                 </div>
               </div>
             )}
@@ -604,18 +604,18 @@ export default function ChatPage() {
                   }
                   className={`p-2 rounded-lg transition-colors flex items-center gap-1 ${
                     voice.isStreaming
-                      ? "bg-blue-50 text-blue-600 hover:bg-red-50 hover:text-red-500"
+                      ? "bg-[#E5F3FF] text-[#0B6E99] hover:bg-[#FDEEEE] hover:text-[#E03E3E]"
                       : voice.errorMessage
-                      ? "bg-orange-50 text-orange-500 hover:bg-orange-100"
-                      : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                      ? "bg-[#FDF4EC] text-[#D9730D] hover:bg-[#FDF4EC]"
+                      : "text-[#9B9A97] hover:text-[#0B6E99] hover:bg-[#E5F3FF]"
                   }`}
                 >
                   {voice.isStreaming ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                  {voice.isStreaming && voice.snapshot.is_active && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />}
-                  {voice.errorMessage && !voice.isStreaming && <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />}
+                  {voice.isStreaming && voice.snapshot.is_active && <span className="w-1.5 h-1.5 bg-[#0B6E99] rounded-full animate-pulse" />}
+                  {voice.errorMessage && !voice.isStreaming && <span className="w-1.5 h-1.5 bg-[#D9730D] rounded-full" />}
                 </button>
                 {voice.errorMessage && (
-                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-[#191919] text-white text-xs rounded-lg p-3 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                     <p className="font-medium mb-1">⚠️ Micrófono no disponible</p>
                     <p>{voice.errorMessage}</p>
                   </div>
@@ -623,13 +623,13 @@ export default function ChatPage() {
               </div>
             ) : (
               <div className="relative group">
-                <span className="p-2 rounded-lg flex items-center gap-1 text-gray-300 cursor-default" title="Sin micrófono — P4 desactivado">
+                <span className="p-2 rounded-lg flex items-center gap-1 text-[#9B9A97] cursor-default" title="Sin micrófono — P4 desactivado">
                   <MicOff className="w-4 h-4" />
                 </span>
-                <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-[#191919] text-white text-xs rounded-lg p-3 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                   <p className="font-medium mb-1">🎤 Sin micrófono detectado</p>
                   <p>El Patrón 4 (prosodia de voz) no está disponible en este dispositivo.</p>
-                  <p className="mt-1 text-gray-300">El sistema funciona con P1 + P2 + P5.</p>
+                  <p className="mt-1 text-[#9B9A97]">El sistema funciona con P1 + P2 + P5.</p>
                 </div>
               </div>
             )}
@@ -640,8 +640,8 @@ export default function ChatPage() {
                 title={voiceTutor.subtitlesEnabled ? "Ocultar subtítulos" : "Mostrar subtítulos"}
                 className={`p-2 rounded-lg transition-colors ${
                   voiceTutor.subtitlesEnabled
-                    ? "bg-violet-50 text-violet-600"
-                    : "text-gray-400 hover:text-violet-500 hover:bg-violet-50"
+                    ? "bg-[#F7F3FB] text-[#6940A5]"
+                    : "text-[#9B9A97] hover:text-[#6940A5] hover:bg-[#F7F3FB]"
                 }`}
               >
                 <Captions className="w-4 h-4" />
@@ -654,8 +654,8 @@ export default function ChatPage() {
               disabled={!voice.hardwareAvailable}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
                 voice.hardwareAvailable
-                  ? 'bg-violet-600 text-white hover:bg-violet-500 shadow-sm'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  ? 'bg-[#6940A5] text-white hover:bg-[#6940A5]'
+                  : 'bg-[#F7F6F3] text-[#9B9A97] cursor-not-allowed'
               }`}
               title={voice.hardwareAvailable ? 'Modo Live con tutor animado' : 'Requiere micrófono'}
             >
@@ -663,14 +663,14 @@ export default function ChatPage() {
             </button>
             <button
               onClick={() => setShowDashboard(!showDashboard)}
-              className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-gray-400 hover:text-accent-500 hover:bg-accent-50"}`}
+              className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-[#9B9A97] hover:text-accent-500 hover:bg-accent-50"}`}
               title="Panel neuroconductual"
             >
               <BarChart2 className="w-4 h-4" />
             </button>
             <button
               onClick={endSession}
-              className="p-2 text-gray-400 hover:text-danger-500 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-2 text-[#9B9A97] hover:text-danger-500 hover:bg-[#FDEEEE] rounded-lg transition-colors"
               title="Terminar sesión"
             >
               <X className="w-4 h-4" />
@@ -681,25 +681,25 @@ export default function ChatPage() {
         {/* Preview de cámara — cuadrito flotante esquina inferior derecha */}
         {facial.isStreaming && (
           <div className="absolute bottom-20 right-4 z-30 group">
-            <div className="relative w-36 h-28 rounded-xl overflow-hidden shadow-2xl border-2 border-green-400 bg-black">
+            <div className="relative w-36 h-28 rounded-md overflow-hidden border-2 border-[#0F7B6C] bg-black">
               {/* El elemento <video> existe en el DOM; lo clonamos visualmente con un canvas
                   o simplemente referenciamos el mismo stream en un <video> React */}
               <VideoPreview videoRef={facial.videoRef} />
               {/* Indicador "EN VIVO" */}
               <div className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-black/60 rounded-full px-1.5 py-0.5">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                <span className="w-1.5 h-1.5 bg-[#E03E3E] rounded-full animate-pulse" />
                 <span className="text-white text-[9px] font-semibold tracking-wide">EN VIVO</span>
               </div>
               {/* Botón cerrar encima del cuadrito */}
               <button
                 onClick={facial.stopCamera}
-                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#E03E3E]"
                 title="Apagar cámara"
               >
                 <X className="w-3 h-3" />
               </button>
             </div>
-            <p className="text-center text-[10px] text-gray-400 mt-1">Análisis facial activo</p>
+            <p className="text-center text-[10px] text-[#9B9A97] mt-1">Análisis facial activo</p>
           </div>
         )}
 
@@ -718,7 +718,7 @@ export default function ChatPage() {
                       onStopSpeak={() => voiceTutor.stopSpeaking()}
                       onReport={(id) => console.log(`Reporte de mensaje: ${id}`)}
                     />
-                  : <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+                  : <div className="bg-[#37352F] text-white rounded-md rounded-tr-sm px-4 py-3">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                     </div>
                 }
@@ -741,14 +741,14 @@ export default function ChatPage() {
           {sending && (
             <div className="flex justify-start animate-fadeIn w-full">
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-base flex-shrink-0 shadow-sm mt-0.5 select-none">
+                <div className="w-8 h-8 rounded-md bg-[#37352F] flex items-center justify-center text-base flex-shrink-0 mt-0.5 select-none">
                   🤖
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-xs font-semibold text-gray-600">Asistente IA</span>
+                    <span className="text-xs font-semibold text-[#787774]">Asistente IA</span>
                   </div>
-                  <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3.5 shadow-sm border border-gray-100">
+                  <div className="bg-white rounded-md rounded-tl-sm px-4 py-3.5 border border-[#E9E9E7]">
                     <div className="flex items-center gap-1 py-0.5">
                       <span className="typing-dot" />
                       <span className="typing-dot" />
@@ -765,24 +765,24 @@ export default function ChatPage() {
         {/* Overlay de subtítulos progresivos — avanza palabra a palabra */}
         {voiceTutor.subtitlesEnabled && voiceTutor.isSpeaking && voiceTutor.subtitleProgress && (
           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-2xl pointer-events-none">
-            <div className="bg-black/80 text-white text-sm rounded-2xl px-5 py-3 text-center leading-relaxed backdrop-blur-sm shadow-xl border border-violet-500/30">
-              <span className="mr-1.5 text-violet-400 text-xs font-semibold uppercase tracking-widest">🔊 Tutor</span>
+            <div className="bg-black/80 text-white text-sm rounded-md px-5 py-3 text-center leading-relaxed backdrop-blur-sm border border-[#6940A5]/30">
+              <span className="mr-1.5 text-[#6940A5] text-xs font-semibold uppercase tracking-widest">🔊 Tutor</span>
               <br />
               <span className="text-base">
                 {voiceTutor.subtitleProgress}
-                <span className="inline-block w-2 h-[1em] bg-violet-400 ml-1 animate-pulse align-middle rounded-sm" />
+                <span className="inline-block w-2 h-[1em] bg-[#6940A5] ml-1 animate-pulse align-middle rounded-sm" />
               </span>
             </div>
           </div>
         )}
 
         {/* Input */}
-        <div className="bg-white border-t border-gray-200 px-4 py-3 flex-shrink-0">
+        <div className="bg-white border-t border-[#E9E9E7] px-4 py-3 flex-shrink-0">
           {/* Indicador STT: transcript en vivo mientras el usuario habla */}
           {voiceTutor.isListening && voiceTutor.liveTranscript && (
             <div className="px-4 pb-1 max-w-4xl mx-auto w-full animate-fadeIn">
-              <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-xs text-violet-700">
-                <span className="w-2 h-2 bg-violet-500 rounded-full animate-ping flex-shrink-0" />
+              <div className="flex items-center gap-2 bg-[#F7F3FB] border border-[#D9CCE9] rounded-md px-3 py-2 text-xs text-[#6940A5]">
+                <span className="w-2 h-2 bg-[#6940A5] rounded-full animate-ping flex-shrink-0" />
                 <span className="italic">"{voiceTutor.liveTranscript}"</span>
               </div>
             </div>
@@ -790,8 +790,8 @@ export default function ChatPage() {
           {/* Indicador mic pulsante cuando escucha y no hay transcript */}
           {voiceTutor.isListening && !voiceTutor.liveTranscript && (
             <div className="px-4 pb-1 max-w-4xl mx-auto w-full">
-              <div className="flex items-center gap-2 text-xs text-violet-500">
-                <span className="w-2 h-2 bg-violet-400 rounded-full animate-ping" />
+              <div className="flex items-center gap-2 text-xs text-[#6940A5]">
+                <span className="w-2 h-2 bg-[#6940A5] rounded-full animate-ping" />
                 <span>Escuchando... habla con tu tutor</span>
               </div>
             </div>
@@ -799,12 +799,12 @@ export default function ChatPage() {
           {/* Indicador TTS: tutor hablando */}
           {voiceTutor.isSpeaking && (
             <div className="px-4 pb-1 max-w-4xl mx-auto w-full">
-              <div className="flex items-center gap-2 text-xs text-violet-600">
-                <span className="w-2 h-2 bg-violet-500 rounded-full animate-pulse" />
+              <div className="flex items-center gap-2 text-xs text-[#6940A5]">
+                <span className="w-2 h-2 bg-[#6940A5] rounded-full animate-pulse" />
                 <span>El tutor está respondiendo en voz alta...</span>
                 <button
                   onClick={voiceTutor.stopSpeaking}
-                  className="ml-auto text-violet-400 hover:text-violet-600 underline"
+                  className="ml-auto text-[#6940A5] hover:text-[#6940A5] underline"
                 >
                   Detener
                 </button>
@@ -814,7 +814,7 @@ export default function ChatPage() {
           {/* Hint de pausa larga */}
           {metrics.isLongPause && sessionActive && !sending && (
           <div className="px-4 pb-1 max-w-4xl mx-auto w-full animate-fadeIn">
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700">
+            <div className="flex items-center gap-2 bg-[#FCF6E5] border border-[#EDD88A] rounded-md px-3 py-2 text-xs text-[#DFAB01]">
               <span className="text-base">🤔</span>
               <span>
                 <strong>¿Necesitas ayuda?</strong> Llevas{" "}
@@ -833,34 +833,34 @@ export default function ChatPage() {
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
               placeholder="Escribe tu respuesta..."
               disabled={sending}
-              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-gray-50"
+              className="flex-1 px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-[#F7F6F3]"
             />
             <button
               onClick={sendMessage}
               disabled={!input.trim() || sending}
-              className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="p-2.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </div>
           {lastResponse && (
             <div className="flex items-center gap-3 mt-2 max-w-4xl mx-auto">
-              <div className="flex items-center gap-1 text-xs text-gray-400">
+              <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Engagement:</span>
-                <div className="w-16 h-1 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-400 rounded-full transition-all duration-700"
+                <div className="w-16 h-1 bg-[#F7F6F3] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#0B6E99] rounded-full transition-all duration-700"
                     style={{ width: `${Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%` }} />
                 </div>
                 <span>{Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%</span>
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-400">
+              <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Riesgo error:</span>
-                <span className={`font-medium ${(lastResponse.error_risk ?? 0) > 0.5 ? "text-red-500" : "text-green-500"}`}>
+                <span className={`font-medium ${(lastResponse.error_risk ?? 0) > 0.5 ? "text-[#E03E3E]" : "text-[#0F7B6C]"}`}>
                   {Math.round((lastResponse.error_risk ?? 0) * 100)}%
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-400">
-                <span className="text-gray-300">|</span>
+              <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
+                <span className="text-[#9B9A97]">|</span>
                 <span>{(lastResponse.active_modalities ?? []).length}/5 patrones activos</span>
               </div>
             </div>
@@ -890,7 +890,7 @@ export default function ChatPage() {
                   await sendMessageWithText("Generame el quiz sobre el tema que acabamos de ver con exactamente 4 opciones (A, B, C, D)");
                 }}
                 disabled={sending}
-                className="text-sm font-semibold bg-gradient-to-r from-violet-500 to-purple-600 text-white px-6 py-3 rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all disabled:opacity-40 flex items-center gap-2"
+                className="text-sm font-semibold bg-[#6940A5] text-white px-6 py-3 rounded-full hover:shadow-xl transform hover:scale-105 transition-all disabled:opacity-40 flex items-center gap-2"
               >
                 <span className="text-lg">📋</span>
                 <span>Quiz Sugerido</span>
@@ -905,7 +905,7 @@ export default function ChatPage() {
               <button
                 onClick={() => sendMessageWithText("Dame un quiz de opción múltiple (A, B, C, D) sobre lo que acabamos de ver para verificar que aprendí.")}
                 disabled={sending}
-                className="text-xs text-violet-500 hover:text-violet-700 border border-violet-200 hover:bg-violet-50 px-3 py-1 rounded-full transition-colors disabled:opacity-40"
+                className="text-xs text-[#6940A5] hover:text-[#6940A5] border border-[#D9CCE9] hover:bg-[#F7F3FB] px-3 py-1 rounded-full transition-colors disabled:opacity-40"
               >
                 🧠 Quiz rápido
               </button>

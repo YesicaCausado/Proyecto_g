@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CognitiveDashboard
  * Visualización en tiempo real de los 5 Patrones Neuroconductuales Digitales
  */
@@ -55,37 +55,37 @@ const PATTERN_CONFIG = [
 ];
 
 const STATE_CONFIG: Record<string, { label: string; color: string; emoji: string }> = {
-  normal:       { label: 'Normal',       color: 'bg-gray-100 text-gray-700 border-gray-200',       emoji: '😐' },
-  fatigue:      { label: 'Fatiga',       color: 'bg-amber-100 text-amber-700 border-amber-200',    emoji: '😴' },
-  overload:     { label: 'Sobrecarga',   color: 'bg-red-100 text-red-700 border-red-200',          emoji: '🤯' },
-  doubt:        { label: 'Duda',         color: 'bg-yellow-100 text-yellow-700 border-yellow-200', emoji: '🤔' },
-  mastery:      { label: 'Dominio',      color: 'bg-emerald-100 text-emerald-700 border-emerald-200', emoji: '🌟' },
-  flow:         { label: 'Flujo',        color: 'bg-blue-100 text-blue-700 border-blue-200',       emoji: '✨' },
-  frustration:  { label: 'Frustración',  color: 'bg-red-100 text-red-700 border-red-200',          emoji: '😤' },
-  curiosity:    { label: 'Curiosidad',   color: 'bg-violet-100 text-violet-700 border-violet-200', emoji: '🔍' },
+  normal:       { label: 'Normal',       color: 'bg-[#F7F6F3] text-[#37352F] border-[#E9E9E7]',       emoji: '😐' },
+  fatigue:      { label: 'Fatiga',       color: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',    emoji: '😴' },
+  overload:     { label: 'Sobrecarga',   color: 'bg-[#FDEEEE] text-[#E03E3E] border-[#F4BDBD]',          emoji: '🤯' },
+  doubt:        { label: 'Duda',         color: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]', emoji: '🤔' },
+  mastery:      { label: 'Dominio',      color: 'bg-[#EEF7F4] text-[#0F7B6C] border-[#B7DDD6]', emoji: '🌟' },
+  flow:         { label: 'Flujo',        color: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',       emoji: '✨' },
+  frustration:  { label: 'Frustración',  color: 'bg-[#FDEEEE] text-[#E03E3E] border-[#F4BDBD]',          emoji: '😤' },
+  curiosity:    { label: 'Curiosidad',   color: 'bg-[#F4EFFB] text-[#6940A5] border-[#D9CCE9]', emoji: '🔍' },
   // legacy labels
-  focused:      { label: 'Enfocado',     color: 'bg-blue-100 text-blue-700 border-blue-200',       emoji: '🎯' },
-  learning:     { label: 'Aprendiendo',  color: 'bg-indigo-100 text-indigo-700 border-indigo-200', emoji: '📚' },
-  struggling:   { label: 'Dificultad',   color: 'bg-amber-100 text-amber-700 border-amber-200',    emoji: '💪' },
-  confused:     { label: 'Confundido',   color: 'bg-orange-100 text-orange-700 border-orange-200', emoji: '😕' },
-  mastering:    { label: 'Dominando',    color: 'bg-emerald-100 text-emerald-700 border-emerald-200', emoji: '🏆' },
+  focused:      { label: 'Enfocado',     color: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',       emoji: '🎯' },
+  learning:     { label: 'Aprendiendo',  color: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]', emoji: '📚' },
+  struggling:   { label: 'Dificultad',   color: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',    emoji: '💪' },
+  confused:     { label: 'Confundido',   color: 'bg-[#FDF4EC] text-[#D9730D] border-[#F2D2B7]', emoji: '😕' },
+  mastering:    { label: 'Dominando',    color: 'bg-[#EEF7F4] text-[#0F7B6C] border-[#B7DDD6]', emoji: '🏆' },
 };
 
 const COLOR_CLASSES: Record<string, { bar: string; bg: string; text: string; ring: string }> = {
-  blue:   { bar: 'bg-blue-500',   bg: 'bg-blue-50',   text: 'text-blue-600',   ring: 'ring-blue-200' },
-  purple: { bar: 'bg-purple-500', bg: 'bg-purple-50', text: 'text-purple-600', ring: 'ring-purple-200' },
-  amber:  { bar: 'bg-amber-500',  bg: 'bg-amber-50',  text: 'text-amber-600',  ring: 'ring-amber-200' },
-  green:  { bar: 'bg-green-500',  bg: 'bg-green-50',  text: 'text-green-600',  ring: 'ring-green-200' },
-  red:    { bar: 'bg-red-500',    bg: 'bg-red-50',    text: 'text-red-600',    ring: 'ring-red-200' },
+  blue:   { bar: 'bg-[#0B6E99]',   bg: 'bg-[#E5F3FF]',   text: 'text-[#0B6E99]',   ring: 'ring-blue-200' },
+  purple: { bar: 'bg-[#6940A5]', bg: 'bg-[#F7F3FB]', text: 'text-[#6940A5]', ring: 'ring-purple-200' },
+  amber:  { bar: 'bg-[#FCF6E5]0',  bg: 'bg-[#FCF6E5]',  text: 'text-[#DFAB01]',  ring: 'ring-amber-200' },
+  green:  { bar: 'bg-[#0F7B6C]',  bg: 'bg-[#EEF7F4]',  text: 'text-[#0F7B6C]',  ring: 'ring-green-200' },
+  red:    { bar: 'bg-[#E03E3E]',    bg: 'bg-[#FDEEEE]',    text: 'text-[#E03E3E]',    ring: 'ring-red-200' },
 };
 
 function MetricBar({ value, color, label }: { value: number; color: string; label?: string }) {
   const pct = Math.round(Math.min(Math.max(value, 0), 1) * 100);
-  const colorClass = COLOR_CLASSES[color]?.bar || 'bg-gray-400';
+  const colorClass = COLOR_CLASSES[color]?.bar || 'bg-[#9B9A97]';
   return (
     <div>
-      {label && <span className="text-xs text-gray-500">{label}: {pct}%</span>}
-      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+      {label && <span className="text-xs text-[#787774]">{label}: {pct}%</span>}
+      <div className="h-1.5 bg-[#F7F6F3] rounded-full overflow-hidden">
         <div
           className={`h-full ${colorClass} transition-all duration-700 rounded-full`}
           style={{ width: `${pct}%` }}
@@ -123,7 +123,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
   if (!isVisible || !response) return null;
 
   const state = response.cognitive_state || 'normal';
-  const stateInfo = STATE_CONFIG[state] || { label: state, color: 'bg-gray-100 text-gray-700 border-gray-200', emoji: '🧠' };
+  const stateInfo = STATE_CONFIG[state] || { label: state, color: 'bg-[#F7F6F3] text-[#37352F] border-[#E9E9E7]', emoji: '🧠' };
   const activeModalities = response.active_modalities || [];
   const engagement = response.engagement_score ?? 0.5;
   const attention = response.attention_level ?? 1.0;
@@ -151,14 +151,14 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
   const isVoiceLive  = !!(voiceActive && voiceSnapshot?.is_active);
 
   return (
-    <div className="bg-white border-l border-gray-100 w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4">
+    <div className="bg-white border-l border-[#E9E9E7] w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4">
       {/* Estado Cognitivo */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-4 h-4 text-accent-500" />
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Estado Cognitivo</span>
+          <span className="text-xs font-semibold text-[#787774] uppercase tracking-wide">Estado Cognitivo</span>
         </div>
-        <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${stateInfo.color}`}>
+        <div className={`flex items-center gap-3 px-3 py-2.5 rounded-md border ${stateInfo.color}`}>
           <span className="text-2xl">{stateInfo.emoji}</span>
           <div>
             <p className="font-semibold text-sm">{stateInfo.label}</p>
@@ -166,32 +166,32 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
           </div>
         </div>
         {response.emotional_state && (
-          <p className="text-xs text-gray-400 mt-1 ml-1">Estado emocional: {response.emotional_state}</p>
+          <p className="text-xs text-[#9B9A97] mt-1 ml-1">Estado emocional: {response.emotional_state}</p>
         )}
       </div>
 
       {/* Métricas Globales */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="text-center bg-blue-50 rounded-xl p-2">
+        <div className="text-center bg-[#E5F3FF] rounded-md p-2">
           <CircleGauge value={engagement} color="blue" size={44} />
-          <p className="text-xs text-blue-600 font-medium mt-1">Engagement</p>
-          <p className="text-xs text-blue-500">{Math.round(engagement * 100)}%</p>
+          <p className="text-xs text-[#0B6E99] font-medium mt-1">Engagement</p>
+          <p className="text-xs text-[#0B6E99]">{Math.round(engagement * 100)}%</p>
         </div>
-        <div className="text-center bg-green-50 rounded-xl p-2">
+        <div className="text-center bg-[#EEF7F4] rounded-md p-2">
           <CircleGauge value={attention} color="green" size={44} />
-          <p className="text-xs text-green-600 font-medium mt-1">Atención</p>
-          <p className="text-xs text-green-500">{Math.round(attention * 100)}%</p>
+          <p className="text-xs text-[#0F7B6C] font-medium mt-1">Atención</p>
+          <p className="text-xs text-[#0F7B6C]">{Math.round(attention * 100)}%</p>
         </div>
-        <div className="text-center bg-red-50 rounded-xl p-2">
+        <div className="text-center bg-[#FDEEEE] rounded-md p-2">
           <CircleGauge value={errorRisk} color="red" size={44} />
-          <p className="text-xs text-red-600 font-medium mt-1">Riesgo</p>
-          <p className="text-xs text-red-500">{Math.round(errorRisk * 100)}%</p>
+          <p className="text-xs text-[#E03E3E] font-medium mt-1">Riesgo</p>
+          <p className="text-xs text-[#E03E3E]">{Math.round(errorRisk * 100)}%</p>
         </div>
       </div>
 
       {/* 5 Patrones Neuroconductuales */}
       <div>
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mb-3">
           5 Patrones Neuroconductuales
         </p>
         <div className="space-y-2.5">
@@ -204,7 +204,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
             const isActive = isBackendActive || isSensorLive;
             const colors = COLOR_CLASSES[p.color];
             return (
-              <div key={p.id} className={`rounded-xl p-2.5 ${colors.bg}`}>
+              <div key={p.id} className={`rounded-md p-2.5 ${colors.bg}`}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <div className={`w-5 h-5 rounded-md flex items-center justify-center ${colors.bg} ${colors.ring} ring-1`}>
@@ -217,7 +217,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
                   <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
                     isActive
                       ? `${colors.bg} ${colors.text} ring-1 ${colors.ring}`
-                      : 'bg-gray-100 text-gray-400'
+                      : 'bg-[#F7F6F3] text-[#9B9A97]'
                   }`}>
                     {isSensorLive ? `🔴 ${Math.round(val * 100)}%` : isActive ? `${Math.round(val * 100)}%` : '—'}
                   </span>
@@ -226,7 +226,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
                   <MetricBar value={val} color={p.color} />
                 )}
                 {!isActive && (
-                  <p className="text-xs text-gray-400">Datos insuficientes</p>
+                  <p className="text-xs text-[#9B9A97]">Datos insuficientes</p>
                 )}
               </div>
             );
@@ -237,12 +237,12 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
       {/* Recomendaciones */}
       {response.suggestions && response.suggestions.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mb-2">
             Recomendaciones IA
           </p>
           <div className="space-y-1.5">
             {response.suggestions.slice(0, 3).map((sug, i) => (
-              <div key={i} className="text-xs text-gray-600 bg-gray-50 rounded-lg px-2.5 py-2 leading-relaxed">
+              <div key={i} className="text-xs text-[#787774] bg-[#F7F6F3] rounded-lg px-2.5 py-2 leading-relaxed">
                 {sug}
               </div>
             ))}
@@ -251,59 +251,59 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
       )}
 
       {/* Modalidades Activas */}
-      <div className="pt-2 border-t border-gray-100">
-        <p className="text-xs text-gray-400 mb-1.5">Canales activos</p>
+      <div className="pt-2 border-t border-[#E9E9E7]">
+        <p className="text-xs text-[#9B9A97] mb-1.5">Canales activos</p>
         <div className="flex flex-wrap gap-1">
           {['interaction_rhythm', 'decision_sequence', 'error_prediction'].map((mod) => (
-            <span key={mod} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+            <span key={mod} className="text-xs bg-[#E5F3FF] text-[#0B6E99] px-2 py-0.5 rounded-full">
               {mod === 'interaction_rhythm' ? 'Ritmo' :
                mod === 'decision_sequence' ? 'Decisión' : 'Predicción'}
             </span>
           ))}
           {(activeModalities.includes('facial_microexpression') || isFacialLive) && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${isFacialLive ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600'}`}>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${isFacialLive ? 'bg-[#FCF6E5]0 text-white' : 'bg-[#FCF6E5] text-[#DFAB01]'}`}>
               {isFacialLive ? '🔴 Facial' : 'Facial'}
             </span>
           )}
           {!isFacialLive && !activeModalities.includes('facial_microexpression') && (
-            <span className="text-xs bg-gray-50 text-gray-400 px-2 py-0.5 rounded-full">📷 Facial inactivo</span>
+            <span className="text-xs bg-[#F7F6F3] text-[#9B9A97] px-2 py-0.5 rounded-full">📷 Facial inactivo</span>
           )}
           {(activeModalities.includes('voice_prosody') || isVoiceLive) && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${isVoiceLive ? 'bg-green-500 text-white' : 'bg-green-50 text-green-600'}`}>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${isVoiceLive ? 'bg-[#0F7B6C] text-white' : 'bg-[#EEF7F4] text-[#0F7B6C]'}`}>
               {isVoiceLive ? '🔴 Voz' : 'Voz'}
             </span>
           )}
           {!isVoiceLive && !activeModalities.includes('voice_prosody') && (
-            <span className="text-xs bg-gray-50 text-gray-400 px-2 py-0.5 rounded-full">🎤 Voz inactiva</span>
+            <span className="text-xs bg-[#F7F6F3] text-[#9B9A97] px-2 py-0.5 rounded-full">🎤 Voz inactiva</span>
           )}
         </div>
         {/* Detalles en vivo de facial */}
         {isFacialLive && facialSnapshot && (
-          <div className="mt-2 text-xs text-gray-500 space-y-1 bg-amber-50 rounded-lg px-2 py-2">
+          <div className="mt-2 text-xs text-[#787774] space-y-1 bg-[#FCF6E5] rounded-lg px-2 py-2">
             <div className="flex items-center justify-between">
               <span>👁 Mirada:</span>
-              <span className="font-medium text-amber-700">{facialSnapshot.gaze_direction === 'screen' ? '✅ Pantalla' : facialSnapshot.gaze_direction === 'away' ? '↗ Desviada' : facialSnapshot.gaze_direction === 'down' ? '↓ Abajo' : '↑ Arriba'}</span>
+              <span className="font-medium text-[#DFAB01]">{facialSnapshot.gaze_direction === 'screen' ? '✅ Pantalla' : facialSnapshot.gaze_direction === 'away' ? '↗ Desviada' : facialSnapshot.gaze_direction === 'down' ? '↓ Abajo' : '↑ Arriba'}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>😊 Emoción:</span>
-              <span className="font-medium text-amber-700">
+              <span className="font-medium text-[#DFAB01]">
                 {facialSnapshot.valence > 0.2 ? '😊 Positiva' : facialSnapshot.valence < -0.2 ? '😟 Negativa' : '😐 Neutral'}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span>🏃 Movimiento:</span>
-              <span className="font-medium text-amber-700">{Math.round(facialSnapshot.motion_level * 100)}%</span>
+              <span className="font-medium text-[#DFAB01]">{Math.round(facialSnapshot.motion_level * 100)}%</span>
             </div>
             <div className="flex items-center justify-between">
               <span>😌 Ceño:</span>
-              <span className="font-medium text-amber-700">{facialSnapshot.brow_furrow > 0.4 ? '😠 Fruncido' : '😌 Relajado'}</span>
+              <span className="font-medium text-[#DFAB01]">{facialSnapshot.brow_furrow > 0.4 ? '😠 Fruncido' : '😌 Relajado'}</span>
             </div>
             <MetricBar value={facialSnapshot.attention_score} color="amber" label="Atención visual" />
           </div>
         )}
         {/* Detalles en vivo de voz */}
         {isVoiceLive && voiceSnapshot && (
-          <div className="mt-2 text-xs text-gray-500 space-y-0.5 bg-green-50 rounded-lg px-2 py-1.5">
+          <div className="mt-2 text-xs text-[#787774] space-y-0.5 bg-[#EEF7F4] rounded-lg px-2 py-1.5">
             <p>🎵 Tono: {voiceSnapshot.pitch_mean_hz.toFixed(0)} Hz · Vol: {voiceSnapshot.volume_db.toFixed(0)} dB</p>
             <p>⚡ Velocidad: {voiceSnapshot.speech_rate_wpm.toFixed(0)} ppm · Silencio: {(voiceSnapshot.silence_duration_ms / 1000).toFixed(1)}s</p>
           </div>
