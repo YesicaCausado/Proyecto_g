@@ -106,12 +106,12 @@ export function TeachersTab({ license }: { license: any }) {
     setError('');
     
     try {
-      const response = await api.post('/credentials/super/teachers/individual', {
+      const response = await api.post('/super/teachers', {
         first_name: firstName,
         last_name: lastName,
         document_number: documentNumber,
-        email: email || null
-      });
+        email:  email || null
+        });
       
       setMessage('¡Profesor creado exitosamente!');
       setNewCredentials(prev => [response.data, ...prev]);
@@ -143,11 +143,11 @@ export function TeachersTab({ license }: { license: any }) {
     formData.append('file', fileInputRef.current.files[0]);
     
     try {
-      const response = await api.post('/credentials/super/teachers/batch', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await api.post('/super/teachers/bulk', formData, {
+      headers: {
+      'Content-Type': 'multipart/form-data',
+      },
+    });
       
       setMessage(`Se han procesado ${response.data.total_processed} profesores en lote.`);
       setNewCredentials(response.data.credentials);
@@ -382,7 +382,7 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
     setError('');
     
     try {
-      const response = await api.post('/credentials/super/students/individual', {
+      const response = await api.post('/super/students', {
         first_name: firstName,
         last_name: lastName,
         document_number: documentNumber,
@@ -421,8 +421,8 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
     }
     
     try {
-      const response = await api.post('/credentials/super/students/batch', formData, {
-        headers: {
+      const response = await api.post('/super/students/bulk', formData, {
+          headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
