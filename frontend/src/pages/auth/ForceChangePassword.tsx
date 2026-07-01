@@ -35,10 +35,10 @@ export default function ForceChangePassword() {
     setError(null);
     setLoading(true);
     try {
-      await api.post('/api/v1/auth/change-password', {
+      await api.post('/auth/change-password', {
         current_password: current,
         new_password: newPwd,
-      });
+        });
       setSuccess(true);
       setTimeout(() => {
         const role = user?.role;
