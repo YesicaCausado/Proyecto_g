@@ -42,6 +42,14 @@ except Exception as e:
     import logging
     logging.getLogger(__name__).error(f"⚠️ No se pudo crear las tablas: {e}. El backend arrancará sin DB.")
 
+# ─── Migraciones B2B (columnas nuevas en tablas existentes) ──────────────────
+try:
+    from app.db.migrate import run_migrations
+    run_migrations(engine)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).error(f"⚠️ Error en migraciones B2B: {e}")
+
 # ─── Usuario demo (DEMO_MODE del frontend) ────────────────────────────────────
 def _ensure_demo_user():
     """Crea los usuarios demo (estudiante y admin) si no existen."""

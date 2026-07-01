@@ -12,6 +12,8 @@ import {
   TrendingUp,
   BookMarked,
   ChevronRight,
+  LayoutList,
+  Calendar,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -41,6 +43,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         { to: '/performance', icon: TrendingUp,    label: 'Desempeño'   },
         { to: '/material',    icon: BookMarked,    label: 'Material'    },
         { to: '/my-classes',  icon: Users,         label: 'Mis Clases'  },
+        { to: '/tablero',     icon: LayoutList,    label: 'Tablero'     },
+        { to: '/messages',    icon: MessageSquare, label: 'Mensajes'    },
+        { to: '/calendar',    icon: Calendar,      label: 'Calendario'  },
       ];
 
   const isActive = (path: string) => location.pathname === path;

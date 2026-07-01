@@ -12,7 +12,11 @@ import MyClassesPage from './pages/student/MyClassesPage';
 import QuizzesPage from './pages/student/QuizzesPage';
 import DesempenoPage from './pages/student/DesempenoPage';
 import MaterialPage from './pages/student/MaterialPage';
+import TableroPage from './pages/student/TableroPage';
+import MessagesPage from './pages/student/MessagesPage';
+import CalendarPage from './pages/student/CalendarPage';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
+import TeacherPanel from './pages/teacher/TeacherPanel';
 import CreateClassroomPage from './pages/teacher/CreateClassroomPage';
 import ClassroomDetailPage from './pages/teacher/ClassroomDetailPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -24,7 +28,7 @@ function DashboardRouter() {
   if (user?.must_change_password) return <Navigate to="/change-password" replace />;
   if (user?.role === 'admin')          return <Navigate to="/admin" replace />;
   if (user?.role === 'super_profesor') return <Navigate to="/super" replace />;
-  if (user?.role === 'profesor')       return <TeacherDashboard />;
+  if (user?.role === 'profesor')       return <Navigate to="/teacher" replace />;
   return <StudentDashboard />;
 }
 
@@ -57,8 +61,22 @@ function AppRoutes() {
       <Route path="/material" element={
         <ProtectedRoute role="estudiante"><Layout><MaterialPage /></Layout></ProtectedRoute>
       } />
+      <Route path="/tablero" element={
+        <ProtectedRoute role="estudiante"><Layout><TableroPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/messages" element={
+        <ProtectedRoute role="estudiante"><Layout><MessagesPage /></Layout></ProtectedRoute>
+      } />
+      <Route path="/calendar" element={
+        <ProtectedRoute role="estudiante"><Layout><CalendarPage /></Layout></ProtectedRoute>
+      } />
 
-      {/* Profesor */}
+      {/* Profesor — panel completo sin Layout */}
+      <Route path="/teacher/*" element={
+        <ProtectedRoute role="profesor"><TeacherPanel /></ProtectedRoute>
+      } />
+
+      {/* Rutas legacy del profesor (compatibilidad) */}
       <Route path="/classrooms" element={
         <ProtectedRoute role="profesor"><Layout><TeacherDashboard /></Layout></ProtectedRoute>
       } />
@@ -74,12 +92,12 @@ function AppRoutes() {
         <ProtectedRoute><ForceChangePassword /></ProtectedRoute>
       } />
 
-      {/* Super Profesor */}
+      {/* Super Profesor — tiene su propio layout completo, sin <Layout> */}
       <Route path="/super" element={
-        <ProtectedRoute role="super_profesor"><Layout><SuperDashboard /></Layout></ProtectedRoute>
+        <ProtectedRoute role="super_profesor"><SuperDashboard /></ProtectedRoute>
       } />
       <Route path="/super/*" element={
-        <ProtectedRoute role="super_profesor"><Layout><SuperDashboard /></Layout></ProtectedRoute>
+        <ProtectedRoute role="super_profesor"><SuperDashboard /></ProtectedRoute>
       } />
 
       {/* Admin */}

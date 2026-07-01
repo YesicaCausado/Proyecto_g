@@ -13,6 +13,8 @@ import {
   Target,
   Flame,
   LayoutDashboard,
+  LayoutList,
+  Calendar,
   Users,
   Calculator,
   Zap,
@@ -292,6 +294,27 @@ export default function StudentDashboard() {
                         <div>
                             <div className="font-medium text-[#37352F] text-sm">Mis clases</div>
                             <div className="text-xs text-[#9B9A97]">Clases inscritas</div>
+                        </div>
+                    </Link>
+                    <Link to="/tablero" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
+                        <div className="w-8 h-8 bg-[#EEF3FD] border border-[#C5D9F7] rounded-md flex items-center justify-center flex-shrink-0"><LayoutList className="w-4 h-4 text-[#2E6FDB]" /></div>
+                        <div>
+                            <div className="font-medium text-[#37352F] text-sm">Tablero</div>
+                            <div className="text-xs text-[#9B9A97]">Pub. del profe</div>
+                        </div>
+                    </Link>
+                    <Link to="/messages" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
+                        <div className="w-8 h-8 bg-emerald-50 border border-emerald-100 rounded-md flex items-center justify-center flex-shrink-0"><MessageSquare className="w-4 h-4 text-[#0F7B6C]" /></div>
+                        <div>
+                            <div className="font-medium text-[#37352F] text-sm">Mensajes</div>
+                            <div className="text-xs text-[#9B9A97]">Habla con tu profe</div>
+                        </div>
+                    </Link>
+                    <Link to="/calendar" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
+                        <div className="w-8 h-8 bg-purple-50 border border-purple-100 rounded-md flex items-center justify-center flex-shrink-0"><Calendar className="w-4 h-4 text-[#6940A5]" /></div>
+                        <div>
+                            <div className="font-medium text-[#37352F] text-sm">Calendario</div>
+                            <div className="text-xs text-[#9B9A97]">Exámenes y eventos</div>
                         </div>
                     </Link>
                 </div>

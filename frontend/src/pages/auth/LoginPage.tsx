@@ -19,8 +19,13 @@ export default function LoginPage() {
       await login(form);
       navigate('/dashboard');
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } };
-      setError(axiosErr.response?.data?.detail || 'Error al iniciar sesión');
+      // Maneja tanto errores de Axios como errores de demo (Error nativo)
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        const axiosErr = err as { response?: { data?: { detail?: string } } };
+        setError(axiosErr.response?.data?.detail || 'Error al iniciar sesión');
+      }
     } finally {
       setLoading(false);
     }
@@ -106,6 +111,35 @@ export default function LoginPage() {
             Tu cuenta es asignada por tu institución educativa.
           </p>
         </div>
+
+        {/* Credenciales demo — solo en modo demo */}
+        <div className="mt-4 bg-white border border-[#E9E9E7] rounded-md p-4">
+          <p className="text-xs font-semibold text-[#787774] uppercase tracking-wider mb-3">
+            🔑 Accesos de demostración
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: 'Estudiante',     user: 'demo',          pass: 'demo1234',          color: 'bg-blue-50 border-blue-200 text-blue-700' },
+              { label: 'Profesor',       user: 'profesor',      pass: 'profesor1234',      color: 'bg-green-50 border-green-200 text-green-700' },
+              { label: 'Admin',          user: 'admin',         pass: 'admin1234',         color: 'bg-orange-50 border-orange-200 text-orange-700' },
+              { label: 'Super Profesor', user: 'superprofesor', pass: 'superprofesor1234', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+            ].map(({ label, user: u, pass, color }) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => setForm({ username: u, password: pass })}
+                className={`text-left p-2.5 rounded border text-xs font-medium transition-all hover:opacity-80 ${color}`}
+              >
+                <span className="block font-semibold mb-0.5">{label}</span>
+                <span className="font-mono opacity-75">{u}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-[#9B9A97] mt-2 text-center">
+            Haz clic en un rol para rellenar las credenciales automáticamente.
+          </p>
+        </div>
+
       </div>
     </div>
   );

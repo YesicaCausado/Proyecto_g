@@ -59,7 +59,7 @@ export default function CreateInstitution() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const { data } = await api.post<CreatedInstitution>('/api/v1/admin/institutions', form);
+      const { data } = await api.post<CreatedInstitution>('/admin/institutions', form);
       setCreated(data);
     } catch (err: any) {
       setServerError(err?.response?.data?.detail ?? 'Error al crear la institución');
