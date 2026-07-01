@@ -10,6 +10,10 @@ export interface User {
   is_expert: boolean;
   created_at: string;
   cognitive_profile: Record<string, unknown> | null;
+  // B2B fields
+  must_change_password?: boolean;
+  institution_id?: number | null;
+  document_number?: string | null;
 }
 
 export interface Token {
@@ -18,6 +22,7 @@ export interface Token {
   user_id?: number;
   role?: string;
   full_name?: string | null;
+  must_change_password?: boolean;
 }
 
 export interface LoginRequest {

@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
 import LoginPage from './pages/auth/LoginPage';
+import ForceChangePassword from './pages/auth/ForceChangePassword';
 import StudentDashboard from './pages/student/StudentDashboard';
 import ChatPage from './pages/student/ChatPage';
 import BotsPage from './pages/student/BotsPage';
@@ -15,11 +16,14 @@ import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import CreateClassroomPage from './pages/teacher/CreateClassroomPage';
 import ClassroomDetailPage from './pages/teacher/ClassroomDetailPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import SuperDashboard from './pages/super/SuperDashboard';
 
 function DashboardRouter() {
   const { user } = useAuth();
+  // Fuerza cambio de contraseña en primer login
+  if (user?.must_change_password) return <Navigate to="/change-password" replace />;
   if (user?.role === 'admin')          return <Navigate to="/admin" replace />;
-  if (user?.role === 'super_profesor') return <Navigate to="/super-dashboard" replace />;
+  if (user?.role === 'super_profesor') return <Navigate to="/super" replace />;
   if (user?.role === 'profesor')       return <TeacherDashboard />;
   return <StudentDashboard />;
 }
@@ -63,6 +67,19 @@ function AppRoutes() {
       } />
       <Route path="/classrooms/:id" element={
         <ProtectedRoute role="profesor"><Layout><ClassroomDetailPage /></Layout></ProtectedRoute>
+      } />
+
+      {/* Cambio de contraseña forzado (primer login) */}
+      <Route path="/change-password" element={
+        <ProtectedRoute><ForceChangePassword /></ProtectedRoute>
+      } />
+
+      {/* Super Profesor */}
+      <Route path="/super" element={
+        <ProtectedRoute role="super_profesor"><Layout><SuperDashboard /></Layout></ProtectedRoute>
+      } />
+      <Route path="/super/*" element={
+        <ProtectedRoute role="super_profesor"><Layout><SuperDashboard /></Layout></ProtectedRoute>
       } />
 
       {/* Admin */}

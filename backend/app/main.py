@@ -22,12 +22,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.database import engine, Base
 from app.api import auth, chat, expert_bot, classroom, stats
+from app.api import credentials  # B2B credential system
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
 import app.models.learning      # noqa: F401
 import app.models.expert_bot    # noqa: F401
 import app.models.classroom     # noqa: F401
+import app.models.institution   # noqa: F401
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 try:
@@ -119,6 +121,7 @@ app.include_router(chat.router,          prefix="/api/v1")
 app.include_router(expert_bot.router,    prefix="/api/v1/bots")
 app.include_router(classroom.router,     prefix="/api/v1/classrooms")
 app.include_router(stats.router,         prefix="/api/v1/stats")
+app.include_router(credentials.router,   prefix="/api/v1")
 
 
 @app.get("/")

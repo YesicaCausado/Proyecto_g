@@ -137,6 +137,7 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         user_id=user.id,
         role=user.role,
         full_name=user.full_name,
+        must_change_password=getattr(user, 'must_change_password', False) or False,
     )
 
 

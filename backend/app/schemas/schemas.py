@@ -27,13 +27,16 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
-    email: str
+    email: Optional[str]
     full_name: Optional[str]
     role: str = "estudiante"
     is_active: bool
     is_expert: bool
     created_at: datetime
     cognitive_profile: Optional[Dict] = None
+    must_change_password: Optional[bool] = False
+    institution_id: Optional[int] = None
+    document_number: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -45,6 +48,7 @@ class Token(BaseModel):
     user_id: Optional[int] = None
     role: Optional[str] = None
     full_name: Optional[str] = None
+    must_change_password: Optional[bool] = False
 
 
 # ===== CHAT / APRENDIZAJE =====
@@ -318,3 +322,95 @@ class ClassroomStatsResponse(BaseModel):
     students_at_risk: int
     top_performers: List[Dict] = []
     struggling_students: List[Dict] = []
+
+
+# ===== SISTEMA B2B — INSTITUCIONES Y CREDENCIALES =====
+
+class InstitutionCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=200)
+    dane_code: str = Field(..., min_length=3, max_length=20)
+    license_type: str = Field(default="basica", pattern="^(basica|premium|pro)$")
+    # Datos del Super Profesor
+    sp_full_name: str = Field(..., min_length=2, max_length=100)
+    sp_document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    sp_document_number: str = Field(..., min_length=4, max_length=30)
+    sp_email: str = Field(..., max_length=100)
+
+
+class CredentialItem(BaseModel):
+    full_name: str
+    username: str        # = document_number
+    temp_password: str
+    role: str
+
+
+class InstitutionResponse(BaseModel):
+    id: int
+    name: str
+    dane_code: str
+    license_type: str
+    is_active: bool
+    created_at: datetime
+    credential: CredentialItem
+
+    class Config:
+        from_attributes = True
+
+
+class InstitutionListItem(BaseModel):
+    id: int
+    name: str
+    dane_code: str
+    license_type: str
+    is_active: bool
+    created_at: datetime
+    teacher_count: int = 0
+    student_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class TeacherCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: str = Field(..., max_length=100)
+    subject_area: str = Field(default="", max_length=100)
+
+
+class StudentCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    birth_date: Optional[str] = None    # YYYY-MM-DD
+    email: Optional[str] = None
+    grade: str = Field(default="", max_length=20)
+
+
+class BulkCreateResponse(BaseModel):
+    created: List[CredentialItem]
+    errors: List[Dict[str, Any]] = []
+    total_processed: int
+    total_created: int
+    total_errors: int
+
+
+class LicenseUsage(BaseModel):
+    license_type: str
+    max_teachers: int
+    current_teachers: int
+    max_students: int
+    current_students: int
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
+class CSVValidationRow(BaseModel):
+    row: int
+    data: Dict[str, Any]
+    error: Optional[str] = None
+    valid: bool = True

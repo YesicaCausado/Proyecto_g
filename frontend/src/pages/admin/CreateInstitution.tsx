@@ -1,429 +1,243 @@
 ﻿import { useState } from 'react';
 import {
-  School, User, Mail, Hash, Users, BookOpen,
-  Save, Eye, EyeOff, Copy, CheckCircle, ArrowLeft,
+  School, User, Mail, Hash, ShieldCheck, Copy, CheckCircle,
+  ArrowLeft, Eye, EyeOff, Building2, FileText, BadgeCheck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 
-interface InstitutionForm {
-  name:            string;
-  dane_code:       string;
-  admin_full_name: string;
-  admin_document:  string;
-  admin_email:     string;
-  student_limit:   number;
-  teacher_limit:   number;
-}
+type LicenseType = 'basica' | 'premium' | 'pro';
+type DocType = 'CC' | 'TI' | 'CE' | 'PA';
 
-interface CreatedCredentials {
-  institution_name:         string;
-  super_profesor_username:  string;
-  super_profesor_temp_password: string;
+interface FormState {
+  name: string; dane_code: string; license_type: LicenseType;
+  sp_full_name: string; sp_document_type: DocType;
+  sp_document_number: string; sp_email: string;
 }
+interface Credential { full_name: string; username: string; temp_password: string; role: string; }
+interface CreatedInstitution { id: number; name: string; dane_code: string; license_type: string; credential: Credential; }
 
-const EMPTY_FORM: InstitutionForm = {
-  name:            '',
-  dane_code:       '',
-  admin_full_name: '',
-  admin_document:  '',
-  admin_email:     '',
-  student_limit:   100,
-  teacher_limit:   10,
+const EMPTY: FormState = {
+  name: '', dane_code: '', license_type: 'basica',
+  sp_full_name: '', sp_document_type: 'CC', sp_document_number: '', sp_email: '',
+};
+
+const LICENSE_INFO = {
+  basica:  { label: 'Basica',   teachers: 20,    students: 300,    desc: 'Instituciones pequeñas' },
+  premium: { label: 'Premium',  teachers: 60,    students: 1500,   desc: 'Colegios medianos' },
+  pro:     { label: 'Pro',      teachers: '∞',   students: '∞',    desc: 'Sin restricciones' },
 };
 
 export default function CreateInstitution() {
-  const [form, setForm]               = useState<InstitutionForm>(EMPTY_FORM);
+  const [form, setForm]               = useState<FormState>(EMPTY);
   const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<CreatedCredentials | null>(null);
+  const [errors, setErrors]           = useState<Partial<Record<keyof FormState, string>>>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [created, setCreated]         = useState<CreatedInstitution | null>(null);
   const [showPass, setShowPass]       = useState(false);
-  const [copied, setCopied]           = useState<string | null>(null);
+  const [copied, setCopied]           = useState<'user' | 'pass' | 'all' | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type } = e.target;
-    setForm(prev => ({
-      ...prev,
-      [name]: type === 'number' ? Math.max(1, parseInt(value) || 1) : value,
-    }));
+  const set = (field: keyof FormState) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm(f => ({ ...f, [field]: e.target.value }));
+
+  const validate = (): boolean => {
+    const e: typeof errors = {};
+    if (!form.name.trim())               e.name               = 'Requerido';
+    if (!form.dane_code.trim())          e.dane_code          = 'Requerido';
+    if (!form.sp_full_name.trim())       e.sp_full_name       = 'Requerido';
+    if (!form.sp_document_number.trim()) e.sp_document_number = 'Requerido';
+    if (!form.sp_email.trim())           e.sp_email           = 'Requerido';
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.sp_email)) e.sp_email = 'Correo inválido';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const copyToClipboard = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(null), 2500);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    // Validaciones
-    if (form.dane_code.replace(/\D/g, '').length < 6) {
-      setError('El código DANE debe tener al menos 6 dígitos numéricos.');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.admin_email)) {
-      setError('Ingresa un correo electrónico válido.');
-      return;
-    }
-
+  const handleSubmit = async (evt: React.FormEvent) => {
+    evt.preventDefault();
+    setServerError(null);
+    if (!validate()) return;
     setLoading(true);
     try {
-      const { data } = await api.post<CreatedCredentials>('/admin/institutions', form);
-      setCredentials(data);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })
-        ?.response?.data?.detail
-        ?? 'Error al crear la institución. Verifica los datos e intenta de nuevo.';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+      const { data } = await api.post<CreatedInstitution>('/api/v1/admin/institutions', form);
+      setCreated(data);
+    } catch (err: any) {
+      setServerError(err?.response?.data?.detail ?? 'Error al crear la institución');
+    } finally { setLoading(false); }
   };
 
-  // ── PANTALLA DE ÉXITO ───────────────────────────────────────────
-  if (credentials) {
-    return (
-      <div className="p-8 max-w-2xl">
-        <div className="bg-white rounded-md border border-[#E9E9E7] overflow-hidden">
+  const copyText = (text: string, key: 'user' | 'pass' | 'all') => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
+  };
 
-          {/* Cabecera verde */}
-          <div className="bg-[#0F7B6C] px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h2 className="font-bold text-white text-lg leading-tight">
-                  Institución creada exitosamente
-                </h2>
-                <p className="text-[#EEF7F4] text-sm">{credentials.institution_name}</p>
-              </div>
+  // ── Modal de credenciales ──────────────────────────────────────
+  if (created) {
+    const c = created.credential;
+    return (
+      <div className="p-8 max-w-xl mx-auto">
+        <div className="bg-white border border-[#E9E9E7] rounded-md p-8">
+          <div className="flex flex-col items-center text-center mb-6">
+            <div className="w-14 h-14 bg-[#EEF7F4] rounded-full flex items-center justify-center mb-3">
+              <BadgeCheck className="w-7 h-7 text-[#0F7B6C]" />
             </div>
+            <h2 className="text-xl font-bold text-[#191919]">Institución creada correctamente</h2>
+            <p className="text-sm text-[#787774] mt-1">{created.name} · DANE {created.dane_code}</p>
           </div>
 
-          <div className="p-6">
-            <p className="text-sm text-[#787774] mb-5 bg-[#FCF6E5] border border-[#EDD88A] rounded-lg px-4 py-3">
-              ⚠️ <strong>Guarda estas credenciales ahora.</strong> La contraseña temporal
-              no se podrá ver de nuevo. El rector deberá cambiarla en su primer inicio de sesión.
-            </p>
+          <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-4 py-3 mb-5 flex items-center gap-3 text-sm">
+            <ShieldCheck className="w-4 h-4 text-[#6940A5] shrink-0" />
+            <span className="text-[#787774]">Licencia <span className="font-semibold text-[#37352F] capitalize">{created.license_type}</span> asignada</span>
+          </div>
 
-            {/* Credenciales */}
-            <div className="space-y-3 mb-6">
-              <CredentialRow
-                label="Usuario del Super Profesor"
-                value={credentials.super_profesor_username}
-                visible
-                copied={copied === 'user'}
-                onCopy={() => copyToClipboard(credentials.super_profesor_username, 'user')}
-              />
-              <CredentialRow
-                label="Contraseña temporal"
-                value={credentials.super_profesor_temp_password}
-                visible={showPass}
-                copied={copied === 'pass'}
-                onCopy={() => copyToClipboard(credentials.super_profesor_temp_password, 'pass')}
-                onToggle={() => setShowPass(v => !v)}
-                showToggle
-              />
+          <div className="border border-[#E9E9E7] rounded-md p-5 space-y-4 mb-5">
+            <p className="text-xs font-semibold text-[#787774] uppercase tracking-wider">Credenciales del Super Profesor</p>
+            <p className="text-sm font-medium text-[#191919]">{c.full_name}</p>
+            {/* Usuario */}
+            <div>
+              <p className="text-xs text-[#787774] mb-1">Usuario (número de documento)</p>
+              <div className="flex gap-2">
+                <code className="flex-1 font-mono text-sm bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-3 py-2 text-[#191919]">{c.username}</code>
+                <button onClick={() => copyText(c.username, 'user')} className="p-2 border border-[#E9E9E7] rounded-md hover:bg-[#F1F1EF] text-[#787774]">
+                  {copied === 'user' ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
+            {/* Contraseña */}
+            <div>
+              <p className="text-xs text-[#787774] mb-1">Contraseña temporal</p>
+              <div className="flex gap-2">
+                <code className="flex-1 font-mono text-sm bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-3 py-2 text-[#191919]">
+                  {showPass ? c.temp_password : '•'.repeat(c.temp_password.length)}
+                </code>
+                <button onClick={() => setShowPass(p => !p)} className="p-2 border border-[#E9E9E7] rounded-md hover:bg-[#F1F1EF] text-[#787774]">
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+                <button onClick={() => copyText(c.temp_password, 'pass')} className="p-2 border border-[#E9E9E7] rounded-md hover:bg-[#F1F1EF] text-[#787774]">
+                  {copied === 'pass' ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <button onClick={() => copyText(`Usuario: ${c.username}\nContraseña: ${c.temp_password}`, 'all')}
+              className="w-full flex items-center justify-center gap-2 py-2 text-sm border border-[#E9E9E7] rounded-md hover:bg-[#F1F1EF] text-[#37352F]">
+              {copied === 'all' ? <><CheckCircle className="w-4 h-4 text-[#0F7B6C]" />Copiado</> : <><Copy className="w-4 h-4" />Copiar todo</>}
+            </button>
+          </div>
 
-            {/* Instrucciones */}
-            <div className="bg-[#F7F6F3] rounded-lg p-4 text-sm text-[#787774] space-y-1 mb-6">
-              <p className="font-medium text-[#191919] mb-2">Próximos pasos:</p>
-              <p>1. Comparte el usuario y contraseña temporal con el rector.</p>
-              <p>2. El rector inicia sesión en <strong>/login</strong> y cambia su contraseña.</p>
-              <p>3. El rector crea las cuentas de profesores desde su panel.</p>
-              <p>4. Los profesores crean o invitan a sus estudiantes.</p>
-            </div>
+          <p className="text-xs text-[#D9730D] bg-[#FDF4EC] border border-[#F2D2B7] rounded-md p-3 mb-6">
+            ⚠️ Esta contraseña solo se muestra una vez. El Super Profesor deberá cambiarla en su primer inicio de sesión.
+          </p>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setCredentials(null); setForm(EMPTY_FORM); }}
-                className="flex-1 px-4 py-2.5 bg-[#37352F] text-white rounded-lg text-sm font-medium hover:bg-[#2F2D2B] transition-colors"
-              >
-                Registrar otra institución
-              </button>
-              <Link
-                to="/admin"
-                className="flex-1 px-4 py-2.5 bg-[#F7F6F3] text-[#37352F] rounded-lg text-sm font-medium hover:bg-[#E9E9E7] transition-colors text-center"
-              >
-                Volver al inicio
-              </Link>
-            </div>
+          <div className="flex gap-3">
+            <button onClick={() => { setCreated(null); setForm(EMPTY); setErrors({}); }}
+              className="flex-1 py-2.5 text-sm bg-[#37352F] text-white rounded-md hover:bg-[#2F2D2B] font-medium">
+              Crear otra institución
+            </button>
+            <Link to="/admin" className="flex-1 py-2.5 text-sm border border-[#E9E9E7] text-[#37352F] rounded-md hover:bg-[#F1F1EF] font-medium text-center">
+              Ir al panel
+            </Link>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── FORMULARIO ──────────────────────────────────────────────────
+  // ── Formulario ─────────────────────────────────────────────────
   return (
-    <div className="p-8 max-w-3xl">
-
-      {/* Encabezado */}
-      <div className="mb-7">
-        <Link
-          to="/admin/instituciones"
-          className="inline-flex items-center gap-1.5 text-sm text-[#787774] hover:text-[#191919] mb-3 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Instituciones
-        </Link>
-        <h1 className="text-2xl font-bold text-[#191919]">Registrar nueva institución</h1>
-        <p className="text-[#787774] text-sm mt-1">
-          Al guardar se crean automáticamente las credenciales temporales del rector.
-        </p>
+    <div className="p-8 max-w-2xl">
+      <div className="flex items-center gap-3 mb-7">
+        <Link to="/admin" className="p-1.5 rounded-md hover:bg-[#F1F1EF] text-[#787774]"><ArrowLeft className="w-4 h-4" /></Link>
+        <div>
+          <h1 className="text-xl font-bold text-[#191919]">Registrar institución</h1>
+          <p className="text-sm text-[#787774]">Crea el colegio y genera las credenciales del rector automáticamente</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
-        {/* Error global */}
-        {error && (
-          <div className="bg-[#FDEEEE] border border-[#F4BDBD] rounded-lg px-4 py-3 text-sm text-[#E03E3E]">
-            {error}
+        {/* Datos institución */}
+        <section className="bg-white border border-[#E9E9E7] rounded-md p-6">
+          <h2 className="text-sm font-semibold text-[#191919] flex items-center gap-2 mb-5">
+            <Building2 className="w-4 h-4 text-[#787774]" /> Datos de la institución
+          </h2>
+          <div className="space-y-4">
+            <InputField label="Nombre del colegio *" icon={School} value={form.name}
+              onChange={set('name')} placeholder="Ej: Colegio Nacional San Francisco" error={errors.name} />
+            <InputField label="Código DANE *" icon={Hash} value={form.dane_code}
+              onChange={set('dane_code')} placeholder="Ej: 154001000149" error={errors.dane_code} />
+            <div>
+              <label className="block text-xs font-medium text-[#37352F] mb-2">Tipo de licencia</label>
+              <div className="grid grid-cols-3 gap-3">
+                {(Object.entries(LICENSE_INFO) as [LicenseType, typeof LICENSE_INFO.basica][]).map(([key, info]) => (
+                  <button key={key} type="button" onClick={() => setForm(f => ({ ...f, license_type: key }))}
+                    className={`p-3 border-2 rounded-md text-left transition-all ${form.license_type === key ? 'border-[#37352F] bg-[#F7F6F3]' : 'border-[#E9E9E7] hover:border-[#9B9A97]'}`}>
+                    <p className="font-semibold text-sm text-[#191919]">{info.label}</p>
+                    <p className="text-[10px] text-[#787774] mt-0.5">{info.desc}</p>
+                    <p className="text-[10px] text-[#9B9A97] mt-1">{info.teachers} prof · {info.students} est</p>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+        </section>
+
+        {/* Datos Super Profesor */}
+        <section className="bg-white border border-[#E9E9E7] rounded-md p-6">
+          <h2 className="text-sm font-semibold text-[#191919] flex items-center gap-2 mb-5">
+            <ShieldCheck className="w-4 h-4 text-[#787774]" /> Datos del Super Profesor (Rector)
+          </h2>
+          <div className="space-y-4">
+            <InputField label="Nombre completo *" icon={User} value={form.sp_full_name}
+              onChange={set('sp_full_name')} placeholder="Ej: Carlos Andrés Mendoza" error={errors.sp_full_name} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[#37352F] mb-1">Tipo de documento</label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B9A97]" />
+                  <select value={form.sp_document_type} onChange={set('sp_document_type')}
+                    className="w-full pl-9 pr-3 py-2.5 text-sm border border-[#E9E9E7] rounded-md bg-white text-[#191919] focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99] appearance-none">
+                    {(['CC','TI','CE','PA'] as DocType[]).map(d => <option key={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+              <InputField label="Número de documento *" icon={Hash} value={form.sp_document_number}
+                onChange={set('sp_document_number')} placeholder="Ej: 1023456789" error={errors.sp_document_number} />
+            </div>
+            <InputField label="Correo electrónico *" icon={Mail} type="email" value={form.sp_email}
+              onChange={set('sp_email')} placeholder="rector@colegio.edu.co" error={errors.sp_email} />
+          </div>
+        </section>
+
+        {serverError && (
+          <div className="bg-[#FDEEEE] border border-[#F4BDBD] rounded-md p-4 text-sm text-[#E03E3E]">{serverError}</div>
         )}
 
-        {/* ── Bloque 1: Datos del colegio ── */}
-        <FormSection
-          title="Datos de la institución educativa"
-          icon={<School className="w-4 h-4 text-[#0B6E99]" />}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <Field
-                label="Nombre del colegio *"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                placeholder="Ej: Institución Educativa San José"
-                required
-              />
-            </div>
-            <Field
-              label="Código DANE *"
-              name="dane_code"
-              value={form.dane_code}
-              onChange={handleChange}
-              placeholder="Ej: 168001000123"
-              required
-              icon={<Hash className="w-4 h-4" />}
-              hint="Asignado por el Ministerio de Educación de Colombia"
-            />
-          </div>
-        </FormSection>
-
-        {/* ── Bloque 2: Datos del rector ── */}
-        <FormSection
-          title="Datos del rector — Super Profesor"
-          icon={<User className="w-4 h-4 text-[#0B6E99]" />}
-          subtitle="Este perfil tendrá acceso para gestionar profesores y licencias de su institución"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="sm:col-span-2">
-              <Field
-                label="Nombre completo *"
-                name="admin_full_name"
-                value={form.admin_full_name}
-                onChange={handleChange}
-                placeholder="Ej: María Fernanda Gómez Torres"
-                required
-              />
-            </div>
-            <Field
-              label="Número de documento *"
-              name="admin_document"
-              value={form.admin_document}
-              onChange={handleChange}
-              placeholder="Cédula de ciudadanía"
-              required
-              icon={<Hash className="w-4 h-4" />}
-            />
-            <Field
-              label="Correo electrónico institucional *"
-              name="admin_email"
-              type="email"
-              value={form.admin_email}
-              onChange={handleChange}
-              placeholder="rector@colegio.edu.co"
-              required
-              icon={<Mail className="w-4 h-4" />}
-            />
-          </div>
-        </FormSection>
-
-        {/* ── Bloque 3: Límites de licencia ── */}
-        <FormSection
-          title="Límites de licencia"
-          icon={<Users className="w-4 h-4 text-[#0B6E99]" />}
-          badge="Gestión de licencias — próximamente"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field
-              label="Límite de estudiantes *"
-              name="student_limit"
-              type="number"
-              value={String(form.student_limit)}
-              onChange={handleChange}
-              placeholder="100"
-              required
-              icon={<BookOpen className="w-4 h-4" />}
-              hint="Máximo de estudiantes activos permitidos"
-            />
-            <Field
-              label="Límite de profesores *"
-              name="teacher_limit"
-              type="number"
-              value={String(form.teacher_limit)}
-              onChange={handleChange}
-              placeholder="10"
-              required
-              icon={<Users className="w-4 h-4" />}
-              hint="Máximo de docentes activos permitidos"
-            />
-          </div>
-        </FormSection>
-
-        {/* Botón guardar */}
-        <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-7 py-3 bg-[#37352F] text-white rounded-md font-medium hover:bg-[#2F2D2B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                Guardando...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                Guardar y generar credenciales
-              </>
-            )}
-          </button>
-        </div>
+        <button type="submit" disabled={loading}
+          className="w-full py-3 bg-[#37352F] text-white rounded-md font-medium text-sm hover:bg-[#2F2D2B] disabled:opacity-50 flex items-center justify-center gap-2">
+          {loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creando institución…</> : <><School className="w-4 h-4" />Crear institución y generar credenciales</>}
+        </button>
       </form>
     </div>
   );
 }
 
-// ── Sub-componentes reutilizables ──────────────────────────────────
-
-interface FormSectionProps {
-  title:    string;
-  icon:     React.ReactNode;
-  subtitle?: string;
-  badge?:   string;
-  children: React.ReactNode;
-}
-
-function FormSection({ title, icon, subtitle, badge, children }: FormSectionProps) {
-  return (
-    <section className="bg-white rounded-md p-6 border border-[#E9E9E7]">
-      <div className="flex items-start justify-between mb-5">
-        <div>
-          <h2 className="font-semibold text-[#191919] flex items-center gap-2 text-sm">
-            {icon}
-            {title}
-          </h2>
-          {subtitle && <p className="text-xs text-[#787774] mt-1 ml-6">{subtitle}</p>}
-        </div>
-        {badge && (
-          <span className="text-xs text-[#9B9A97] bg-[#F7F6F3] px-2.5 py-1 rounded-full shrink-0 ml-4">
-            {badge}
-          </span>
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-interface FieldProps {
-  label:       string;
-  name:        string;
-  value:       string;
-  onChange:    (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string;
-  type?:       string;
-  required?:   boolean;
-  icon?:       React.ReactNode;
-  hint?:       string;
-}
-
-function Field({ label, name, value, onChange, placeholder, type = 'text', required, icon, hint }: FieldProps) {
+function InputField({ label, icon: Icon, value, onChange, placeholder, type = 'text', error }: {
+  label: string; icon: React.ElementType; value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string; type?: string; error?: string;
+}) {
   return (
     <div>
-      <label className="block text-xs font-medium text-[#37352F] mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-[#37352F] mb-1">{label}</label>
       <div className="relative">
-        {icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B9A97] pointer-events-none">
-            {icon}
-          </div>
-        )}
-        <input
-          type={type}
-          name={name}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          required={required}
-          min={type === 'number' ? 1 : undefined}
-          className={`w-full border border-[#E9E9E7] rounded-lg py-2.5 pr-3 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0B6E99] focus:border-transparent transition-shadow ${icon ? 'pl-9' : 'pl-3'}`}
-        />
+        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B9A97]" />
+        <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+          className={`w-full pl-9 pr-3 py-2.5 text-sm border rounded-md bg-white text-[#191919] placeholder-[#9B9A97]
+            focus:outline-none focus:ring-2 transition-all
+            ${error ? 'border-[#E03E3E] focus:ring-[#FDEEEE]' : 'border-[#E9E9E7] focus:ring-[#E5F3FF] focus:border-[#0B6E99]'}`} />
       </div>
-      {hint && <p className="text-xs text-[#9B9A97] mt-1">{hint}</p>}
-    </div>
-  );
-}
-
-interface CredentialRowProps {
-  label:       string;
-  value:       string;
-  visible:     boolean;
-  copied:      boolean;
-  onCopy:      () => void;
-  showToggle?: boolean;
-  onToggle?:   () => void;
-}
-
-function CredentialRow({ label, value, visible, copied, onCopy, showToggle, onToggle }: CredentialRowProps) {
-  return (
-    <div className="flex items-center gap-3 bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg px-4 py-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-[#787774] mb-0.5">{label}</p>
-        <p className="font-mono text-sm font-semibold text-[#191919] truncate">
-          {visible ? value : '••••••••••••'}
-        </p>
-      </div>
-      {showToggle && (
-        <button
-          type="button"
-          onClick={onToggle}
-          className="text-[#9B9A97] hover:text-[#787774] transition-colors p-1"
-          title={visible ? 'Ocultar' : 'Mostrar'}
-        >
-          {visible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={onCopy}
-        className="text-[#9B9A97] hover:text-[#0B6E99] transition-colors p-1"
-        title="Copiar"
-      >
-        {copied
-          ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" />
-          : <Copy className="w-4 h-4" />
-        }
-      </button>
+      {error && <p className="text-xs text-[#E03E3E] mt-1">{error}</p>}
     </div>
   );
 }
