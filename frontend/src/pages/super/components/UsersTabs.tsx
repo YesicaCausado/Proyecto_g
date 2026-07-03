@@ -89,10 +89,12 @@ export function TeachersTab({ license }: { license: any }) {
   const [newCredentials, setNewCredentials] = useState<any[]>([]);
 
   // Individual Form
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
+  const [firstName, setFirstName]       = useState('');
+  const [lastName, setLastName]         = useState('');
+  const [email, setEmail]               = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
+  const [documentType, setDocumentType] = useState('CC');
+  const [subjectArea, setSubjectArea]   = useState('');
 
   const handleCreateIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,11 +109,12 @@ export function TeachersTab({ license }: { license: any }) {
     
     try {
       const response = await api.post('/super/teachers', {
-        first_name: firstName,
-        last_name: lastName,
+        full_name: `${firstName.trim()} ${lastName.trim()}`,
+        document_type: documentType,
         document_number: documentNumber,
-        email:  email || null
-        });
+        email: email,
+        subject_area: subjectArea,
+      });
       
       setMessage('¡Profesor creado exitosamente!');
       setNewCredentials(prev => [response.data, ...prev]);
@@ -121,6 +124,8 @@ export function TeachersTab({ license }: { license: any }) {
       setLastName('');
       setEmail('');
       setDocumentNumber('');
+      setDocumentType('CC');
+      setSubjectArea('');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al crear el profesor');
     } finally {
@@ -247,7 +252,23 @@ export function TeachersTab({ license }: { license: any }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
-                  <Hash className="w-3 h-3" /> Documento/Cédula
+                  <Hash className="w-3 h-3" /> Tipo de documento
+                </label>
+                <select
+                  value={documentType}
+                  onChange={(e) => setDocumentType(e.target.value)}
+                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
+                  required
+                >
+                  <option value="CC">CC — Cédula de Ciudadanía</option>
+                  <option value="TI">TI — Tarjeta de Identidad</option>
+                  <option value="CE">CE — Cédula de Extranjería</option>
+                  <option value="PA">PA — Pasaporte</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                  <Hash className="w-3 h-3" /> Número de documento
                 </label>
                 <input
                   type="text"
@@ -258,16 +279,31 @@ export function TeachersTab({ license }: { license: any }) {
                   required
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
-                  <Mail className="w-3 h-3" /> Email (Opcional)
+                  <Mail className="w-3 h-3" /> Correo electrónico *
                 </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
-                  placeholder="ejemplo@escuela.edu"
+                  placeholder="profesor@colegio.edu.co"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                  <User className="w-3 h-3" /> Área de enseñanza (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={subjectArea}
+                  onChange={(e) => setSubjectArea(e.target.value)}
+                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  placeholder="Ej: Matemáticas"
                 />
               </div>
             </div>
@@ -364,11 +400,15 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newCredentials, setNewCredentials] = useState<any[]>([]);
 
-  // Individual Form
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+// Individual Form
+  const [firstName, setFirstName]           = useState('');
+  const [lastName, setLastName]             = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
+  const [documentType, setDocumentType]     = useState('TI');
+  const [grade, setGrade]                   = useState('');
+  const [birthDate, setBirthDate]           = useState('');
   const [assignedTeacherId, setAssignedTeacherId] = useState('');
+
 
   const handleCreateIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -383,10 +423,11 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
     
     try {
       const response = await api.post('/super/students', {
-        first_name: firstName,
-        last_name: lastName,
+        full_name: `${firstName.trim()} ${lastName.trim()}`,
+        document_type: documentType,
         document_number: documentNumber,
-        teacher_id: assignedTeacherId ? parseInt(assignedTeacherId) : undefined
+        grade: grade,
+        birth_date: birthDate || null,
       });
       
       setMessage('¡Estudiante creado exitosamente!');
@@ -396,6 +437,11 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
       setFirstName('');
       setLastName('');
       setDocumentNumber('');
+      setDocumentType('TI');
+      setGrade('');
+      setBirthDate('');
+
+
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al crear el estudiante');
     } finally {
@@ -504,6 +550,7 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  placeholder="Ej: Valentina"
                   required
                 />
               </div>
@@ -516,6 +563,7 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  placeholder="Ej: Torres"
                   required
                 />
               </div>
@@ -523,30 +571,57 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#787774] mb-1">
-                  Matricula / Documento Escolar
+                  Tipo de documento
+                </label>
+                <select
+                  value={documentType}
+                  onChange={(e) => setDocumentType(e.target.value)}
+                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
+                  required
+                >
+                  <option value="TI">TI — Tarjeta de Identidad</option>
+                  <option value="CC">CC — Cédula de Ciudadanía</option>
+                  <option value="CE">CE — Cédula de Extranjería</option>
+                  <option value="PA">PA — Pasaporte</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#787774] mb-1">
+                  Número de documento
                 </label>
                 <input
                   type="text"
                   value={documentNumber}
                   onChange={(e) => setDocumentNumber(e.target.value)}
                   className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-mono"
+                  placeholder="Ej: 1234567890"
                   required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[#787774] mb-1">
+                  Grado (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  placeholder="Ej: 10°"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#787774] mb-1">
-                  Asignar a Profesor (Opcional)
+                  Fecha de nacimiento (opcional)
                 </label>
-                <select
-                  value={assignedTeacherId}
-                  onChange={(e) => setAssignedTeacherId(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
-                >
-                  <option value="">-- Sin asignar --</option>
-                  {(teachers || []).map(t => (
-                    <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>
-                  ))}
-                </select>
+                <input
+                  type="date"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                />
               </div>
             </div>
             
