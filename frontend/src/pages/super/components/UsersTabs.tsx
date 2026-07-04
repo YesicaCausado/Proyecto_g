@@ -337,13 +337,18 @@ export function TeachersTab({ license }: { license: any }) {
                  El archivo CSV debe tener las siguientes cabeceras exactamente:
                </p>
                <code className="block bg-white p-2 rounded border border-[#E9E9E7] text-xs font-mono text-[#37352F] mb-3">
-                 first_name,last_name,document_number,email
+                 nombre_completo,tipo_documento,numero_documento,correo,area
                </code>
+               <div className="text-xs text-[#787774] space-y-1 mt-2">
+                 <p><span className="font-semibold text-[#37352F]">tipo_documento</span> — CC, TI, CE o PA</p>
+                 <p><span className="font-semibold text-[#37352F]">correo</span> — obligatorio para profesores</p>
+                 <p><span className="font-semibold text-[#37352F]">area</span> — opcional (ej: Matemáticas)</p>
+               </div>
                <button
                  onClick={() => downloadCsvTemplate(
                    'plantilla_profesores.csv',
-                   'first_name,last_name,document_number,email',
-                   'Carlos,Martínez,1234567890,carlos@colegio.edu'
+                   'nombre_completo,tipo_documento,numero_documento,correo,area',
+                   'Carlos Martínez,CC,1234567890,carlos@colegio.edu.co,Matemáticas'
                  )}
                  className="text-sm text-primary hover:underline flex items-center gap-1">
                  <Download className="w-3 h-3" /> Descargar plantilla de ejemplo
@@ -642,11 +647,17 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
                  <FileText className="w-4 h-4" /> Formato CSV Estudiantes
                </h4>
                <p className="text-sm text-[#787774] mb-2">
-                 El archivo CSV debe tener las cabeceras exactas (email es opcional, puede quedar vacio):
+                 El archivo CSV debe tener las siguientes cabeceras exactamente:
                </p>
                <code className="block bg-white p-2 rounded border border-[#E9E9E7] text-xs font-mono text-[#37352F] mb-3">
-                 first_name,last_name,document_number,email
+                 nombre_completo,tipo_documento,numero_documento,correo,grado,fecha_nacimiento
                </code>
+               <div className="text-xs text-[#787774] space-y-1 mt-2">
+                 <p><span className="font-semibold text-[#37352F]">tipo_documento</span> — CC, TI, CE o PA</p>
+                 <p><span className="font-semibold text-[#37352F]">correo</span> — opcional</p>
+                 <p><span className="font-semibold text-[#37352F]">grado</span> — opcional (ej: 10°)</p>
+                 <p><span className="font-semibold text-[#37352F]">fecha_nacimiento</span> — opcional, formato YYYY-MM-DD</p>
+               </div>
              </div>
              
              <form onSubmit={handleCreateBatch} className="space-y-4">
