@@ -28,6 +28,7 @@ class User(Base):
     is_expert = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
 
     # ── Campos B2B nuevos ─────────────────────────────────
     document_number      = Column(String(30), unique=True, index=True, nullable=True)

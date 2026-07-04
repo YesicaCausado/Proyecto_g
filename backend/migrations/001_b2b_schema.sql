@@ -26,6 +26,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subject_area         VARCHAR(100);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS grade                VARCHAR(20);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date           VARCHAR(20);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login           TIMESTAMP;
 
 -- Índice único en document_number (solo filas no-NULL)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_document_number
