@@ -38,7 +38,7 @@ function CredentialsTable({
           <thead className="bg-[#F7F6F3]/50">
             <tr>
               <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Usuario</th>
-              <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Email (Opcional)</th>
+              <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Nombre completo</th>
               <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Contraseña Temporal</th>
               <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider text-right">Acción</th>
             </tr>
@@ -47,11 +47,11 @@ function CredentialsTable({
             {credentials.map((cred, idx) => (
               <tr key={idx} className="hover:bg-[#F7F6F3]/50 transition-colors">
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[#37352F] font-medium font-mono">{cred.username}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#787774]">{cred.email || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#37352F] font-mono tracking-wider font-semibold">{cred.temporary_password}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#787774]">{cred.full_name || '-'}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#37352F] font-mono tracking-wider font-semibold">{cred.temp_password}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                   <button 
-                    onClick={() => navigator.clipboard.writeText(`Usuario: ${cred.username} | Pass: ${cred.temporary_password}`)}
+                    onClick={() => navigator.clipboard.writeText(`Usuario: ${cred.username} | Pass: ${cred.temp_password}`)}
                     className="text-[#787774] hover:text-[#37352F] transition-colors flex items-center gap-1 justify-end ml-auto"
                     title="Copiar credenciales"
                   >
