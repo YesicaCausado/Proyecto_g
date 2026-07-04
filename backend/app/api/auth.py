@@ -69,13 +69,42 @@ async def get_current_user(
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Registrar un nuevo usuario en la base de datos."""
+async def register(
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """
+    Crear cuenta de usuario.
+    Solo puede ser usado por admin o super_profesor.
+    El flujo B2B usa /admin/institutions y /super/teachers|students.
+    Este endpoint queda como respaldo interno protegido.
+    """
+    # Solo admin y super_profesor pueden crear cuentas
+    if current_user.role not in ("admin", "super_profesor"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para crear cuentas. "
+                   "Usa el panel de administración.",
+        )
+
+    # Un super_profesor solo puede crear profesores y estudiantes
+    # Un admin puede crear cualquier rol
+    roles_permitidos = {
+        "admin":          ("estudiante", "profesor", "super_profesor", "admin"),
+        "super_profesor": ("estudiante", "profesor"),
+    }
+    if user_data.role not in roles_permitidos[current_user.role]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Tu rol no puede crear usuarios de tipo '{user_data.role}'.",
+        )
+
     try:
         if db.query(UserModel).filter(UserModel.username == user_data.username).first():
             raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
+
         if db.query(UserModel).filter(UserModel.email == user_data.email).first():
-            raise HTTPException(status_code=400, detail="El email ya está registrado")
             raise HTTPException(status_code=400, detail="El email ya está registrado")
 
         db_user = UserModel(
@@ -89,6 +118,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_user)
         return db_user
+
     except HTTPException:
         raise
     except Exception as e:
