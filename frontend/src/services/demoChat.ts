@@ -14,20 +14,120 @@ export { DEMO_MODE };
 
 // ── Respuestas de bienvenida por tema ─────────────────────────────────────────
 const WELCOME: Record<string, string> = {
-  matematicas: "¡Hola! Soy tu tutor de **Pensamiento Lógico-Matemático** 🧮\n\nEstoy aquí para ayudarte a prepararte para el Saber 11. ¿Empezamos con álgebra, geometría o estadística?",
-  lectora:     "¡Hola! Soy tu tutor de **Comprensión Lectora** 📖\n\nPracticaremos lectura crítica para el Saber 11. ¿Quieres trabajar con textos informativos, literarios o argumentativos?",
-  ingles:      "Hello! I'm your **English** tutor 🌎\n\nLet's get you ready for Saber 11. Shall we practice reading comprehension, grammar or vocabulary?",
-  ciudadanas:  "¡Hola! Soy tu tutor de **Competencias Ciudadanas** 🏛️\n\nExploraremos temas de democracia, convivencia y constitución. ¿Por dónde empezamos?",
-  cientifico:  "¡Hola! Soy tu tutor de **Pensamiento Científico** 🔬\n\nRepasaremos física, química y biología para el Saber 11. ¿Qué área te genera más dudas?",
+  matematicas: `## ¡Bienvenido a Matemáticas! 🧮
+
+Soy tu tutor de **Pensamiento Lógico-Matemático** para el Saber 11.
+
+Podemos trabajar en:
+- **Álgebra** — ecuaciones, funciones, sistemas
+- **Geometría** — áreas, volúmenes, trigonometría
+- **Estadística** — probabilidad, análisis de datos
+
+¿Por cuál área empezamos?`,
+
+  lectora: `## ¡Bienvenido a Lectura Crítica! 📖
+
+Soy tu tutor de **Comprensión Lectora** para el Saber 11.
+
+Practicaremos:
+- **Textos informativos** — extracción de ideas clave
+- **Textos argumentativos** — análisis de posiciones y argumentos
+- **Textos literarios** — interpretación y sentido implícito
+
+¿Con qué tipo de texto quieres comenzar?`,
+
+  ingles: `## Welcome to English! 🌎
+
+I'm your **English** tutor for the Saber 11 exam.
+
+We can practice:
+- **Reading comprehension** — understanding texts in English
+- **Grammar** — verb tenses, sentence structure
+- **Vocabulary** — common words and phrases
+
+What would you like to work on first?`,
+
+  ciudadanas: `## ¡Bienvenido a Ciencias Sociales! 🏛️
+
+Soy tu tutor de **Competencias Ciudadanas** para el Saber 11.
+
+Exploraremos temas como:
+- **Democracia y constitución** colombiana
+- **Convivencia** y derechos humanos
+- **Historia** y geografía
+
+¿Por dónde empezamos?`,
+
+  cientifico: `## ¡Bienvenido a Ciencias Naturales! 🔬
+
+Soy tu tutor de **Pensamiento Científico** para el Saber 11.
+
+Cubriremos:
+- **Biología** — célula, ecosistemas, genética
+- **Química** — reacciones, tabla periódica, soluciones
+- **Física** — movimiento, energía, ondas
+
+¿Qué área te genera más dudas?`,
 };
 
 // ── Pool de respuestas demo ───────────────────────────────────────────────────
 const REPLIES = [
-  "¡Excelente pregunta! Déjame explicarte paso a paso:\n\n**1.** Primero identifica los datos clave del problema.\n**2.** Aplica el concepto correspondiente.\n**3.** Verifica tu resultado.\n\n¿Quieres que trabajemos un ejemplo concreto?",
-  "Muy bien 💡 Eso demuestra que estás comprendiendo el concepto. Ahora intenta este desafío:\n\n> ¿Puedes explicar con tus propias palabras lo que acabas de aprender?\n\nEso refuerza mucho la memoria a largo plazo.",
-  "Entiendo tu duda. Es un tema que confunde a muchos. La clave está en:\n\n- Reconocer el **patrón** detrás del ejercicio\n- Practicar con variantes del mismo tipo\n- No memorizar, sino **entender el porqué**\n\n¿Probamos con un ejercicio similar?",
-  "¡Vas muy bien! Tu ritmo de aprendizaje es bueno. Recuerda que para el Saber 11 lo más importante es la **comprensión conceptual**, no la memorización.\n\n¿Continuamos con el siguiente nivel?",
-  "Esa es una respuesta correcta ✅\n\nAhora un nivel más difícil: intenta aplicar el mismo razonamiento a un contexto diferente. ¿Te animas?",
+  `## Explicación paso a paso
+
+Para resolver este tipo de problema, sigue estos pasos:
+
+1. **Identifica los datos clave** del enunciado
+2. **Selecciona el concepto** o fórmula que aplica
+3. **Sustituye y simplifica** cuidadosamente
+4. **Verifica el resultado** con las unidades o el contexto
+
+> Este tipo de pregunta aparece frecuentemente en el Saber 11.
+
+¿Quieres que trabajemos un ejemplo concreto con números?`,
+
+  `¡Muy bien! 💡 Estás comprendiendo el concepto.
+
+La clave que debes recordar:
+
+- **No memorices** → comprende el *porqué*
+- **Practica con variantes** del mismo tipo de ejercicio
+- Cuando puedas explicarlo con tus propias palabras, lo dominaste
+
+> "La diferencia entre saber y entender es lo que separa un puntaje promedio de uno sobresaliente."
+
+¿Quieres intentar un ejercicio similar por tu cuenta?`,
+
+  `Entiendo tu duda, es un error muy común.
+
+## ¿Por qué ocurre la confusión?
+
+- No distinguir **cuándo** aplicar cada concepto
+- Confundir los signos al operar con variables
+- Saltar pasos en lugar de resolverlo ordenadamente
+
+---
+
+El truco es **identificar el patrón** antes de calcular. ¿Probamos primero con un ejercicio más sencillo?`,
+
+  `✅ ¡Correcto!
+
+Ahora sube un nivel: aplica el mismo razonamiento a este contexto diferente.
+
+> Cuando puedas explicar un concepto de forma sencilla, es señal de que verdaderamente lo entendiste.
+
+Para el Saber 11, recuerda que lo más importante es la **comprensión conceptual**, no memorizar fórmulas. ¿Continuamos con el siguiente nivel?`,
+
+  `## Resumen del tema
+
+Hasta aquí hemos cubierto:
+
+- El **concepto base** y su definición
+- Cómo **aplicarlo** en preguntas tipo Saber 11
+- Los **errores más comunes** y cómo evitarlos
+
+---
+
+¿Seguimos con el siguiente subtema o quieres practicar más este antes de avanzar?`,
 ];
 
 const STATES = ["normal", "learning", "focused", "curiosity", "mastery"];

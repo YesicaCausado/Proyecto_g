@@ -1,53 +1,100 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
+@plugin "daisyui";
 
+/* ── Notion Design System — Paleta completa ─────────────────────────────────── */
 @theme {
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-  --color-accent-400: #a78bfa;
-  --color-accent-500: #8b5cf6;
-  --color-accent-600: #7c3aed;
-  --color-success-500: #22c55e;
-  --color-warning-500: #f59e0b;
-  --color-danger-500: #ef4444;
+  /* Azul Notion */
+  --color-primary-50:  #EAF4FB;
+  --color-primary-100: #C8E5F5;
+  --color-primary-200: #99CCEA;
+  --color-primary-300: #5AAFD8;
+  --color-primary-400: #2E96C7;
+  --color-primary-500: #0B6E99;   /* Notion Blue */
+  --color-primary-600: #095E85;
+  --color-primary-700: #074D6E;
+  --color-primary-800: #053C56;
+  --color-primary-900: #032B3F;
+
+  /* Verde Notion */
+  --color-secondary-400: #5DC8B4;
+  --color-secondary-500: #0F7B6C;  /* Notion Green */
+  --color-secondary-600: #0A6459;
+
+  /* Naranja Notion */
+  --color-accent-400:  #F2C84B;
+  --color-accent-500:  #D9730D;    /* Notion Orange */
+  --color-accent-600:  #B8600B;
+
+  /* Semánticos */
+  --color-success-500: #0F7B6C;
+  --color-warning-500: #DFAB01;
+  --color-danger-500:  #E03E3E;
+
+  /* Morado Notion */
+  --color-purple-500:  #6940A5;
 }
 
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
 body {
-  @apply bg-gray-50 text-gray-900 antialiased;
+  background: #FFFFFF;
+  color: #37352F;
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { @apply bg-gray-100; }
-::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-gray-400; }
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: #191919;
+}
 
+/* ── Scrollbar Notion ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #E9E9E7; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #9B9A97; }
+
+/* ── Card helpers ───────────────────────────────────────────────────────────── */
+.card-shadow { border: 1px solid #E9E9E7; box-shadow: none; }
+.card-hover:hover { border-color: #9B9A97; box-shadow: none; transform: none; }
+
+/* ── Chat bubbles ───────────────────────────────────────────────────────────── */
 .chat-bubble-bot {
-  @apply bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm;
+  background: #FFFFFF;
+  border: 1px solid #E9E9E7;
+  border-radius: 8px;
+  border-top-left-radius: 2px;
+  padding: 12px 16px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
 }
 .chat-bubble-user {
-  @apply bg-primary-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm;
+  background: #37352F;
+  color: #FFFFFF;
+  border-radius: 8px;
+  border-top-right-radius: 2px;
+  padding: 10px 16px;
+  font-size: 0.9375rem;
 }
 
+/* ── Animations (200ms estilo Notion) ───────────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
 }
-.animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+.animate-fadeIn { animation: fadeIn 200ms ease-out; }
 
 @keyframes pulse-dot {
   0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+  40%           { transform: scale(1); }
 }
 .typing-dot {
-  @apply inline-block w-2 h-2 bg-gray-400 rounded-full mx-0.5;
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: #9B9A97;
+  border-radius: 50%;
+  margin: 0 2px;
   animation: pulse-dot 1.4s infinite ease-in-out both;
 }
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }

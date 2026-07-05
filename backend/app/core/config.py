@@ -1,8 +1,14 @@
 import os
-
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings
+
+# Busca el .env en el directorio backend/ independientemente de desde dónde
+# se ejecute uvicorn (raíz del proyecto o dentro de backend/)
+_THIS_FILE = Path(__file__).resolve()               # .../backend/app/core/config.py
+_BACKEND_DIR = _THIS_FILE.parent.parent.parent      # .../backend/
+_ENV_FILE = _BACKEND_DIR / ".env"
 
 class Settings(BaseSettings):
     APP_NAME: str = "NeuroLearn Bot Service"
@@ -19,13 +25,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    AUTH_SERVICE_URL: str = "http://localhost:8002"
+    AUTH_SERVICE_URL: str = "http://localhost:8000"
 
     OPENAI_API_KEY: Optional[str] = None
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.1-8b-instant"
-    GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3-32b")
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     COGNITIVE_ANALYSIS_WINDOW: int = 30
     FATIGUE_THRESHOLD: float = 0.7
@@ -35,12 +41,13 @@ class Settings(BaseSettings):
 
     ALLOWED_ORIGINS: list = [
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://localhost:3000",
         "*",
     ]
 
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_FILE)
         case_sensitive = True
         extra = "ignore"
 

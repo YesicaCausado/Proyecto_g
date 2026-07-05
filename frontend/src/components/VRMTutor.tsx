@@ -1,4 +1,4 @@
-/**
+﻿/**
  * VRMTutor — Avatar 3D del tutor cargado desde /tutor.vrm
  *
  * Funciones:
@@ -301,19 +301,19 @@ const VRMTutor = forwardRef<VRMTutorHandle, Props>(
 
         {/* Cargando */}
         {loadState === "loading" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-violet-50 to-purple-100 rounded-xl">
-            <div className="w-12 h-12 border-4 border-violet-300 border-t-violet-600 rounded-full animate-spin mb-3" />
-            <p className="text-xs text-violet-600 font-medium">Cargando tutor 3D...</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#F7F6F3] rounded-md">
+            <div className="w-12 h-12 border-4 border-[#D9CCE9] border-t-[#6940A5] rounded-full animate-spin mb-3" />
+            <p className="text-xs text-[#6940A5] font-medium">Cargando tutor 3D...</p>
           </div>
         )}
 
         {/* Error */}
         {loadState === "error" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 rounded-xl p-4">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#F7F6F3] rounded-md p-4">
             <span className="text-3xl mb-2">🤖</span>
-            <p className="text-xs text-gray-500 text-center">Avatar no disponible</p>
+            <p className="text-xs text-[#787774] text-center">Avatar no disponible</p>
             {errorMsg && (
-              <p className="text-[10px] text-red-400 mt-1 text-center line-clamp-2">{errorMsg}</p>
+              <p className="text-[10px] text-[#E03E3E] mt-1 text-center line-clamp-2">{errorMsg}</p>
             )}
           </div>
         )}

@@ -27,13 +27,16 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
-    email: str
+    email: Optional[str]
     full_name: Optional[str]
     role: str = "estudiante"
     is_active: bool
     is_expert: bool
     created_at: datetime
     cognitive_profile: Optional[Dict] = None
+    must_change_password: Optional[bool] = False
+    institution_id: Optional[int] = None
+    document_number: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -45,6 +48,7 @@ class Token(BaseModel):
     user_id: Optional[int] = None
     role: Optional[str] = None
     full_name: Optional[str] = None
+    must_change_password: Optional[bool] = False
 
 
 # ===== CHAT / APRENDIZAJE =====
@@ -59,6 +63,7 @@ class ChatMessageRequest(BaseModel):
     message: str = Field(..., min_length=1)
     topic: Optional[str] = None          # ← NUEVO: tema para modo stateless
     history: Optional[List[Dict[str, Any]]] = None  # ← NUEVO: historial para serverless
+    cognitive_state: Optional[str] = None  # ← Estado cognitivo actual del estudiante
     response_time_ms: float = Field(default=0, ge=0)
     typing_speed_cpm: float = Field(default=0, ge=0)
     corrections: int = Field(default=0, ge=0)
@@ -73,62 +78,93 @@ class ChatMessageResponse(BaseModel):
     action: str
     difficulty: str
     cognitive_state: str
-    confidence: float = 0.0
-    suggestions: List[str] = []
-    should_pause: bool = False
-    metadata: Dict[str, Any] = {}
-    # Datos multimodales de salida
-    emotional_state: Optional[str] = None
-    attention_level: float = 1.0
-    engagement_score: float = 0.5
-    error_risk: float = 0.0
-    active_modalities: List[str] = []
+    confidence: float
+    suggestions: List[str]
+    should_pause: bool
+    metadata: Dict[str, Any]
 
+# ===== QUIZ COGNITIVO (Formato Gemini) =====
 
-class SessionStatsResponse(BaseModel):
+class QuizQuestionGemini(BaseModel):
+    """Pregunta individual en formato Gemini"""
+    id: int
+    question: str
+    options: List[str]  # Lista simple de opciones
+    answer: str  # La opción correcta textual
+    explanation: str
+
+class QuizResponseGemini(BaseModel):
+    """Respuesta completa del quiz en formato Gemini"""
+    quiz_title: str
+    difficulty: str  # Fácil/Medio/Difícil
+    questions: List[QuizQuestionGemini]
+
+class QuizRequest(BaseModel):
+    topic: str
+    num_questions: Optional[int] = 5
+    difficulty: Optional[str] = None  # Opcional: Fácil/Medio/Difícil
+
+class QuizHistoryEntry(BaseModel):
+    """Entrada individual del historial de quizzes con adaptación"""
+    date: str  # YYYY-MM-DD
+    title: str
+    questions_count: int
+    user_score: Optional[str] = None  # "X/Y" formato
+    difficulty: str
+    mistakes: Optional[List[str]] = None  # Lista de preguntas falladas
+    adaptation: Optional[str] = None  # Descripción de cómo se ajustó el siguiente quiz
+    performance_score: Optional[float] = None  # Porcentaje de aciertos
+    recommended_difficulty: Optional[str] = None  # Dificultad sugerida
+
+class QuizHistoryResponse(BaseModel):
+    """Respuesta con el historial completo de quizzes"""
+    history: List[QuizHistoryEntry]
+    total_quizzes: int
+
+class QuizSubmission(BaseModel):
+    """Envío de respuestas del quiz por parte del usuario"""
+    quiz_title: str
+    user_answers: Dict[int, str]  # {question_id: selected_answer}
+
+class QuizAnalysisResponse(BaseModel):
+    """Respuesta del análisis de quiz con recomendaciones adaptativas"""
+    score: str
+    correct_answers: int
+    wrong_answers: int
+    percentage: float
+    mistakes: List[Dict[str, Any]]  # Detalles de errores
+    weak_concepts: List[str]  # Conceptos a reforzar
+    recommended_difficulty: str
+    adaptation_message: str
+
+# ===== SCHEMAS LEGACY (mantener compatibilidad) =====
+
+class QuizOption(BaseModel):
+    id: str
+    text: str
+
+class QuizQuestion(BaseModel):
+    id: int
+    question: str
+    options: List[QuizOption]
+    correct_option: str
+    explanation: str
+
+class QuizResponse(BaseModel):
     topic: str
     difficulty: str
-    interactions: int
-    cognitive_state: str
-    concepts_taught: int = 0
-    concepts_mastered: int = 0
-    quiz_results: int = 0
-    consecutive_errors: int = 0
-    consecutive_correct: int = 0
-    duration_minutes: float = 0.0
-    cognitive_profile: Dict = {}
+    cognitive_level: str
+    questions: List[QuizQuestion]
 
-    class Config:
-        extra = "ignore"
-
-
-# ===== COGNITIVE EVENTS =====
-
-class CognitiveEventCreate(BaseModel):
-    event_type: str
-    response_time_ms: Optional[float] = None
-    typing_speed_cpm: Optional[float] = None
-    error_occurred: bool = False
-    correction_made: bool = False
-    pause_duration_ms: Optional[float] = None
-    content_length: int = 0
-    metadata: Dict = {}
-
-
-class CognitiveStateResponse(BaseModel):
-    state: str
-    confidence: float
-    factors: Dict[str, float] = {}
-    recommendations: List[str] = []
-    should_adapt: bool = False
-    suggested_difficulty: Optional[str] = None
-    active_modalities: List[str] = []
-    emotional_state: Optional[str] = None
-    attention_level: float = 1.0
-    engagement_score: float = 0.5
-    error_risk: float = 0.0
-    predicted_next_error: Optional[str] = None
-
+class SessionStatsResponse(BaseModel):
+    session_id: int
+    topic: str
+    duration_minutes: float
+    total_messages: int
+    avg_response_time: float
+    mastery_level: float
+    concepts_learned: List[str]
+    cognitive_evolution: List[Dict[str, Any]]
 
 # ===== BOT EXPERTO =====
 
@@ -286,3 +322,95 @@ class ClassroomStatsResponse(BaseModel):
     students_at_risk: int
     top_performers: List[Dict] = []
     struggling_students: List[Dict] = []
+
+
+# ===== SISTEMA B2B — INSTITUCIONES Y CREDENCIALES =====
+
+class InstitutionCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=200)
+    dane_code: str = Field(..., min_length=3, max_length=20)
+    license_type: str = Field(default="basica", pattern="^(basica|premium|pro)$")
+    # Datos del Super Profesor
+    sp_full_name: str = Field(..., min_length=2, max_length=100)
+    sp_document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    sp_document_number: str = Field(..., min_length=4, max_length=30)
+    sp_email: str = Field(..., max_length=100)
+
+
+class CredentialItem(BaseModel):
+    full_name: str
+    username: str        # = document_number
+    temp_password: str
+    role: str
+
+
+class InstitutionResponse(BaseModel):
+    id: int
+    name: str
+    dane_code: str
+    license_type: str
+    is_active: bool
+    created_at: datetime
+    credential: CredentialItem
+
+    class Config:
+        from_attributes = True
+
+
+class InstitutionListItem(BaseModel):
+    id: int
+    name: str
+    dane_code: str
+    license_type: str
+    is_active: bool
+    created_at: datetime
+    teacher_count: int = 0
+    student_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class TeacherCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: str = Field(..., max_length=100)
+    subject_area: str = Field(default="", max_length=100)
+
+
+class StudentCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    birth_date: Optional[str] = None    # YYYY-MM-DD
+    email: Optional[str] = None
+    grade: str = Field(default="", max_length=20)
+
+
+class BulkCreateResponse(BaseModel):
+    created: List[CredentialItem]
+    errors: List[Dict[str, Any]] = []
+    total_processed: int
+    total_created: int
+    total_errors: int
+
+
+class LicenseUsage(BaseModel):
+    license_type: str
+    max_teachers: int
+    current_teachers: int
+    max_students: int
+    current_students: int
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
+class CSVValidationRow(BaseModel):
+    row: int
+    data: Dict[str, Any]
+    error: Optional[str] = None
+    valid: bool = True

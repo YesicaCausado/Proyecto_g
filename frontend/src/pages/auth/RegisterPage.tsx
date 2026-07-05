@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Brain, Eye, EyeOff, Loader2, GraduationCap, BookOpenCheck } from 'lucide-react';
@@ -39,21 +39,21 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-400/10 flex items-center justify-center px-4 py-8">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-8" style={{ fontFamily: "'Inter', sans-serif" }}>
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-accent-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <Brain className="w-9 h-9 text-white" />
+          <div className="w-12 h-12 bg-[#37352F] rounded-md flex items-center justify-center mx-auto mb-4">
+            <Brain className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Crear Cuenta</h1>
-          <p className="text-gray-500 mt-1">Únete a NeuroLearn AI</p>
+          <h1 className="text-xl font-semibold text-[#37352F]">Crear Cuenta</h1>
+          <p className="text-[#787774] text-sm mt-1">Únete a NeuroLearn AI</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+        <div className="bg-white rounded-md border border-[#E9E9E7] p-8">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
+            <div className="bg-[#FDEEEE] border border-[#F4BDBD] text-[#E03E3E] text-sm rounded-md px-4 py-3 mb-4">
               {error}
             </div>
           )}
@@ -61,87 +61,62 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Role selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Soy...</label>
+              <label className="block text-xs font-medium text-[#787774] mb-2">Soy...</label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, role: 'estudiante' })}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-md border-2 transition-all text-sm ${
                     form.role === 'estudiante'
-                      ? 'border-primary-500 bg-primary-50 text-primary-700'
-                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                      ? 'border-[#37352F] bg-[#F7F6F3] text-[#37352F]'
+                      : 'border-[#E9E9E7] hover:border-[#9B9A97] text-[#787774]'
                   }`}
                 >
-                  <GraduationCap className="w-6 h-6" />
-                  <span className="text-sm font-medium">Estudiante</span>
+                  <GraduationCap className="w-5 h-5" />
+                  <span className="font-medium">Estudiante</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, role: 'profesor' })}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-md border-2 transition-all text-sm ${
                     form.role === 'profesor'
-                      ? 'border-accent-500 bg-purple-50 text-accent-600'
-                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                      ? 'border-[#37352F] bg-[#F7F6F3] text-[#37352F]'
+                      : 'border-[#E9E9E7] hover:border-[#9B9A97] text-[#787774]'
                   }`}
                 >
-                  <BookOpenCheck className="w-6 h-6" />
-                  <span className="text-sm font-medium">Profesor</span>
+                  <BookOpenCheck className="w-5 h-5" />
+                  <span className="font-medium">Profesor</span>
                 </button>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre completo
-              </label>
-              <input
-                type="text"
-                value={form.full_name}
-                onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
-                placeholder="Tu nombre completo"
-              />
-            </div>
+            {[
+              { id: 'full_name', label: 'Nombre completo', type: 'text', placeholder: 'Tu nombre completo', required: false },
+              { id: 'username',  label: 'Usuario',         type: 'text', placeholder: 'Elige un nombre de usuario', required: true, minLength: 3 },
+              { id: 'email',     label: 'Correo electrónico', type: 'email', placeholder: 'tu@correo.com', required: true },
+            ].map((f) => (
+              <div key={f.id}>
+                <label className="block text-xs font-medium text-[#787774] mb-1">{f.label}</label>
+                <input
+                  type={f.type}
+                  value={form[f.id as keyof typeof form] as string}
+                  onChange={(e) => setForm({ ...form, [f.id]: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-[#E9E9E7] rounded-md focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F] outline-none text-sm text-[#37352F]"
+                  placeholder={f.placeholder}
+                  required={f.required}
+                  minLength={f.minLength}
+                />
+              </div>
+            ))}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Usuario
-              </label>
-              <input
-                type="text"
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
-                placeholder="Elige un nombre de usuario"
-                required
-                minLength={3}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Correo electrónico
-              </label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
-                placeholder="tu@correo.com"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contraseña
-              </label>
+              <label className="block text-xs font-medium text-[#787774] mb-1">Contraseña</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors pr-10"
+                  className="w-full px-4 py-2.5 border border-[#E9E9E7] rounded-md focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F] outline-none transition-colors pr-10 text-sm text-[#37352F]"
                   placeholder="Mínimo 6 caracteres"
                   required
                   minLength={6}
@@ -149,7 +124,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9B9A97] hover:text-[#787774]"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -159,7 +134,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-[#37352F] text-white py-2.5 rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -172,9 +147,9 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-6">
+          <p className="text-center text-xs text-[#787774] mt-6">
             ¿Ya tienes cuenta?{' '}
-            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
+            <Link to="/login" className="text-[#37352F] hover:underline font-medium">
               Inicia sesión
             </Link>
           </p>

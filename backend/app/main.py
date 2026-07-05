@@ -21,35 +21,49 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.db.database import engine, Base
-from app.api import auth, chat, expert_bot
-from app.api import classroom as classroom_api
+from app.api import auth, chat, expert_bot, classroom, stats
+from app.api import credentials  # B2B credential system
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
 import app.models.learning      # noqa: F401
 import app.models.expert_bot    # noqa: F401
 import app.models.classroom     # noqa: F401
+import app.models.institution   # noqa: F401
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 try:
-    Base.metadata.create_all(bind=engine)
+    if engine is not None:
+        Base.metadata.create_all(bind=engine)
+    else:
+        import logging
+        logging.getLogger(__name__).warning("⚠️ engine es None — tablas no creadas. Verifica DATABASE_URL.")
 except Exception as e:
     import logging
     logging.getLogger(__name__).error(f"⚠️ No se pudo crear las tablas: {e}. El backend arrancará sin DB.")
 
+# ─── Migraciones B2B (columnas nuevas en tablas existentes) ──────────────────
+try:
+    from app.db.migrate import run_migrations
+    run_migrations(engine)
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).error(f"⚠️ Error en migraciones B2B: {e}")
+
 # ─── Usuario demo (DEMO_MODE del frontend) ────────────────────────────────────
 def _ensure_demo_user():
-    """Crea el usuario demo si no existe — permite que el frontend funcione sin registro."""
+    """Crea los usuarios demo (estudiante y admin) si no existen."""
     from app.db.database import SessionLocal
     from app.models.user import User, UserRole
     from passlib.context import CryptContext
     try:
         db = SessionLocal()
         try:
-            exists = db.query(User).filter(User.username == "demo").first()
-            if not exists:
-                pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-                user = User(
+            pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            
+            # 1. Usuario Demo Estudiante
+            if not db.query(User).filter(User.username == "demo").first():
+                user_std = User(
                     username="demo",
                     email="demo@neurolearn.app",
                     full_name="Usuario Demo",
@@ -57,15 +71,30 @@ def _ensure_demo_user():
                     role=UserRole.ESTUDIANTE,
                     is_active=True,
                 )
-                db.add(user)
-                db.commit()
+                db.add(user_std)
                 import logging
                 logging.getLogger(__name__).info("✅ Usuario demo creado: demo / demo1234")
+            
+            # 2. Usuario Admin (para el nuevo panel administrativo)
+            if not db.query(User).filter(User.username == "admin").first():
+                user_adm = User(
+                    username="admin",
+                    email="admin@neurolearn.app",
+                    full_name="Administrador Sistema",
+                    hashed_password=pwd.hash("admin1234"),
+                    role=UserRole.ADMIN,
+                    is_active=True,
+                )
+                db.add(user_adm)
+                import logging
+                logging.getLogger(__name__).info("✅ Usuario admin creado: admin / admin1234")
+            
+            db.commit()
         finally:
             db.close()
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuario demo (sin DB): {e}")
+        logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuarios demo (sin DB o error): {e}")
 
 try:
     _ensure_demo_user()
@@ -97,8 +126,10 @@ app.add_middleware(
 # Rutas — prefijo /api/v1 tanto en local como en Vercel
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(chat.router,          prefix="/api/v1")
-app.include_router(expert_bot.router,    prefix="/api/v1")
-app.include_router(classroom_api.router, prefix="/api/v1")
+app.include_router(expert_bot.router,    prefix="/api/v1/bots")
+app.include_router(classroom.router,     prefix="/api/v1/classrooms")
+app.include_router(stats.router,         prefix="/api/v1/stats")
+app.include_router(credentials.router,   prefix="/api/v1")
 
 
 @app.get("/")
@@ -121,14 +152,20 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Verificación de salud del sistema"""
+    from app.db.database import engine, IS_DB_DISABLED
     from app.api.chat import ai_manager
+
+    db_status = "disabled"
+    if not IS_DB_DISABLED and engine is not None:
+        try:
+            with engine.connect() as conn:
+                conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+            db_status = "connected"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+
     return {
         "status": "healthy",
-        "modules": {
-            "cognitive_engine": "ready",
-            "adaptive_chatbot": "ready",
-            "expert_bot_trainer": "ready",
-            "database": "connected",
-        },
+        "database": db_status,
         "ai_providers": ai_manager.get_status(),
     }

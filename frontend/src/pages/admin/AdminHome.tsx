@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+﻿import { Link } from 'react-router-dom';
 import { School, Users, BookOpen, ShieldCheck, Plus, ArrowRight } from 'lucide-react';
 
 // Tarjetas de estadísticas — los valores vendrán del backend (fase siguiente)
@@ -8,32 +8,32 @@ const STATS = [
     value: '—',
     sub: 'colegios registrados',
     icon: School,
-    color: 'bg-blue-500',
-    light: 'bg-blue-50 text-blue-700',
+    color: 'bg-[#0B6E99]',
+    light: 'bg-[#E5F3FF] text-[#0B6E99]',
   },
   {
     label: 'Super Profesores',
     value: '—',
     sub: 'rectores con acceso',
     icon: ShieldCheck,
-    color: 'bg-indigo-500',
-    light: 'bg-indigo-50 text-indigo-700',
+    color: 'bg-[#0B6E99]',
+    light: 'bg-[#E5F3FF] text-[#0B6E99]',
   },
   {
     label: 'Profesores totales',
     value: '—',
     sub: 'docentes activos',
     icon: Users,
-    color: 'bg-violet-500',
-    light: 'bg-violet-50 text-violet-700',
+    color: 'bg-[#6940A5]',
+    light: 'bg-[#F7F3FB] text-[#6940A5]',
   },
   {
     label: 'Estudiantes totales',
     value: '—',
     sub: 'alumnos registrados',
     icon: BookOpen,
-    color: 'bg-emerald-500',
-    light: 'bg-emerald-50 text-emerald-700',
+    color: 'bg-[#0F7B6C]',
+    light: 'bg-[#EEF7F4] text-[#0F7B6C]',
   },
 ];
 
@@ -44,16 +44,16 @@ const QUICK_ACTIONS = [
     icon: School,
     title: 'Registrar institución',
     description: 'Crear nuevo colegio y generar credenciales del rector (Super Profesor)',
-    color: 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50',
-    iconBg: 'bg-indigo-100 group-hover:bg-indigo-200 text-indigo-600',
+    color: 'border-[#BFDFF0] hover:border-[#0B6E99] hover:bg-[#E5F3FF]',
+    iconBg: 'bg-[#E5F3FF] group-hover:bg-[#E5F3FF] text-[#0B6E99]',
   },
   {
     to: '/admin/usuarios',
     icon: Users,
     title: 'Gestionar usuarios',
     description: 'Ver, activar o desactivar cuentas de administradores del sistema',
-    color: 'border-violet-200 hover:border-violet-400 hover:bg-violet-50',
-    iconBg: 'bg-violet-100 group-hover:bg-violet-200 text-violet-600',
+    color: 'border-[#D9CCE9] hover:border-[#6940A5] hover:bg-[#F7F3FB]',
+    iconBg: 'bg-[#F4EFFB] group-hover:bg-[#D9CCE9] text-[#6940A5]',
   },
 ];
 
@@ -63,25 +63,25 @@ export default function AdminHome() {
 
       {/* ── Encabezado ─────────────────────────────────────── */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-[#191919]">
           Bienvenido al panel de administración
         </h1>
-        <p className="text-gray-500 mt-1 text-sm">
+        <p className="text-[#787774] mt-1 text-sm">
           Gestión global de instituciones, licencias y usuarios de NeuroLearn IA.
         </p>
       </div>
 
       {/* ── Flujo de roles (visual informativo) ────────────── */}
-      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 mb-8 flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-semibold text-indigo-800">Flujo de creación de cuentas:</span>
-        <RoleBadge label="Administrador" color="bg-indigo-600" />
-        <ArrowRight className="w-4 h-4 text-indigo-400" />
-        <RoleBadge label="Super Profesor (rector)" color="bg-violet-600" />
-        <ArrowRight className="w-4 h-4 text-indigo-400" />
-        <RoleBadge label="Profesor" color="bg-blue-600" />
-        <ArrowRight className="w-4 h-4 text-indigo-400" />
-        <RoleBadge label="Estudiante" color="bg-emerald-600" />
-        <span className="text-indigo-500 ml-2">
+      <div className="bg-[#E5F3FF] border border-[#BFDFF0] rounded-md p-5 mb-8 flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-semibold text-[#37352F]">Flujo de creación de cuentas:</span>
+        <RoleBadge label="Administrador" color="bg-[#37352F]" />
+        <ArrowRight className="w-4 h-4 text-[#0B6E99]" />
+        <RoleBadge label="Super Profesor (rector)" color="bg-[#6940A5]" />
+        <ArrowRight className="w-4 h-4 text-[#0B6E99]" />
+        <RoleBadge label="Profesor" color="bg-[#0B6E99]" />
+        <ArrowRight className="w-4 h-4 text-[#0B6E99]" />
+        <RoleBadge label="Estudiante" color="bg-[#0F7B6C]" />
+        <span className="text-[#0B6E99] ml-2">
           — Cada nivel crea al nivel siguiente dentro de su institución
         </span>
       </div>
@@ -91,27 +91,27 @@ export default function AdminHome() {
         {STATS.map((s) => (
           <div
             key={s.label}
-            className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex items-start gap-4"
+            className="bg-white rounded-md p-5 border border-[#E9E9E7] flex items-start gap-4"
           >
             <div className={`w-10 h-10 ${s.color} rounded-lg flex items-center justify-center shrink-0`}>
               <s.icon className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
-              <p className="text-2xl font-bold text-gray-900 leading-tight">{s.value}</p>
-              <p className="text-sm font-medium text-gray-700 leading-tight">{s.label}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{s.sub}</p>
+              <p className="text-2xl font-bold text-[#191919] leading-tight">{s.value}</p>
+              <p className="text-sm font-medium text-[#37352F] leading-tight">{s.label}</p>
+              <p className="text-xs text-[#9B9A97] mt-0.5">{s.sub}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* ── Acciones rápidas ───────────────────────────────── */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="bg-white rounded-md p-6 border border-[#E9E9E7]">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-gray-900">Acciones rápidas</h2>
+          <h2 className="text-base font-semibold text-[#191919]">Acciones rápidas</h2>
           <Link
             to="/admin/instituciones"
-            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+            className="text-xs text-[#0B6E99] hover:text-[#37352F] flex items-center gap-1"
           >
             Ver todas <ArrowRight className="w-3 h-3" />
           </Link>
@@ -122,17 +122,17 @@ export default function AdminHome() {
             <Link
               key={action.to}
               to={action.to}
-              className={`group flex items-start gap-4 p-4 border-2 border-dashed rounded-xl transition-all duration-150 ${action.color}`}
+              className={`group flex items-start gap-4 p-4 border-2 border-dashed rounded-md transition-all duration-150 ${action.color}`}
             >
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${action.iconBg}`}>
                 <action.icon className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="font-medium text-gray-900 text-sm">{action.title}</p>
-                  <Plus className="w-3 h-3 text-gray-400 group-hover:text-gray-600 shrink-0" />
+                  <p className="font-medium text-[#191919] text-sm">{action.title}</p>
+                  <Plus className="w-3 h-3 text-[#9B9A97] group-hover:text-[#787774] shrink-0" />
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{action.description}</p>
+                <p className="text-xs text-[#787774] mt-0.5 leading-relaxed">{action.description}</p>
               </div>
             </Link>
           ))}
@@ -140,7 +140,7 @@ export default function AdminHome() {
       </div>
 
       {/* ── Nota sobre flujo de cuentas ────────────────────── */}
-      <div className="mt-6 bg-amber-50 border border-amber-100 rounded-xl p-4 text-sm text-amber-800">
+      <div className="mt-6 bg-[#FCF6E5] border border-[#EDD88A] rounded-md p-4 text-sm text-[#D9730D]">
         <strong className="font-semibold">Nota importante:</strong> El registro de nuevas cuentas
         está cerrado al público. Solo el administrador puede crear Super Profesores. El Super Profesor
         crea profesores dentro de su institución, y el profesor crea o invita a sus estudiantes.

@@ -9,6 +9,11 @@ import {
   Users,
   Menu,
   X,
+  TrendingUp,
+  BookMarked,
+  ChevronRight,
+  LayoutList,
+  Calendar,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -27,124 +32,181 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = isTeacher
     ? [
-        { to: '/dashboard', icon: Home, label: 'Inicio' },
-        { to: '/classrooms', icon: Users, label: 'Mis Clases' },
+        { to: '/dashboard', icon: Home,    label: 'Inicio'    },
+        { to: '/classrooms', icon: Users,  label: 'Mis Clases'},
       ]
     : [
-        { to: '/dashboard', icon: Home, label: 'Inicio' },
-        { to: '/bots', icon: BookOpen, label: 'Habilidades' },
-        { to: '/chat', icon: MessageSquare, label: 'Aprender' },
-        { to: '/my-classes', icon: Users, label: 'Mis Clases' },
+        { to: '/dashboard',   icon: Home,         label: 'Inicio'      },
+        { to: '/bots',        icon: BookOpen,      label: 'Habilidades' },
+        { to: '/chat',        icon: MessageSquare, label: 'Aprender'    },
+        { to: '/quizzes',     icon: BookOpen,      label: 'Desafíos'    },
+        { to: '/performance', icon: TrendingUp,    label: 'Desempeño'   },
+        { to: '/material',    icon: BookMarked,    label: 'Material'    },
+        { to: '/my-classes',  icon: Users,         label: 'Mis Clases'  },
+        { to: '/tablero',     icon: LayoutList,    label: 'Tablero'     },
+        { to: '/messages',    icon: MessageSquare, label: 'Mensajes'    },
+        { to: '/calendar',    icon: Calendar,      label: 'Calendario'  },
       ];
 
   const isActive = (path: string) => location.pathname === path;
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar Desktop */}
-      <aside className="hidden md:flex md:flex-col md:w-64 bg-white border-r border-gray-200">
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
-          <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-600 rounded-xl flex items-center justify-center">
-            <Brain className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="font-bold text-gray-900 text-lg leading-tight">NeuroLearn</h1>
-            <p className="text-xs text-gray-400">Plataforma IA</p>
-          </div>
-        </div>
+  const initials = (user?.full_name || user?.username || '?')
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-4 space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive(item.to)
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+  // ─── Sidebar inner ─────────────────────────────────────────────────────────
+  const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
+    <div className="flex flex-col h-full" style={{ fontFamily: "'Inter', sans-serif" }}>
 
-        {/* User Info */}
-        <div className="border-t border-gray-100 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-semibold text-sm">
-              {user?.full_name?.charAt(0) || user?.username?.charAt(0)?.toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {user?.full_name || user?.username}
-              </p>
-              <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-danger-500 hover:bg-red-50 transition-colors"
-              title="Cerrar sesión"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+      {/* Logo */}
+      <div className="px-4 pt-5 pb-4 border-b border-[#E9E9E7]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 bg-[#37352F] rounded-md flex items-center justify-center flex-shrink-0">
+            <Brain className="w-4 h-4 text-white" />
           </div>
-        </div>
-      </aside>
-
-      {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-600 rounded-lg flex items-center justify-center">
-              <Brain className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-gray-900">NeuroLearn</span>
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold text-[#37352F] leading-tight tracking-tight">
+              NeuroLearn
+            </p>
+            <p className="text-[10px] text-[#787774] font-medium tracking-wide">Saber 11 ICFES</p>
           </div>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2">
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
         </div>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div className="md:hidden fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}>
-          <div className="absolute left-0 top-14 bottom-0 w-64 bg-white border-r shadow-lg p-4 space-y-1"
-            onClick={(e) => e.stopPropagation()}>
-            {navItems.map((item) => (
+      {/* Nav section */}
+      <div className="flex-1 overflow-y-auto py-3 px-2">
+        <p className="px-2 mb-1.5 text-[10px] font-semibold text-[#787774] uppercase tracking-widest">
+          Navegación
+        </p>
+        <nav className="space-y-0.5">
+          {navItems.map((item) => {
+            const active = isActive(item.to);
+            return (
               <Link
                 key={item.to}
                 to={item.to}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive(item.to)
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-50'
+                onClick={() => mobile && setSidebarOpen(false)}
+                className={`group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-colors duration-100 ${
+                  active
+                    ? 'bg-[#F1F1EF] text-[#37352F]'
+                    : 'text-[#787774] hover:bg-[#F1F1EF] hover:text-[#37352F]'
                 }`}
               >
-                <item.icon className="w-5 h-5" />
-                {item.label}
+                <item.icon
+                  className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                    active ? 'text-[#37352F]' : 'text-[#9B9A97] group-hover:text-[#37352F]'
+                  }`}
+                  strokeWidth={active ? 2.5 : 2}
+                />
+                <span className="flex-1 truncate">{item.label}</span>
+                {active && (
+                  <ChevronRight className="w-3.5 h-3.5 text-[#9B9A97] ml-auto flex-shrink-0" />
+                )}
               </Link>
-            ))}
-            <hr className="my-3" />
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-danger-500 hover:bg-red-50 w-full"
-            >
-              <LogOut className="w-5 h-5" />
-              Cerrar sesión
-            </button>
+            );
+          })}
+        </nav>
+
+        {/* Progreso — solo estudiante */}
+        {!isTeacher && (
+          <div className="mt-5">
+            <p className="px-2 mb-1.5 text-[10px] font-semibold text-[#787774] uppercase tracking-widest">
+              Mi progreso
+            </p>
+            <div className="px-2 space-y-1.5">
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-[12px] text-[#787774]">Nivel</span>
+                <span className="text-[12px] font-semibold text-[#37352F]">Intermedio</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-t border-[#E9E9E7]">
+                <span className="text-[12px] text-[#787774]">Puntos</span>
+                <span className="text-[12px] font-semibold text-[#37352F]">2 450 pts</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* User footer */}
+      <div className="border-t border-[#E9E9E7] p-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-[#F1F1EF] flex items-center justify-center text-[#37352F] text-[11px] font-bold flex-shrink-0 select-none">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">
+              {user?.full_name || user?.username}
+            </p>
+            <p className="text-[10px] text-[#787774] capitalize truncate">{user?.role}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Cerrar sesión"
+            className="p-1.5 rounded-md text-[#9B9A97] hover:text-[#37352F] hover:bg-[#F1F1EF] transition-colors flex-shrink-0"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className="flex h-screen bg-white text-[#37352F]"
+      style={{ fontFamily: "'Inter', sans-serif" }}
+    >
+      {/* ── Sidebar Desktop ── */}
+      <aside
+        className="hidden md:flex md:flex-col md:w-[240px] flex-shrink-0 border-r border-[#E9E9E7]"
+        style={{ background: '#F7F6F3' }}
+      >
+        <SidebarContent />
+      </aside>
+
+      {/* ── Mobile header ── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-[#E9E9E7] z-40 h-12 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-[#37352F] rounded-md flex items-center justify-center">
+            <Brain className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span
+            className="text-[14px] font-semibold text-[#37352F] tracking-tight"
+            style={{ fontFamily: "'Inter', sans-serif" }}
+          >
+            NeuroLearn
+          </span>
+        </div>
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-1.5 rounded-md text-[#787774] hover:bg-[#F1F1EF] transition-colors"
+        >
+          {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+      </div>
+
+      {/* ── Mobile sidebar overlay ── */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/20"
+          onClick={() => setSidebarOpen(false)}
+        >
+          <div
+            className="absolute left-0 top-12 bottom-0 w-[240px] border-r border-[#E9E9E7]"
+            style={{ background: '#F7F6F3' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SidebarContent mobile />
           </div>
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="flex-1 md:overflow-y-auto">
-        <div className="pt-14 md:pt-0 min-h-screen">
+      {/* ── Main content ── */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="pt-12 md:pt-0 min-h-full">
           {children}
         </div>
       </main>
