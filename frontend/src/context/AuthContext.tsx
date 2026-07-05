@@ -3,7 +3,7 @@ import api from '../services/api';
 import type { User, LoginRequest, RegisterRequest, Token } from '../types';
 
 // false = backend real | true = demo offline sin backend
-const DEMO_MODE = true;
+const DEMO_MODE = false;
 
 // ─────────────────────────────────────────────────────────────────
 // Usuarios demo por rol — credenciales temporales de prueba
