@@ -1,29 +1,56 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Lock, Shield, Smartphone, LogOut, Eye, EyeOff, CheckCircle, AlertTriangle, Clock, Globe, Monitor } from 'lucide-react';
+import api from '../../../services/api';
 
-const MOCK_SESSIONS = [
-  { id: 1, device: 'Chrome 126 — Windows 11',    icon: Monitor, ip: '192.168.1.10', location: 'Bogotá, Colombia', lastActive: 'Ahora mismo',    current: true  },
-  { id: 2, device: 'Firefox 127 — MacOS',         icon: Monitor, ip: '192.168.1.45', location: 'Bogotá, Colombia', lastActive: 'Hace 2 horas',   current: false },
-  { id: 3, device: 'Chrome Mobile — Android 14',  icon: Smartphone, ip: '181.55.12.3', location: 'Medellín, Colombia', lastActive: 'Ayer 15:30', current: false },
-];
+interface ActiveSession {
+  id: number; device: string; icon: any; ip: string;
+  location: string; lastActive: string; current: boolean;
+}
 
-const MOCK_LOGIN_HISTORY = [
-  { date: '2026-07-01 08:58', ip: '192.168.1.10', browser: 'Chrome 126', status: 'exitoso',  location: 'Bogotá' },
-  { date: '2026-06-30 09:12', ip: '192.168.1.10', browser: 'Chrome 126', status: 'exitoso',  location: 'Bogotá' },
-  { date: '2026-06-29 08:45', ip: '192.168.1.45', browser: 'Firefox 127',status: 'exitoso',  location: 'Bogotá' },
-  { date: '2026-06-28 07:30', ip: '201.20.33.11', browser: 'Edge 125',   status: 'fallido',  location: 'Cali' },
-  { date: '2026-06-27 09:05', ip: '192.168.1.10', browser: 'Chrome 126', status: 'exitoso',  location: 'Bogotá' },
-];
+interface LoginEntry {
+  date: string; ip: string; browser: string; status: string; location: string;
+}
 
 export default function SeguridadTab() {
-  const [sessions, setSessions] = useState(MOCK_SESSIONS);
-  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+  const [sessions, setSessions]           = useState<ActiveSession[]>([]);
+  const [loginHistory, setLoginHistory]   = useState<LoginEntry[]>([]);
+  const [twoFAEnabled, setTwoFAEnabled]   = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
-  const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [pwSuccess, setPwSuccess] = useState('');
-  const [pwError, setPwError] = useState('');
+  const [pwForm, setPwForm]               = useState({ current: '', newPw: '', confirm: '' });
+  const [showCurrent, setShowCurrent]     = useState(false);
+  const [showNew, setShowNew]             = useState(false);
+  const [pwSuccess, setPwSuccess]         = useState('');
+  const [pwError, setPwError]             = useState('');
+
+  useEffect(() => {
+    api.get('/super/stats/security')
+      .then(r => {
+        const raw = r.data ?? {};
+        // Map active_sessions: assign icon based on device string
+        setSessions(
+          (raw.active_sessions ?? []).map((s: any, i: number): ActiveSession => ({
+            id:         s.id ?? i + 1,
+            device:     s.user ?? s.device ?? '—',
+            icon:       (s.device ?? '').toLowerCase().includes('mobile') ? Smartphone : Monitor,
+            ip:         s.ip ?? s.ip_address ?? '—',
+            location:   s.location ?? '—',
+            lastActive: s.last_login ?? s.last_active ?? '—',
+            current:    s.current ?? i === 0,
+          }))
+        );
+        // Map login_history
+        setLoginHistory(
+          (raw.login_history ?? []).map((h: any): LoginEntry => ({
+            date:     (h.created_at ?? h.date ?? '').replace('T', ' ').slice(0, 16),
+            ip:       h.ip ?? h.ip_address ?? '—',
+            browser:  h.browser ?? '—',
+            status:   h.action === 'login' ? 'exitoso' : (h.status ?? 'exitoso'),
+            location: h.location ?? '—',
+          }))
+        );
+      })
+      .catch(() => { setSessions([]); setLoginHistory([]); });
+  }, []);
 
   const revokeSession = (id: number) => {
     if (window.confirm('¿Cerrar esta sesión en el dispositivo remoto?')) {
@@ -204,7 +231,7 @@ export default function SeguridadTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E9E9E7]">
-            {MOCK_LOGIN_HISTORY.map((h, i) => (
+            {loginHistory.map((h: LoginEntry, i: number) => (
               <tr key={i} className="hover:bg-[#F7F6F3]/50 transition-colors">
                 <td className="px-4 py-3 text-xs text-[#37352F] font-mono">{h.date}</td>
                 <td className="px-4 py-3 text-xs font-mono text-[#787774]">{h.ip}</td>

@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageSquare, Send, Users, GraduationCap, BookOpen, User, Paperclip, Clock, CheckCheck, Plus, Trash2 } from 'lucide-react';
+import api from '../../../services/api';
 
 type Recipient = 'institucional' | 'profesores' | 'estudiantes' | 'grado' | 'grupo';
 
-const MOCK_SENT = [
-  { id: 1, subject: 'Cierre de período académico', to: 'Toda la institución', date: '2026-06-28 09:15', reads: 58, total: 63, sender: 'Rector Demo' },
-  { id: 2, subject: 'Reunión de docentes — Julio 5', to: 'Solo profesores', date: '2026-06-25 14:30', reads: 17, total: 18, sender: 'Rector Demo' },
-  { id: 3, subject: 'Exámenes de recuperación programados', to: 'Solo estudiantes', date: '2026-06-20 10:00', reads: 421, total: 745, sender: 'Rector Demo' },
-  { id: 4, subject: 'Material nuevo disponible', to: 'Grado 9°', to2: '', date: '2026-06-15 11:45', reads: 89, total: 92, sender: 'Rector Demo' },
-];
+interface SentMsg {
+  id: number; subject: string; to: string; date: string;
+  reads: number; total: number; sender: string;
+}
+
 
 const RECIPIENT_OPTIONS: { value: Recipient; label: string; icon: any; desc: string }[] = [
   { value: 'institucional', label: 'Toda la institución', icon: Users,         desc: 'Profesores + estudiantes' },
@@ -29,31 +29,38 @@ export default function MensajeriaTab() {
   const [subject, setSubject]     = useState('');
   const [body, setBody]           = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
-  const [sent, setSent]           = useState(MOCK_SENT);
+  const [sent, setSent]           = useState<SentMsg[]>([]);
   const [sending, setSending]     = useState(false);
   const [success, setSuccess]     = useState('');
 
-  const recipientLabel = () => {
-    if (recipient === 'grado') return grade ? `Grado ${grade}` : 'Selecciona grado';
-    if (recipient === 'grupo') return group || 'Selecciona grupo';
-    return RECIPIENT_OPTIONS.find(r => r.value === recipient)?.label ?? '';
-  };
+  useEffect(() => {
+    api.get('/super/broadcasts')
+      .then(r => setSent(r.data.broadcasts ?? []))
+      .catch(() => setSent([]));
+  }, []);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!subject.trim() || !body.trim()) return;
     setSending(true);
-    setTimeout(() => {
-      const newMsg = {
-        id: Date.now(), subject, to: recipientLabel(), date: new Date().toLocaleString('es-CO', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }),
-        reads: 0, total: recipient === 'institucional' ? 763 : recipient === 'profesores' ? 18 : 745, sender: 'Rector Demo',
-      };
-      setSent(prev => [newMsg as any, ...prev]);
+    try {
+      const res = await api.post('/super/broadcasts', {
+        subject,
+        body,
+        recipient_type: recipient,
+        grade: recipient === 'grado' ? grade : undefined,
+        group_id: recipient === 'grupo' ? group : undefined,
+        scheduled_at: scheduleDate || undefined,
+      });
+      setSent(prev => [res.data, ...prev]);
       setSubject(''); setBody(''); setScheduleDate('');
-      setSending(false);
       setSuccess('¡Mensaje enviado exitosamente!');
       setTimeout(() => setSuccess(''), 4000);
       setView('sent');
-    }, 1500);
+    } catch {
+      setSuccess('');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (

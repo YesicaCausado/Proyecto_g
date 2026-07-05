@@ -1,24 +1,28 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BookOpen, Search, Users, TrendingUp,
-  Activity, Eye, Edit3, Trash2, RefreshCw, ArrowLeftRight
+  Activity, Eye, Edit3, Trash2, RefreshCw, ArrowLeftRight, Loader2
 } from 'lucide-react';
+import api from '../../../services/api';
 
-const MOCK_GROUPS = [
-  { id: 1, name: 'Matemáticas 8A', teacher: 'Carlos Martínez', subject: 'Matemáticas', grade: '8°', students: 28, code: 'MAT8A-2024', status: 'activo', avg: 7.2, lastActivity: 'Hace 1 hora' },
-  { id: 2, name: 'Ciencias 9B', teacher: 'Laura González', subject: 'Ciencias', grade: '9°', students: 31, code: 'CIE9B-2024', status: 'activo', avg: 8.1, lastActivity: 'Hace 3 horas' },
-  { id: 3, name: 'Lenguaje 7C', teacher: 'Ana Torres', subject: 'Lenguaje', grade: '7°', students: 26, code: 'LEN7C-2024', status: 'activo', avg: 7.8, lastActivity: 'Hace 1 día' },
-  { id: 4, name: 'Historia 10A', teacher: 'Pedro Ramírez', subject: 'Sociales', grade: '10°', students: 30, code: 'HIS10A-2024', status: 'activo', avg: 8.4, lastActivity: 'Hace 2 días' },
-  { id: 5, name: 'Física 11B', teacher: 'María López', subject: 'Física', grade: '11°', students: 22, code: 'FIS11B-2024', status: 'activo', avg: 6.9, lastActivity: 'Hace 3 días' },
-  { id: 6, name: 'Inglés 6A', teacher: 'Juan Herrera', subject: 'Inglés', grade: '6°', students: 34, code: 'ING6A-2024', status: 'inactivo', avg: 7.5, lastActivity: 'Hace 1 semana' },
-  { id: 7, name: 'Tecnología 8B', teacher: 'Sofía Castro', subject: 'Tecnología', grade: '8°', students: 29, code: 'TEC8B-2024', status: 'activo', avg: 8.7, lastActivity: 'Hace 4 horas' },
-];
+interface Group {
+  id: number; name: string; teacher: string; subject: string; grade: string;
+  students: number; code: string; status: string; avg: number; lastActivity: string;
+}
 
 export default function GruposTab() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'todos' | 'activo' | 'inactivo'>('todos');
-  const [groups, setGroups] = useState(MOCK_GROUPS);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    api.get('/super/classrooms')
+      .then(r => setGroups(r.data.classrooms ?? []))
+      .catch(() => setGroups([]))
+      .finally(() => setLoading(false));
+  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -70,11 +74,12 @@ export default function GruposTab() {
         </div>
       )}
 
-      {/* Banner DEMO */}
-      <div className="bg-[#FCF6E5] border border-[#EDD88A] rounded-md px-4 py-2.5 flex items-center gap-2 text-xs text-[#D9730D] font-medium">
-        <span className="bg-[#D9730D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded">DEMO</span>
-        Los datos de esta vista son de demostración. Conéctate al backend para ver datos reales.
-      </div>
+      {/* Banner de carga */}
+      {loading && (
+        <div className="flex items-center justify-center py-4 gap-2 text-sm text-[#787774]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando grupos…
+        </div>
+      )}
 
       {/* KPIs rápidos */}
       <div className="grid grid-cols-3 gap-4">
@@ -232,7 +237,13 @@ export default function GruposTab() {
         <div className="px-4 py-3 border-t border-[#E9E9E7] bg-[#F7F6F3] flex justify-between items-center">
           <p className="text-xs text-[#787774]">Mostrando {filtered.length} de {groups.length} grupos</p>
           <button
-            onClick={() => showToast('Datos actualizados')}
+            onClick={() => {
+              setLoading(true);
+              api.get('/super/classrooms')
+                .then(r => setGroups(r.data.classrooms ?? []))
+                .catch(() => {})
+                .finally(() => { setLoading(false); showToast('Datos actualizados'); });
+            }}
             className="flex items-center gap-1.5 text-xs text-[#787774] hover:text-[#37352F] transition-colors">
             <RefreshCw className="w-3 h-3" /> Actualizar
           </button>

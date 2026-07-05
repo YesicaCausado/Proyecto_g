@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Shield, Search, Download, Filter, RefreshCw, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Shield, Search, Download, Filter, RefreshCw, ChevronDown, Loader2 } from 'lucide-react';
+import api from '../../../services/api';
 
 type ActionType = 'login' | 'logout' | 'create' | 'delete' | 'update' | 'export' | 'upload';
 
@@ -25,19 +26,6 @@ const ACTION_CONFIG: Record<ActionType, { label: string; color: string; bg: stri
   upload:  { label: 'Carga archivo',   color: 'text-[#0B6E99]', bg: 'bg-blue-50 border-blue-200' },
 };
 
-const MOCK_LOGS: AuditLog[] = [
-  { id:  1, user: 'superprofesor', role: 'Rector',   action: 'create',  description: 'Creó credencial para profesor Carlos Martínez (doc: 12345)',       date: '2026-07-01', time: '09:15:32', ip: '192.168.1.10', browser: 'Chrome 126' },
-  { id:  2, user: 'superprofesor', role: 'Rector',   action: 'export',  description: 'Exportó reporte institucional — Período 1 2026',                   date: '2026-07-01', time: '09:02:11', ip: '192.168.1.10', browser: 'Chrome 126' },
-  { id:  3, user: 'superprofesor', role: 'Rector',   action: 'login',   description: 'Inicio de sesión exitoso desde Windows 11',                        date: '2026-07-01', time: '08:58:01', ip: '192.168.1.10', browser: 'Chrome 126' },
-  { id:  4, user: 'carlos.m',     role: 'Profesor',  action: 'create',  description: 'Creó NeuroBots "MateBot 8A" con 3 documentos',                     date: '2026-06-30', time: '15:44:20', ip: '192.168.1.22', browser: 'Firefox 127' },
-  { id:  5, user: 'superprofesor', role: 'Rector',   action: 'delete',  description: 'Eliminó grupo "Inglés 6A (Copia)"',                                date: '2026-06-30', time: '11:30:05', ip: '192.168.1.10', browser: 'Chrome 126' },
-  { id:  6, user: 'admin',        role: 'Admin',     action: 'update',  description: 'Actualizó límite de licencia de 50 a 60 profesores',                date: '2026-06-29', time: '10:12:44', ip: '10.0.0.1',     browser: 'Edge 125' },
-  { id:  7, user: 'laura.g',      role: 'Profesor',  action: 'upload',  description: 'Subió archivo CSV con 28 estudiantes al grupo Ciencias 9B',         date: '2026-06-28', time: '08:25:17', ip: '192.168.1.35', browser: 'Chrome 125' },
-  { id:  8, user: 'superprofesor', role: 'Rector',   action: 'create',  description: 'Creó 15 credenciales en lote para estudiantes de grado 8°',         date: '2026-06-27', time: '14:05:33', ip: '192.168.1.10', browser: 'Chrome 126' },
-  { id:  9, user: 'carlos.m',     role: 'Profesor',  action: 'logout',  description: 'Cierre de sesión',                                                  date: '2026-06-27', time: '17:00:00', ip: '192.168.1.22', browser: 'Firefox 127' },
-  { id: 10, user: 'superprofesor', role: 'Rector',   action: 'update',  description: 'Actualizó datos institucionales: teléfono y dirección',             date: '2026-06-26', time: '09:45:12', ip: '192.168.1.10', browser: 'Chrome 126' },
-];
-
 // ── Generador de CSV real ──────────────────────────────────────────────────
 function exportLogsAsCSV(logs: AuditLog[]) {
   const headers = 'ID,Usuario,Rol,Acción,Descripción,Fecha,Hora,IP,Navegador';
@@ -57,13 +45,45 @@ function exportLogsAsCSV(logs: AuditLog[]) {
 }
 
 export default function AuditoriaTab() {
-  const [search,      setSearch]      = useState('');
+  const [search,       setSearch]       = useState('');
   const [filterAction, setFilterAction] = useState<ActionType | 'todas'>('todas');
-  const [dateFrom,    setDateFrom]    = useState('');
-  const [dateTo,      setDateTo]      = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [dateFrom,     setDateFrom]     = useState('');
+  const [dateTo,       setDateTo]       = useState('');
+  const [showFilters,  setShowFilters]  = useState(false);
+  const [logs,         setLogs]         = useState<AuditLog[]>([]);
+  const [loading,      setLoading]      = useState(true);
 
-  const filtered = MOCK_LOGS.filter(l => {
+  // Map API action strings to ActionType keys
+  const toActionType = (raw: string): ActionType => {
+    const map: Record<string, ActionType> = {
+      create_teacher: 'create', create_student: 'create', create_group: 'create', create_bot: 'create',
+      delete_teacher: 'delete', delete_student: 'delete', delete_group: 'delete',
+      update: 'update', broadcast: 'export', upload: 'upload', login: 'login', logout: 'logout',
+    };
+    return map[raw] ?? (raw in ACTION_CONFIG ? (raw as ActionType) : 'update');
+  };
+
+  useEffect(() => {
+    api.get('/super/audit?limit=50')
+      .then(r => {
+        const raw = r.data.logs ?? r.data ?? [];
+        setLogs(raw.map((l: any, i: number): AuditLog => ({
+          id:          l.id ?? i,
+          user:        l.performed_by ?? l.user ?? '—',
+          role:        l.user_type ?? l.role ?? '—',
+          action:      toActionType(l.action ?? ''),
+          description: l.notes ?? l.description ?? l.action ?? '—',
+          date:        (l.created_at ?? l.date ?? '').slice(0, 10),
+          time:        (l.created_at ?? l.time ?? '').slice(11, 19) || '—',
+          ip:          l.ip_address ?? l.ip ?? '—',
+          browser:     l.browser ?? '—',
+        })));
+      })
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = logs.filter((l: AuditLog) => {
     const matchSearch  = l.user.includes(search) || l.description.toLowerCase().includes(search.toLowerCase());
     const matchAction  = filterAction === 'todas' || l.action === filterAction;
     const matchDateFrom = !dateFrom || l.date >= dateFrom;
@@ -74,11 +94,11 @@ export default function AuditoriaTab() {
   return (
     <div className="space-y-5">
 
-      {/* Banner DEMO */}
-      <div className="bg-[#FCF6E5] border border-[#EDD88A] rounded-md px-4 py-2.5 flex items-center gap-2 text-xs text-[#D9730D] font-medium">
-        <span className="bg-[#D9730D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded">DEMO</span>
-        Los registros mostrados son de demostración. Con el backend activo se registrarán todas las acciones reales del sistema.
-      </div>
+      {loading && (
+        <div className="flex items-center justify-center py-4 gap-2 text-sm text-[#787774]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando registros de auditoría…
+        </div>
+      )}
 
       {/* Controles */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -155,7 +175,7 @@ export default function AuditoriaTab() {
           <div className="text-center py-12 text-[#787774]"><Shield className="w-10 h-10 mx-auto mb-3 opacity-20" /><p>No se encontraron registros</p></div>
         )}
         <div className="px-4 py-3 border-t border-[#E9E9E7] bg-[#F7F6F3] flex justify-between items-center">
-          <p className="text-xs text-[#787774]">{filtered.length} de {MOCK_LOGS.length} registros</p>
+          <p className="text-xs text-[#787774]">{filtered.length} de {logs.length} registros</p>
           <button onClick={() => { setSearch(''); setFilterAction('todas'); setDateFrom(''); setDateTo(''); }}
             className="flex items-center gap-1 text-xs text-[#787774] hover:text-[#37352F] transition-colors">
             <RefreshCw className="w-3 h-3" /> Limpiar filtros

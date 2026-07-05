@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Megaphone, ClipboardList, Link2, FileText, Bell,
-  MessageCircle, Send, Paperclip, ThumbsUp,
+  MessageCircle, Send, Paperclip, ThumbsUp, Loader2,
 } from 'lucide-react';
+import api from '../../services/api';
 
 type PostType = 'anuncio' | 'tarea' | 'recordatorio' | 'enlace' | 'material';
 
@@ -37,75 +38,55 @@ const TYPE_CONFIG: Record<PostType, { label: string; color: string; bg: string; 
   material:     { label: 'Material',     color: 'text-[#6940A5]', bg: 'bg-purple-50',    borderColor: 'border-[#6940A5]',  icon: FileText     },
 };
 
-const MOCK_POSTS: Post[] = [
-  {
-    id: 'p1', type: 'anuncio', group: 'Matemáticas 9A',
-    teacherName: 'Prof. Carlos Martínez',
-    title: 'Bienvenida al segundo semestre 2026',
-    content: 'Estimados estudiantes, les doy la bienvenida al segundo período académico. Recuerden revisar el NeuroBots de la clase para repasar los temas del parcial anterior. ¡Mucho ánimo este semestre!',
-    date: '2026-07-01',
-    reactions: 18, userReacted: false,
-    comments: [
-      { id: 'c1', author: 'Valentina Torres', isTeacher: false, text: '¡Gracias profe! Lista para este semestre.', time: 'Hace 2h' },
-      { id: 'c2', author: 'Prof. Carlos Martínez', isTeacher: true, text: '¡Así se habla Valentina! Éxitos a todos.', time: 'Hace 1h' },
-    ],
-    attachments: [],
-  },
-  {
-    id: 'p2', type: 'tarea', group: 'Matemáticas 9A',
-    teacherName: 'Prof. Carlos Martínez',
-    title: 'Tarea #4 — Ecuaciones cuadráticas',
-    content: 'Resolver los ejercicios 1 al 15 del capítulo 4 del libro. Mostrar el procedimiento completo. Subir foto o PDF del desarrollo en la plataforma antes de la fecha límite.',
-    date: '2026-06-30', dueDate: '2026-07-05',
-    reactions: 5, userReacted: true,
-    comments: [
-      { id: 'c3', author: 'Juan Pérez', isTeacher: false, text: 'Profe, ¿el ejercicio 10 es con fórmula general o completando el cuadrado?', time: 'Hace 3h' },
-      { id: 'c4', author: 'Prof. Carlos Martínez', isTeacher: true, text: 'Puedes usar cualquiera de los dos métodos, Juan.', time: 'Hace 2h' },
-    ],
-    attachments: ['cap4_ejercicios.pdf', 'rubrica_tarea4.pdf'],
-  },
-  {
-    id: 'p3', type: 'recordatorio', group: 'Física 10B',
-    teacherName: 'Prof. María López',
-    title: 'Parcial de Física — Viernes 5 de julio',
-    content: 'Recuerden que el parcial cubre los temas de la Unidad 2: Termodinámica y Ondas. Traer calculadora científica. No se permiten hojas de fórmulas. Duración: 90 minutos.',
-    date: '2026-06-28',
-    reactions: 12, userReacted: false,
-    comments: [],
-    attachments: [],
-  },
-  {
-    id: 'p4', type: 'material', group: 'Álgebra 8C',
-    teacherName: 'Prof. Ana Torres',
-    title: 'Guía de estudio — Funciones lineales',
-    content: 'Comparto el material de apoyo para estudiar funciones lineales antes del quiz del miércoles. Incluye ejercicios resueltos y ejercicios de práctica.',
-    date: '2026-06-27',
-    reactions: 24, userReacted: true,
-    comments: [
-      { id: 'c5', author: 'Carlos López', isTeacher: false, text: '¡Gracias profe, muy útil!', time: 'Hace 1 día' },
-    ],
-    attachments: ['funciones_lineales_guia.pdf'],
-  },
-  {
-    id: 'p5', type: 'enlace', group: 'Matemáticas 9A',
-    teacherName: 'Prof. Carlos Martínez',
-    title: 'Video explicativo — Ecuaciones cuadráticas',
-    content: 'Les comparto este video de Khan Academy que explica de forma muy clara el método de la fórmula cuadrática. Perfecto para repasar antes de la tarea.',
-    date: '2026-06-25',
-    reactions: 8, userReacted: false,
-    comments: [],
-    attachments: ['https://khanacademy.org/algebra'],
-  },
-];
+// Convierte un post de la API al formato del componente
+function mapPost(raw: any): Post {
+  const mapComment = (c: any): Comment => ({
+    id:        String(c.id),
+    author:    c.author_name ?? '?',
+    isTeacher: c.author_role === 'profesor' || c.author_role === 'super_profesor',
+    text:      c.content,
+    time:      new Date(c.created_at).toLocaleString('es-CO', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }),
+  });
+
+  return {
+    id:          String(raw.id),
+    type:        (raw.post_type ?? 'anuncio') as PostType,
+    title:       raw.title,
+    content:     raw.content ?? '',
+    date:        (raw.created_at ?? '').slice(0, 10),
+    group:       raw.classroom_name ?? '',
+    teacherName: raw.teacher_name ?? 'Profesor',
+    reactions:   raw.reactions_count ?? 0,
+    userReacted: raw.user_reacted ?? false,
+    comments:    (raw.comments ?? []).map(mapComment),
+    attachments: (raw.attachments ?? []).map((a: any) => typeof a === 'string' ? a : (a.name ?? a.url ?? '')),
+    dueDate:     raw.due_date ?? undefined,
+  };
+}
 
 export default function TableroPage() {
-  const [posts,       setPosts]       = useState<Post[]>(MOCK_POSTS);
+  const [posts,       setPosts]       = useState<Post[]>([]);
+  const [loading,     setLoading]     = useState(true);
   const [filterGroup, setFilterGroup] = useState('Todos');
   const [filterType,  setFilterType]  = useState<PostType | 'todos'>('todos');
   const [commentText, setCommentText] = useState<Record<string, string>>({});
-  const [expanded,    setExpanded]    = useState<Set<string>>(new Set(['p1', 'p2']));
+  const [expanded,    setExpanded]    = useState<Set<string>>(new Set());
 
-  const groups = ['Todos', ...Array.from(new Set(MOCK_POSTS.map(p => p.group)))];
+  // ── Fetch inicial ──────────────────────────────────────────────
+  useEffect(() => {
+    setLoading(true);
+    api.get('/posts')
+      .then(res => {
+        const raw: any[] = res.data.posts ?? [];
+        setPosts(raw.map(mapPost));
+        // Expandir el primero automáticamente
+        if (raw.length > 0) setExpanded(new Set([String(raw[0].id)]));
+      })
+      .catch(() => setPosts([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const groups = ['Todos', ...Array.from(new Set(posts.map(p => p.group)))];
 
   const filtered = posts.filter(p => {
     const gOk = filterGroup === 'Todos' || p.group === filterGroup;
@@ -117,23 +98,56 @@ export default function TableroPage() {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
-  const toggleReaction = (id: string) => {
+  const toggleReaction = async (id: string) => {
+    // Optimistic update
     setPosts(prev => prev.map(p => p.id === id
       ? { ...p, userReacted: !p.userReacted, reactions: p.userReacted ? p.reactions - 1 : p.reactions + 1 }
       : p
     ));
+    try {
+      const res = await api.post(`/posts/${id}/reactions`);
+      // Sincronizar con la respuesta real del servidor
+      setPosts(prev => prev.map(p => p.id === id
+        ? { ...p, userReacted: res.data.reacted, reactions: res.data.reactions_count }
+        : p
+      ));
+    } catch {
+      // Si falla, revertir
+      setPosts(prev => prev.map(p => p.id === id
+        ? { ...p, userReacted: !p.userReacted, reactions: p.userReacted ? p.reactions - 1 : p.reactions + 1 }
+        : p
+      ));
+    }
   };
 
-  const addComment = (postId: string) => {
+  const addComment = async (postId: string) => {
     const text = commentText[postId]?.trim();
     if (!text) return;
-    const c: Comment = { id: Date.now().toString(), author: 'Yo (Estudiante)', isTeacher: false, text, time: 'Ahora' };
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...p.comments, c] } : p));
     setCommentText(prev => ({ ...prev, [postId]: '' }));
+    try {
+      const res = await api.post(`/posts/${postId}/comments`, { content: text });
+      const newComment: Comment = {
+        id:        String(res.data.id),
+        author:    res.data.author_name,
+        isTeacher: res.data.author_role === 'profesor' || res.data.author_role === 'super_profesor',
+        text:      res.data.content,
+        time:      new Date(res.data.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+      };
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p));
+    } catch {
+      // Restaurar texto si falla
+      setCommentText(prev => ({ ...prev, [postId]: text }));
+    }
   };
 
   const today = new Date().toISOString().slice(0, 10);
   const pendingTasks = posts.filter(p => p.type === 'tarea' && p.dueDate && p.dueDate >= today);
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="w-6 h-6 text-[#787774] animate-spin" />
+    </div>
+  );
 
   return (
     <div className="p-6 md:p-8 max-w-3xl mx-auto space-y-6">
