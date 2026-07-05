@@ -42,9 +42,10 @@ export default function ForceChangePassword() {
       setSuccess(true);
       setTimeout(() => {
         const role = user?.role;
-        if (role === 'super_profesor') navigate('/super');
-        else if (role === 'profesor') navigate('/');
-        else navigate('/');
+        if (role === 'admin')          navigate('/admin');
+        else if (role === 'super_profesor') navigate('/super');
+        else if (role === 'profesor')       navigate('/teacher');
+        else                                navigate('/dashboard');
       }, 2000);
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? 'Error al cambiar la contraseña');
