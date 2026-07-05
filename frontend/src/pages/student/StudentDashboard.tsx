@@ -19,6 +19,10 @@ import {
   Calculator,
   Zap,
   Bell,
+  Brain,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 
 const SKILL_ICONS: Record<string, React.ReactNode> = {
@@ -48,6 +52,27 @@ interface DashboardStats {
   skill_scores: Record<string, number>;
 }
 
+interface CognitiveData {
+  fatigue:  number;  // 0-100
+  overload: number;
+  doubt:    number;
+  mastery:  number;
+}
+
+interface SubjectData {
+  score:      number;
+  trend:      number;
+  weaknesses: string[];
+}
+
+const SUBJECT_LABELS: Record<string, string> = {
+  matematicas: 'Matemáticas',
+  lectura:     'Lectura Crítica',
+  ingles:      'Inglés',
+  ciencias:    'Ciencias',
+  sociales:    'Sociales',
+};
+
 export default function StudentDashboard() {
   const { user } = useAuth();
   const [, setBots] = useState<ExpertBot[]>([]);
@@ -61,6 +86,8 @@ export default function StudentDashboard() {
     streak_days: 0,
     skill_scores: {},
   });
+  const [cognitive, setCognitive] = useState<CognitiveData>({ fatigue: 0, overload: 0, doubt: 0, mastery: 0 });
+  const [subjects, setSubjects] = useState<Record<string, SubjectData>>({});
   const [, setLoading] = useState(true);
 
   useEffect(() => {
@@ -100,6 +127,10 @@ export default function StudentDashboard() {
             skill_scores,
           });
         }
+
+        if (perfData?.cognitive) setCognitive(perfData.cognitive);
+        if (perfData?.subjects)  setSubjects(perfData.subjects);
+
       } catch {
         // silently fail
       } finally {
@@ -363,26 +394,117 @@ export default function StudentDashboard() {
                 </div>
             </div>
 
-            {/* AI Recommendations */}
+            {/* NeuroInsights — indicadores cognitivos reales */}
             <div className="bg-white border border-[#E9E9E7] rounded-md p-5">
-                <div className="flex items-center gap-2 mb-4">
-                    <div className="w-7 h-7 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
-                        <Sparkles className="w-3.5 h-3.5 text-[#787774]" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-[#37352F]">Recomendaciones AI</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+                  <Brain className="w-3.5 h-3.5 text-[#787774]" />
                 </div>
-                <p className="text-xs text-[#9B9A97] mb-4">Basado en tu último desempeño en matemáticas, te sugerimos:</p>
-                <div className="space-y-2">
-                    {[
-                        { n: '1', text: 'Repasar Álgebra Básica' },
-                        { n: '2', text: 'Quiz de Comprensión Lectora' },
-                    ].map(r => (
-                        <div key={r.n} className="flex items-center gap-3 p-3 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md">
-                            <span className="w-5 h-5 bg-white border border-[#E9E9E7] rounded text-[#787774] text-xs font-semibold flex items-center justify-center flex-shrink-0">{r.n}</span>
-                            <span className="text-[#37352F] text-sm">{r.text}</span>
+                <h3 className="text-sm font-semibold text-[#37352F]">NeuroInsights</h3>
+                <Link to="/performance" className="ml-auto text-[10px] text-[#787774] hover:text-[#37352F]">Ver todo →</Link>
+              </div>
+
+              {cognitive.mastery === 0 && cognitive.fatigue === 0 ? (
+                <p className="text-xs text-[#9B9A97] text-center py-3">Completa tu primer quiz para activar los NeuroInsights.</p>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    {
+                      label: 'Dominio',
+                      value: cognitive.mastery,
+                      icon: CheckCircle2,
+                      color: cognitive.mastery >= 70 ? '#0F7B6C' : cognitive.mastery >= 40 ? '#D9730D' : '#E03E3E',
+                      bg:    cognitive.mastery >= 70 ? 'bg-emerald-50' : cognitive.mastery >= 40 ? 'bg-orange-50' : 'bg-red-50',
+                    },
+                    {
+                      label: 'Dominio activo',
+                      value: 100 - cognitive.fatigue,
+                      icon: Zap,
+                      color: cognitive.fatigue <= 30 ? '#0F7B6C' : cognitive.fatigue <= 60 ? '#D9730D' : '#E03E3E',
+                      bg:    cognitive.fatigue <= 30 ? 'bg-emerald-50' : cognitive.fatigue <= 60 ? 'bg-orange-50' : 'bg-red-50',
+                    },
+                    {
+                      label: 'Claridad',
+                      value: 100 - cognitive.doubt,
+                      icon: TrendingUp,
+                      color: cognitive.doubt <= 30 ? '#0F7B6C' : cognitive.doubt <= 60 ? '#D9730D' : '#E03E3E',
+                      bg:    cognitive.doubt <= 30 ? 'bg-emerald-50' : cognitive.doubt <= 60 ? 'bg-orange-50' : 'bg-red-50',
+                    },
+                    {
+                      label: 'Carga cognitiva',
+                      value: 100 - cognitive.overload,
+                      icon: AlertTriangle,
+                      color: cognitive.overload <= 40 ? '#0F7B6C' : cognitive.overload <= 65 ? '#D9730D' : '#E03E3E',
+                      bg:    cognitive.overload <= 40 ? 'bg-emerald-50' : cognitive.overload <= 65 ? 'bg-orange-50' : 'bg-red-50',
+                    },
+                  ].map(({ label, value, icon: Icon, color, bg }) => (
+                    <div key={label}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-5 h-5 ${bg} rounded flex items-center justify-center`}>
+                            <Icon className="w-3 h-3" style={{ color }} />
+                          </div>
+                          <span className="text-xs text-[#787774]">{label}</span>
                         </div>
-                    ))}
+                        <span className="text-xs font-semibold" style={{ color }}>{value}%</span>
+                      </div>
+                      <div className="w-full bg-[#E9E9E7] rounded-full h-1.5">
+                        <div className="h-1.5 rounded-full transition-all duration-500" style={{ width: `${value}%`, backgroundColor: color }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              )}
+            </div>
+
+            {/* Recomendaciones AI — basadas en materias débiles reales */}
+            <div className="bg-white border border-[#E9E9E7] rounded-md p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-3.5 h-3.5 text-[#787774]" />
+                </div>
+                <h3 className="text-sm font-semibold text-[#37352F]">Recomendaciones AI</h3>
+              </div>
+
+              {(() => {
+                // Ordenar materias por score ascendente → las más débiles primero
+                const sorted = Object.entries(subjects)
+                  .filter(([, s]) => s.score > 0)
+                  .sort(([, a], [, b]) => a.score - b.score);
+
+                if (sorted.length === 0) {
+                  return <p className="text-xs text-[#9B9A97]">Practica algunos quizzes para recibir recomendaciones personalizadas.</p>;
+                }
+
+                const recs: { text: string; link: string }[] = [];
+                sorted.slice(0, 2).forEach(([key, s]) => {
+                  const label = SUBJECT_LABELS[key] ?? key;
+                  const weak  = s.weaknesses?.[0];
+                  recs.push({
+                    text: weak && weak !== 'Sin datos aún'
+                      ? `Refuerza "${weak}" en ${label} (${s.score}%)`
+                      : `Practica más ejercicios de ${label} (${s.score}%)`,
+                    link: `/chat?skill=${key}`,
+                  });
+                });
+                if (sorted[0]?.[1].trend < -5) {
+                  const [key] = sorted[0];
+                  recs.push({ text: `Tu rendimiento en ${SUBJECT_LABELS[key] ?? key} bajó ${Math.abs(sorted[0][1].trend)} pts esta semana`, link: '/performance' });
+                }
+
+                return (
+                  <div className="space-y-2">
+                    {recs.map((r, i) => (
+                      <Link key={i} to={r.link}
+                        className="flex items-center gap-3 p-3 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md hover:border-[#9B9A97] transition-colors">
+                        <span className="w-5 h-5 bg-white border border-[#E9E9E7] rounded text-[#787774] text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                        <span className="text-[#37352F] text-xs leading-snug">{r.text}</span>
+                        <ArrowRight className="w-3 h-3 text-[#9B9A97] ml-auto flex-shrink-0" />
+                      </Link>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
         </div>

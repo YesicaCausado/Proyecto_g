@@ -27,6 +27,7 @@ class Classroom(Base):
     subject = Column(String(100), nullable=False)  # Habilidad transversal
     grade = Column(String(20), default="")  # Grado: 6to, 7mo, etc.
     invite_code = Column(String(8), unique=True, index=True, nullable=False)
+    color = Column(String(20), default="#2E6FDB")
 
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

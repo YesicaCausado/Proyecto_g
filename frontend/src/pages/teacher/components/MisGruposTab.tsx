@@ -213,6 +213,8 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
 export default function MisGruposTab({ license }: { license: any }) {
   const [groups,      setGroups]      = useState<Group[]>([]);
   const [loading,     setLoading]     = useState(true);
+  const [createError, setCreateError] = useState('');
+  const [creating,    setCreating]    = useState(false);
   const [selected,    setSelected]    = useState<Group | null>(null);
   const [showModal,   setShowModal]   = useState(false);
   const [copiedId,    setCopiedId]    = useState<string | null>(null);
@@ -261,20 +263,26 @@ export default function MisGruposTab({ license }: { license: any }) {
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.subject.trim()) return;
+    setCreating(true);
+    setCreateError('');
     try {
       const res = await api.post('/classrooms/', {
-        name:        form.name.trim(),
-        subject:     form.subject.trim(),
-        grade:       form.grade,
-        description: form.description,
+        name:         form.name.trim(),
+        subject:      form.subject.trim(),
+        grade:        form.grade,
+        description:  form.description,
         max_students: 40,
+        color:        form.color,
       });
       setGroups(prev => [mapGroup(res.data), ...prev]);
-    } catch {
-      // fallback local add
+      setShowModal(false);
+      setForm({ name:'', subject:'', grade:'', description:'', color: COLORS[0].value, image:'' });
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? 'Error al crear el grupo. Intenta de nuevo.';
+      setCreateError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setCreating(false);
     }
-    setShowModal(false);
-    setForm({ name:'', subject:'', grade:'', description:'', color: COLORS[0].value, image:'' });
   };
 
   if (selected) return <GroupDetail group={selected} onBack={() => setSelected(null)} />;
@@ -459,13 +467,20 @@ export default function MisGruposTab({ license }: { license: any }) {
                 </button>
               </div>
             </div>
-            <div className="px-6 pb-5 flex justify-end gap-2">
-              <button onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg transition-colors">Cancelar</button>
-              <button onClick={handleCreate} disabled={!form.name.trim() || !form.subject.trim()}
-                className="px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                <Plus className="w-4 h-4 inline mr-1.5" />Crear Grupo
-              </button>
+            <div className="px-6 pb-5 flex flex-col gap-2">
+              {createError && (
+                <p className="text-xs text-[#E03E3E] bg-red-50 border border-red-100 rounded-lg px-3 py-2">{createError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => { setShowModal(false); setCreateError(''); }}
+                  className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg transition-colors">Cancelar</button>
+                <button onClick={handleCreate} disabled={!form.name.trim() || !form.subject.trim() || creating}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {creating
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Creando…</>
+                    : <><Plus className="w-4 h-4" />Crear Grupo</>}
+                </button>
+              </div>
             </div>
           </div>
         </div>

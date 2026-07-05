@@ -246,6 +246,7 @@ class ClassroomCreate(BaseModel):
     subject: str = Field(..., max_length=100)
     grade: str = Field(default="", max_length=20)
     max_students: int = Field(default=40, ge=1, le=100)
+    color: str = Field(default="#2E6FDB", max_length=20)
 
 
 class ClassroomResponse(BaseModel):
@@ -259,6 +260,7 @@ class ClassroomResponse(BaseModel):
     is_active: bool
     max_students: int
     student_count: int = 0
+    color: str = "#2E6FDB"
     created_at: datetime
 
     class Config:
