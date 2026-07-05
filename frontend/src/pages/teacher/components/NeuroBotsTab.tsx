@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Plus, Trash2, Globe, Lock, FileText, Upload, X,
   CheckCircle, Clock, AlertCircle, MessageSquare, BarChart2,
   ToggleLeft, ToggleRight, BookOpen,
 } from 'lucide-react';
+import api from '../../../services/api';
 
 interface KnowledgeFile {
   id: string;
@@ -25,35 +26,6 @@ interface NeuroBot {
   created: string;
 }
 
-const MOCK_BOTS: NeuroBot[] = [
-  {
-    id:'b1', name:'MateBot 9A', description:'Asistente de álgebra y geometría para grado 9A.',
-    subject:'Matemáticas', mode:'public', active:true, queries:342,
-    docs:[
-      {id:'d1',name:'algebra_cap1.pdf',size:'2.1 MB',date:'2026-06-10',status:'processed'},
-      {id:'d2',name:'geometria_basica.pdf',size:'3.4 MB',date:'2026-06-12',status:'processed'},
-      {id:'d3',name:'ejercicios_ecuaciones.md',size:'0.3 MB',date:'2026-06-15',status:'processed'},
-    ],
-    created:'2026-02-20',
-  },
-  {
-    id:'b2', name:'FísicaBot 10B', description:'Explica mecánica, óptica y electromagnetismo.',
-    subject:'Física', mode:'public', active:true, queries:218,
-    docs:[
-      {id:'d4',name:'mecanica_newton.pdf',size:'4.2 MB',date:'2026-05-20',status:'processed'},
-      {id:'d5',name:'electromagnetismo.pdf',size:'5.1 MB',date:'2026-05-22',status:'processed'},
-    ],
-    created:'2026-02-21',
-  },
-  {
-    id:'b3', name:'AlgebraBot 8C', description:'Apoyo en ecuaciones y funciones básicas.',
-    subject:'Álgebra', mode:'private', active:false, queries:89,
-    docs:[
-      {id:'d6',name:'funciones_lineales.pdf',size:'1.8 MB',date:'2026-04-05',status:'processed'},
-    ],
-    created:'2026-03-15',
-  },
-];
 
 const STATUS_CONFIG = {
   processed:  { icon: CheckCircle, color: 'text-[#0F7B6C]', label: 'Procesado'  },
@@ -177,12 +149,28 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function NeuroBotsTab({ license }: { license: any }) {
-  const [bots,      setBots]      = useState<NeuroBot[]>(MOCK_BOTS);
+  const [bots,      setBots]      = useState<NeuroBot[]>([]);
   const [selected,  setSelected]  = useState<NeuroBot | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [form,      setForm]      = useState({ name:'', description:'', subject:'', mode:'public' as 'public'|'private' });
   const fileRef = useRef<HTMLInputElement>(null);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get('/expert_bots/my-bots')
+      .then(r => setBots((r.data.bots ?? []).map((b: any): NeuroBot => ({
+        id:          String(b.id),
+        name:        b.name,
+        description: b.description ?? '',
+        subject:     b.category ?? b.subject ?? 'General',
+        mode:        b.is_public ? 'public' : 'private',
+        active:      b.is_active ?? true,
+        queries:     b.total_users ?? 0,
+        docs:        [],
+        created:     (b.created_at ?? '').slice(0, 10),
+      }))))
+      .catch(() => setBots([]));
+  }, []);
 
   const maxBots = license?.bots_limit === 'unlimited' ? Infinity : (license?.bots_limit ?? 1);
   const usedBots = bots.length;

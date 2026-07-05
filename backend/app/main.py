@@ -25,6 +25,9 @@ from app.api import auth, chat, expert_bot, classroom, stats
 from app.api import credentials  # B2B credential system
 from app.api import posts, events, messages  # Tablero, Calendario, Mensajes
 from app.api import super_stats               # Super Profesor stats institucionales
+from app.api import teacher_stats            # Teacher dashboard stats
+from app.api import teacher_materials        # Teacher materials (carpetas + archivos)
+from app.api import teacher_evaluations      # Teacher evaluations (evaluaciones)
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
@@ -35,6 +38,8 @@ import app.models.institution   # noqa: F401
 import app.models.posts         # noqa: F401
 import app.models.events        # noqa: F401
 import app.models.messages      # noqa: F401
+import app.api.teacher_materials   # noqa: F401 — registers TeacherFolder + TeacherMaterial
+import app.api.teacher_evaluations # noqa: F401 — registers TeacherEvaluation
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 try:
@@ -138,7 +143,10 @@ app.include_router(credentials.router,   prefix="/api/v1")
 app.include_router(posts.router,         prefix="/api/v1")
 app.include_router(events.router,        prefix="/api/v1")
 app.include_router(messages.router,      prefix="/api/v1")
-app.include_router(super_stats.router,   prefix="/api/v1")
+app.include_router(super_stats.router,         prefix="/api/v1")
+app.include_router(teacher_stats.router,       prefix="/api/v1")
+app.include_router(teacher_materials.router,   prefix="/api/v1")
+app.include_router(teacher_evaluations.router, prefix="/api/v1")
 
 
 @app.get("/")

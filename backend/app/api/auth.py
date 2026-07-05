@@ -175,3 +175,54 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 async def get_me(current_user=Depends(get_current_user)):
     """Obtener perfil del usuario actual."""
     return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Actualizar nombre y/o email del usuario autenticado."""
+    if "full_name" in data and data["full_name"]:
+        current_user.full_name = data["full_name"]
+    if "email" in data and data["email"]:
+        # Check uniqueness
+        existing = db.query(UserModel).filter(
+            UserModel.email == data["email"],
+            UserModel.id != current_user.id,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="El email ya está en uso por otra cuenta.")
+        current_user.email = data["email"]
+    try:
+        db.commit()
+        db.refresh(current_user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar: {str(e)}")
+    return current_user
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Cambiar contraseña del usuario autenticado."""
+    current_pwd = data.get("current_password", "")
+    new_pwd     = data.get("new_password", "")
+
+    if not verify_password(current_pwd, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta.")
+    if len(new_pwd) < 8:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres.")
+
+    current_user.hashed_password = get_password_hash(new_pwd)
+    current_user.must_change_password = False
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar: {str(e)}")

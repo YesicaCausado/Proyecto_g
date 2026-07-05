@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   AlertTriangle, Brain, TrendingDown, Clock,
-  ChevronRight, CheckCircle, Target, BookOpen, Zap,
+  ChevronRight, CheckCircle, Target, BookOpen, Zap, Loader2,
 } from 'lucide-react';
+import api from '../../../services/api';
 
 type Priority = 'alta' | 'media' | 'baja';
 
@@ -32,44 +33,8 @@ interface Student {
   trend: number[];
 }
 
-const MOCK_ALERTS: Alert[] = [
-  { id:'a1', priority:'alta',  category:'Rendimiento',  title:'Juan Pérez — Descenso crítico',          detail:'Promedio descendió de 7.2 a 4.2 en 3 semanas.', affected:'Juan Pérez / 9A',     date:'2026-07-01', resolved:false },
-  { id:'a2', priority:'alta',  category:'Inactividad',  title:'Ana Rodríguez — Sin actividad 5 días',   detail:'No ha ingresado desde hace 5 días. Riesgo de abandono.', affected:'Ana R. / 10B',date:'2026-07-01', resolved:false },
-  { id:'a3', priority:'media', category:'Grupo',        title:'Álgebra 8C — Promedio cayó 12%',         detail:'Promedio grupal descendió de 7.8 a 6.9 este período.',  affected:'Grupo 8C',     date:'2026-06-30', resolved:false },
-  { id:'a4', priority:'media', category:'Participación','title':'Bajo uso del NeuroBot — Álgebra 8C',   detail:'Solo el 32% del grupo ha usado el bot en la última semana.', affected:'28 est.',  date:'2026-06-29', resolved:false },
-  { id:'a5', priority:'baja',  category:'Tarea',        title:'Tarea #4 — 6 entregas pendientes',       detail:'6 estudiantes no han entregado la tarea de geometría.',    affected:'6 est.',    date:'2026-06-28', resolved:true  },
-];
 
-const MOCK_STUDENTS: Student[] = [
-  {
-    id:'s1', name:'Juan Pérez',       group:'9A',  avg:4.2, risk:'high',
-    strengths:['Geometría básica','Aritmética'], weaknesses:['Álgebra lineal','Fracciones','Ecuaciones'],
-    concepts_ok:['Suma de vectores','Ángulos','Perímetro'],
-    concepts_fail:['Ecuaciones cuadráticas','Funciones','Fracciones complejas'],
-    study_time:'12 min/día', ai_usage:8, trend:[7.2,6.8,5.9,5.1,4.8,4.2],
-  },
-  {
-    id:'s2', name:'Ana Rodríguez',    group:'10B', avg:5.1, risk:'high',
-    strengths:['Física mecánica'], weaknesses:['Termodinámica','Electromagnetismo'],
-    concepts_ok:['Leyes de Newton','Fuerza'],
-    concepts_fail:['Ondas electromagnéticas','Temperatura','Presión'],
-    study_time:'8 min/día', ai_usage:3, trend:[7.0,6.5,6.1,5.8,5.4,5.1],
-  },
-  {
-    id:'s3', name:'Carlos López',     group:'8C',  avg:6.2, risk:'medium',
-    strengths:['Operaciones básicas','Geometría'], weaknesses:['Fracciones','Potencias'],
-    concepts_ok:['Suma','Resta','Multiplicación'],
-    concepts_fail:['Fracciones mixtas','Potencias negativas'],
-    study_time:'25 min/día', ai_usage:42, trend:[6.0,6.2,6.1,6.4,6.2,6.2],
-  },
-  {
-    id:'s4', name:'Valentina Torres', group:'9A',  avg:9.4, risk:'low',
-    strengths:['Álgebra','Cálculo','Geometría'], weaknesses:[],
-    concepts_ok:['Ecuaciones','Funciones','Derivadas'],
-    concepts_fail:[],
-    study_time:'58 min/día', ai_usage:92, trend:[8.8,9.0,9.1,9.2,9.3,9.4],
-  },
-];
+
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; dot: string }> = {
   alta:  { label:'Alta',  color:'text-[#E03E3E]', bg:'bg-red-50   border-red-200',    dot:'bg-[#E03E3E]' },
@@ -214,9 +179,59 @@ function StudentProfile({ student, onBack }: { student: Student; onBack: () => v
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function NeuroAlertasTab() {
-  const [alerts,      setAlerts]      = useState<Alert[]>(MOCK_ALERTS);
+  const [alerts,      setAlerts]      = useState<Alert[]>([]);
+  const [students,    setStudents]    = useState<Student[]>([]);
   const [selected,    setSelected]    = useState<Student | null>(null);
   const [filterPrio,  setFilterPrio]  = useState<Priority | 'todas'>('todas');
+  const [loading,     setLoading]     = useState(true);
+
+  useEffect(() => {
+    // Load alerts + derive at-risk students list from classroom alerts
+    api.get('/classrooms/my-classes')
+      .then(async r => {
+        const classrooms: any[] = r.data.classrooms ?? [];
+        const alertsList: Alert[] = [];
+        const studentsMap = new Map<string, Student>();
+
+        for (const c of classrooms) {
+          const res = await api.get(`/classrooms/${c.id}/alerts`).catch(() => ({ data: { alerts: [] } }));
+          for (const a of (res.data.alerts ?? [])) {
+            alertsList.push({
+              id:       String(a.id ?? `${c.id}-${a.student_id}`),
+              priority: a.severity === 'high' ? 'alta' : a.severity === 'medium' ? 'media' : 'baja',
+              category: a.category ?? 'Académico',
+              title:    a.title ?? a.message ?? 'Alerta académica',
+              detail:   a.detail ?? a.description ?? '',
+              affected: a.student ?? a.student_name ?? 'Estudiante',
+              date:     (a.created_at ?? '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+              resolved: a.resolved ?? false,
+            });
+            const key = String(a.student_id);
+            if (!studentsMap.has(key)) {
+              studentsMap.set(key, {
+                id:           key,
+                name:         a.student ?? a.student_name ?? `Estudiante ${key}`,
+                group:        c.grade ?? c.name ?? '',
+                avg:          a.average_score != null ? Math.round(a.average_score * 10) / 10 : 0,
+                risk:         a.severity === 'high' ? 'high' : a.severity === 'medium' ? 'medium' : 'low',
+                strengths:    [],
+                weaknesses:   [a.message ?? 'Bajo rendimiento'],
+                concepts_ok:  [],
+                concepts_fail:[],
+                study_time:   '—',
+                ai_usage:     0,
+                trend:        [],
+              });
+            }
+          }
+        }
+
+        setAlerts(alertsList);
+        setStudents(Array.from(studentsMap.values()));
+      })
+      .catch(() => { setAlerts([]); setStudents([]); })
+      .finally(() => setLoading(false));
+  }, []);
 
   const resolve = (id: string) => setAlerts(prev => prev.map(a => a.id === id ? { ...a, resolved: true } : a));
 
@@ -227,6 +242,11 @@ export default function NeuroAlertasTab() {
 
   return (
     <div className="space-y-6">
+      {loading && (
+        <div className="flex items-center justify-center py-4 gap-2 text-sm text-[#787774]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando alertas…
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -291,7 +311,7 @@ export default function NeuroAlertasTab() {
           <p className="text-xs text-[#787774] mt-0.5">Selecciona un estudiante para ver su perfil completo</p>
         </div>
         <div className="divide-y divide-[#F7F6F3]">
-          {MOCK_STUDENTS.map(student => {
+          {students.map(student => {
             const risk = RISK_CONFIG[student.risk];
             return (
               <button key={student.id} onClick={() => setSelected(student)}
