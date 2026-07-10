@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 
     AUTH_SERVICE_URL: str = "http://localhost:8000"
 
+    # Email — Resend
+    RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY")
+    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "NeuroLearn IA <noreply@neurolearn.app>")
+
     OPENAI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3-32b")

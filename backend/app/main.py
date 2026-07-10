@@ -29,7 +29,8 @@ import app.models.user          # noqa: F401
 import app.models.learning      # noqa: F401
 import app.models.expert_bot    # noqa: F401
 import app.models.classroom     # noqa: F401
-import app.models.institution   # noqa: F401
+import app.models.institution      # noqa: F401
+import app.models.password_reset   # noqa: F401
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 try:

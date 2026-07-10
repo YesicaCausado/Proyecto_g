@@ -5,6 +5,8 @@ import Layout from './components/Layout';
 
 import LoginPage from './pages/auth/LoginPage';
 import ForceChangePassword from './pages/auth/ForceChangePassword';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import StudentDashboard from './pages/student/StudentDashboard';
 import ChatPage from './pages/student/ChatPage';
 import BotsPage from './pages/student/BotsPage';
@@ -36,7 +38,9 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Públicas */}
-      <Route path="/login"    element={<LoginPage />} />
+      <Route path="/login"           element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password"  element={<ResetPasswordPage />} />
       {/* Dashboard universal — redirige por rol */}
       <Route path="/dashboard" element={
         <ProtectedRoute><Layout><DashboardRouter /></Layout></ProtectedRoute>
