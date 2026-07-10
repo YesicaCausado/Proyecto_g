@@ -409,6 +409,17 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8)
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Solicitud de recuperación — acepta username o email"""
+    username: str = Field(..., min_length=3)
+
+
+class ResetPasswordRequest(BaseModel):
+    """Restablecer contraseña con token recibido por email"""
+    token: str = Field(..., min_length=10)
+    new_password: str = Field(..., min_length=8)
+
+
 class CSVValidationRow(BaseModel):
     row: int
     data: Dict[str, Any]
