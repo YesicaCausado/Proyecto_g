@@ -38,8 +38,9 @@ import app.models.institution   # noqa: F401
 import app.models.posts         # noqa: F401
 import app.models.events        # noqa: F401
 import app.models.messages      # noqa: F401
-import app.api.teacher_materials   # noqa: F401 — registers TeacherFolder + TeacherMaterial
-import app.api.teacher_evaluations # noqa: F401 — registers TeacherEvaluation
+import app.models.password_reset            # noqa: F401 — PasswordResetToken
+import app.api.teacher_materials            # noqa: F401 — registers TeacherFolder + TeacherMaterial
+import app.api.teacher_evaluations          # noqa: F401 — registers TeacherEvaluation
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 try:

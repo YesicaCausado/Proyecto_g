@@ -2,7 +2,7 @@
 NeuroLearn AI - API de Autenticación
 Soporta modo con DB (local/producción) y modo demo (Vercel sin DB).
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
@@ -11,10 +11,15 @@ from fastapi.security import OAuth2PasswordBearer
 from dataclasses import dataclass, field
 from typing import Optional
 
+import secrets
 from app.db.database import get_db
 from app.core.config import settings
 from app.models.user import User as UserModel
-from app.schemas.schemas import UserCreate, UserLogin, UserResponse, Token
+from app.schemas.schemas import (
+    UserCreate, UserLogin, UserResponse, Token,
+    ForgotPasswordRequest, ResetPasswordRequest,
+)
+from app.services.email_service import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -187,7 +192,6 @@ async def update_me(
     if "full_name" in data and data["full_name"]:
         current_user.full_name = data["full_name"]
     if "email" in data and data["email"]:
-        # Check uniqueness
         existing = db.query(UserModel).filter(
             UserModel.email == data["email"],
             UserModel.id != current_user.id,
@@ -226,3 +230,131 @@ async def change_password(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al guardar: {str(e)}")
+
+
+@router.post("/forgot-password", status_code=200)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Solicitar recuperación de contraseña.
+    Siempre devuelve el mismo mensaje para no revelar
+    si el email/usuario existe en el sistema.
+    """
+    from datetime import timezone
+    from sqlalchemy import text
+
+    GENERIC_RESPONSE = {
+        "message": "Si los datos son correctos, recibirás un correo con las instrucciones."
+    }
+
+    user = db.query(UserModel).filter(
+        (UserModel.username == payload.username) |
+        (UserModel.email == payload.username)
+    ).first()
+
+    if not user or not user.is_active:
+        return GENERIC_RESPONSE
+
+    from app.models.password_reset import PasswordResetToken
+    active_count = db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used == False,
+        PasswordResetToken.expires_at > datetime.now(timezone.utc),
+    ).count()
+
+    if active_count >= 5:
+        return GENERIC_RESPONSE
+
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used == False,
+    ).update({"used": True})
+
+    token = secrets.token_urlsafe(64)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+    ip = request.headers.get("X-Forwarded-For") or getattr(request.client, "host", None)
+
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token=token,
+        expires_at=expires_at,
+        ip_address=ip,
+    )
+    db.add(reset_token)
+    db.commit()
+
+    send_password_reset_email(
+        to_email=user.email,
+        to_name=user.full_name or user.username,
+        reset_token=token,
+        ip_address=ip,
+    )
+
+    return GENERIC_RESPONSE
+
+
+@router.get("/reset-password/validate", status_code=200)
+async def validate_reset_token(token: str, db: Session = Depends(get_db)):
+    """Valida que el token de recuperación existe, no está usado y no expiró."""
+    from datetime import timezone
+    from app.models.password_reset import PasswordResetToken
+
+    reset = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == token,
+    ).first()
+
+    if not reset:
+        raise HTTPException(status_code=400, detail="Token inválido o inexistente")
+    if reset.used:
+        raise HTTPException(status_code=400, detail="Este enlace ya fue utilizado")
+    if reset.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="El enlace ha expirado. Solicita uno nuevo")
+
+    return {"valid": True, "message": "Token válido"}
+
+
+@router.post("/reset-password", status_code=200)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Restablece la contraseña usando el token recibido por email."""
+    import re
+    from datetime import timezone
+    from app.models.password_reset import PasswordResetToken
+
+    reset = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token == payload.token,
+    ).first()
+
+    if not reset or reset.used:
+        raise HTTPException(status_code=400, detail="Token inválido o ya utilizado")
+    if reset.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="El enlace ha expirado. Solicita uno nuevo")
+
+    pwd = payload.new_password
+    if (len(pwd) < 8
+            or not re.search(r"[A-Z]", pwd)
+            or not re.search(r"[a-z]", pwd)
+            or not re.search(r"\d", pwd)
+            or not re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd)):
+        raise HTTPException(
+            status_code=400,
+            detail="La contraseña debe tener mínimo 8 caracteres, "
+                   "una mayúscula, una minúscula, un número y un carácter especial",
+        )
+
+    user = db.query(UserModel).filter(UserModel.id == reset.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    user.hashed_password = get_password_hash(pwd)
+    user.must_change_password = False
+    reset.used = True
+    db.commit()
+
+    return {"message": "Contraseña restablecida correctamente. Ya puedes iniciar sesión"}
+
