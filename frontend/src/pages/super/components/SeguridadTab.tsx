@@ -217,7 +217,7 @@ export default function SeguridadTab() {
       </section>
 
       {/* ── Historial de inicios de sesión ── */}
-      <section className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+      <section className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
         <div className="px-5 py-4 border-b border-[#E9E9E7] flex items-center gap-2">
           <Clock className="w-4 h-4 text-[#787774]" />
           <h3 className="font-semibold text-[#191919]">Historial de inicios de sesión</h3>

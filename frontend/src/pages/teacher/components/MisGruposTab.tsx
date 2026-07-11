@@ -158,7 +158,7 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
       )}
 
       {tab === 'estudiantes' && (
-        <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+        <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden overflow-x-auto">
           {loadingStudents ? (
             <div className="flex items-center justify-center py-8 gap-2 text-sm text-[#787774]">
               <Loader2 className="w-4 h-4 animate-spin" /> Cargando estudiantes…

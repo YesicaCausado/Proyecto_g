@@ -3,7 +3,7 @@ import { Send, Search, CheckCheck, Loader2, MessageSquare } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
-// â”€â”€ Tipos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Tipos ---------------------------------------------------------------------
 
 interface Message {
   id: string;
@@ -27,7 +27,7 @@ interface Conversation {
   loaded: boolean;
 }
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Helpers -------------------------------------------------------------------
 
 function getInitials(name: string): string {
   return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -69,7 +69,7 @@ function mapMessage(raw: any): Message {
   };
 }
 
-// â”€â”€ Componente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Componente ----------------------------------------------------------------
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -83,7 +83,7 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // â”€â”€ Cargar lista de conversaciones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Cargar lista de conversaciones ------------------------------
   useEffect(() => {
     api.get('/messages/conversations')
       .then(res => {
@@ -96,12 +96,12 @@ export default function MessagesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // â”€â”€ Scroll automÃ¡tico â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Scroll autom�tico -------------------------------------------
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [active?.messages.length]);
 
-  // â”€â”€ Abrir conversaciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Abrir conversaci�n ------------------------------------------
   const openConversation = useCallback(async (conv: Conversation, list?: Conversation[]) => {
     const src = list ?? convs;
     const withRead = src.map(c => c.otherId === conv.otherId ? { ...c, unread: 0 } : c);
@@ -124,7 +124,7 @@ export default function MessagesPage() {
     }
   }, [convs]);
 
-  // â”€â”€ Enviar mensaje â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Enviar mensaje ----------------------------------------------
   const sendMessage = async () => {
     if (!text.trim() || !active || sending) return;
     const content = text.trim();
@@ -178,10 +178,10 @@ export default function MessagesPage() {
           <Loader2 className="w-6 h-6 text-[#787774] animate-spin" />
         </div>
       ) : (
-        <div className="flex h-[620px] bg-white border border-[#E9E9E7] rounded-xl overflow-hidden shadow-sm">
+        <div className="flex h-[calc(100vh-200px)] min-h-[480px] bg-white border border-[#E9E9E7] rounded-xl overflow-hidden shadow-sm">
 
-          {/* â”€â”€ Lista conversaciones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-          <div className="w-72 flex-shrink-0 border-r border-[#E9E9E7] flex flex-col">
+          {/* -- Lista conversaciones --------------------------- */}
+          <div className={`flex-shrink-0 border-r border-[#E9E9E7] flex-col w-full sm:w-72 transition-all ${active ? 'hidden sm:flex' : 'flex'}`}>
             <div className="px-4 py-3 border-b border-[#E9E9E7]">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold text-[#191919]">Conversaciones</span>
@@ -205,7 +205,7 @@ export default function MessagesPage() {
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-[#AEADAB] text-xs">
                   <MessageSquare className="w-6 h-6 mb-2 text-[#E9E9E7]" />
-                  Sin conversaciones aÃºn
+                  Sin conversaciones a�n
                 </div>
               ) : filtered.map(conv => {
                 const isAct = active?.otherId === conv.otherId;
@@ -222,7 +222,7 @@ export default function MessagesPage() {
                         {conv.lastTime && <span className="text-[10px] text-[#AEADAB] flex-shrink-0 ml-1">{conv.lastTime}</span>}
                       </div>
                       <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-xs text-[#787774] truncate">{conv.lastMsg ?? 'Inicia la conversaciÃ³n'}</p>
+                        <p className="text-xs text-[#787774] truncate">{conv.lastMsg ?? 'Inicia la conversaci�n'}</p>
                         {conv.unread > 0 && (
                           <span className="w-4 h-4 rounded-full bg-[#2E6FDB] text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0 ml-1">
                             {conv.unread}
@@ -237,10 +237,16 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* â”€â”€ Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* -- Chat ------------------------------------------ */}
           {active ? (
             <div className="flex-1 flex flex-col min-w-0">
-              <div className="flex items-center gap-3 px-5 py-3 border-b border-[#E9E9E7] bg-[#F7F6F3]/50 flex-shrink-0">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E9E9E7] bg-[#F7F6F3]/50 flex-shrink-0">
+                <button
+                  onClick={() => setActive(null)}
+                  className="sm:hidden p-1 rounded-md text-[#787774] hover:bg-[#EBEBEA] transition-colors flex-shrink-0"
+                >
+                  ?
+                </button>
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${isTeacher(active) ? 'bg-[#EEF3FD] text-[#2E6FDB]' : 'bg-emerald-50 text-[#0F7B6C]'}`}>
                   {active.initials}
                 </div>
@@ -254,7 +260,7 @@ export default function MessagesPage() {
                 {active.messages.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-32 text-[#AEADAB]">
                     <MessageSquare className="w-8 h-8 mb-2 text-[#E9E9E7]" />
-                    <p className="text-xs">Inicia la conversaciÃ³n con {active.otherName}</p>
+                    <p className="text-xs">Inicia la conversaci�n con {active.otherName}</p>
                   </div>
                 )}
                 {active.messages.map(msg => {
@@ -299,7 +305,7 @@ export default function MessagesPage() {
             <div className="flex-1 flex items-center justify-center text-[#AEADAB]">
               <div className="text-center">
                 <MessageSquare className="w-10 h-10 mx-auto mb-3 text-[#E9E9E7]" />
-                <p className="text-sm">Selecciona una conversaciÃ³n</p>
+                <p className="text-sm">Selecciona una conversaci�n</p>
               </div>
             </div>
           )}

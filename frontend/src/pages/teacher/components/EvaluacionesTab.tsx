@@ -180,7 +180,7 @@ export default function EvaluacionesTab({ license }: { license: any }) {
         </button>
       </div>
 
-      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
