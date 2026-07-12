@@ -77,7 +77,7 @@ export default function SuperDashboard() {
 
   useEffect(() => {
     api.get('/super/license-usage').then(r => setLicense(r.data)).catch(() => {});
-    api.get('/credentials/super/teachers').then(r => setTeachers(r.data)).catch(() => {});
+    api.get('/super/teachers').then(r => setTeachers(r.data)).catch(() => {});
   }, []);
 
   const handleLogout = () => { logout(); navigate('/login'); };
