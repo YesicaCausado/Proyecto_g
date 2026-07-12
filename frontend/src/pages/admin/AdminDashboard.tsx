@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import AdminHome from './AdminHome';
 import CreateInstitution from './CreateInstitution';
+import InstitutionList from './InstitutionList';
 
 // Ítems del menú lateral
 const NAV_ITEMS = [
@@ -147,7 +148,7 @@ export default function AdminDashboard() {
         <div className="flex-1 overflow-y-auto">
           <Routes>
             <Route index element={<AdminHome />} />
-            <Route path="instituciones"        element={<CreateInstitution />} />
+            <Route path="instituciones"        element={<InstitutionList />} />
             <Route path="instituciones/nueva"  element={<CreateInstitution />} />
             {/* Rutas futuras */}
             <Route path="usuarios"             element={<PlaceholderPage title="Gestión de Usuarios" />} />
