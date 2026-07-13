@@ -229,7 +229,7 @@ def get_license_for_user(user: User, db: Session) -> LicenseInfo:
 # 4. FastAPI Dependencies reutilizables
 # ─────────────────────────────────────────────────────────────────────────────
 
-from app.api.auth import get_current_user  # noqa: E402 — import aquí para evitar circular
+from app.api.auth import get_current_user  # no circular: auth.py doesn't import license_service
 
 
 def get_license(

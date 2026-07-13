@@ -99,6 +99,42 @@ def run_migrations(engine) -> None:
 
         # ── 5. Columna expiry_date en institutions (sistema de licencias) ───
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP",
+
+        # ── 6. Columnas que pueden faltar en institutions si la tabla fue
+        #      creada antes de agregar estos campos ────────────────────────
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS license_type VARCHAR(20) NOT NULL DEFAULT 'basica'",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
+
+        # ── 7. Columnas legacy en institutions con NOT NULL sin DEFAULT
+        #      que bloquean inserts modernos. Asigna DEFAULT '' a todas
+        #      las columnas de texto que no sean parte del nuevo modelo. ──
+        """
+        DO $$
+        DECLARE
+            col_rec RECORD;
+        BEGIN
+            FOR col_rec IN
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_name = 'institutions'
+                  AND table_schema = 'public'
+                  AND is_nullable = 'NO'
+                  AND column_default IS NULL
+                  AND column_name NOT IN ('id','name','dane_code','license_type',
+                                          'is_active','created_at')
+                  AND data_type IN ('character varying','text','character')
+            LOOP
+                EXECUTE format(
+                    'ALTER TABLE institutions ALTER COLUMN %I SET DEFAULT ''''',
+                    col_rec.column_name
+                );
+                EXECUTE format(
+                    'UPDATE institutions SET %I = '''' WHERE %I IS NULL',
+                    col_rec.column_name, col_rec.column_name
+                );
+            END LOOP;
+        END $$
+        """,
     ]
 
     applied = 0
