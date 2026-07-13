@@ -392,7 +392,7 @@ class StudentCreate(BaseModel):
 
 
 class BulkCreateResponse(BaseModel):
-    created: List[CredentialItem]
+    credentials: List[CredentialItem]
     errors: List[Dict[str, Any]] = []
     total_processed: int
     total_created: int
@@ -464,12 +464,6 @@ class StudentCreate(BaseModel):
     birth_date: Optional[str] = None
 
 
-class BulkCreateResponse(BaseModel):
-    total: int
-    successful: int
-    failed: int
-    credentials: List[CredentialItem]
-    errors: List[Dict[str, Any]] = []
 
 
 class InstitutionListItem(BaseModel):

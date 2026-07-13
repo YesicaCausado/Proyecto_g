@@ -365,7 +365,7 @@ async def bulk_create_teachers(
 
     db.commit()
     return BulkCreateResponse(
-        created=created, errors=errors,
+        credentials=created, errors=errors,
         total_processed=len(created) + len(errors),
         total_created=len(created), total_errors=len(errors),
     )
@@ -517,7 +517,7 @@ async def bulk_create_students(
 
     db.commit()
     return BulkCreateResponse(
-        created=created, errors=errors,
+        credentials=created, errors=errors,
         total_processed=len(created) + len(errors),
         total_created=len(created), total_errors=len(errors),
     )
