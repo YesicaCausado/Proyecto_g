@@ -105,32 +105,65 @@ def run_migrations(engine) -> None:
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS license_type VARCHAR(20) NOT NULL DEFAULT 'basica'",
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
 
-        # ── 7. Columnas legacy en institutions con NOT NULL sin DEFAULT
-        #      que bloquean inserts modernos. Asigna DEFAULT '' a todas
-        #      las columnas de texto que no sean parte del nuevo modelo. ──
+        # ── 7. Columnas legacy en institutions: hacerlas NULLABLE y quitar
+        #      DEFAULT '' para que los inserts modernos no violen UNIQUE. ──
         """
         DO $$
         DECLARE
             col_rec RECORD;
         BEGIN
             FOR col_rec IN
-                SELECT column_name, data_type
+                SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'institutions'
                   AND table_schema = 'public'
-                  AND is_nullable = 'NO'
-                  AND column_default IS NULL
                   AND column_name NOT IN ('id','name','dane_code','license_type',
-                                          'is_active','created_at')
-                  AND data_type IN ('character varying','text','character')
+                                          'is_active','created_at','created_by',
+                                          'expiry_date')
+                  AND data_type IN ('character varying','text','character','integer',
+                                    'bigint','boolean','numeric')
             LOOP
+                -- Quitar restricción NOT NULL (idempotente si ya es nullable)
                 EXECUTE format(
-                    'ALTER TABLE institutions ALTER COLUMN %I SET DEFAULT ''''',
+                    'ALTER TABLE institutions ALTER COLUMN %I DROP NOT NULL',
                     col_rec.column_name
                 );
+                -- Quitar DEFAULT '' que pusimos antes (evita UNIQUE con '')
                 EXECUTE format(
-                    'UPDATE institutions SET %I = '''' WHERE %I IS NULL',
+                    'ALTER TABLE institutions ALTER COLUMN %I DROP DEFAULT',
+                    col_rec.column_name
+                );
+                -- Limpiar filas que tienen '' para que no molesten
+                EXECUTE format(
+                    'UPDATE institutions SET %I = NULL WHERE %I = ''''',
                     col_rec.column_name, col_rec.column_name
+                );
+            END LOOP;
+        END $$
+        """,
+
+        # ── 8. Eliminar UNIQUE constraints de columnas legacy que no son
+        #      parte del nuevo modelo — admin_email, admin_document, etc.
+        #      Un NULL puede repetirse, pero '' con UNIQUE falla. ──────────
+        """
+        DO $$
+        DECLARE
+            con_rec RECORD;
+        BEGIN
+            FOR con_rec IN
+                SELECT tc.constraint_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.constraint_column_usage ccu
+                     ON ccu.constraint_name = tc.constraint_name
+                    AND ccu.table_name      = tc.table_name
+                WHERE tc.table_name       = 'institutions'
+                  AND tc.table_schema     = 'public'
+                  AND tc.constraint_type  = 'UNIQUE'
+                  AND ccu.column_name NOT IN ('dane_code')
+            LOOP
+                EXECUTE format(
+                    'ALTER TABLE institutions DROP CONSTRAINT IF EXISTS %I',
+                    con_rec.constraint_name
                 );
             END LOOP;
         END $$
@@ -139,34 +172,31 @@ def run_migrations(engine) -> None:
 
     applied = 0
     errors  = 0
+    is_pg   = engine.dialect.name == "postgresql"
 
-    with engine.begin() as conn:
-        # Solo ejecutar en PostgreSQL (Supabase); SQLite no soporta DO $$
-        dialect = engine.dialect.name
-        is_pg   = dialect == "postgresql"
-
-        for i, sql in enumerate(migrations):
-            sql = sql.strip()
-            # Saltar bloques DO $$ en SQLite
-            if not is_pg and sql.startswith("DO $$"):
-                continue
-            try:
+    # Cada migración en su PROPIA transacción para que un fallo no
+    # deje la transacción global en estado "aborted" en PostgreSQL.
+    for i, sql in enumerate(migrations):
+        sql = sql.strip()
+        if not is_pg and sql.startswith("DO $$"):
+            continue
+        try:
+            with engine.begin() as conn:
                 conn.execute(text(sql))
-                applied += 1
-            except Exception as e:
-                err_str = str(e)
-                # Ignorar errores de "ya existe" (no es un problema real)
-                ignore_phrases = [
-                    "already exists",
-                    "duplicate column",
-                    "ya existe",
-                    "DuplicateColumn",
-                ]
-                if any(p.lower() in err_str.lower() for p in ignore_phrases):
-                    logger.debug(f"Migración {i+1} omitida (ya existente): {err_str[:80]}")
-                else:
-                    logger.error(f"Error en migración {i+1}: {err_str[:200]}")
-                    errors += 1
+            applied += 1
+        except Exception as e:
+            err_str = str(e)
+            ignore_phrases = [
+                "already exists",
+                "duplicate column",
+                "ya existe",
+                "DuplicateColumn",
+            ]
+            if any(p.lower() in err_str.lower() for p in ignore_phrases):
+                logger.debug(f"Migración {i+1} omitida (ya existente): {err_str[:80]}")
+            else:
+                logger.error(f"Error en migración {i+1}: {err_str[:200]}")
+                errors += 1
 
     if errors == 0:
         logger.info(f"✅ Migraciones B2B completadas: {applied} pasos aplicados.")
