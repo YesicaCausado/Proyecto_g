@@ -100,6 +100,34 @@ def _ensure_demo_user():
                 db.add(user_adm)
                 import logging
                 logging.getLogger(__name__).info("✅ Usuario admin creado: admin / admin1234")
+
+            # 3. Usuario Profesor demo
+            if not db.query(User).filter(User.username == "profesor").first():
+                user_prof = User(
+                    username="profesor",
+                    email="profesor@neurolearn.app",
+                    full_name="Profesor Demo",
+                    hashed_password=pwd.hash("profesor"),
+                    role=UserRole.PROFESOR,
+                    is_active=True,
+                )
+                db.add(user_prof)
+                import logging
+                logging.getLogger(__name__).info("✅ Usuario profesor creado: profesor / profesor")
+
+            # 4. Usuario Super Profesor demo
+            if not db.query(User).filter(User.username == "superprofesor").first():
+                user_sp = User(
+                    username="superprofesor",
+                    email="superprofesor@neurolearn.app",
+                    full_name="Super Profesor Demo",
+                    hashed_password=pwd.hash("superprofesor"),
+                    role=UserRole.SUPER_PROFESOR,
+                    is_active=True,
+                )
+                db.add(user_sp)
+                import logging
+                logging.getLogger(__name__).info("✅ Usuario superprofesor creado: superprofesor / superprofesor")
             
             db.commit()
         finally:
@@ -108,8 +136,54 @@ def _ensure_demo_user():
         import logging
         logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuarios demo (sin DB o error): {e}")
 
+def _ensure_demo_institution():
+    """
+    Crea la institución demo y asigna institution_id a los usuarios
+    super_profesor / profesor que no tengan ninguna institución asignada.
+    Idempotente: se puede ejecutar múltiples veces sin efectos secundarios.
+    """
+    from app.db.database import SessionLocal
+    from app.models.user import User, UserRole
+    from app.models.institution import Institution
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        db = SessionLocal()
+        try:
+            # 1. Crear institución demo si no existe
+            inst = db.query(Institution).filter(Institution.dane_code == "DEMO0001").first()
+            if not inst:
+                inst = Institution(
+                    name="Institución Demo NeuroLearn",
+                    dane_code="DEMO0001",
+                    license_type="premium",
+                    is_active=True,
+                )
+                db.add(inst)
+                db.flush()
+                log.info(f"✅ Institución demo creada: id={inst.id}")
+
+            # 2. Asignar a todos los super_profesor / profesor sin institución
+            for username in ("superprofesor", "profesor"):
+                u = db.query(User).filter(User.username == username).first()
+                if u and not u.institution_id:
+                    u.institution_id = inst.id
+                    log.info(f"✅ {username}.institution_id = {inst.id}")
+
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        import logging as _log
+        _log.getLogger(__name__).warning(f"⚠️ No se pudo crear institución demo: {e}")
+
 try:
     _ensure_demo_user()
+except Exception:
+    pass
+
+try:
+    _ensure_demo_institution()
 except Exception:
     pass
 
