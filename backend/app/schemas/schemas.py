@@ -445,9 +445,14 @@ class TeacherListItem(BaseModel):
     full_name: str
     username: str
     email: str
-    subject_area: Optional[str]
+    document_type: Optional[str] = None
+    document_number: Optional[str] = None
+    subject_area: Optional[str] = None
+    is_active: bool = True
     temp_password: Optional[str] = None
-    status: str  # "activo" o "inactivo"
+
+    class Config:
+        from_attributes = True
 
 
 class StudentCreate(BaseModel):
@@ -456,6 +461,7 @@ class StudentCreate(BaseModel):
     document_number: str = Field(..., min_length=4, max_length=30)
     email: Optional[str] = None
     grade: Optional[str] = None
+    birth_date: Optional[str] = None
 
 
 class BulkCreateResponse(BaseModel):

@@ -168,6 +168,12 @@ def run_migrations(engine) -> None:
             END LOOP;
         END $$
         """,
+
+        # ── 9. Columnas que pueden faltar en classrooms ───────────────────
+        "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS color       VARCHAR(20)  DEFAULT '#0B6E99'",
+        "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS invite_code VARCHAR(20)  DEFAULT NULL",
+        "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS description TEXT         DEFAULT NULL",
+        "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS max_students INTEGER     DEFAULT 40",
     ]
 
     applied = 0

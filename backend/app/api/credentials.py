@@ -217,6 +217,32 @@ def _get_my_institution(db: Session, user: User) -> Institution:
     return inst
 
 
+@router.get("/super/teachers", response_model=List[TeacherListItem])
+async def list_teachers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value)
+    institution = _get_my_institution(db, current_user)
+    teachers = db.query(User).filter(
+        User.institution_id == institution.id,
+        User.role == UserRole.PROFESOR.value,
+    ).order_by(User.full_name).all()
+    return [
+        TeacherListItem(
+            id=t.id,
+            full_name=t.full_name,
+            username=t.username,
+            email=t.email or "",
+            document_type=t.document_type or "",
+            document_number=t.document_number or "",
+            subject_area=t.subject_area or "",
+            is_active=t.is_active,
+        )
+        for t in teachers
+    ]
+
+
 @router.post("/super/teachers", response_model=CredentialItem, status_code=201)
 async def create_teacher(
     payload: TeacherCreate,
@@ -346,6 +372,33 @@ async def bulk_create_teachers(
 
 
 # ─── Super Profesor: Estudiantes ──────────────────────────────────────────────
+
+@router.get("/super/students")
+async def list_students(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value)
+    institution = _get_my_institution(db, current_user)
+    students = db.query(User).filter(
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).order_by(User.full_name).all()
+    return [
+        {
+            "id": s.id,
+            "full_name": s.full_name,
+            "username": s.username,
+            "email": s.email or "",
+            "document_type": s.document_type or "",
+            "document_number": s.document_number or "",
+            "grade": s.grade or "",
+            "birth_date": s.birth_date or "",
+            "is_active": s.is_active,
+        }
+        for s in students
+    ]
+
 
 @router.post("/super/students", response_model=CredentialItem, status_code=201)
 async def create_student(
