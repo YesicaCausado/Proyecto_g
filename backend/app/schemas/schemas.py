@@ -428,3 +428,50 @@ class CSVValidationRow(BaseModel):
     data: Dict[str, Any]
     error: Optional[str] = None
     valid: bool = True
+
+
+# ===== SCHEMAS B2B FALTANTES =====
+
+class TeacherCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: str = Field(..., max_length=100)
+    subject_area: Optional[str] = None
+
+
+class TeacherListItem(BaseModel):
+    id: int
+    full_name: str
+    username: str
+    email: str
+    subject_area: Optional[str]
+    temp_password: Optional[str] = None
+    status: str  # "activo" o "inactivo"
+
+
+class StudentCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: Optional[str] = None
+    grade: Optional[str] = None
+
+
+class BulkCreateResponse(BaseModel):
+    total: int
+    successful: int
+    failed: int
+    credentials: List[CredentialItem]
+    errors: List[Dict[str, Any]] = []
+
+
+class InstitutionListItem(BaseModel):
+    id: int
+    name: str
+    dane_code: str
+    license_type: str
+    is_active: bool
+    created_at: datetime
+    teacher_count: int
+    student_count: int
