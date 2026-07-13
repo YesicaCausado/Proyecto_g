@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useLicense } from '../../context/LicenseContext';
 import api from '../../services/api';
 
 import DashboardTab      from './components/DashboardTab';
@@ -13,11 +14,14 @@ import MaterialesTab     from './components/MaterialesTab';
 import MensajesTab       from './components/MensajesTab';
 import CalendarioTab     from './components/CalendarioTab';
 import ConfiguracionTab  from './components/ConfiguracionTab';
+import LicenseBanner     from '../../components/LicenseBanner';
+import SuspendedScreen   from '../../components/SuspendedScreen';
 
 import {
   LayoutDashboard, BookOpen, Bot, BrainCircuit, LayoutList,
   ClipboardList, FolderOpen, MessageSquare, Calendar,
   Settings, LogOut, Bell, ChevronRight, Brain, Zap, Menu, X,
+  BarChart2, FlaskConical, Link2, Cpu,
 } from 'lucide-react';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -46,44 +50,81 @@ const PLAN_COLORS: Record<LicensePlan, { bg: string; text: string; label: string
   pro:      { bg: 'bg-purple-50',   text: 'text-[#6940A5]',  label: 'Pro ✦'   },
 };
 
-// ── Secciones del menú ────────────────────────────────────────────────────────
-const NAV_SECTIONS = [
-  {
-    label: 'PRINCIPAL',
-    items: [
-      { id: 'dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
-      { id: 'grupos',       label: 'Mis Grupos',   icon: BookOpen        },
-    ],
-  },
-  {
-    label: 'INTELIGENCIA IA',
-    items: [
-      { id: 'neurobots',    label: 'NeuroBots',    icon: Bot                          },
-      { id: 'alertas',      label: 'NeuroAlertas', icon: BrainCircuit, badge: 'alert' },
-    ],
-  },
-  {
-    label: 'AULA',
-    items: [
-      { id: 'tablero',      label: 'Tablero',      icon: LayoutList                   },
-      { id: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList                },
-      { id: 'materiales',   label: 'Materiales',   icon: FolderOpen                   },
-    ],
-  },
-  {
-    label: 'COMUNICACIÓN',
-    items: [
-      { id: 'mensajes',     label: 'Mensajes',     icon: MessageSquare, badge: 'msg' },
-      { id: 'calendario',   label: 'Calendario',   icon: Calendar                    },
-    ],
-  },
-  {
-    label: 'CUENTA',
-    items: [
-      { id: 'configuracion', label: 'Configuración', icon: Settings },
-    ],
-  },
-];
+// ── Definición completa de todos los ítems del menú ──────────────────────────
+interface NavItemDef {
+  label: string;
+  icon: any;
+  badge?: string;
+  module: string;
+  id?: string;
+}
+
+const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
+  dashboard:      { label: 'Dashboard',       icon: LayoutDashboard, module: 'dashboard'      },
+  grupos:         { label: 'Mis Grupos',       icon: BookOpen,        module: 'grupos'         },
+  neurobots:      { label: 'NeuroBots',        icon: Bot,             module: 'neurobots'      },
+  alertas:        { label: 'NeuroAlertas',     icon: BrainCircuit,    module: 'dashboard', badge: 'alert' },
+  tablero:        { label: 'Tablero',          icon: LayoutList,      module: 'cursos'         },
+  evaluaciones:   { label: 'Evaluaciones',     icon: ClipboardList,   module: 'evaluaciones'   },
+  materiales:     { label: 'Materiales',       icon: FolderOpen,      module: 'recursos'       },
+  mensajes:       { label: 'Mensajes',         icon: MessageSquare,   module: 'mensajes', badge: 'msg' },
+  calendario:     { label: 'Calendario',       icon: Calendar,        module: 'calendario'     },
+  analitica:      { label: 'Analítica',        icon: BarChart2,       module: 'analitica'      },
+  ia:             { label: 'IA Generativa',    icon: Cpu,             module: 'ia'             },
+  integraciones:  { label: 'Integraciones',    icon: Link2,           module: 'integraciones'  },
+  automatizaciones:{ label: 'Automatizaciones',icon: FlaskConical,    module: 'automatizaciones'},
+  configuracion:  { label: 'Configuración',    icon: Settings,        module: 'configuracion'  },
+};
+
+// ── Función que construye el menú según licencia ──────────────────────────────
+function buildNavSections(hasModule: (m: string) => boolean) {
+  const sections: { label: string; items: typeof ALL_NAV_ITEMS[string][] }[] = [];
+
+  // PRINCIPAL — siempre visible si tiene el módulo
+  const principal = ['dashboard', 'grupos'].filter(id =>
+    hasModule(ALL_NAV_ITEMS[id].module)
+  );
+  if (principal.length) {
+    sections.push({ label: 'PRINCIPAL', items: principal.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
+  }
+
+  // INTELIGENCIA IA — solo si tiene neurobots o alertas
+  const ia = ['neurobots', 'alertas'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  if (ia.length) {
+    sections.push({ label: 'INTELIGENCIA IA', items: ia.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
+  }
+
+  // AULA
+  const aula = ['tablero', 'evaluaciones', 'materiales'].filter(id =>
+    hasModule(ALL_NAV_ITEMS[id].module)
+  );
+  if (aula.length) {
+    sections.push({ label: 'AULA', items: aula.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
+  }
+
+  // ANALYTICS (premium / pro)
+  const analytics = ['analitica', 'ia'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  if (analytics.length) {
+    sections.push({ label: 'ANALÍTICA & IA', items: analytics.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
+  }
+
+  // AVANZADO (pro)
+  const advanced = ['integraciones', 'automatizaciones'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  if (advanced.length) {
+    sections.push({ label: 'AVANZADO', items: advanced.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
+  }
+
+  // COMUNICACIÓN
+  const comms = ['mensajes', 'calendario'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  if (comms.length) {
+    sections.push({ label: 'COMUNICACIÓN', items: comms.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
+  }
+
+  // CUENTA
+  sections.push({ label: 'CUENTA', items: [{ ...ALL_NAV_ITEMS.configuracion, id: 'configuracion' }] });
+
+  return sections;
+}
 
 const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   dashboard:     { title: 'Dashboard',          subtitle: 'Resumen general de tus grupos y actividad académica' },
@@ -96,11 +137,16 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   mensajes:      { title: 'Mensajes',            subtitle: 'Conversaciones con estudiantes y otros docentes' },
   calendario:    { title: 'Calendario',          subtitle: 'Exámenes, tareas, eventos y clases programadas' },
   configuracion: { title: 'Configuración',       subtitle: 'Perfil, notificaciones y preferencias de la cuenta' },
+  analitica:     { title: 'Analítica',           subtitle: 'Métricas de participación, rendimiento y riesgo académico' },
+  ia:            { title: 'IA Generativa',       subtitle: 'Crea contenido, evaluaciones y materiales con IA' },
+  integraciones: { title: 'Integraciones',       subtitle: 'Conecta NeuroLearn con otras plataformas' },
+  automatizaciones: { title: 'Automatizaciones', subtitle: 'Flujos automáticos basados en eventos académicos' },
 };
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function TeacherPanel() {
   const { user, logout } = useAuth();
+  const { licenseStatus, licenseType, hasTeacherModule } = useLicense();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [license]  = useState<TeacherLicense>(DEMO_LICENSE);
@@ -108,6 +154,14 @@ export default function TeacherPanel() {
   const [unreadMsgs,  setUnreadMsgs] = useState(0);
   const [activeAlerts,setActiveAlerts] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Construir menú dinámico basado en licencia
+  const navSections = buildNavSections(hasTeacherModule);
+
+  // Pantalla de suspensión total
+  if (licenseStatus === 'suspended') {
+    return <SuspendedScreen role="profesor" />;
+  }
 
   useEffect(() => {
     api.get('/classrooms/my-classes').then(r => setGroups(r.data?.classrooms || [])).catch(() => {});
@@ -127,7 +181,7 @@ export default function TeacherPanel() {
 
   const handleLogout = () => { logout(); navigate('/login'); };
   const meta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
-  const planStyle = PLAN_COLORS[license.plan];
+  const planStyle = PLAN_COLORS[(licenseType as LicensePlan)] ?? PLAN_COLORS['basica'];
 
   const handleNav = (id: string) => {
     setActiveTab(id);
@@ -196,13 +250,13 @@ export default function TeacherPanel() {
 
       {/* Navegación */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
-        {NAV_SECTIONS.map(section => (
+        {navSections.map((section: any) => (
           <div key={section.label}>
             <p className="px-3 mb-1 text-[10px] font-semibold text-[#AEADAB] uppercase tracking-widest">
               {section.label}
             </p>
             <div className="space-y-0.5">
-              {section.items.map(item => <NavButton key={item.id} {...item} />)}
+              {section.items.map((item: any) => <NavButton key={item.id} {...item} />)}
             </div>
           </div>
         ))}
@@ -275,6 +329,9 @@ export default function TeacherPanel() {
 
       {/* ══ CONTENT ══════════════════════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col overflow-hidden bg-white">
+
+        {/* Banner de licencia */}
+        <LicenseBanner showContactButton={true} />
 
         {/* Header — desktop only */}
         <header className="hidden lg:flex flex-shrink-0 px-6 xl:px-8 py-4 xl:py-5 border-b border-[#E9E9E7] bg-white items-center justify-between">

@@ -28,6 +28,7 @@ from app.api import super_stats               # Super Profesor stats institucion
 from app.api import teacher_stats            # Teacher dashboard stats
 from app.api import teacher_materials        # Teacher materials (carpetas + archivos)
 from app.api import teacher_evaluations      # Teacher evaluations (evaluaciones)
+from app.api import license                  # License system
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
@@ -148,6 +149,7 @@ app.include_router(super_stats.router,         prefix="/api/v1")
 app.include_router(teacher_stats.router,       prefix="/api/v1")
 app.include_router(teacher_materials.router,   prefix="/api/v1")
 app.include_router(teacher_evaluations.router, prefix="/api/v1")
+app.include_router(license.router,             prefix="/api/v1")
 
 
 @app.get("/")

@@ -1,5 +1,8 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLicense } from '../context/LicenseContext';
+import LicenseBanner from './LicenseBanner';
+import SuspendedScreen from './SuspendedScreen';
 import {
   Brain,
   LogOut,
@@ -19,6 +22,7 @@ import { useState } from 'react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const { hasStudentModule, licenseStatus } = useLicense();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -29,6 +33,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const isTeacher = user?.role === 'profesor';
+
+  // Pantalla de suspensión
+  if (licenseStatus === 'suspended' && user?.role === 'estudiante') {
+    return <SuspendedScreen role="estudiante" />;
+  }
 
   const navSections = isTeacher
     ? [
@@ -50,28 +59,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {
           label: 'APRENDIZAJE',
           items: [
-            { to: '/bots',        icon: BookOpen,      label: 'Habilidades' },
-            { to: '/chat',        icon: MessageSquare, label: 'Aprender'    },
-            { to: '/quizzes',     icon: BookOpen,      label: 'Desafíos'    },
-            { to: '/performance', icon: TrendingUp,    label: 'Desempeño'   },
-            { to: '/material',    icon: BookMarked,    label: 'Material'    },
-          ],
+            { to: '/bots',        icon: BookOpen,      label: 'Habilidades',  module: 'mis_cursos'  },
+            { to: '/chat',        icon: MessageSquare, label: 'Aprender',     module: 'tutor_ia'    },
+            { to: '/quizzes',     icon: BookOpen,      label: 'Desafíos',     module: 'evaluaciones'},
+            { to: '/performance', icon: TrendingUp,    label: 'Desempeño',    module: 'estadisticas'},
+            { to: '/material',    icon: BookMarked,    label: 'Material',     module: 'recursos'    },
+          ].filter(i => !i.module || hasStudentModule(i.module)),
         },
         {
           label: 'MI INSTITUCIÓN',
           items: [
-            { to: '/my-classes',  icon: Users,        label: 'Mis Clases'  },
-            { to: '/tablero',     icon: LayoutList,   label: 'Tablero'     },
-            { to: '/calendar',    icon: Calendar,     label: 'Calendario'  },
-          ],
+            { to: '/my-classes',  icon: Users,        label: 'Mis Clases',   module: 'mis_cursos' },
+            { to: '/tablero',     icon: LayoutList,   label: 'Tablero',      module: 'mis_cursos' },
+            { to: '/calendar',    icon: Calendar,     label: 'Calendario',   module: 'calendario' },
+          ].filter(i => !i.module || hasStudentModule(i.module)),
         },
         {
           label: 'COMUNICACIÓN',
           items: [
-            { to: '/messages',    icon: MessageSquare, label: 'Mensajes'   },
-          ],
+            { to: '/messages',    icon: MessageSquare, label: 'Mensajes',    module: 'mensajes' },
+          ].filter(i => !i.module || hasStudentModule(i.module)),
         },
-      ];
+      ].filter(sec => sec.items.length > 0);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -215,8 +224,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* ── Main content ── */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="pt-12 md:pt-0 pb-16 md:pb-0 min-h-full">
+      <main className="flex-1 overflow-y-auto flex flex-col">
+        {/* Banner de licencia para estudiante */}
+        {!isTeacher && <LicenseBanner showContactButton={false} />}
+        <div className="pt-12 md:pt-0 pb-16 md:pb-0 min-h-full flex-1">
           {children}
         </div>
       </main>
@@ -225,12 +236,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {!isTeacher && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#E9E9E7] flex items-center justify-around px-1 h-16 safe-area-pb">
           {[
-            { to: '/dashboard',   icon: Home,         label: 'Inicio'   },
-            { to: '/bots',        icon: BookOpen,      label: 'Habilidades'},
-            { to: '/chat',        icon: MessageSquare, label: 'Aprender' },
-            { to: '/my-classes',  icon: Users,         label: 'Clases'   },
-            { to: '/performance', icon: TrendingUp,    label: 'Progreso' },
-          ].map(item => {
+            { to: '/dashboard',   icon: Home,         label: 'Inicio',       module: 'inicio'      },
+            { to: '/bots',        icon: BookOpen,      label: 'Habilidades',  module: 'mis_cursos'  },
+            { to: '/chat',        icon: MessageSquare, label: 'Aprender',     module: 'tutor_ia'    },
+            { to: '/my-classes',  icon: Users,         label: 'Clases',       module: 'mis_cursos'  },
+            { to: '/performance', icon: TrendingUp,    label: 'Progreso',     module: 'estadisticas'},
+          ].filter(i => hasStudentModule(i.module)).map(item => {
             const active = isActive(item.to);
             return (
               <Link

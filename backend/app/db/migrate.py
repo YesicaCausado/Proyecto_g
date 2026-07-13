@@ -96,6 +96,9 @@ def run_migrations(engine) -> None:
             created_at       TIMESTAMP NOT NULL DEFAULT NOW()
         )
         """,
+
+        # ── 5. Columna expiry_date en institutions (sistema de licencias) ───
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP",
     ]
 
     applied = 0
