@@ -26,8 +26,8 @@ from app.models.user import User, UserRole
 from app.models.institution import Institution, AuditLog, LICENSE_LIMITS
 from app.schemas.schemas import (
     InstitutionCreate, InstitutionResponse, InstitutionListItem,
-    TeacherCreate, StudentCreate, BulkCreateResponse, CredentialItem,
-    LicenseUsage, ChangePasswordRequest,
+    TeacherCreate, TeacherListItem, StudentCreate, BulkCreateResponse,
+    CredentialItem, LicenseUsage, ChangePasswordRequest,
 )
 
 router = APIRouter(tags=["Credenciales B2B"])

@@ -690,7 +690,7 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
                  >
                    <option value="">-- Sin asignar --</option>
                    {(teachers || []).map(t => (
-                     <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>
+                     <option key={t.id} value={t.id}>{t.full_name}</option>
                    ))}
                  </select>
                </div>
