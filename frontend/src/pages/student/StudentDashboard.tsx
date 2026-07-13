@@ -148,17 +148,17 @@ export default function StudentDashboard() {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-[1400px] mx-auto">
-      {/* Top action bar (Search, Streak, Notifications) */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-[#191919] font-heading tracking-tight flex items-center gap-2">
+    <div className="p-4 sm:p-6 md:p-10 max-w-[1400px] mx-auto">
+      {/* Top action bar */}
+      <div className="flex justify-between items-center mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-3xl font-bold text-[#191919] font-heading tracking-tight flex items-center gap-2">
             ¡{greeting()}, {user?.full_name?.split(' ')[0] || user?.username}! <span role="img" aria-label="wave">👋</span>
         </h1>
-        <div className="hidden md:flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-[#F7F6F3] border border-[#E9E9E7] px-3 py-1.5 rounded-md">
-                <Flame className="w-4 h-4 text-[#D9730D]" />
-                <span className="text-[#37352F] text-sm font-semibold">{stats.streak_days} {stats.streak_days === 1 ? 'día' : 'días'}</span>
-                <span className="text-[#9B9A97] text-xs">racha</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 bg-[#F7F6F3] border border-[#E9E9E7] px-2 sm:px-3 py-1.5 rounded-md">
+                <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#D9730D]" />
+                <span className="text-[#37352F] text-xs sm:text-sm font-semibold">{stats.streak_days}</span>
+                <span className="text-[#9B9A97] text-xs hidden sm:inline">días racha</span>
             </div>
             <button className="relative w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center text-[#787774] hover:bg-[#F1F1EF] transition-colors">
                 <Bell className="w-4 h-4" />
@@ -166,22 +166,22 @@ export default function StudentDashboard() {
         </div>
       </div>
       
-      <p className="text-[#787774] text-[15px] mb-8 mt-[-24px]">Continúa desarrollando tus habilidades para el Saber 11</p>
+      <p className="text-[#787774] text-[13px] sm:text-[15px] mb-6 sm:mb-8 mt-[-16px] sm:mt-[-24px]">Continúa desarrollando tus habilidades para el Saber 11</p>
 
       {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8">
         
         {/* Left Column (2/3 width) - Hero, Skills, Actions */}
         <div className="xl:col-span-2 space-y-8">
             
             {/* Hero / Banner */}
-            <div className="bg-[#37352F] rounded-md overflow-hidden relative h-[180px] flex items-center">
-                <div className="p-8 md:p-10">
-                    <p className="text-[#9B9A97] text-xs font-medium mb-2 uppercase tracking-wider">Tu aprendizaje, potenciado por</p>
-                    <div className="text-white text-2xl md:text-3xl font-semibold mb-4">NeuroLearn AI</div>
-                    <Link to="/bots" className="inline-flex items-center gap-2 bg-white text-[#37352F] px-4 py-2 rounded-md font-medium text-sm hover:bg-[#F7F6F3] transition-colors">
+            <div className="bg-[#37352F] rounded-md overflow-hidden relative h-[140px] sm:h-[180px] flex items-center">
+                <div className="p-6 sm:p-8 md:p-10">
+                    <p className="text-[#9B9A97] text-xs font-medium mb-1.5 sm:mb-2 uppercase tracking-wider">Tu aprendizaje, potenciado por</p>
+                    <div className="text-white text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4">NeuroLearn AI</div>
+                    <Link to="/bots" className="inline-flex items-center gap-2 bg-white text-[#37352F] px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm hover:bg-[#F7F6F3] transition-colors">
                         Continuar aprendiendo
-                        <ArrowRight className="w-4 h-4" />
+                        <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                 </div>
             </div>
@@ -298,54 +298,54 @@ export default function StudentDashboard() {
 
             <div className="mt-2">
                 <h3 className="text-base font-semibold text-[#37352F] mb-3">¿Qué quieres hacer hoy?</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <Link to="/chat" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
-                        <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><MessageSquare className="w-4 h-4 text-[#787774]" /></div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                    <Link to="/chat" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#787774]" /></div>
                         <div>
-                            <div className="font-medium text-[#37352F] text-sm">Practicar</div>
-                            <div className="text-xs text-[#9B9A97]">Ejercicios adaptativos</div>
+                            <div className="font-medium text-[#37352F] text-xs sm:text-sm">Practicar</div>
+                            <div className="text-[10px] sm:text-xs text-[#9B9A97]">Ejercicios adaptativos</div>
                         </div>
                     </Link>
-                    <Link to="/bots" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
-                        <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><BookOpen className="w-4 h-4 text-[#787774]" /></div>
+                    <Link to="/bots" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#787774]" /></div>
                         <div>
-                            <div className="font-medium text-[#37352F] text-sm">Repasar</div>
-                            <div className="text-xs text-[#9B9A97]">Contenido clave</div>
+                            <div className="font-medium text-[#37352F] text-xs sm:text-sm">Repasar</div>
+                            <div className="text-[10px] sm:text-xs text-[#9B9A97]">Contenido clave</div>
                         </div>
                     </Link>
-                    <Link to="/quizzes" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
-                        <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><Target className="w-4 h-4 text-[#787774]" /></div>
+                    <Link to="/quizzes" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#787774]" /></div>
                         <div>
-                            <div className="font-medium text-[#37352F] text-sm">Desafiarme</div>
-                            <div className="text-xs text-[#9B9A97]">Retos por nivel</div>
+                            <div className="font-medium text-[#37352F] text-xs sm:text-sm">Desafiarme</div>
+                            <div className="text-[10px] sm:text-xs text-[#9B9A97]">Retos por nivel</div>
                         </div>
                     </Link>
-                    <Link to="/my-classes" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
-                        <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><LayoutDashboard className="w-4 h-4 text-[#787774]" /></div>
+                    <Link to="/my-classes" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><LayoutDashboard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#787774]" /></div>
                         <div>
-                            <div className="font-medium text-[#37352F] text-sm">Mis clases</div>
-                            <div className="text-xs text-[#9B9A97]">Clases inscritas</div>
+                            <div className="font-medium text-[#37352F] text-xs sm:text-sm">Mis clases</div>
+                            <div className="text-[10px] sm:text-xs text-[#9B9A97]">Clases inscritas</div>
                         </div>
                     </Link>
-                    <Link to="/tablero" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
-                        <div className="w-8 h-8 bg-[#EEF3FD] border border-[#C5D9F7] rounded-md flex items-center justify-center flex-shrink-0"><LayoutList className="w-4 h-4 text-[#2E6FDB]" /></div>
+                    <Link to="/tablero" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-[#EEF3FD] border border-[#C5D9F7] rounded-md flex items-center justify-center flex-shrink-0"><LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#2E6FDB]" /></div>
                         <div>
-                            <div className="font-medium text-[#37352F] text-sm">Tablero</div>
-                            <div className="text-xs text-[#9B9A97]">Pub. del profe</div>
+                            <div className="font-medium text-[#37352F] text-xs sm:text-sm">Tablero</div>
+                            <div className="text-[10px] sm:text-xs text-[#9B9A97]">Pub. del profe</div>
                         </div>
                     </Link>
-                    <Link to="/messages" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
-                        <div className="w-8 h-8 bg-emerald-50 border border-emerald-100 rounded-md flex items-center justify-center flex-shrink-0"><MessageSquare className="w-4 h-4 text-[#0F7B6C]" /></div>
+                    <Link to="/messages" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-emerald-50 border border-emerald-100 rounded-md flex items-center justify-center flex-shrink-0"><MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#0F7B6C]" /></div>
                         <div>
-                            <div className="font-medium text-[#37352F] text-sm">Mensajes</div>
-                            <div className="text-xs text-[#9B9A97]">Habla con tu profe</div>
+                            <div className="font-medium text-[#37352F] text-xs sm:text-sm">Mensajes</div>
+                            <div className="text-[10px] sm:text-xs text-[#9B9A97]">Habla con tu profe</div>
                         </div>
                     </Link>
-                    <Link to="/calendar" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 flex items-center gap-3 transition-all">
-                        <div className="w-8 h-8 bg-purple-50 border border-purple-100 rounded-md flex items-center justify-center flex-shrink-0"><Calendar className="w-4 h-4 text-[#6940A5]" /></div>
+                    <Link to="/calendar" className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 bg-purple-50 border border-purple-100 rounded-md flex items-center justify-center flex-shrink-0"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#6940A5]" /></div>
                         <div>
-                            <div className="font-medium text-[#37352F] text-sm">Calendario</div>
-                            <div className="text-xs text-[#9B9A97]">Exámenes y eventos</div>
+                            <div className="font-medium text-[#37352F] text-xs sm:text-sm">Calendario</div>
+                            <div className="text-[10px] sm:text-xs text-[#9B9A97]">Exámenes y eventos</div>
                         </div>
                     </Link>
                 </div>

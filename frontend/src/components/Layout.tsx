@@ -216,10 +216,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Main content ── */}
       <main className="flex-1 overflow-y-auto">
-        <div className="pt-12 md:pt-0 min-h-full">
+        <div className="pt-12 md:pt-0 pb-16 md:pb-0 min-h-full">
           {children}
         </div>
       </main>
+
+      {/* ── Mobile Bottom Nav (estudiante) ── */}
+      {!isTeacher && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#E9E9E7] flex items-center justify-around px-1 h-16 safe-area-pb">
+          {[
+            { to: '/dashboard',   icon: Home,         label: 'Inicio'   },
+            { to: '/bots',        icon: BookOpen,      label: 'Habilidades'},
+            { to: '/chat',        icon: MessageSquare, label: 'Aprender' },
+            { to: '/my-classes',  icon: Users,         label: 'Clases'   },
+            { to: '/performance', icon: TrendingUp,    label: 'Progreso' },
+          ].map(item => {
+            const active = isActive(item.to);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={() => setSidebarOpen(false)}
+                className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]"
+              >
+                <item.icon className={`w-5 h-5 transition-colors ${active ? 'text-[#37352F]' : 'text-[#AEADAB]'}`} strokeWidth={active ? 2.5 : 2} />
+                <span className={`text-[10px] font-medium transition-colors ${active ? 'text-[#37352F]' : 'text-[#AEADAB]'}`}>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }

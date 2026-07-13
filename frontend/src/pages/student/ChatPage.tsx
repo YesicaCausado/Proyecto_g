@@ -423,7 +423,7 @@ export default function ChatPage() {
     };
 
     return (
-      <div className="flex h-[calc(100vh-64px)] bg-[#F7F6F3] justify-center">
+      <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3] justify-center">
         <div className="flex flex-col w-full max-w-2xl">
           {/* ── Header ── */}
           <div className="bg-white border-b border-[#E9E9E7] px-5 py-4 flex items-center gap-3">
@@ -535,7 +535,7 @@ export default function ChatPage() {
 
   // ===== CHAT VIEW =====
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-[#F7F6F3]">
+    <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
       {/* Chat Panel */}
       <div className="flex flex-col flex-1 min-w-0 relative">
         {/* Header */}
