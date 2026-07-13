@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Search, CheckCheck, Loader2 } from 'lucide-react';
+import { Send, Search, CheckCheck, Loader2, PenSquare, X } from 'lucide-react';
 import api from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 
@@ -23,22 +23,34 @@ interface Conversation {
   messages: Message[];
 }
 
+interface Contact {
+  id: number;
+  name: string;
+  role: string;
+  initials: string;
+}
+
 const TYPE_COLOR: Record<Conversation['type'], string> = { student:'bg-[#EEF3FD] text-[#2E6FDB]', group:'bg-emerald-50 text-[#0F7B6C]', super:'bg-purple-50 text-[#6940A5]' };
 
 function mapConv(raw: any): Conversation {
-  const role = (raw.other_role ?? raw.otherRole ?? 'estudiante').toLowerCase();
+  // Backend returns: other_user_id, other_user_name, other_user_role
+  const otherId = raw.other_user_id ?? raw.other_id ?? raw.otherId ?? raw.id;
+  const otherName = raw.other_user_name ?? raw.other_name ?? raw.otherName ?? raw.name ?? '—';
+  const role = (raw.other_user_role ?? raw.other_role ?? raw.otherRole ?? 'estudiante').toLowerCase();
   const type: Conversation['type'] = role.includes('super') || role.includes('rector') ? 'super'
     : role.includes('profesor') ? 'group'
     : 'student';
   return {
-    id:       String(raw.other_id ?? raw.otherId ?? raw.id),
+    id:       String(otherId),
     type,
-    name:     raw.other_name ?? raw.otherName ?? raw.name ?? '—',
-    avatar:   (raw.other_name ?? raw.name ?? '?').charAt(0).toUpperCase(),
+    name:     otherName,
+    avatar:   (otherName || '?').charAt(0).toUpperCase(),
     lastMsg:  raw.last_message ?? raw.lastMsg ?? '',
-    lastTime: raw.last_time ?? raw.lastTime ?? '',
+    lastTime: raw.last_message_at
+      ? new Date(raw.last_message_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      : (raw.lastTime ?? ''),
     unread:   raw.unread_count ?? raw.unread ?? 0,
-    otherId:  raw.other_id ?? raw.otherId ?? raw.id,
+    otherId,
     messages: [],
   };
 }
@@ -57,12 +69,15 @@ export default function MensajesTab() {
   const { user } = useAuth();
   const myId = user?.id ?? 0;
 
-  const [convs,    setConvs]    = useState<Conversation[]>([]);
-  const [active,   setActive]   = useState<Conversation | null>(null);
-  const [text,     setText]     = useState('');
-  const [search,   setSearch]   = useState('');
-  const [loading,  setLoading]  = useState(true);
-  const [sending,  setSending]  = useState(false);
+  const [convs,       setConvs]       = useState<Conversation[]>([]);
+  const [active,      setActive]      = useState<Conversation | null>(null);
+  const [text,        setText]        = useState('');
+  const [search,      setSearch]      = useState('');
+  const [loading,     setLoading]     = useState(true);
+  const [sending,     setSending]     = useState(false);
+  const [showNew,     setShowNew]     = useState(false);
+  const [contacts,    setContacts]    = useState<Contact[]>([]);
+  const [contactSearch, setContactSearch] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,20 +130,104 @@ export default function MensajesTab() {
     setSending(false);
   };
 
+  const openNewChat = async () => {
+    setShowNew(true);
+    if (contacts.length > 0) return;
+    try {
+      const r = await api.get('/messages/contacts');
+      setContacts((r.data.contacts ?? r.data ?? []).map((c: any) => ({
+        id: c.id,
+        name: c.name ?? c.full_name ?? '—',
+        role: c.role ?? '',
+        initials: (c.name ?? c.full_name ?? '?').charAt(0).toUpperCase(),
+      })));
+    } catch { /* noop */ }
+  };
+
+  const startConversation = (contact: Contact) => {
+    const role = contact.role.toLowerCase();
+    const type: Conversation['type'] = role.includes('super') ? 'super'
+      : role.includes('profesor') ? 'group' : 'student';
+    const existing = convs.find(c => c.otherId === contact.id);
+    if (existing) { selectConv(existing); setShowNew(false); return; }
+    const newConv: Conversation = {
+      id: String(contact.id), type, name: contact.name,
+      avatar: contact.initials, lastMsg: '', lastTime: '',
+      unread: 0, otherId: contact.id, messages: [],
+    };
+    setConvs(prev => [newConv, ...prev]);
+    selectConv(newConv);
+    setShowNew(false);
+  };
+
+  const filteredContacts = contacts.filter(c =>
+    c.name.toLowerCase().includes(contactSearch.toLowerCase())
+  );
+
   const filtered = convs.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
   const totalUnread = convs.reduce((a, c) => a + c.unread, 0);
 
   return (
-    <div className="flex h-[600px] bg-white border border-[#E9E9E7] rounded-xl overflow-hidden">
+    <div className="flex h-[600px] bg-white border border-[#E9E9E7] rounded-xl overflow-hidden relative">
+
+      {/* ── Contacts Modal ───────────────────────────────────── */}
+      {showNew && (
+        <div className="absolute inset-0 z-20 bg-black/40 flex items-center justify-center">
+          <div className="bg-white rounded-xl w-80 shadow-xl flex flex-col max-h-[480px]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#E9E9E7]">
+              <h4 className="font-semibold text-[#191919] text-sm">Nueva conversación</h4>
+              <button onClick={() => setShowNew(false)} className="text-[#787774] hover:text-[#191919]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-4 py-2 border-b border-[#E9E9E7]">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#AEADAB]" />
+                <input value={contactSearch} onChange={e => setContactSearch(e.target.value)}
+                  placeholder="Buscar contacto..."
+                  className="w-full pl-8 pr-3 py-1.5 border border-[#E9E9E7] rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#2E6FDB]" />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {filteredContacts.length === 0 && (
+                <p className="text-center text-xs text-[#AEADAB] py-8">
+                  {contacts.length === 0 ? 'Cargando contactos…' : 'Sin resultados'}
+                </p>
+              )}
+              {filteredContacts.map(contact => (
+                <button key={contact.id} onClick={() => startConversation(contact)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[#F7F6F3] transition-colors text-left border-b border-[#F7F6F3] last:border-0">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
+                    contact.role.toLowerCase().includes('super') ? TYPE_COLOR.super
+                    : contact.role.toLowerCase().includes('profesor') ? TYPE_COLOR.group
+                    : TYPE_COLOR.student}`}>
+                    {contact.initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#191919] truncate">{contact.name}</p>
+                    <p className="text-[10px] text-[#787774] capitalize">{contact.role}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Lista de conversaciones ──────────────────────────── */}
       <div className="w-72 flex-shrink-0 border-r border-[#E9E9E7] flex flex-col">
         <div className="px-4 py-3 border-b border-[#E9E9E7]">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-[#191919] text-sm">Mensajes</h3>
-            {totalUnread > 0 && (
-              <span className="w-5 h-5 rounded-full bg-[#2E6FDB] text-white text-[10px] font-bold flex items-center justify-center">{totalUnread}</span>
-            )}
+            <div className="flex items-center gap-2">
+              {totalUnread > 0 && (
+                <span className="w-5 h-5 rounded-full bg-[#2E6FDB] text-white text-[10px] font-bold flex items-center justify-center">{totalUnread}</span>
+              )}
+              <button onClick={openNewChat} title="Nueva conversación"
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#EEF3FD] text-[#787774] hover:text-[#2E6FDB] transition-colors">
+                <PenSquare className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#AEADAB]" />

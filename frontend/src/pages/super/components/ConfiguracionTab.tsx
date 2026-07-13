@@ -1,23 +1,44 @@
-import { useState, useRef } from 'react';
-import { Settings, Upload, Globe, Clock, Building2, Phone, Mail, MapPin, Save, RefreshCw } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Settings, Upload, Globe, Clock, Building2, Phone, Mail, MapPin, Save, RefreshCw, Loader2 } from 'lucide-react';
+import api from '../../../services/api';
 
 export default function ConfiguracionTab() {
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
-    name: 'Colegio Nacional Demo',
-    dane: '123456789000',
-    email: 'contacto@colegio.edu.co',
-    phone: '601 234 5678',
-    address: 'Calle 50 # 10-20, Bogotá, Colombia',
+    name: '',
+    dane: '',
+    email: '',
+    phone: '',
+    address: '',
     timezone: 'America/Bogota',
     language: 'es',
     primaryColor: '#6940A5',
-    website: 'https://colegio.edu.co',
+    website: '',
   });
+  const [origName, setOrigName] = useState('');
 
-  const handleSave = () => {
+  useEffect(() => {
+    api.get('/super/institution')
+      .then(r => {
+        setForm(prev => ({
+          ...prev,
+          name: r.data.name ?? '',
+          dane: r.data.dane_code ?? '',
+        }));
+        setOrigName(r.data.name ?? '');
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      await api.patch('/super/institution', { name: form.name });
+      setOrigName(form.name);
+    } catch { /* noop */ }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -30,6 +51,14 @@ export default function ConfiguracionTab() {
       {children}
     </div>
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-[#787774]">
+        <Loader2 className="w-5 h-5 animate-spin mr-2" /> Cargando datos institucionales…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -175,11 +204,7 @@ export default function ConfiguracionTab() {
       {/* Botón guardar */}
       <div className="flex justify-end gap-3">
         <button
-          onClick={() => setForm({
-            name: 'Colegio Nacional Demo', dane: '123456789000', email: 'contacto@colegio.edu.co',
-            phone: '601 234 5678', address: 'Calle 50 # 10-20, Bogotá', timezone: 'America/Bogota',
-            language: 'es', primaryColor: '#6940A5', website: 'https://colegio.edu.co',
-          })}
+          onClick={() => setForm(prev => ({ ...prev, name: origName }))}
           className="flex items-center gap-2 px-4 py-2 border border-[#E9E9E7] rounded-md text-sm text-[#787774] hover:bg-[#F7F6F3] transition-colors"
         >
           <RefreshCw className="w-4 h-4" /> Restablecer

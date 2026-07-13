@@ -23,7 +23,7 @@ from app.schemas.schemas import (
 )
 from app.ai.expert_bot.trainer import ExpertBotTrainer
 
-router = APIRouter(prefix="/expert-bot", tags=["Bot Experto"])
+router = APIRouter(tags=["Bot Experto"])
 
 # Almacén de entrenamientos activos (en producción usar Redis)
 active_trainers: Dict[int, ExpertBotTrainer] = {}
@@ -42,6 +42,7 @@ async def create_bot(
         name=request.name,
         description=request.description,
         category=request.category,
+        is_public=request.is_public,
     )
     db.add(bot)
     db.commit()
@@ -377,6 +378,53 @@ async def list_my_bots(
         ],
         "total": len(bots),
     }
+
+
+from typing import Optional as _Opt
+from pydantic import BaseModel as _BaseModel
+
+class _BotUpdate(_BaseModel):
+    is_active: _Opt[bool] = None
+    is_public: _Opt[bool] = None
+
+
+@router.patch("/{bot_id}")
+async def update_bot(
+    bot_id: int,
+    payload: _BotUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Actualiza is_active / is_public de un bot del usuario actual"""
+    bot = db.query(ExpertBot).filter(
+        ExpertBot.id == bot_id,
+        ExpertBot.creator_id == current_user.id,
+    ).first()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot no encontrado")
+    if payload.is_active is not None:
+        bot.is_active = payload.is_active
+    if payload.is_public is not None:
+        bot.is_public = payload.is_public
+    db.commit()
+    return {"id": bot.id, "is_active": bot.is_active, "is_public": bot.is_public}
+
+
+@router.delete("/{bot_id}", status_code=204)
+async def delete_bot(
+    bot_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Elimina un bot creado por el usuario actual"""
+    bot = db.query(ExpertBot).filter(
+        ExpertBot.id == bot_id,
+        ExpertBot.creator_id == current_user.id,
+    ).first()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot no encontrado")
+    db.delete(bot)
+    db.commit()
 
 
 @router.get("/trained-bots")

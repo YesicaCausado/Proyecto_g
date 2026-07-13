@@ -47,17 +47,42 @@ const PLAN_COLORS: Record<LicensePlan, { bg: string; text: string; label: string
 };
 
 // ── Secciones del menú ────────────────────────────────────────────────────────
-const NAV_ITEMS = [
-  { id: 'dashboard',     label: 'Dashboard',      icon: LayoutDashboard                   },
-  { id: 'grupos',        label: 'Mis Grupos',      icon: BookOpen                          },
-  { id: 'neurobots',     label: 'NeuroBots',       icon: Bot                               },
-  { id: 'alertas',       label: 'NeuroAlertas',    icon: BrainCircuit, badge: 'alert'      },
-  { id: 'tablero',       label: 'Tablero',         icon: LayoutList                        },
-  { id: 'evaluaciones',  label: 'Evaluaciones',    icon: ClipboardList                     },
-  { id: 'materiales',    label: 'Materiales',      icon: FolderOpen                        },
-  { id: 'mensajes',      label: 'Mensajes',        icon: MessageSquare, badge: 'msg'       },
-  { id: 'calendario',    label: 'Calendario',      icon: Calendar                          },
-  { id: 'configuracion', label: 'Configuración',   icon: Settings                          },
+const NAV_SECTIONS = [
+  {
+    label: 'PRINCIPAL',
+    items: [
+      { id: 'dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
+      { id: 'grupos',       label: 'Mis Grupos',   icon: BookOpen        },
+    ],
+  },
+  {
+    label: 'INTELIGENCIA IA',
+    items: [
+      { id: 'neurobots',    label: 'NeuroBots',    icon: Bot                          },
+      { id: 'alertas',      label: 'NeuroAlertas', icon: BrainCircuit, badge: 'alert' },
+    ],
+  },
+  {
+    label: 'AULA',
+    items: [
+      { id: 'tablero',      label: 'Tablero',      icon: LayoutList                   },
+      { id: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList                },
+      { id: 'materiales',   label: 'Materiales',   icon: FolderOpen                   },
+    ],
+  },
+  {
+    label: 'COMUNICACIÓN',
+    items: [
+      { id: 'mensajes',     label: 'Mensajes',     icon: MessageSquare, badge: 'msg' },
+      { id: 'calendario',   label: 'Calendario',   icon: Calendar                    },
+    ],
+  },
+  {
+    label: 'CUENTA',
+    items: [
+      { id: 'configuracion', label: 'Configuración', icon: Settings },
+    ],
+  },
 ];
 
 const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
@@ -79,20 +104,36 @@ export default function TeacherPanel() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [license]  = useState<TeacherLicense>(DEMO_LICENSE);
-  const [_groups, setGroups]     = useState<any[]>([]);
-  const [unreadMsgs]             = useState(3);
-  const [activeAlerts]           = useState(4);
+  const [_groups, setGroups]         = useState<any[]>([]);
+  const [unreadMsgs,  setUnreadMsgs] = useState(0);
+  const [activeAlerts,setActiveAlerts] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     api.get('/classrooms/my-classes').then(r => setGroups(r.data?.classrooms || [])).catch(() => {});
+    // Real alert count from teacher stats
+    api.get('/teacher/stats')
+      .then(r => setActiveAlerts(r.data?.alert_count ?? 0))
+      .catch(() => {});
+    // Real unread message count
+    api.get('/messages/conversations')
+      .then(r => {
+        const convs = r.data?.conversations ?? r.data ?? [];
+        const total = convs.reduce((sum: number, c: any) => sum + (c.unread_count ?? 0), 0);
+        setUnreadMsgs(total);
+      })
+      .catch(() => {});
   }, []);
 
   const handleLogout = () => { logout(); navigate('/login'); };
   const meta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
   const planStyle = PLAN_COLORS[license.plan];
 
-  const handleNav = (id: string) => { setActiveTab(id); setSidebarOpen(false); };
+  const handleNav = (id: string) => {
+    setActiveTab(id);
+    setSidebarOpen(false);
+    if (id === 'mensajes') setUnreadMsgs(0);
+  };
 
   // ── NavButton ──
   const NavButton = ({ id, label, icon: Icon, badge }: any) => {
@@ -154,8 +195,17 @@ export default function TeacherPanel() {
       </div>
 
       {/* Navegación */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {NAV_ITEMS.map(item => <NavButton key={item.id} {...item} />)}
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+        {NAV_SECTIONS.map(section => (
+          <div key={section.label}>
+            <p className="px-3 mb-1 text-[10px] font-semibold text-[#AEADAB] uppercase tracking-widest">
+              {section.label}
+            </p>
+            <div className="space-y-0.5">
+              {section.items.map(item => <NavButton key={item.id} {...item} />)}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Pie */}

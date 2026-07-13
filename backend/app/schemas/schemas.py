@@ -170,8 +170,9 @@ class SessionStatsResponse(BaseModel):
 
 class ExpertBotCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    description: str
-    category: str = Field(..., max_length=50)
+    description: str = ""
+    category: str = Field(default="General", max_length=50)
+    is_public: bool = True
 
 
 class ExpertBotResponse(BaseModel):

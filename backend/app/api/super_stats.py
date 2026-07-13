@@ -10,8 +10,10 @@ Endpoints:
   GET  /super/bots             - Todos los NeuroBots de la institución
   GET  /super/broadcasts       - Mensajes institucionales enviados
   POST /super/broadcasts       - Enviar mensaje institucional
+  GET  /super/institution      - Datos de la institución (nombre, DANE, licencia)
+  PATCH /super/institution     - Actualizar nombre de la institución
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from datetime import datetime, timedelta
@@ -31,12 +33,55 @@ router = APIRouter(prefix="/super", tags=["Super Profesor - Stats"])
 
 def _require_super(user: User):
     if user.role not in (UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value):
-        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Acceso restringido al super profesor")
 
 
 def _get_institution_id(user: User, db: Session) -> Optional[int]:
     return user.institution_id
+
+
+# ── GET /super/institution ────────────────────────────────────────────────────
+
+@router.get("/institution")
+async def get_institution(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_super(current_user)
+    inst = db.query(Institution).filter(Institution.id == current_user.institution_id).first()
+    if not inst:
+        raise HTTPException(404, "Institución no encontrada")
+    return {
+        "id":           inst.id,
+        "name":         inst.name,
+        "dane_code":    inst.dane_code,
+        "license_type": inst.license_type,
+        "is_active":    inst.is_active,
+        "created_at":   inst.created_at.isoformat() if inst.created_at else None,
+    }
+
+
+class InstitutionUpdate(BaseModel):
+    name: Optional[str] = None
+
+
+# ── PATCH /super/institution ──────────────────────────────────────────────────
+
+@router.patch("/institution")
+async def update_institution(
+    payload: InstitutionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_super(current_user)
+    inst = db.query(Institution).filter(Institution.id == current_user.institution_id).first()
+    if not inst:
+        raise HTTPException(404, "Institución no encontrada")
+    if payload.name and payload.name.strip():
+        inst.name = payload.name.strip()
+    db.commit()
+    db.refresh(inst)
+    return {"name": inst.name, "dane_code": inst.dane_code, "license_type": inst.license_type}
 
 
 # ── GET /super/stats/dashboard ────────────────────────────────────────────────
