@@ -128,10 +128,10 @@ export default function LoginPage() {
           </p>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: 'Estudiante',     user: 'demo',          pass: 'demo1234',          color: 'bg-blue-50 border-blue-200 text-blue-700' },
-              { label: 'Profesor',       user: 'profesor',      pass: 'profesor1234',      color: 'bg-green-50 border-green-200 text-green-700' },
-              { label: 'Admin',          user: 'admin',         pass: 'admin1234',         color: 'bg-orange-50 border-orange-200 text-orange-700' },
-              { label: 'Super Profesor', user: 'superprofesor', pass: 'superprofesor1234', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+              { label: 'Estudiante',     user: 'demo',          pass: 'demo',          color: 'bg-blue-50 border-blue-200 text-blue-700' },
+              { label: 'Profesor',       user: 'profesor',      pass: 'profesor',      color: 'bg-green-50 border-green-200 text-green-700' },
+              { label: 'Admin',          user: 'admin',         pass: 'admin1234',     color: 'bg-orange-50 border-orange-200 text-orange-700' },
+              { label: 'Super Profesor', user: 'superprofesor', pass: 'superprofesor', color: 'bg-purple-50 border-purple-200 text-purple-700' },
             ].map(({ label, user: u, pass, color }) => (
               <button
                 key={u}
