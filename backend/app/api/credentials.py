@@ -30,6 +30,8 @@ from app.schemas.schemas import (
     CredentialItem, LicenseUsage, ChangePasswordRequest, AdminStats,
 )
 
+from app.services.email_service import send_credentials_email
+
 router = APIRouter(tags=["Credenciales B2B"])
 
 
@@ -169,6 +171,14 @@ async def create_institution(
 
     db.commit()
 
+    send_credentials_email(
+        to_email=sp.email,
+        to_name=sp.full_name or sp.username,
+        username=sp.username,
+        temp_password=temp_pwd,
+        role=sp.role,
+    )
+
     return {
         "id": institution.id,
         "name": institution.name,
@@ -287,6 +297,14 @@ async def create_teacher(
     _log(db, "create_teacher", current_user, institution.id,
          teacher.id, "profesor", _client_ip(request))
     db.commit()
+
+    send_credentials_email(
+        to_email=teacher.email,
+        to_name=teacher.full_name or teacher.username,
+        username=teacher.username,
+        temp_password=temp_pwd,
+        role=teacher.role,
+    )
 
     return CredentialItem(
         full_name=teacher.full_name,
@@ -416,6 +434,15 @@ async def create_student(
     _log(db, "create_student", current_user, institution.id,
          student.id, "estudiante", _client_ip(request))
     db.commit()
+
+    if payload.email:
+        send_credentials_email(
+            to_email=student.email,
+            to_name=student.full_name or student.username,
+            username=student.username,
+            temp_password=temp_pwd,
+            role=student.role,
+        )
 
     return CredentialItem(
         full_name=student.full_name,
