@@ -403,7 +403,15 @@ class LicenseUsage(BaseModel):
     max_students: int
     current_students: int
 
+class AdminStats(BaseModel):
+    """Estadísticas globales del sistema para el panel del administrador"""
+    total_institutions:   int
+    active_institutions:  int
+    total_super_profesores: int
+    total_profesores:     int
+    total_estudiantes:    int
 
+    
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)

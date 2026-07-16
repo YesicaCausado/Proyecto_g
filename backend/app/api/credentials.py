@@ -27,7 +27,7 @@ from app.models.institution import Institution, AuditLog, LICENSE_LIMITS
 from app.schemas.schemas import (
     InstitutionCreate, InstitutionResponse, InstitutionListItem,
     TeacherCreate, TeacherListItem, StudentCreate, BulkCreateResponse,
-    CredentialItem, LicenseUsage, ChangePasswordRequest,
+    CredentialItem, LicenseUsage, ChangePasswordRequest, AdminStats,
 )
 
 router = APIRouter(tags=["Credenciales B2B"])
@@ -183,6 +183,40 @@ async def create_institution(
             role=sp.role,
         ),
     }
+
+@router.get("/admin/stats", response_model=AdminStats)
+async def get_admin_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estadísticas globales del sistema — solo para administradores."""
+    _require_role(current_user, UserRole.ADMIN.value)
+
+    total_institutions  = db.query(Institution).count()
+    active_institutions = db.query(Institution).filter(Institution.is_active == True).count()
+
+    total_super_profesores = db.query(User).filter(
+        User.role == UserRole.SUPER_PROFESOR.value,
+        User.is_active == True,
+    ).count()
+
+    total_profesores = db.query(User).filter(
+        User.role == UserRole.PROFESOR.value,
+        User.is_active == True,
+    ).count()
+
+    total_estudiantes = db.query(User).filter(
+        User.role == UserRole.ESTUDIANTE.value,
+        User.is_active == True,
+    ).count()
+
+    return AdminStats(
+        total_institutions=total_institutions,
+        active_institutions=active_institutions,
+        total_super_profesores=total_super_profesores,
+        total_profesores=total_profesores,
+        total_estudiantes=total_estudiantes,
+    )
 
 
 @router.get("/admin/institutions", response_model=List[InstitutionListItem])

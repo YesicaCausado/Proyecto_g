@@ -1,43 +1,19 @@
-﻿import { Link } from 'react-router-dom';
-import { School, Users, BookOpen, ShieldCheck, Plus, ArrowRight } from 'lucide-react';
+﻿import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  School, Users, BookOpen, ShieldCheck,
+  Plus, ArrowRight, Loader2,
+} from 'lucide-react';
+import api from '../../services/api';
 
-// Tarjetas de estadísticas — los valores vendrán del backend (fase siguiente)
-const STATS = [
-  {
-    label: 'Instituciones activas',
-    value: '—',
-    sub: 'colegios registrados',
-    icon: School,
-    color: 'bg-[#0B6E99]',
-    light: 'bg-[#E5F3FF] text-[#0B6E99]',
-  },
-  {
-    label: 'Super Profesores',
-    value: '—',
-    sub: 'rectores con acceso',
-    icon: ShieldCheck,
-    color: 'bg-[#0B6E99]',
-    light: 'bg-[#E5F3FF] text-[#0B6E99]',
-  },
-  {
-    label: 'Profesores totales',
-    value: '—',
-    sub: 'docentes activos',
-    icon: Users,
-    color: 'bg-[#6940A5]',
-    light: 'bg-[#F7F3FB] text-[#6940A5]',
-  },
-  {
-    label: 'Estudiantes totales',
-    value: '—',
-    sub: 'alumnos registrados',
-    icon: BookOpen,
-    color: 'bg-[#0F7B6C]',
-    light: 'bg-[#EEF7F4] text-[#0F7B6C]',
-  },
-];
+interface AdminStats {
+  total_institutions:     number;
+  active_institutions:    number;
+  total_super_profesores: number;
+  total_profesores:       number;
+  total_estudiantes:      number;
+}
 
-// Acciones rápidas del panel
 const QUICK_ACTIONS = [
   {
     to: '/admin/instituciones/nueva',
@@ -58,6 +34,48 @@ const QUICK_ACTIONS = [
 ];
 
 export default function AdminHome() {
+  const [stats, setStats]     = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get<AdminStats>('/admin/stats')
+      .then(r => setStats(r.data))
+      .catch(() => setStats(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Construir tarjetas con datos reales o '—' mientras carga
+  const STAT_CARDS = [
+    {
+      label: 'Instituciones activas',
+      value: loading ? null : (stats?.active_institutions ?? '—'),
+      sub:   stats ? `${stats.total_institutions} registradas en total` : 'colegios registrados',
+      icon:  School,
+      color: 'bg-[#0B6E99]',
+    },
+    {
+      label: 'Super Profesores',
+      value: loading ? null : (stats?.total_super_profesores ?? '—'),
+      sub:   'rectores con acceso',
+      icon:  ShieldCheck,
+      color: 'bg-[#0B6E99]',
+    },
+    {
+      label: 'Profesores totales',
+      value: loading ? null : (stats?.total_profesores ?? '—'),
+      sub:   'docentes activos',
+      icon:  Users,
+      color: 'bg-[#6940A5]',
+    },
+    {
+      label: 'Estudiantes totales',
+      value: loading ? null : (stats?.total_estudiantes ?? '—'),
+      sub:   'alumnos registrados',
+      icon:  BookOpen,
+      color: 'bg-[#0F7B6C]',
+    },
+  ];
+
   return (
     <div className="p-8 max-w-6xl">
 
@@ -71,24 +89,24 @@ export default function AdminHome() {
         </p>
       </div>
 
-      {/* ── Flujo de roles (visual informativo) ────────────── */}
+      {/* ── Flujo de roles ─────────────────────────────────── */}
       <div className="bg-[#E5F3FF] border border-[#BFDFF0] rounded-md p-5 mb-8 flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold text-[#37352F]">Flujo de creación de cuentas:</span>
-        <RoleBadge label="Administrador" color="bg-[#37352F]" />
+        <RoleBadge label="Administrador"         color="bg-[#37352F]" />
         <ArrowRight className="w-4 h-4 text-[#0B6E99]" />
         <RoleBadge label="Super Profesor (rector)" color="bg-[#6940A5]" />
         <ArrowRight className="w-4 h-4 text-[#0B6E99]" />
-        <RoleBadge label="Profesor" color="bg-[#0B6E99]" />
+        <RoleBadge label="Profesor"              color="bg-[#0B6E99]" />
         <ArrowRight className="w-4 h-4 text-[#0B6E99]" />
-        <RoleBadge label="Estudiante" color="bg-[#0F7B6C]" />
+        <RoleBadge label="Estudiante"            color="bg-[#0F7B6C]" />
         <span className="text-[#0B6E99] ml-2">
           — Cada nivel crea al nivel siguiente dentro de su institución
         </span>
       </div>
 
-      {/* ── Estadísticas ───────────────────────────────────── */}
+      {/* ── Estadísticas reales ────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
-        {STATS.map((s) => (
+        {STAT_CARDS.map((s) => (
           <div
             key={s.label}
             className="bg-white rounded-md p-5 border border-[#E9E9E7] flex items-start gap-4"
@@ -97,7 +115,13 @@ export default function AdminHome() {
               <s.icon className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
-              <p className="text-2xl font-bold text-[#191919] leading-tight">{s.value}</p>
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin text-[#9B9A97] mb-1" />
+              ) : (
+                <p className="text-2xl font-bold text-[#191919] leading-tight">
+                  {s.value}
+                </p>
+              )}
               <p className="text-sm font-medium text-[#37352F] leading-tight">{s.label}</p>
               <p className="text-xs text-[#9B9A97] mt-0.5">{s.sub}</p>
             </div>
@@ -132,18 +156,21 @@ export default function AdminHome() {
                   <p className="font-medium text-[#191919] text-sm">{action.title}</p>
                   <Plus className="w-3 h-3 text-[#9B9A97] group-hover:text-[#787774] shrink-0" />
                 </div>
-                <p className="text-xs text-[#787774] mt-0.5 leading-relaxed">{action.description}</p>
+                <p className="text-xs text-[#787774] mt-0.5 leading-relaxed">
+                  {action.description}
+                </p>
               </div>
             </Link>
           ))}
         </div>
       </div>
 
-      {/* ── Nota sobre flujo de cuentas ────────────────────── */}
+      {/* ── Nota ───────────────────────────────────────────── */}
       <div className="mt-6 bg-[#FCF6E5] border border-[#EDD88A] rounded-md p-4 text-sm text-[#D9730D]">
-        <strong className="font-semibold">Nota importante:</strong> El registro de nuevas cuentas
-        está cerrado al público. Solo el administrador puede crear Super Profesores. El Super Profesor
-        crea profesores dentro de su institución, y el profesor crea o invita a sus estudiantes.
+        <strong className="font-semibold">Nota importante:</strong> El registro de nuevas
+        cuentas está cerrado al público. Solo el administrador puede crear Super Profesores.
+        El Super Profesor crea profesores dentro de su institución, y el profesor crea o
+        invita a sus estudiantes.
       </div>
     </div>
   );
