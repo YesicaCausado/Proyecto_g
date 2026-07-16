@@ -1,51 +1,38 @@
 version: '3.8'
 
-services:
-  # Auth Service - Autenticación con Neon PostgreSQL
-  auth-service:
-    build:
-      context: .
-      dockerfile: auth-service/Dockerfile
-    container_name: neurolearn-auth-service
-    ports:
-      - "8002:8000"
-    environment:
-      - DATABASE_URL=postgresql://neondb_owner:npg_MAed8LuD7yOz@ep-restless-river-am0m57yj-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-      - SECRET_KEY=your-secret-key-change-in-production
-      - BOT_SERVICE_URL=http://bot-service:8000
-    depends_on:
-      - bot-service
-    networks:
-      - neurolearn
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+# ============================================================
+# NeuroLearn IA — Docker Compose
+# Base de datos: Supabase PostgreSQL (sa-east-1)
+# ============================================================
 
-  # Bot Service - Gestión de Bots y Chat
+services:
+
+  # ── Backend principal — FastAPI :8000 ─────────────────────
+  # Gestión de bots, chat, credenciales B2B y autenticación
   bot-service:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: neurolearn-bot-service
+    container_name: neurolearn-backend
     ports:
-      - "8001:8000"
+      - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite:///./bots.db
-      - SECRET_KEY=neurolearn-secret-key-cambiar-en-produccion-2026
-      - AUTH_SERVICE_URL=http://auth-service:8000
+      # Supabase — reemplazar con valores reales en producción
+      - DATABASE_URL=${DATABASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
     networks:
       - neurolearn
-    volumes:
-      - ./backend/bots.db:/app/bots.db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
       retries: 5
 
-  # Frontend - React
+  # ── Frontend — React + Vite :5173 ─────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -54,18 +41,29 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8001
-      - VITE_AUTH_URL=http://localhost:8002
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - bot-service
-      - auth-service
     networks:
       - neurolearn
+
+  # ── Auth Service — DEPRECADO ───────────────────────────────
+  # Este servicio está desconectado. Ver auth-service/DEPRECATED.md
+  # Descomentar SOLO si se decide reactivar en el futuro.
+  #
+  # auth-service:
+  #   build:
+  #     context: .
+  #     dockerfile: auth-service/Dockerfile
+  #   container_name: neurolearn-auth-service
+  #   ports:
+  #     - "8002:8000"
+  #   environment:
+  #     - DATABASE_URL=${DATABASE_URL}
+  #     - SECRET_KEY=${SECRET_KEY}
+  #   networks:
+  #     - neurolearn
 
 networks:
   neurolearn:
     driver: bridge
-
-volumes:
-  bots_data:
-    driver: local
