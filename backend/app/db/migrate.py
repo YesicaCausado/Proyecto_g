@@ -44,6 +44,12 @@ def run_migrations(engine) -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS subject_area         VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS grade                VARCHAR(20)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date           VARCHAR(20)",
+        # columnas base que pueden faltar si la tabla se creó antes del modelo actual
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active   BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_expert   BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name   VARCHAR(100)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS cognitive_profile JSONB",
 
         # Índice único parcial en document_number
         """
@@ -174,6 +180,11 @@ def run_migrations(engine) -> None:
         "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS invite_code VARCHAR(20)  DEFAULT NULL",
         "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS description TEXT         DEFAULT NULL",
         "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS max_students INTEGER     DEFAULT 40",
+
+        # ── 10. Columnas que pueden faltar en audit_logs ──────────────────
+        "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS notes TEXT",
+        "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_type  VARCHAR(30)",
+        "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)",
     ]
 
     applied = 0

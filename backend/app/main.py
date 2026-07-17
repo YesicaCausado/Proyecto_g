@@ -79,7 +79,7 @@ def _ensure_demo_user():
                     username="demo",
                     email="demo@neurolearn.app",
                     full_name="Usuario Demo",
-                    hashed_password=pwd.hash("demo1234"),
+                    hashed_password=pwd.hash("demo"),
                     role=UserRole.ESTUDIANTE,
                     is_active=True,
                 )

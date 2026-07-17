@@ -222,7 +222,7 @@ async def list_teachers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _require_role(current_user, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value)
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
     teachers = db.query(User).filter(
         User.institution_id == institution.id,
@@ -378,7 +378,7 @@ async def list_students(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _require_role(current_user, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value)
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
     students = db.query(User).filter(
         User.institution_id == institution.id,
