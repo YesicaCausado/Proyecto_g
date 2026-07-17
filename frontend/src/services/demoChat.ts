@@ -1,7 +1,7 @@
 /**
  * demoChat.ts
  * Modo demo: cuando DEMO_MODE = true en AuthContext,
- * el frontend intenta login con demo/demo1234 para obtener JWT real
+ * el frontend intenta login con demo/demo para obtener JWT real
  * y usar la IA del backend. Solo si eso falla, se usan estas
  * respuestas simuladas locales como último recurso.
  */

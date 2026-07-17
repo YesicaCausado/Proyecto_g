@@ -170,8 +170,9 @@ class SessionStatsResponse(BaseModel):
 
 class ExpertBotCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    description: str
-    category: str = Field(..., max_length=50)
+    description: str = ""
+    category: str = Field(default="General", max_length=50)
+    is_public: bool = True
 
 
 class ExpertBotResponse(BaseModel):
@@ -246,6 +247,7 @@ class ClassroomCreate(BaseModel):
     subject: str = Field(..., max_length=100)
     grade: str = Field(default="", max_length=20)
     max_students: int = Field(default=40, ge=1, le=100)
+    color: str = Field(default="#2E6FDB", max_length=20)
 
 
 class ClassroomResponse(BaseModel):
@@ -259,6 +261,7 @@ class ClassroomResponse(BaseModel):
     is_active: bool
     max_students: int
     student_count: int = 0
+    color: str = "#2E6FDB"
     created_at: datetime
 
     class Config:
@@ -389,7 +392,7 @@ class StudentCreate(BaseModel):
 
 
 class BulkCreateResponse(BaseModel):
-    created: List[CredentialItem]
+    credentials: List[CredentialItem]
     errors: List[Dict[str, Any]] = []
     total_processed: int
     total_created: int
@@ -433,3 +436,50 @@ class CSVValidationRow(BaseModel):
     data: Dict[str, Any]
     error: Optional[str] = None
     valid: bool = True
+
+
+# ===== SCHEMAS B2B FALTANTES =====
+
+class TeacherCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: str = Field(..., max_length=100)
+    subject_area: Optional[str] = None
+
+
+class TeacherListItem(BaseModel):
+    id: int
+    full_name: str
+    username: str
+    email: str
+    document_type: Optional[str] = None
+    document_number: Optional[str] = None
+    subject_area: Optional[str] = None
+    is_active: bool = True
+    temp_password: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class StudentCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: Optional[str] = None
+    grade: Optional[str] = None
+    birth_date: Optional[str] = None
+
+
+
+
+class InstitutionListItem(BaseModel):
+    id: int
+    name: str
+    dane_code: str
+    license_type: str
+    is_active: bool
+    created_at: datetime
+    teacher_count: int
+    student_count: int

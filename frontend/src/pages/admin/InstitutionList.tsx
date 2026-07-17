@@ -55,19 +55,19 @@ export default function InstitutionList() {
   );
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl">
 
       {/* ── Encabezado ─────────────────────────────────── */}
-      <div className="flex items-start justify-between mb-7">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6 sm:mb-7">
         <div>
-          <h1 className="text-2xl font-bold text-[#191919]">Instituciones</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#191919]">Instituciones</h1>
           <p className="text-[#787774] text-sm mt-1">
             {institutions.length} colegio{institutions.length !== 1 ? 's' : ''} registrado{institutions.length !== 1 ? 's' : ''}
           </p>
         </div>
         <Link
           to="/admin/instituciones/nueva"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#37352F] text-white text-sm font-medium rounded-md hover:bg-[#2F2D2B] transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#37352F] text-white text-sm font-medium rounded-md hover:bg-[#2F2D2B] transition-colors self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
           Nueva institución

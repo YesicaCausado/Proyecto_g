@@ -1,45 +1,47 @@
+import { useEffect, useState } from 'react';
 import {
   Users, GraduationCap, BookOpen, Bot, TrendingUp, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2, LineChart,
   PieChart, Trophy, Activity
 } from 'lucide-react';
+import api from '../../../services/api';
 
-const MOCK_TEACHER_RANKING = [
-  { name: 'Sofía Castro',     subject: 'Tecnología', avg: 8.7, participation: 94, aiUsage: 87, students: 29 },
-  { name: 'Pedro Ramírez',    subject: 'Sociales',   avg: 8.4, participation: 88, aiUsage: 72, students: 30 },
-  { name: 'Laura González',   subject: 'Ciencias',   avg: 8.1, participation: 85, aiUsage: 68, students: 31 },
-  { name: 'Ana Torres',       subject: 'Lenguaje',   avg: 7.8, participation: 79, aiUsage: 55, students: 26 },
-  { name: 'Carlos Martínez',  subject: 'Matemáticas',avg: 7.2, participation: 61, aiUsage: 43, students: 28 },
-];
+interface DashStats {
+  total_teachers: number;
+  total_students: number;
+  total_groups: number;
+  avg_score: number;
+  at_risk_count: number;
+  teacher_ranking: { name: string; subject: string; avg: number; participation: number; students: number }[];
+  at_risk_detail: { name: string; grade: string; avg: number; subject: string; risk: string }[];
+  areas_data: { label: string; pct: number }[];
+}
 
-const MOCK_AT_RISK = [
-  { name: 'Juan Pérez',    grade: '8°A', avg: 4.2, trend: -1.8, subject: 'Matemáticas' },
-  { name: 'María Gómez',   grade: '9°B', avg: 4.8, trend: -1.2, subject: 'Ciencias'    },
-  { name: 'Luis Herrera',  grade: '7°C', avg: 5.1, trend: -0.9, subject: 'Lenguaje'    },
-  { name: 'Ana Rodríguez', grade: '10°A',avg: 4.5, trend: -2.1, subject: 'Física'      },
-];
-
-const AREAS_DATA = [
-  { label: 'Matemáticas', pct: 22, color: '#0B6E99' },
-  { label: 'Ciencias',    pct: 18, color: '#0F7B6C' },
-  { label: 'Lenguaje',    pct: 20, color: '#6940A5' },
-  { label: 'Sociales',    pct: 16, color: '#D9730D' },
-  { label: 'Tecnología',  pct: 14, color: '#E03E3E' },
-  { label: 'Inglés',      pct: 10, color: '#AEADAB' },
-];
+const AREA_COLORS = ['#0B6E99','#0F7B6C','#6940A5','#D9730D','#E03E3E','#AEADAB','#2E6FDB','#37352F'];
 
 export default function DashboardGeneral({ license, onNavigate }: { license: any; onNavigate?: (tab: string) => void }) {
+  const [stats, setStats] = useState<DashStats | null>(null);
+  const [institution, setInstitution] = useState<{ name: string } | null>(null);
+
+  useEffect(() => {
+    api.get('/super/stats/dashboard').then(r => setStats(r.data)).catch(() => {});
+    api.get('/super/institution').then(r => setInstitution(r.data)).catch(() => {});
+  }, []);
+
+  // Días reales desde el backend (license viene de /super/license-usage)
+  const institutionName = institution?.name ?? license?.institution_name ?? '—';;
+
   const metrics = [
-    { label: 'Profesores activos', value: license?.current_teachers ?? 18,  trend: '+2',   status: 'good',    icon: Users,          tab: 'profesores' },
-    { label: 'Estudiantes',        value: license?.current_students ?? 745,  trend: '+15',  status: 'good',    icon: GraduationCap,  tab: 'estudiantes' },
-    { label: 'Grupos',             value: 24,                                 trend: '0',    status: 'neutral', icon: BookOpen,       tab: 'grupos' },
-    { label: 'NeuroBots',          value: 8,                                  trend: '+3',   status: 'good',    icon: Bot,            tab: 'neurobots' },
-    { label: 'Promedio general',   value: '7.8/10',                           trend: '-0.2', status: 'warning', icon: TrendingUp,     tab: null },
-    { label: 'En riesgo',          value: 12,                                 trend: '+4',   status: 'danger',  icon: AlertTriangle,  tab: 'alertas' },
+    { label: 'Profesores activos', value: stats?.total_teachers ?? license?.current_teachers ?? '—', trend: '',   status: 'good',    icon: Users,          tab: 'profesores' },
+    { label: 'Estudiantes',        value: stats?.total_students ?? license?.current_students ?? '—', trend: '',   status: 'good',    icon: GraduationCap,  tab: 'estudiantes' },
+    { label: 'Grupos',             value: stats?.total_groups ?? '—',                                trend: '',   status: 'neutral', icon: BookOpen,       tab: 'grupos' },
+    { label: 'NeuroBots',          value: '—',                                                       trend: '',   status: 'good',    icon: Bot,            tab: 'neurobots' },
+    { label: 'Promedio general',   value: stats ? `${stats.avg_score}/10` : '—',                     trend: '',   status: stats && stats.avg_score >= 7 ? 'good' : 'warning', icon: TrendingUp, tab: null },
+    { label: 'En riesgo',          value: stats?.at_risk_count ?? '—',                               trend: '',   status: 'danger',  icon: AlertTriangle,  tab: 'alertas' },
   ];
 
-  const daysLeft     = 45;
-  const isExpiring   = daysLeft <= 30;
+  const daysLeft   = license?.days_left ?? null;
+  const isExpiring = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
 
   return (
     <div className="space-y-6">
@@ -80,9 +82,18 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
             </div>
           </div>
           <div className="mt-5">
-            <p className="text-xs opacity-70 mb-0.5">Vence en</p>
-            <p className="text-3xl font-bold">{daysLeft}</p>
-            <p className="text-xs opacity-70">días</p>
+            {daysLeft !== null ? (
+              <>
+                <p className="text-xs opacity-70 mb-0.5">Vence en</p>
+                <p className="text-3xl font-bold">{daysLeft}</p>
+                <p className="text-xs opacity-70">días</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs opacity-70 mb-0.5">Vigencia</p>
+                <p className="text-lg font-bold">Sin límite</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -106,7 +117,7 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
             );
           })}
           <div className="md:col-span-2 pt-4 border-t border-[#E9E9E7] flex justify-between items-center">
-            <p className="text-xs text-[#787774]">Institución: <span className="font-semibold text-[#37352F]">Colegio Nacional (Mock)</span></p>
+            <p className="text-xs text-[#787774]">Institución: <span className="font-semibold text-[#37352F]">{institutionName}</span></p>
             <button onClick={() => onNavigate?.('licencia')} className="text-xs font-medium text-[#6940A5] hover:underline flex items-center gap-1">
               Administrar Licencia <ExternalLink className="w-3 h-3" />
             </button>
@@ -210,7 +221,7 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
             <Trophy className="w-4 h-4 text-[#D9730D]" /> Ranking de Profesores
           </h3>
           <div className="space-y-2">
-            {MOCK_TEACHER_RANKING.map((t, idx) => (
+            {(stats?.teacher_ranking ?? []).map((t, idx) => (
               <div key={t.name} className="flex items-center gap-3 p-2.5 rounded-md hover:bg-[#F7F6F3] transition-colors">
                 <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 ${
                   idx === 0 ? 'bg-yellow-100 text-yellow-600' :
@@ -230,6 +241,7 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
                 </div>
               </div>
             ))}
+            {!stats && <p className="text-xs text-[#AEADAB] text-center py-4">Cargando datos reales…</p>}
           </div>
         </div>
 
@@ -239,17 +251,18 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
             <PieChart className="w-4 h-4 text-[#787774]" /> Distribución por Áreas
           </h3>
           <div className="space-y-2.5">
-            {AREAS_DATA.map(area => (
+            {(stats?.areas_data ?? []).map((area, i) => (
               <div key={area.label}>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-[#37352F] font-medium">{area.label}</span>
                   <span className="text-[#787774]">{area.pct}%</span>
                 </div>
                 <div className="h-2 bg-[#F7F6F3] rounded-full overflow-hidden">
-                  <div className="h-full rounded-full" style={{ width: `${area.pct}%`, backgroundColor: area.color }} />
+                  <div className="h-full rounded-full" style={{ width: `${area.pct}%`, backgroundColor: AREA_COLORS[i % AREA_COLORS.length] }} />
                 </div>
               </div>
             ))}
+            {!stats && <p className="text-xs text-[#AEADAB] text-center py-4">Cargando…</p>}
           </div>
         </div>
       </div>
@@ -259,14 +272,14 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-[#E03E3E]" /> Estudiantes en Riesgo
-            <span className="ml-1 px-2 py-0.5 bg-[#FDEEEE] text-[#E03E3E] text-xs rounded-full font-bold">12</span>
+            <span className="ml-1 px-2 py-0.5 bg-[#FDEEEE] text-[#E03E3E] text-xs rounded-full font-bold">{stats?.at_risk_count ?? '—'}</span>
           </h3>
           <button onClick={() => onNavigate?.('alertas')} className="text-xs text-[#787774] hover:text-[#37352F] transition-colors flex items-center gap-1">
             Ver NeuroAlertas <ExternalLink className="w-3 h-3" />
           </button>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {MOCK_AT_RISK.map(s => (
+          {(stats?.at_risk_detail ?? []).map(s => (
             <div key={s.name} className="border border-[#F4BDBD] bg-[#FDEEEE]/40 rounded-md p-3">
               <div className="flex items-center gap-2 mb-1.5">
                 <div className="w-6 h-6 bg-[#FDEEEE] rounded-full flex items-center justify-center text-xs font-bold text-[#E03E3E]">
@@ -280,11 +293,12 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
               <div className="flex items-center justify-between">
                 <span className="text-lg font-bold text-[#E03E3E]">{s.avg}</span>
                 <span className="text-xs text-[#E03E3E] flex items-center gap-0.5 font-semibold">
-                  <TrendingDown className="w-3 h-3" /> {s.trend}
+                  <TrendingDown className="w-3 h-3" /> riesgo
                 </span>
               </div>
             </div>
           ))}
+          {!stats && <p className="text-xs text-[#AEADAB] col-span-4 text-center py-4">Cargando datos reales…</p>}
         </div>
       </div>
 

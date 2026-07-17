@@ -1,6 +1,44 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User } from 'lucide-react';
 import api from '../../../services/api';
+
+// ── Utilidad: imprime solo las credenciales en una ventana nueva ─────────────
+function printCredentials(credentials: any[], title: string) {
+  const rows = credentials.map((c, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${c.full_name || '-'}</td>
+      <td class="mono">${c.username}</td>
+      <td class="pwd">${c.temp_password}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="es"><head>
+    <meta charset="UTF-8"/>
+    <title>Credenciales — ${title}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:32px;color:#191919;max-width:800px;margin:0 auto}
+      h1{font-size:20px;margin-bottom:4px}
+      .sub{color:#787774;font-size:13px;margin-bottom:24px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#F7F6F3;padding:10px 14px;text-align:left;font-size:12px;color:#787774;border-bottom:1px solid #E9E9E7;text-transform:uppercase;letter-spacing:.05em}
+      td{padding:10px 14px;font-size:13px;border-bottom:1px solid #F0EFED}
+      .mono{font-family:monospace}
+      .pwd{font-family:monospace;font-weight:700;color:#0B6E99}
+      .footer{margin-top:28px;font-size:11px;color:#AEADAB;text-align:center}
+      @media print{button{display:none}}
+    </style></head><body>
+    <h1>Credenciales Nuevas</h1>
+    <p class="sub">${title} — ${new Date().toLocaleDateString('es-CO')}</p>
+    <table>
+      <thead><tr><th>#</th><th>Nombre completo</th><th>Usuario</th><th>Contraseña temporal</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="footer">NeuroLearn AI — Documento confidencial. Entrega personal al usuario.</p>
+    </body></html>`;
+
+  const w = window.open('', '_blank', 'width=860,height=620');
+  if (w) { w.document.write(html); w.document.close(); w.focus(); w.print(); }
+}
 
 // ── Utilidad: genera y descarga un archivo CSV de plantilla ─────────────────
 function downloadCsvTemplate(filename: string, headers: string, exampleRow: string) {
@@ -25,31 +63,77 @@ function CredentialsTable({
   title: string;
   icon: any;
 }) {
+  const [selected, setSelected] = useState<Set<number>>(() => new Set(credentials.map((_, i) => i)));
+
   if (credentials.length === 0) return null;
+
+  const allChecked  = selected.size === credentials.length;
+  const someChecked = selected.size > 0 && !allChecked;
+
+  function toggleAll() {
+    setSelected(allChecked ? new Set() : new Set(credentials.map((_, i) => i)));
+  }
+
+  function toggleOne(idx: number) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+  }
+
+  const selectedCreds = credentials.filter((_, i) => selected.has(i));
 
   return (
     <div className="mt-8 bg-white border border-[#E9E9E7] rounded-lg overflow-hidden shadow-sm">
-      <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center gap-2">
-        <Icon className="w-5 h-5 text-[#37352F]" />
-        <h3 className="font-medium text-[#37352F]">{title}</h3>
+      <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Icon className="w-5 h-5 text-[#37352F]" />
+          <h3 className="font-medium text-[#37352F]">{title}</h3>
+        </div>
+        <span className="text-xs text-[#787774]">
+          {selected.size} de {credentials.length} seleccionados
+        </span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left bg-white">
           <thead className="bg-[#F7F6F3]/50">
             <tr>
-              <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Usuario</th>
-              <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Nombre completo</th>
-              <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Contraseña Temporal</th>
-              <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider text-right">Acción</th>
+              <th className="pl-6 pr-2 py-3">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  ref={el => { if (el) el.indeterminate = someChecked; }}
+                  onChange={toggleAll}
+                  className="w-4 h-4 accent-[#0B6E99] cursor-pointer"
+                  title="Seleccionar todos"
+                />
+              </th>
+              <th className="px-4 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Usuario</th>
+              <th className="px-4 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Nombre completo</th>
+              <th className="px-4 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Contraseña Temporal</th>
+              <th className="px-4 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider text-right">Acción</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E9E9E7]">
             {credentials.map((cred, idx) => (
-              <tr key={idx} className="hover:bg-[#F7F6F3]/50 transition-colors">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#37352F] font-medium font-mono">{cred.username}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#787774]">{cred.full_name || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#37352F] font-mono tracking-wider font-semibold">{cred.temp_password}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+              <tr
+                key={idx}
+                className={`transition-colors cursor-pointer ${selected.has(idx) ? 'bg-[#EEF6FB]' : 'hover:bg-[#F7F6F3]/50'}`}
+                onClick={() => toggleOne(idx)}
+              >
+                <td className="pl-6 pr-2 py-4" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(idx)}
+                    onChange={() => toggleOne(idx)}
+                    className="w-4 h-4 accent-[#0B6E99] cursor-pointer"
+                  />
+                </td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-[#37352F] font-medium font-mono">{cred.username}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-[#787774]">{cred.full_name || '-'}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-[#37352F] font-mono tracking-wider font-semibold">{cred.temp_password}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-right" onClick={e => e.stopPropagation()}>
                   <button 
                     onClick={() => navigator.clipboard.writeText(`Usuario: ${cred.username} | Pass: ${cred.temp_password}`)}
                     className="text-[#787774] hover:text-[#37352F] transition-colors flex items-center gap-1 justify-end ml-auto"
@@ -66,14 +150,15 @@ function CredentialsTable({
       </div>
       <div className="bg-[#F7F6F3]/30 px-6 py-3 border-t border-[#E9E9E7] flex justify-between items-center hide-print">
         <p className="text-xs text-[#787774]">
-          * Estas contraseñas son temporales y cambiarán una vez que el usuario inicie sesión.
+          * Contraseñas temporales. Selecciona las filas que deseas incluir al imprimir.
         </p>
         <button 
-          onClick={() => window.print()}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#37352F] bg-white border border-[#E9E9E7] rounded hover:bg-[#F7F6F3] shadow-sm transition-all"
+          onClick={() => printCredentials(selectedCreds, title)}
+          disabled={selected.size === 0}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-[#37352F] bg-white border border-[#E9E9E7] rounded hover:bg-[#F7F6F3] shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Download className="w-4 h-4" />
-          Exportar PDF o Imprimir
+          Exportar / Imprimir ({selected.size})
         </button>
       </div>
     </div>
@@ -87,6 +172,18 @@ export function TeachersTab({ license }: { license: any }) {
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newCredentials, setNewCredentials] = useState<any[]>([]);
+  const [existingTeachers, setExistingTeachers] = useState<any[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+
+  const loadTeachers = async () => {
+    try {
+      const res = await api.get('/super/teachers');
+      setExistingTeachers(res.data || []);
+    } catch { /* silencioso */ }
+    finally { setLoadingList(false); }
+  };
+
+  useEffect(() => { loadTeachers(); }, []);
 
   // Individual Form
   const [firstName, setFirstName]       = useState('');
@@ -118,6 +215,7 @@ export function TeachersTab({ license }: { license: any }) {
       
       setMessage('¡Profesor creado exitosamente!');
       setNewCredentials(prev => [response.data, ...prev]);
+      loadTeachers();
       
       // Reset form
       setFirstName('');
@@ -156,6 +254,7 @@ export function TeachersTab({ license }: { license: any }) {
       
       setMessage(`Se han procesado ${response.data.total_processed} profesores en lote.`);
       setNewCredentials(response.data.credentials);
+      loadTeachers();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al procesar el archivo CSV');
     } finally {
@@ -393,6 +492,53 @@ export function TeachersTab({ license }: { license: any }) {
         title="Nuevas Credenciales de Profesores" 
         icon={Users} 
       />
+
+      {/* Lista persistente de profesores existentes */}
+      {(existingTeachers.length > 0 || loadingList) && (
+        <div className="mt-6 bg-white border border-[#E9E9E7] rounded-lg overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#37352F]" />
+              <h3 className="font-medium text-[#37352F]">Todos los Profesores Registrados</h3>
+            </div>
+            <span className="text-xs text-[#787774]">{existingTeachers.length} profesor(es)</span>
+          </div>
+          {loadingList ? (
+            <div className="p-6 text-center text-sm text-[#787774]">Cargando...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left bg-white">
+                <thead className="bg-[#F7F6F3]/50">
+                  <tr>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Nombre</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Usuario</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Documento</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Correo</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Área</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E9E9E7]">
+                  {existingTeachers.map((t: any) => (
+                    <tr key={t.id} className="hover:bg-[#F7F6F3]/50 transition-colors">
+                      <td className="px-6 py-3 text-sm text-[#37352F] font-medium">{t.full_name}</td>
+                      <td className="px-6 py-3 text-sm font-mono text-[#37352F]">{t.username}</td>
+                      <td className="px-6 py-3 text-sm text-[#787774]">{t.document_type} {t.document_number}</td>
+                      <td className="px-6 py-3 text-sm text-[#787774]">{t.email || '-'}</td>
+                      <td className="px-6 py-3 text-sm text-[#787774]">{t.subject_area || '-'}</td>
+                      <td className="px-6 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${t.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {t.is_active ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -404,6 +550,18 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [newCredentials, setNewCredentials] = useState<any[]>([]);
+  const [existingStudents, setExistingStudents] = useState<any[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+
+  const loadStudents = async () => {
+    try {
+      const res = await api.get('/super/students');
+      setExistingStudents(res.data || []);
+    } catch { /* silencioso */ }
+    finally { setLoadingList(false); }
+  };
+
+  useEffect(() => { loadStudents(); }, []);
 
 // Individual Form
   const [firstName, setFirstName]           = useState('');
@@ -437,6 +595,7 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
       
       setMessage('¡Estudiante creado exitosamente!');
       setNewCredentials(prev => [response.data, ...prev]);
+      loadStudents();
       
       // Reset form
       setFirstName('');
@@ -480,6 +639,7 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
       
       setMessage(`Se han procesado ${response.data.total_processed} estudiantes en lote.`);
       setNewCredentials(response.data.credentials);
+      loadStudents();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al procesar el archivo CSV');
     } finally {
@@ -714,6 +874,51 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
         title="Nuevas Credenciales Generadas" 
         icon={GraduationCap} 
       />
+
+      {/* Lista persistente de estudiantes existentes */}
+      {(existingStudents.length > 0 || loadingList) && (
+        <div className="mt-6 bg-white border border-[#E9E9E7] rounded-lg overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <GraduationCap className="w-5 h-5 text-[#37352F]" />
+              <h3 className="font-medium text-[#37352F]">Todos los Estudiantes Registrados</h3>
+            </div>
+            <span className="text-xs text-[#787774]">{existingStudents.length} estudiante(s)</span>
+          </div>
+          {loadingList ? (
+            <div className="p-6 text-center text-sm text-[#787774]">Cargando...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left bg-white">
+                <thead className="bg-[#F7F6F3]/50">
+                  <tr>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Nombre</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Usuario</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Documento</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Grado</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E9E9E7]">
+                  {existingStudents.map((s: any) => (
+                    <tr key={s.id} className="hover:bg-[#F7F6F3]/50 transition-colors">
+                      <td className="px-6 py-3 text-sm text-[#37352F] font-medium">{s.full_name}</td>
+                      <td className="px-6 py-3 text-sm font-mono text-[#37352F]">{s.username}</td>
+                      <td className="px-6 py-3 text-sm text-[#787774]">{s.document_type} {s.document_number}</td>
+                      <td className="px-6 py-3 text-sm text-[#787774]">{s.grade || '-'}</td>
+                      <td className="px-6 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                          {s.is_active ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

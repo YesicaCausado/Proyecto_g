@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Clock, BookOpen, ClipboardList, Megaphone, Calendar, Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Clock, BookOpen, ClipboardList, Megaphone, Calendar, Info, Loader2 } from 'lucide-react';
+import api from '../../services/api';
 
 type EventType = 'examen' | 'tarea' | 'clase' | 'anuncio' | 'evento' | 'feriado';
 
@@ -28,17 +29,18 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const fmt  = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
 const todayStr = fmt(today.getFullYear(), today.getMonth(), today.getDate());
 
-const MOCK_EVENTS: CalEvent[] = [
-  { id:'e1', title:'Parcial Física — Unidad 2', date: fmt(today.getFullYear(), today.getMonth(), 5),  type:'examen',  group:'Física 10B',     teacherName:'Prof. María López',    time:'8:00 AM',  description:'Cubre Termodinámica y Ondas. Traer calculadora.' },
-  { id:'e2', title:'Entrega Tarea #4 — Ecuaciones', date: fmt(today.getFullYear(), today.getMonth(), 7),  type:'tarea',   group:'Matemáticas 9A', teacherName:'Prof. Carlos Martínez',time:'11:59 PM', description:'Subir en plataforma antes de medianoche.'       },
-  { id:'e3', title:'Feria de Ciencias',          date: fmt(today.getFullYear(), today.getMonth(), 10), type:'evento',  group:'Todos',          teacherName:'Institución',          time:'9:00 AM',  description:'Participación obligatoria para grados 9° y 10°.' },
-  { id:'e4', title:'Reunión padres de familia',  date: fmt(today.getFullYear(), today.getMonth(), 12), type:'anuncio', group:'Todos',          teacherName:'Coordinación',         time:'6:00 PM',  description:'Informes académicos primer semestre.'            },
-  { id:'e5', title:'Quiz — Funciones lineales',  date: fmt(today.getFullYear(), today.getMonth(), 14), type:'examen',  group:'Álgebra 8C',     teacherName:'Prof. Ana Torres',     time:'9:30 AM',  description:'Temas: funciones lineales y cuadráticas.'        },
-  { id:'e6', title:'Clase de recuperación Física',date: fmt(today.getFullYear(), today.getMonth(), 17), type:'clase',   group:'Física 10B',     teacherName:'Prof. María López',    time:'2:00 PM',  description:'Repaso termodinámica para los que tuvieron dificultades.' },
-  { id:'e7', title:'Día cívico — Festividades',  date: fmt(today.getFullYear(), today.getMonth(), 20), type:'feriado'                                                                                                                                                   },
-  { id:'e8', title:'Entrega proyecto Sociales',  date: fmt(today.getFullYear(), today.getMonth(), 22), type:'tarea',   group:'Ciencias Sociales', teacherName:'Prof. Pedro Ramírez',time:'8:00 AM',  description:'Proyecto en grupo sobre historia de Colombia.'   },
-  { id:'e9', title:'Examen final Matemáticas',   date: fmt(today.getFullYear(), today.getMonth(), 28), type:'examen',  group:'Matemáticas 9A', teacherName:'Prof. Carlos Martínez',time:'7:00 AM',  description:'Examen integral. Toda la materia del semestre.'  },
-];
+function mapEvent(raw: any): CalEvent {
+  return {
+    id:          String(raw.id),
+    title:       raw.title,
+    date:        raw.event_date,
+    type:        (raw.event_type ?? 'clase') as EventType,
+    group:       raw.classroom_name ?? undefined,
+    teacherName: raw.teacher_name ?? undefined,
+    description: raw.description ?? undefined,
+    time:        raw.event_time ?? undefined,
+  };
+}
 
 const DAYS   = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -48,6 +50,18 @@ export default function CalendarPage() {
   const [year,     setYear]     = useState(today.getFullYear());
   const [selected, setSelected] = useState<string | null>(null);
   const [detailEv, setDetailEv] = useState<CalEvent | null>(null);
+  const [events,   setEvents]   = useState<CalEvent[]>([]);
+  const [loading,  setLoading]  = useState(true);
+
+  // Cargar eventos al montar y al cambiar de mes
+  useEffect(() => {
+    setLoading(true);
+    const monthStr = `${year}-${pad(month + 1)}`;
+    api.get(`/events?month=${monthStr}`)
+      .then(res => setEvents((res.data.events ?? []).map(mapEvent)))
+      .catch(() => setEvents([]))
+      .finally(() => setLoading(false));
+  }, [year, month]);
 
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -56,15 +70,21 @@ export default function CalendarPage() {
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
-  const eventsOn  = (d: number) => MOCK_EVENTS.filter(e => e.date === fmt(year, month, d));
-  const selEvents = selected ? MOCK_EVENTS.filter(e => e.date === selected) : [];
-  const upcoming  = [...MOCK_EVENTS]
+  const eventsOn  = (d: number) => events.filter(e => e.date === fmt(year, month, d));
+  const selEvents = selected ? events.filter(e => e.date === selected) : [];
+  const upcoming  = [...events]
     .filter(e => e.date >= todayStr)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 7);
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="w-6 h-6 text-[#787774] animate-spin" />
+    </div>
+  );
 
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -227,7 +247,7 @@ export default function CalendarPage() {
           <div className="bg-white border border-[#E9E9E7] rounded-xl p-5">
             <h3 className="font-semibold text-[#191919] text-sm mb-3">Este mes</h3>
             {(['examen','tarea','evento','anuncio'] as EventType[]).map(type => {
-              const count = MOCK_EVENTS.filter(e =>
+              const count = events.filter((e: CalEvent) =>
                 e.type === type &&
                 e.date.startsWith(`${year}-${pad(month + 1)}`)
               ).length;
@@ -243,7 +263,7 @@ export default function CalendarPage() {
                 </div>
               );
             })}
-            {MOCK_EVENTS.filter(e => e.date.startsWith(`${year}-${pad(month + 1)}`)).length === 0 && (
+            {events.filter((e: CalEvent) => e.date.startsWith(`${year}-${pad(month + 1)}`)).length === 0 && (
               <p className="text-xs text-[#AEADAB]">Sin eventos este mes.</p>
             )}
           </div>

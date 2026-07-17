@@ -23,14 +23,25 @@ from app.core.config import settings
 from app.db.database import engine, Base
 from app.api import auth, chat, expert_bot, classroom, stats
 from app.api import credentials  # B2B credential system
+from app.api import posts, events, messages  # Tablero, Calendario, Mensajes
+from app.api import super_stats               # Super Profesor stats institucionales
+from app.api import teacher_stats            # Teacher dashboard stats
+from app.api import teacher_materials        # Teacher materials (carpetas + archivos)
+from app.api import teacher_evaluations      # Teacher evaluations (evaluaciones)
+from app.api import license                  # License system
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
 import app.models.learning      # noqa: F401
 import app.models.expert_bot    # noqa: F401
 import app.models.classroom     # noqa: F401
-import app.models.institution      # noqa: F401
-import app.models.password_reset   # noqa: F401
+import app.models.institution   # noqa: F401
+import app.models.posts         # noqa: F401
+import app.models.events        # noqa: F401
+import app.models.messages      # noqa: F401
+import app.models.password_reset            # noqa: F401 — PasswordResetToken
+import app.api.teacher_materials            # noqa: F401 — registers TeacherFolder + TeacherMaterial
+import app.api.teacher_evaluations          # noqa: F401 — registers TeacherEvaluation
 
 # Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
 try:
@@ -68,7 +79,7 @@ def _ensure_demo_user():
                     username="demo",
                     email="demo@neurolearn.app",
                     full_name="Usuario Demo",
-                    hashed_password=pwd.hash("demo1234"),
+                    hashed_password=pwd.hash("demo"),
                     role=UserRole.ESTUDIANTE,
                     is_active=True,
                 )
@@ -89,6 +100,34 @@ def _ensure_demo_user():
                 db.add(user_adm)
                 import logging
                 logging.getLogger(__name__).info("✅ Usuario admin creado: admin / admin1234")
+
+            # 3. Usuario Profesor demo
+            if not db.query(User).filter(User.username == "profesor").first():
+                user_prof = User(
+                    username="profesor",
+                    email="profesor@neurolearn.app",
+                    full_name="Profesor Demo",
+                    hashed_password=pwd.hash("profesor"),
+                    role=UserRole.PROFESOR,
+                    is_active=True,
+                )
+                db.add(user_prof)
+                import logging
+                logging.getLogger(__name__).info("✅ Usuario profesor creado: profesor / profesor")
+
+            # 4. Usuario Super Profesor demo
+            if not db.query(User).filter(User.username == "superprofesor").first():
+                user_sp = User(
+                    username="superprofesor",
+                    email="superprofesor@neurolearn.app",
+                    full_name="Super Profesor Demo",
+                    hashed_password=pwd.hash("superprofesor"),
+                    role=UserRole.SUPER_PROFESOR,
+                    is_active=True,
+                )
+                db.add(user_sp)
+                import logging
+                logging.getLogger(__name__).info("✅ Usuario superprofesor creado: superprofesor / superprofesor")
             
             db.commit()
         finally:
@@ -97,8 +136,54 @@ def _ensure_demo_user():
         import logging
         logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuarios demo (sin DB o error): {e}")
 
+def _ensure_demo_institution():
+    """
+    Crea la institución demo y asigna institution_id a los usuarios
+    super_profesor / profesor que no tengan ninguna institución asignada.
+    Idempotente: se puede ejecutar múltiples veces sin efectos secundarios.
+    """
+    from app.db.database import SessionLocal
+    from app.models.user import User, UserRole
+    from app.models.institution import Institution
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        db = SessionLocal()
+        try:
+            # 1. Crear institución demo si no existe
+            inst = db.query(Institution).filter(Institution.dane_code == "DEMO0001").first()
+            if not inst:
+                inst = Institution(
+                    name="Institución Demo NeuroLearn",
+                    dane_code="DEMO0001",
+                    license_type="premium",
+                    is_active=True,
+                )
+                db.add(inst)
+                db.flush()
+                log.info(f"✅ Institución demo creada: id={inst.id}")
+
+            # 2. Asignar a todos los super_profesor / profesor sin institución
+            for username in ("superprofesor", "profesor"):
+                u = db.query(User).filter(User.username == username).first()
+                if u and not u.institution_id:
+                    u.institution_id = inst.id
+                    log.info(f"✅ {username}.institution_id = {inst.id}")
+
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        import logging as _log
+        _log.getLogger(__name__).warning(f"⚠️ No se pudo crear institución demo: {e}")
+
 try:
     _ensure_demo_user()
+except Exception:
+    pass
+
+try:
+    _ensure_demo_institution()
 except Exception:
     pass
 
@@ -131,6 +216,14 @@ app.include_router(expert_bot.router,    prefix="/api/v1/bots")
 app.include_router(classroom.router,     prefix="/api/v1/classrooms")
 app.include_router(stats.router,         prefix="/api/v1/stats")
 app.include_router(credentials.router,   prefix="/api/v1")
+app.include_router(posts.router,         prefix="/api/v1")
+app.include_router(events.router,        prefix="/api/v1")
+app.include_router(messages.router,      prefix="/api/v1")
+app.include_router(super_stats.router,         prefix="/api/v1")
+app.include_router(teacher_stats.router,       prefix="/api/v1")
+app.include_router(teacher_materials.router,   prefix="/api/v1")
+app.include_router(teacher_evaluations.router, prefix="/api/v1")
+app.include_router(license.router,             prefix="/api/v1")
 
 
 @app.get("/")

@@ -76,8 +76,8 @@ export default function CreateInstitution() {
   if (created) {
     const c = created.credential;
     return (
-      <div className="p-8 max-w-xl mx-auto">
-        <div className="bg-white border border-[#E9E9E7] rounded-md p-8">
+      <div className="p-4 sm:p-8 max-w-xl mx-auto">
+        <div className="bg-white border border-[#E9E9E7] rounded-md p-5 sm:p-8">
           <div className="flex flex-col items-center text-center mb-6">
             <div className="w-14 h-14 bg-[#EEF7F4] rounded-full flex items-center justify-center mb-3">
               <BadgeCheck className="w-7 h-7 text-[#0F7B6C]" />
@@ -145,8 +145,8 @@ export default function CreateInstitution() {
 
   // ── Formulario ─────────────────────────────────────────────────
   return (
-    <div className="p-8 max-w-2xl">
-      <div className="flex items-center gap-3 mb-7">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl">
+      <div className="flex items-center gap-3 mb-5 sm:mb-7">
         <Link to="/admin" className="p-1.5 rounded-md hover:bg-[#F1F1EF] text-[#787774]"><ArrowLeft className="w-4 h-4" /></Link>
         <div>
           <h1 className="text-xl font-bold text-[#191919]">Registrar institución</h1>
@@ -168,7 +168,7 @@ export default function CreateInstitution() {
               onChange={set('dane_code')} placeholder="Ej: 154001000149" error={errors.dane_code} />
             <div>
               <label className="block text-xs font-medium text-[#37352F] mb-2">Tipo de licencia</label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {(Object.entries(LICENSE_INFO) as [LicenseType, typeof LICENSE_INFO.basica][]).map(([key, info]) => (
                   <button key={key} type="button" onClick={() => setForm(f => ({ ...f, license_type: key }))}
                     className={`p-3 border-2 rounded-md text-left transition-all ${form.license_type === key ? 'border-[#37352F] bg-[#F7F6F3]' : 'border-[#E9E9E7] hover:border-[#9B9A97]'}`}>
@@ -190,7 +190,7 @@ export default function CreateInstitution() {
           <div className="space-y-4">
             <InputField label="Nombre completo *" icon={User} value={form.sp_full_name}
               onChange={set('sp_full_name')} placeholder="Ej: Carlos Andrés Mendoza" error={errors.sp_full_name} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-[#37352F] mb-1">Tipo de documento</label>
                 <div className="relative">

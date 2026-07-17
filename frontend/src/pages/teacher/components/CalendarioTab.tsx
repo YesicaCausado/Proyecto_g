@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import api from '../../../services/api';
 
 type EventType = 'examen' | 'tarea' | 'clase' | 'anuncio' | 'evento';
 
@@ -23,26 +24,35 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const dateStr = (y: number, m: number, d: number) => `${y}-${pad(m+1)}-${pad(d)}`;
 const todayStr = dateStr(today.getFullYear(), today.getMonth(), today.getDate());
 
-const INITIAL_EVENTS: CalEvent[] = [
-  { id:'ev1', title:'Parcial 1 — Física 10B',       date:`${today.getFullYear()}-${pad(today.getMonth()+1)}-05`, type:'examen',  group:'Física 10B'    },
-  { id:'ev2', title:'Entrega Tarea #4 — Mat 9A',     date:`${today.getFullYear()}-${pad(today.getMonth()+1)}-08`, type:'tarea',   group:'Matemáticas 9A'},
-  { id:'ev3', title:'Feria de Ciencias',             date:`${today.getFullYear()}-${pad(today.getMonth()+1)}-12`, type:'evento'                         },
-  { id:'ev4', title:'Reunión docentes',              date:`${today.getFullYear()}-${pad(today.getMonth()+1)}-15`, type:'anuncio'                        },
-  { id:'ev5', title:'Clase refuerzo Álgebra 8C',     date:`${today.getFullYear()}-${pad(today.getMonth()+1)}-18`, type:'clase',   group:'Álgebra 8C'    },
-  { id:'ev6', title:'Quiz Leyes de Newton',          date:`${today.getFullYear()}-${pad(today.getMonth()+1)}-22`, type:'examen',  group:'Física 10B'    },
-];
-
 const DAYS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const GROUPS = ['Matemáticas 9A','Física 10B','Álgebra 8C','Cálculo 11A','Todos'];
 
+function mapEvent(raw: any): CalEvent {
+  return {
+    id:    String(raw.id),
+    title: raw.title,
+    date:  raw.event_date ?? raw.date,
+    type:  (raw.event_type ?? raw.type ?? 'clase') as EventType,
+    group: raw.classroom_name ?? raw.group,
+  };
+}
+
 export default function CalendarioTab() {
   const [month,    setMonth]    = useState(today.getMonth());
   const [year,     setYear]     = useState(today.getFullYear());
-  const [events,   setEvents]   = useState<CalEvent[]>(INITIAL_EVENTS);
+  const [events,   setEvents]   = useState<CalEvent[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title:'', type:'clase' as EventType, group:'Todos', date:'' });
+
+  const monthStr = `${year}-${pad(month + 1)}`;
+
+  useEffect(() => {
+    api.get(`/events?month=${monthStr}`)
+      .then(r => setEvents((r.data.events ?? r.data ?? []).map(mapEvent)))
+      .catch(() => setEvents([]));
+  }, [monthStr]);
 
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -54,15 +64,27 @@ export default function CalendarioTab() {
   const eventsOnDay = (d: number) => events.filter(e => e.date === dateStr(year, month, d));
   const selectedEvents = selected ? events.filter(e => e.date === selected) : [];
 
-  const addEvent = () => {
+  const addEvent = async () => {
     if (!form.title.trim() || !form.date) return;
-    const ev: CalEvent = { id: Date.now().toString(), title: form.title.trim(), type: form.type, date: form.date, group: form.group !== 'Todos' ? form.group : undefined };
-    setEvents(prev => [...prev, ev]);
-    setForm({ title:'', type:'clase', group:'Todos', date: form.date });
+    try {
+      const res = await api.post('/events', {
+        title:      form.title.trim(),
+        event_type: form.type,
+        event_date: form.date,
+      });
+      setEvents(prev => [...prev, mapEvent(res.data)]);
+    } catch {
+      const ev: CalEvent = { id: Date.now().toString(), title: form.title.trim(), type: form.type, date: form.date, group: form.group !== 'Todos' ? form.group : undefined };
+      setEvents(prev => [...prev, ev]);
+    }
+    setForm({ title:'', type:'clase', group:'Todos', date:'' });
     setShowForm(false);
   };
 
-  const removeEvent = (id: string) => setEvents(prev => prev.filter(e => e.id !== id));
+  const deleteEvent = async (id: string) => {
+    setEvents(prev => prev.filter(e => e.id !== id));
+    try { await api.delete(`/events/${id}`); } catch { /* already removed */ }
+  };
 
   const prev = () => { if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); };
   const next = () => { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1); };
@@ -149,7 +171,7 @@ export default function CalendarioTab() {
                     <p className="text-sm font-medium truncate">{ev.title}</p>
                     {ev.group && <p className="text-[11px] opacity-70">{ev.group}</p>}
                   </div>
-                  <button onClick={() => removeEvent(ev.id)} className="opacity-50 hover:opacity-100 text-xs transition-opacity">×</button>
+                  <button onClick={() => deleteEvent(ev.id)} className="opacity-50 hover:opacity-100 text-xs transition-opacity">×</button>
                 </div>
               ))
             )}

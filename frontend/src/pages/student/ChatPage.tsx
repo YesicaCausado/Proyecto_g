@@ -80,7 +80,12 @@ const detectSkillFromText = (text: string): string => {
 
 export default function ChatPage() {
   const [searchParams] = useSearchParams();
-  const skillParam = searchParams.get("skill");
+  const skillParam    = searchParams.get("skill");
+  const botIdParam    = searchParams.get("bot_id");
+  const botNameParam  = searchParams.get("bot_name");
+
+  // If bot_id is present (teacher testing their own bot), start directly
+  const isCustomBot = !!botIdParam;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -89,9 +94,9 @@ export default function ChatPage() {
   const [sessionActive, setSessionActive] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState(skillParam || "");
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
-  const [showDashboard, setShowDashboard] = useState(true);
-  const [quizSuggested, setQuizSuggested] = useState(false); // Flag para mostrar botón "Quiz Sugerido"
-  const [freeInput, setFreeInput] = useState(""); // Input de la pantalla pre-sesión
+  const [showDashboard, setShowDashboard] = useState(!isCustomBot);
+  const [quizSuggested, setQuizSuggested] = useState(false);
+  const [freeInput, setFreeInput] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -134,6 +139,18 @@ export default function ChatPage() {
     if (skillParam && !sessionActive) setSelectedSkill(skillParam);
   }, [skillParam]);
 
+  // Auto-start when coming from teacher "Probar" button (?bot_id=...)
+  useEffect(() => {
+    if (botIdParam && !sessionActive && !sending) {
+      const topic = skillParam ? decodeURIComponent(skillParam)
+        : botNameParam ? decodeURIComponent(botNameParam)
+        : 'General';
+      setSelectedSkill(topic);
+      startSession(topic);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botIdParam]);
+
   /**
    * Construye el mensaje de error visible para el usuario.
    * @deprecated — Los errores 5xx ahora caen silenciosamente al modo demo.
@@ -143,22 +160,24 @@ export default function ChatPage() {
 
   const startSession = async (skillKey: string, initialMessage?: string) => {
     const skill = SKILLS.find((s) => s.key === skillKey);
-    if (!skill) return;
+    // For custom bots, use the bot's subject as topic even if skill not in list
+    const topicForBot = botIdParam
+      ? (skillParam ? decodeURIComponent(skillParam) : botNameParam ? decodeURIComponent(botNameParam) : 'General')
+      : null;
+    const topic = topicForBot ?? skill?.topic;
+    if (!topic) return;
     setSending(true);
 
     let data: ChatMessageResponse;
 
-    // ── Paso 1: llamada al backend. Solo ESTE bloque decide si hubo
-    // un error real de red/HTTP. Nada de procesamiento de UI aquí. ──
+    // ── Paso 1: llamada al backend ──
     try {
-      const res = await api.post<ChatMessageResponse>("/chat/start", {
-        topic: skill.topic,
-        difficulty: "medium",
-      });
+      const payload: any = { topic, difficulty: "medium" };
+      if (botIdParam) payload.bot_id = Number(botIdParam);
+      const res = await api.post<ChatMessageResponse>("/chat/start", payload);
       data = res.data;
     } catch (err: any) {
       if (err?.response && err.response.status < 500) {
-        // Error de cliente (4xx) — sí mostrar al usuario
         const detail = err.response.data?.detail || `Error ${err.response.status}`;
         console.error("Error starting session (HTTP 4xx):", detail);
         setSessionActive(true);
@@ -172,10 +191,9 @@ export default function ChatPage() {
         inputRef.current?.focus();
         return;
       }
-      // 5xx o sin respuesta (IA no configurada, backend caído) → demo silencioso
       console.warn("Backend/IA no disponible, usando demo:", err?.response?.status ?? err?.message);
       await new Promise((r) => setTimeout(r, 600));
-      data = demoStartSession(skillKey);
+      data = demoStartSession(skillKey || topic);
     }
 
     // ── Paso 2: blindaje de forma de la respuesta.
@@ -405,7 +423,7 @@ export default function ChatPage() {
     };
 
     return (
-      <div className="flex h-[calc(100vh-64px)] bg-[#F7F6F3] justify-center">
+      <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3] justify-center">
         <div className="flex flex-col w-full max-w-2xl">
           {/* ── Header ── */}
           <div className="bg-white border-b border-[#E9E9E7] px-5 py-4 flex items-center gap-3">
@@ -517,7 +535,7 @@ export default function ChatPage() {
 
   // ===== CHAT VIEW =====
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-[#F7F6F3]">
+    <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
       {/* Chat Panel */}
       <div className="flex flex-col flex-1 min-w-0 relative">
         {/* Header */}

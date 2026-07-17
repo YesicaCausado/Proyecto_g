@@ -7,14 +7,14 @@ const DEMO_MODE = false;
 
 // ─────────────────────────────────────────────────────────────────
 // Usuarios demo por rol — credenciales temporales de prueba
-//   demo        / demo1234          → Panel Estudiante
-//   profesor    / profesor1234      → Panel Profesor
-//   admin       / admin1234         → Panel Admin
-//   superprofesor / superprofesor1234 → Panel Super Profesor (Rector)
+//   demo        / demo            → Panel Estudiante
+//   profesor    / profesor        → Panel Profesor
+//   admin       / admin1234       → Panel Admin
+//   superprofesor / superprofesor → Panel Super Profesor (Rector)
 // ─────────────────────────────────────────────────────────────────
 const DEMO_USERS: Record<string, User & { _password: string }> = {
   demo: {
-    _password: 'demo1234',
+    _password: 'demo',
     id: 10,
     username: 'demo',
     email: 'estudiante@neurolearn.app',
@@ -26,7 +26,7 @@ const DEMO_USERS: Record<string, User & { _password: string }> = {
     cognitive_profile: null,
   },
   profesor: {
-    _password: 'profesor1234',
+    _password: 'profesor',
     id: 20,
     username: 'profesor',
     email: 'profesor@neurolearn.app',
@@ -50,7 +50,7 @@ const DEMO_USERS: Record<string, User & { _password: string }> = {
     cognitive_profile: null,
   },
   superprofesor: {
-    _password: 'superprofesor1234',
+    _password: 'superprofesor',
     id: 40,
     username: 'superprofesor',
     email: 'rector@neurolearn.app',
