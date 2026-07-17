@@ -93,6 +93,8 @@ async def get_super_dashboard(
 ):
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
+    if not inst_id:
+        raise HTTPException(status_code=400, detail="No tienes una institución asignada")
 
     # ── Usuarios de la institución ───────────────────────────────
     teachers_q = db.query(User).filter(

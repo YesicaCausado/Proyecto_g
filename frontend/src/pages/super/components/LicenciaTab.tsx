@@ -28,11 +28,11 @@ function UsageBar({ label, current, max, color, icon: Icon }: { label: string; c
 
 export default function LicenciaTab({ license }: { license: any }) {
   // Calcula días restantes desde la fecha real si el backend la provee
-  const expiryDate = license?.expiry_date ? new Date(license.expiry_date) : new Date('2026-08-15');
+  const expiryDate = license?.expiry_date ? new Date(license.expiry_date) : null;
   const today      = new Date();
-  const daysLeft   = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  const isExpiring = daysLeft <= 30 && daysLeft > 0;
-  const isExpired  = daysLeft <= 0;
+  const daysLeft   = expiryDate ? Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  const isExpiring = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
+  const isExpired  = daysLeft !== null && daysLeft <= 0;
   const licType    = license?.license_type || 'Premium';
 
   const PLAN_FEATURES: Record<string, string[]> = {
@@ -101,7 +101,7 @@ export default function LicenciaTab({ license }: { license: any }) {
             <Calendar className="w-5 h-5 text-[#D9730D]" />
             <div>
               <p className="text-xs text-[#787774]">Fecha de vencimiento</p>
-              <p className="text-sm font-semibold text-[#37352F]">{expiryDate.toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' })}</p>
+              <p className="text-sm font-semibold text-[#37352F]">{expiryDate ? expiryDate.toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' }) : 'Sin fecha límite'}</p>
             </div>
           </div>
         </div>

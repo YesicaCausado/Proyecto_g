@@ -21,10 +21,15 @@ const AREA_COLORS = ['#0B6E99','#0F7B6C','#6940A5','#D9730D','#E03E3E','#AEADAB'
 
 export default function DashboardGeneral({ license, onNavigate }: { license: any; onNavigate?: (tab: string) => void }) {
   const [stats, setStats] = useState<DashStats | null>(null);
+  const [institution, setInstitution] = useState<{ name: string } | null>(null);
 
   useEffect(() => {
     api.get('/super/stats/dashboard').then(r => setStats(r.data)).catch(() => {});
+    api.get('/super/institution').then(r => setInstitution(r.data)).catch(() => {});
   }, []);
+
+  // Días reales desde el backend (license viene de /super/license-usage)
+  const institutionName = institution?.name ?? license?.institution_name ?? '—';;
 
   const metrics = [
     { label: 'Profesores activos', value: stats?.total_teachers ?? license?.current_teachers ?? '—', trend: '',   status: 'good',    icon: Users,          tab: 'profesores' },
@@ -35,8 +40,8 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
     { label: 'En riesgo',          value: stats?.at_risk_count ?? '—',                               trend: '',   status: 'danger',  icon: AlertTriangle,  tab: 'alertas' },
   ];
 
-  const daysLeft   = 45;
-  const isExpiring = daysLeft <= 30;
+  const daysLeft   = license?.days_left ?? null;
+  const isExpiring = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
 
   return (
     <div className="space-y-6">
@@ -77,9 +82,18 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
             </div>
           </div>
           <div className="mt-5">
-            <p className="text-xs opacity-70 mb-0.5">Vence en</p>
-            <p className="text-3xl font-bold">{daysLeft}</p>
-            <p className="text-xs opacity-70">días</p>
+            {daysLeft !== null ? (
+              <>
+                <p className="text-xs opacity-70 mb-0.5">Vence en</p>
+                <p className="text-3xl font-bold">{daysLeft}</p>
+                <p className="text-xs opacity-70">días</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs opacity-70 mb-0.5">Vigencia</p>
+                <p className="text-lg font-bold">Sin límite</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -103,7 +117,7 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
             );
           })}
           <div className="md:col-span-2 pt-4 border-t border-[#E9E9E7] flex justify-between items-center">
-            <p className="text-xs text-[#787774]">Institución: <span className="font-semibold text-[#37352F]">Colegio Nacional (Mock)</span></p>
+            <p className="text-xs text-[#787774]">Institución: <span className="font-semibold text-[#37352F]">{institutionName}</span></p>
             <button onClick={() => onNavigate?.('licencia')} className="text-xs font-medium text-[#6940A5] hover:underline flex items-center gap-1">
               Administrar Licencia <ExternalLink className="w-3 h-3" />
             </button>

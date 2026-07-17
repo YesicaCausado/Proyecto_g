@@ -4,6 +4,7 @@ import api from '../../../services/api';
 
 export default function ConfiguracionTab() {
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [loading, setLoading] = useState(true);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -35,12 +36,15 @@ export default function ConfiguracionTab() {
   }, []);
 
   const handleSave = async () => {
+    setSaveError('');
     try {
       await api.patch('/super/institution', { name: form.name });
       setOrigName(form.name);
-    } catch { /* noop */ }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setSaveError('No se pudo guardar. Intenta de nuevo.');
+    }
   };
 
   const Field = ({ label, icon: Icon, children }: { label: string; icon: any; children: React.ReactNode }) => (
@@ -219,6 +223,9 @@ export default function ConfiguracionTab() {
           {saved ? '¡Guardado exitosamente!' : 'Guardar cambios'}
         </button>
       </div>
+      {saveError && (
+        <p className="text-xs text-[#E03E3E] text-right mt-2">{saveError}</p>
+      )}
     </div>
   );
 }

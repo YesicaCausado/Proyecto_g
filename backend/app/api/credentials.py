@@ -304,6 +304,8 @@ async def bulk_create_teachers(
 
     created: List[CredentialItem] = []
     errors = []
+    seen_docs: set = set()   # duplicados dentro del mismo batch
+    seen_emails: set = set()
 
     for i, row in enumerate(reader, start=2):
         row = {k.strip().lower(): v.strip() for k, v in row.items()}
@@ -320,6 +322,10 @@ async def bulk_create_teachers(
             err = "Documento vacío"
         elif not _validate_email(row.get("correo", "")):
             err = "Correo inválido"
+        elif row["numero_documento"] in seen_docs:
+            err = "Documento duplicado en este archivo"
+        elif row["correo"] in seen_emails:
+            err = "Correo duplicado en este archivo"
         elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
             err = "Documento duplicado en el sistema"
         elif db.query(User).filter(User.email == row["correo"]).first():
@@ -354,6 +360,8 @@ async def bulk_create_teachers(
         )
         db.add(teacher)
         db.flush()
+        seen_docs.add(row["numero_documento"])
+        seen_emails.add(row["correo"])
         _log(db, "bulk_create_teacher", current_user, institution.id,
              teacher.id, "profesor", _client_ip(request))
         created.append(CredentialItem(
@@ -460,6 +468,7 @@ async def bulk_create_students(
 
     created: List[CredentialItem] = []
     errors = []
+    seen_docs_s: set = set()
 
     for i, row in enumerate(reader, start=2):
         row = {k.strip().lower(): v.strip() for k, v in row.items()}
@@ -473,6 +482,8 @@ async def bulk_create_students(
             err = "Nombre vacío"
         elif not row.get("numero_documento"):
             err = "Documento vacío"
+        elif row["numero_documento"] in seen_docs_s:
+            err = "Documento duplicado en este archivo"
         elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
             err = "Documento duplicado"
 
@@ -506,6 +517,7 @@ async def bulk_create_students(
         )
         db.add(student)
         db.flush()
+        seen_docs_s.add(row["numero_documento"])
         _log(db, "bulk_create_student", current_user, institution.id,
              student.id, "estudiante", _client_ip(request))
         created.append(CredentialItem(
