@@ -16,6 +16,7 @@ import {
 import AdminHome from './AdminHome';
 import CreateInstitution from './CreateInstitution';
 import InstitutionList from './InstitutionList';
+import UserManagement from './UserManagement';
 
 // Ítems del menú lateral
 const NAV_ITEMS = [
@@ -191,8 +192,8 @@ export default function AdminDashboard() {
             <Route index element={<AdminHome />} />
             <Route path="instituciones"        element={<InstitutionList />} />
             <Route path="instituciones/nueva"  element={<CreateInstitution />} />
+            <Route path="usuarios"             element={<UserManagement />} />
             {/* Rutas futuras */}
-            <Route path="usuarios"             element={<PlaceholderPage title="Gestión de Usuarios" />} />
             <Route path="configuracion"        element={<PlaceholderPage title="Configuración del Sistema" />} />
             <Route path="*"                    element={<Navigate to="/admin" replace />} />
           </Routes>
