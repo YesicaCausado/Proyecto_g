@@ -22,8 +22,7 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.api.auth import get_current_user, get_password_hash
 from app.models.user import User, UserRole
-from app.models.institution import Institution
-from app.models.learning import AuditLog
+from app.models.institution import Institution, AuditLog
 
 router = APIRouter(prefix="/admin", tags=["Admin - Usuarios"])
 
