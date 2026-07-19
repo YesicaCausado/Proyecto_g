@@ -21,6 +21,7 @@ import InstitutionList from './InstitutionList';
 import UserManagement from './UserManagement';
 import AuditLogs from './AuditLogs';
 import LicenseManagement from './LicenseManagement';
+import SystemConfig from './SystemConfig';
 
 // Ítems del menú lateral
 const NAV_ITEMS = [
@@ -213,27 +214,11 @@ export default function AdminDashboard() {
             <Route path="usuarios"             element={<UserManagement />} />
             <Route path="licencias"            element={<LicenseManagement />} />
             <Route path="auditoria"            element={<AuditLogs />} />
-            {/* Ruta futura */}
-            <Route path="configuracion"        element={<PlaceholderPage title="Configuración del Sistema" />} />
+            <Route path="configuracion"        element={<SystemConfig />} />
             <Route path="*"                    element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>
       </main>
-    </div>
-  );
-}
-
-// Placeholder para rutas aún no desarrolladas
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="p-8">
-      <div className="bg-white rounded-md border border-[#E9E9E7] p-12 text-center">
-        <div className="w-12 h-12 bg-[#F7F6F3] rounded-md flex items-center justify-center mx-auto mb-4">
-          <Settings className="w-6 h-6 text-[#9B9A97]" />
-        </div>
-        <h2 className="text-lg font-semibold text-[#191919]">{title}</h2>
-        <p className="text-[#9B9A97] text-sm mt-1">Módulo en desarrollo — próximamente disponible</p>
-      </div>
     </div>
   );
 }

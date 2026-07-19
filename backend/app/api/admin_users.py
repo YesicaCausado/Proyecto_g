@@ -503,7 +503,146 @@ async def admin_list_institutions(
         })
 
     return {"total": total, "page": page, "page_size": page_size, "institutions": result}
-    stats["institutions_active"] = db.query(Inst).filter(Inst.is_active == True).count()
-    stats["users_active"] = db.query(User).filter(User.is_active == True).count()
-    stats["users_inactive"] = db.query(User).filter(User.is_active == False).count()
-    return stats
+
+
+# ─── GET /admin/config ────────────────────────────────────────────────────────
+
+@router.get("/config")
+async def admin_get_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Devuelve la configuración global del sistema (info + ajustes)."""
+    _require_admin(current_user)
+
+    from app.core.config import settings
+    from app.models.institution import LICENSE_LIMITS
+    import os
+
+    # Conteos rápidos
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+    total_institutions = db.query(Institution).count()
+
+    # Estado de la base de datos
+    db_connected = True
+    try:
+        db.execute(__import__("sqlalchemy").text("SELECT 1"))
+    except Exception:
+        db_connected = False
+
+    # Modelos de IA activos (detectar por claves de env)
+    ai_providers = []
+    if os.getenv("GROQ_API_KEY"):
+        ai_providers.append({"name": "Groq", "model": settings.GROQ_MODEL, "active": True})
+    if os.getenv("GEMINI_API_KEY"):
+        ai_providers.append({"name": "Gemini", "model": settings.GEMINI_MODEL, "active": True})
+    if os.getenv("OPENAI_API_KEY"):
+        ai_providers.append({"name": "OpenAI", "model": "gpt-4o-mini", "active": True})
+    if not ai_providers:
+        ai_providers.append({"name": "Sin proveedor configurado", "model": "—", "active": False})
+
+    return {
+        # ── Sistema ─────────────────────────────────────────────
+        "app_name":    settings.APP_NAME,
+        "app_version": settings.APP_VERSION,
+        "environment": settings.ENVIRONMENT,
+        "debug_mode":  settings.DEBUG,
+        # ── Base de datos ────────────────────────────────────────
+        "db_connected":       db_connected,
+        "db_url_configured":  bool(settings.DATABASE_URL),
+        # ── Seguridad ────────────────────────────────────────────
+        "token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        "algorithm":            settings.ALGORITHM,
+        # ── Email ────────────────────────────────────────────────
+        "email_configured": bool(os.getenv("RESEND_API_KEY")),
+        "email_from":       settings.EMAIL_FROM,
+        # ── IA ───────────────────────────────────────────────────
+        "ai_providers": ai_providers,
+        # ── Límites de licencia ──────────────────────────────────
+        "license_limits": LICENSE_LIMITS,
+        # ── Estadísticas rápidas ─────────────────────────────────
+        "total_users":        total_users,
+        "active_users":       active_users,
+        "total_institutions": total_institutions,
+        # ── Usuarios demo ────────────────────────────────────────
+        "demo_accounts": [
+            {"username": "admin",        "role": "admin",          "password": "admin1234"},
+            {"username": "superprofesor","role": "super_profesor",  "password": "superprofesor"},
+            {"username": "profesor",     "role": "profesor",        "password": "profesor"},
+            {"username": "demo",         "role": "estudiante",      "password": "demo"},
+        ],
+    }
+
+
+# ─── PATCH /admin/config ──────────────────────────────────────────────────────
+
+class ConfigUpdatePayload(BaseModel):
+    token_expire_minutes: Optional[int] = None   # 60–43200
+    debug_mode: Optional[bool] = None
+    email_from: Optional[str] = None
+    # Límites de licencia personalizados (sobreescriben LICENSE_LIMITS en memoria)
+    license_basica_teachers:  Optional[int] = None
+    license_basica_students:  Optional[int] = None
+    license_premium_teachers: Optional[int] = None
+    license_premium_students: Optional[int] = None
+    license_pro_teachers:     Optional[int] = None
+    license_pro_students:     Optional[int] = None
+
+
+@router.patch("/config")
+async def admin_update_config(
+    payload: ConfigUpdatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Actualiza ajustes del sistema en memoria (persiste hasta el próximo reinicio).
+    Para cambios permanentes en producción, actualiza las variables de entorno en Vercel.
+    """
+    _require_admin(current_user)
+
+    from app.core.config import settings
+    from app.models.institution import LICENSE_LIMITS
+
+    changes: list = []
+
+    if payload.token_expire_minutes is not None:
+        if not (60 <= payload.token_expire_minutes <= 43200):
+            raise HTTPException(400, "token_expire_minutes debe estar entre 60 y 43200")
+        settings.ACCESS_TOKEN_EXPIRE_MINUTES = payload.token_expire_minutes
+        changes.append(f"token_expire_minutes → {payload.token_expire_minutes}")
+
+    if payload.debug_mode is not None:
+        settings.DEBUG = payload.debug_mode
+        changes.append(f"debug_mode → {payload.debug_mode}")
+
+    if payload.email_from is not None:
+        settings.EMAIL_FROM = payload.email_from.strip()
+        changes.append(f"email_from → {payload.email_from}")
+
+    # Límites de licencia
+    for tier, field_t, field_s in [
+        ("basica",   payload.license_basica_teachers,   payload.license_basica_students),
+        ("premium",  payload.license_premium_teachers,  payload.license_premium_students),
+        ("pro",      payload.license_pro_teachers,      payload.license_pro_students),
+    ]:
+        if field_t is not None:
+            if field_t < 1:
+                raise HTTPException(400, f"El límite de docentes para {tier} debe ser >= 1")
+            LICENSE_LIMITS[tier]["teachers"] = field_t
+            changes.append(f"license_{tier}_teachers → {field_t}")
+        if field_s is not None:
+            if field_s < 1:
+                raise HTTPException(400, f"El límite de estudiantes para {tier} debe ser >= 1")
+            LICENSE_LIMITS[tier]["students"] = field_s
+            changes.append(f"license_{tier}_students → {field_s}")
+
+    if not changes:
+        return {"ok": True, "message": "Sin cambios aplicados", "changes": []}
+
+    return {
+        "ok": True,
+        "message": f"{len(changes)} ajuste(s) aplicado(s). Nota: estos cambios son en memoria; para persistirlos actualiza las variables de entorno en Vercel.",
+        "changes": changes,
+    }
