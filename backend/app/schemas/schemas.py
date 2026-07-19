@@ -49,6 +49,15 @@ class Token(BaseModel):
     role: Optional[str] = None
     full_name: Optional[str] = None
     must_change_password: Optional[bool] = False
+    # Datos completos del usuario para evitar un segundo GET /auth/me
+    email: Optional[str] = None
+    username: Optional[str] = None
+    is_active: Optional[bool] = True
+    is_expert: Optional[bool] = False
+    institution_id: Optional[int] = None
+    document_number: Optional[str] = None
+    cognitive_profile: Optional[Dict] = None
+    created_at: Optional[datetime] = None
 
 
 # ===== CHAT / APRENDIZAJE =====

@@ -23,6 +23,15 @@ export interface Token {
   role?: string;
   full_name?: string | null;
   must_change_password?: boolean;
+  // Campos completos del usuario (devueltos desde /auth/login para evitar segundo request)
+  username?: string;
+  email?: string | null;
+  is_active?: boolean;
+  is_expert?: boolean;
+  institution_id?: number | null;
+  document_number?: string | null;
+  cognitive_profile?: Record<string, unknown> | null;
+  created_at?: string;
 }
 
 export interface LoginRequest {

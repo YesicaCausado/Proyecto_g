@@ -173,6 +173,14 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         role=user.role,
         full_name=user.full_name,
         must_change_password=getattr(user, 'must_change_password', False) or False,
+        email=user.email,
+        username=user.username,
+        is_active=user.is_active,
+        is_expert=getattr(user, 'is_expert', False) or False,
+        institution_id=getattr(user, 'institution_id', None),
+        document_number=getattr(user, 'document_number', None),
+        cognitive_profile=getattr(user, 'cognitive_profile', None),
+        created_at=user.created_at,
     )
 
 
