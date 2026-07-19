@@ -12,11 +12,15 @@ import {
   ChevronRight,
   Menu,
   X,
+  Shield,
+  ClipboardList,
 } from 'lucide-react';
 import AdminHome from './AdminHome';
 import CreateInstitution from './CreateInstitution';
 import InstitutionList from './InstitutionList';
 import UserManagement from './UserManagement';
+import AuditLogs from './AuditLogs';
+import LicenseManagement from './LicenseManagement';
 
 // Ítems del menú lateral
 const NAV_ITEMS = [
@@ -35,11 +39,25 @@ const NAV_ITEMS = [
     description: 'Colegios y super profesores',
   },
   {
+    to: '/admin/licencias',
+    end: false,
+    icon: Shield,
+    label: 'Licencias',
+    description: 'Tipo, vencimiento y cupos',
+  },
+  {
     to: '/admin/usuarios',
     end: false,
     icon: Users,
     label: 'Usuarios',
     description: 'Gestión de cuentas',
+  },
+  {
+    to: '/admin/auditoria',
+    end: false,
+    icon: ClipboardList,
+    label: 'Auditoría',
+    description: 'Logs del sistema',
   },
   {
     to: '/admin/configuracion',
@@ -193,7 +211,9 @@ export default function AdminDashboard() {
             <Route path="instituciones"        element={<InstitutionList />} />
             <Route path="instituciones/nueva"  element={<CreateInstitution />} />
             <Route path="usuarios"             element={<UserManagement />} />
-            {/* Rutas futuras */}
+            <Route path="licencias"            element={<LicenseManagement />} />
+            <Route path="auditoria"            element={<AuditLogs />} />
+            {/* Ruta futura */}
             <Route path="configuracion"        element={<PlaceholderPage title="Configuración del Sistema" />} />
             <Route path="*"                    element={<Navigate to="/admin" replace />} />
           </Routes>
