@@ -422,6 +422,14 @@ async def bulk_create_teachers(
             temp_password=temp_pwd,
             role=teacher.role,
         ))
+        # Email se envía dentro del loop porque aquí tenemos row["correo"]
+        send_credentials_email(
+            to_email=row["correo"],
+            to_name=teacher.full_name or teacher.username,
+            username=teacher.username,
+            temp_password=temp_pwd,
+            role=teacher.role,
+        )
 
     db.commit()
     return BulkCreateResponse(
@@ -587,7 +595,15 @@ async def bulk_create_students(
             temp_password=temp_pwd,
             role=student.role,
         ))
-
+        # Solo enviar si tiene email real (no el @neurolearn.local generado)
+        if row.get("correo"):
+            send_credentials_email(
+                to_email=row["correo"],
+                to_name=student.full_name or student.username,
+                username=student.username,
+                temp_password=temp_pwd,
+                role=student.role,
+            )
     db.commit()
     return BulkCreateResponse(
         credentials=created, errors=errors,
