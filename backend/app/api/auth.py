@@ -8,10 +8,9 @@ from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
-from dataclasses import dataclass, field
 from typing import Optional
-
 import secrets
+
 from app.db.database import get_db
 from app.core.config import settings
 from app.models.user import User as UserModel
@@ -24,7 +23,6 @@ from app.services.email_service import send_password_reset_email
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-# auto_error=False → si no hay token, devuelve None en vez de lanzar 401
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
@@ -36,7 +34,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -55,7 +53,7 @@ async def get_current_user(
         detail="Credenciales inválidas",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     if not token:
         raise credentials_exception
 
@@ -70,6 +68,15 @@ async def get_current_user(
     user = db.query(UserModel).filter(UserModel.username == username).first()
     if user is None:
         raise credentials_exception
+
+    # FIX #5: sin esto, un usuario desactivado sigue autenticado hasta que
+    # su token expira (hasta 24h con ACCESS_TOKEN_EXPIRE_MINUTES=1440).
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cuenta desactivada. Contacta al administrador.",
+        )
+
     return user
 
 
@@ -251,9 +258,6 @@ async def forgot_password(
     Siempre devuelve el mismo mensaje para no revelar
     si el email/usuario existe en el sistema.
     """
-    from datetime import timezone
-    from sqlalchemy import text
-
     GENERIC_RESPONSE = {
         "message": "Si los datos son correctos, recibirás un correo con las instrucciones."
     }
@@ -307,7 +311,6 @@ async def forgot_password(
 @router.get("/reset-password/validate", status_code=200)
 async def validate_reset_token(token: str, db: Session = Depends(get_db)):
     """Valida que el token de recuperación existe, no está usado y no expiró."""
-    from datetime import timezone
     from app.models.password_reset import PasswordResetToken
 
     reset = db.query(PasswordResetToken).filter(
@@ -331,7 +334,6 @@ async def reset_password(
 ):
     """Restablece la contraseña usando el token recibido por email."""
     import re
-    from datetime import timezone
     from app.models.password_reset import PasswordResetToken
 
     reset = db.query(PasswordResetToken).filter(

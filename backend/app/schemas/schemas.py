@@ -369,37 +369,6 @@ class InstitutionResponse(BaseModel):
         from_attributes = True
 
 
-class InstitutionListItem(BaseModel):
-    id: int
-    name: str
-    dane_code: str
-    license_type: str
-    is_active: bool
-    created_at: datetime
-    teacher_count: int = 0
-    student_count: int = 0
-
-    class Config:
-        from_attributes = True
-
-
-class TeacherCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
-    email: str = Field(..., max_length=100)
-    subject_area: str = Field(default="", max_length=100)
-
-
-class StudentCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
-    birth_date: Optional[str] = None    # YYYY-MM-DD
-    email: Optional[str] = None
-    grade: str = Field(default="", max_length=20)
-
-
 class BulkCreateResponse(BaseModel):
     credentials: List[CredentialItem]
     errors: List[Dict[str, Any]] = []
@@ -492,3 +461,6 @@ class InstitutionListItem(BaseModel):
     created_at: datetime
     teacher_count: int
     student_count: int
+
+class Config:
+        from_attributes = True
