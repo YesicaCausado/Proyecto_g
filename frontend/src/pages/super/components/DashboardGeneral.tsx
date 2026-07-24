@@ -5,6 +5,7 @@ import {
   PieChart, Trophy, Activity
 } from 'lucide-react';
 import api from '../../../services/api';
+import NeuronAvatar from '../../../components/NeuronAvatar';
 
 interface DashStats {
   total_teachers: number;
@@ -299,6 +300,24 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
             </div>
           ))}
           {!stats && <p className="text-xs text-[#AEADAB] col-span-4 text-center py-4">Cargando datos reales…</p>}
+        </div>
+      </div>
+
+      {/* Motivacional con Neuron */}
+      <div
+        className="relative rounded-xl overflow-hidden"
+        style={{ height: '130px', background: 'linear-gradient(135deg, #ede9ff 0%, #ddd5ff 50%, #c8baff 100%)' }}
+      >
+        <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-30 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
+        <div className="relative z-10 flex flex-col justify-center h-full pl-6 pr-32">
+          <p className="text-[14px] font-bold text-[#2e1065] leading-tight mb-1">¡Neuron está listo!</p>
+          <p className="text-[11px] text-[#6d28d9] leading-snug opacity-85">
+            Tu institución avanza. Monitorea, decide, transforma 🚀
+          </p>
+        </div>
+        <div className="absolute right-6 top-0 bottom-0 flex items-center justify-center pointer-events-none">
+          <NeuronAvatar size={80} online variant="gradient" />
         </div>
       </div>
 

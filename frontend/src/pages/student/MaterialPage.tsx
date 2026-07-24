@@ -4,6 +4,7 @@ import {
   BookOpen, Calculator, MessageSquare,
   Users, Zap, Filter, Layers,
   ExternalLink, BookMarked, GraduationCap, Globe,
+  type LucideIcon,
 } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -206,7 +207,7 @@ const EXTERNAL_RESOURCES: ExternalResource[] = [
 ];
 
 // ─── Estilos por materia ──────────────────────────────────────────────────────
-const SUBJECT_STYLES: Record<SubjectKey, { label: string; Icon: React.ElementType; color: string; bg: string; text: string; badge: string }> = {
+const SUBJECT_STYLES: Record<SubjectKey, { label: string; Icon: LucideIcon; color: string; bg: string; text: string; badge: string }> = {
   todos:       { label: 'Todos',          Icon: Layers,       color: '#787774', bg: 'bg-[#F7F6F3]',  text: 'text-[#787774]',  badge: 'bg-[#F7F6F3] text-[#787774]'  },
   lectura:     { label: 'Lectura Crítica',Icon: BookOpen,     color: '#D9730D', bg: 'bg-[#FDF4EC]',  text: 'text-[#D9730D]',  badge: 'bg-[#FDF4EC] text-[#D9730D]'  },
   matematicas: { label: 'Matemáticas',    Icon: Calculator,   color: '#0B6E99', bg: 'bg-[#E5F3FF]',  text: 'text-[#0B6E99]',  badge: 'bg-[#E5F3FF] text-[#0B6E99]'  },
@@ -234,7 +235,7 @@ const DIFF_COLORS: Record<string, string> = {
   'Difícil': 'bg-[#FDEEEE] text-[#E03E3E]',
 };
 
-const FILTER_TABS: { key: SubjectKey; label: string; Icon: React.ElementType }[] = [
+const FILTER_TABS: { key: SubjectKey; label: string; Icon: LucideIcon }[] = [
   { key: 'todos',       label: 'Todos',          Icon: Layers        },
   { key: 'general',     label: 'General',        Icon: GraduationCap },
   { key: 'lectura',     label: 'Lectura',        Icon: BookOpen      },

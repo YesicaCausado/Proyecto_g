@@ -14,6 +14,7 @@ import MensajeriaTab from './components/MensajeriaTab';
 import CalendarioTab from './components/CalendarioTab';
 import AuditoriaTab from './components/AuditoriaTab';
 import SeguridadTab from './components/SeguridadTab';
+import NeuronWelcome from '../../components/NeuronWelcome';
 import {
   ShieldCheck, LogOut, Users, GraduationCap, LayoutDashboard,
   BrainCircuit, Settings, Bell, BookOpen, Bot, FileText,
@@ -209,8 +210,17 @@ export default function SuperDashboard() {
 
         {/* Top header — desktop only */}
         <header className="hidden lg:block flex-shrink-0 px-6 xl:px-8 py-4 xl:py-5 border-b border-[#E9E9E7] bg-white">
-          <h1 className="text-xl font-bold text-[#191919] leading-tight">{currentMeta.title}</h1>
-          <p className="text-sm text-[#787774] mt-0.5">{currentMeta.subtitle}</p>
+          {activeTab === 'dashboard' ? (
+            <NeuronWelcome
+              name={user?.full_name || user?.username || ''}
+              subtitle="Panel institucional · supervisa, gestiona y toma decisiones"
+            />
+          ) : (
+            <>
+              <h1 className="text-xl font-bold text-[#191919] leading-tight">{currentMeta.title}</h1>
+              <p className="text-sm text-[#787774] mt-0.5">{currentMeta.subtitle}</p>
+            </>
+          )}
         </header>
 
         {/* Scrollable content */}

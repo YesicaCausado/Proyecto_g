@@ -45,8 +45,53 @@ ai_manager = AIManager(
     gemini_model=settings.GEMINI_MODEL,
 )
 
-# Motor Neuroconductual: análisis de patrones digitales
-neuro_engine = MultimodalCognitiveEngine()
+# Motor Neuroconductual: pool por usuario (claves "u{user_id}")
+# Cada usuario mantiene su propio motor con baselines y estado acumulado
+_user_engines: Dict[str, MultimodalCognitiveEngine] = {}
+# Estadísticas por sesión de usuario {"u{id}": {...}}
+_session_stats: Dict[str, dict] = {}
+
+
+def _get_user_engine(user_id: int) -> MultimodalCognitiveEngine:
+    """Devuelve (o crea) el motor neuroconductual propio de este usuario."""
+    key = f"u{user_id}"
+    if key not in _user_engines:
+        _user_engines[key] = MultimodalCognitiveEngine()
+        _session_stats[key] = {
+            "msg_count": 0,
+            "error_streak": 0,      # mensajes consecutivos con muchas correcciones
+            "fast_replies": 0,      # respuestas muy rápidas (posible flujo)
+            "slow_replies": 0,      # respuestas lentas (posible duda/fatiga)
+            "total_rt_ms": 0.0,
+            "quiz_error_rate": 0.0, # % de errores históricos en quizzes del tema
+            "weak_concepts": [],
+        }
+    return _user_engines[key]
+
+
+def _update_session_stats(user_id: int, response_time_ms: float, corrections: int,
+                           quiz_error_rate: float = 0.0, weak_concepts: list = []) -> dict:
+    """Actualiza las estadísticas acumuladas de la sesión."""
+    key = f"u{user_id}"
+    if key not in _session_stats:
+        _get_user_engine(user_id)  # inicializa si no existe
+    s = _session_stats[key]
+    s["msg_count"] += 1
+    s["total_rt_ms"] += response_time_ms
+    s["quiz_error_rate"] = quiz_error_rate
+    if weak_concepts:
+        s["weak_concepts"] = weak_concepts
+    # Detectar tendencias
+    avg_rt = s["total_rt_ms"] / s["msg_count"] if s["msg_count"] else 3200
+    if response_time_ms < avg_rt * 0.6:
+        s["fast_replies"] += 1
+    elif response_time_ms > avg_rt * 1.8:
+        s["slow_replies"] += 1
+    if corrections >= 5:
+        s["error_streak"] += 1
+    else:
+        s["error_streak"] = max(0, s["error_streak"] - 1)
+    return s
 
 _SYSTEM_PROMPT = """Eres NeuroLearn, un tutor educativo de IA para estudiantes de bachillerato en Colombia.
 Tu objetivo es preparar al estudiante para las pruebas Saber 11.
@@ -89,22 +134,141 @@ Estructura TODAS tus respuestas así:
 • Máximo 4 bloques por respuesta"""
 
 
-def _build_system_prompt(topic: str, cognitive_state: str = "normal") -> str:
+def _build_system_prompt(topic: str, cognitive_state: str = "normal",
+                         session_stats: dict = None, error_risk: float = 0.0) -> str:
+    """
+    Genera el system prompt con instrucciones pedagógicas ULTRA-ESPECÍFICAS
+    según el estado cognitivo inferido y las estadísticas reales de la sesión.
+    """
+    # Estadísticas de sesión para enriquecer el contexto
+    stats = session_stats or {}
+    msg_n      = stats.get("msg_count", 0)
+    weak       = stats.get("weak_concepts", [])
+    quiz_err   = stats.get("quiz_error_rate", 0.0)
+    err_streak = stats.get("error_streak", 0)
+    fast_r     = stats.get("fast_replies", 0)
+    slow_r     = stats.get("slow_replies", 0)
+
+    # Contexto de tendencia de sesión
+    trend_ctx = ""
+    if msg_n >= 3:
+        if fast_r >= 2:
+            trend_ctx = "📈 TENDENCIA: El estudiante responde rápido y con fluidez — probablemente está en flujo."
+        elif slow_r >= 2:
+            trend_ctx = "📉 TENDENCIA: El estudiante tarda más de lo habitual — posible duda o cansancio acumulado."
+        if err_streak >= 2:
+            trend_ctx += " ⚠️ Ha cometido muchas correcciones seguidas — señal de confusión o frustración."
+
+    # Contexto de historial de quizzes (Patrón 5)
+    quiz_ctx = ""
+    if quiz_err > 0.5:
+        concepts_str = ", ".join(weak[:3]) if weak else "conceptos del tema"
+        quiz_ctx = (
+            f"\n⚠️ HISTORIAL DE QUIZZES: El estudiante tiene {int(quiz_err*100)}% de errores "
+            f"en evaluaciones de este tema, especialmente en: {concepts_str}. "
+            f"Refuerza ACTIVAMENTE estos conceptos en tu respuesta actual."
+        )
+    elif quiz_err > 0.25 and weak:
+        quiz_ctx = (
+            f"\n📊 HISTORIAL: Errores moderados ({int(quiz_err*100)}%) en: {', '.join(weak[:2])}. "
+            f"Verifica comprensión cuando sea pertinente."
+        )
+
+    # Instrucciones muy específicas por estado cognitivo
     state_instructions = {
-        "fatigue":     "⚠️ ESTADO: Estudiante cansado → respuesta MUY corta, un solo concepto, sugiere pausa.",
-        "overload":    "⚠️ ESTADO: Sobrecarga cognitiva → UNA sola idea, sin listas largas, muy simple.",
-        "doubt":       "⚠️ ESTADO: Tiene dudas sobre el tema → más ejemplos concretos del tema, analogías simples.",
-        "mastery":     "⚠️ ESTADO: Domina el tema → desafíos avanzados, preguntas de pensamiento crítico del tema.",
-        "flow":        "⚠️ ESTADO: En flujo → mantén ritmo, profundiza en conceptos avanzados del tema.",
-        "frustration": "⚠️ ESTADO: Frustrado → mucha empatía, simplifica al máximo, refuerza lo que ya sabe del tema.",
-        "normal":      "Estado normal → enseñanza estándar del tema, ritmo claro y motivador.",
+        "fatigue": (
+            "🔴 ESTADO: FATIGA COGNITIVA DETECTADA\n"
+            "REGLAS OBLIGATORIAS (no negociables):\n"
+            "• Respuesta MUY CORTA: máximo 2 párrafos o 4 bullet points\n"
+            "• UN solo concepto nuevo como máximo\n"
+            "• Sin listas largas, sin tablas, sin sub-secciones\n"
+            "• Termina con: '🛑 Si necesitas una pausa, está bien tomarse 5 minutos.'\n"
+            "• NO sugieras quiz ahora"
+        ),
+        "overload": (
+            "🔴 ESTADO: SOBRECARGA COGNITIVA DETECTADA\n"
+            "REGLAS OBLIGATORIAS:\n"
+            "• Una sola idea, explicada muy simple, con una analogía cotidiana\n"
+            "• Sin lista de pasos, sin múltiples conceptos, sin tecnicismos\n"
+            "• Máximo 3 oraciones\n"
+            "• Pregunta: '¿Tiene sentido hasta aquí? ¿Qué parte te genera más dudas?'\n"
+            "• NO sugieras quiz ni profundices"
+        ),
+        "doubt": (
+            "🟡 ESTADO: DUDA / INSEGURIDAD DETECTADA\n"
+            "REGLAS:\n"
+            "• Empieza con: '💡 Vamos a verlo desde otro ángulo...'\n"
+            "• Da 2-3 ejemplos CONCRETOS del tema (no genéricos)\n"
+            "• Explica el concepto paso a paso como si fuera la primera vez\n"
+            "• Usa una analogía de la vida cotidiana\n"
+            "• Al final: '¿Ahora tiene más sentido? ¿Cuál parte aún genera duda?'"
+        ),
+        "mastery": (
+            "🟢 ESTADO: DOMINIO ALTO DETECTADO\n"
+            "REGLAS:\n"
+            "• El estudiante ya maneja lo básico — llévalo al siguiente nivel\n"
+            "• Presenta un caso de aplicación REAL o complejo\n"
+            "• Haz preguntas de análisis o síntesis (no solo de recordar)\n"
+            "• Conecta este tema con otro relacionado\n"
+            "• Puedes sugerir quiz desafiante si lo crees pertinente"
+        ),
+        "flow": (
+            "🟢 ESTADO: FLUJO COGNITIVO — MOMENTO ÓPTIMO\n"
+            "REGLAS:\n"
+            "• Mantén el ritmo y la profundidad actual\n"
+            "• Expande el tema con conceptos avanzados\n"
+            "• Haz preguntas de pensamiento crítico y análisis\n"
+            "• No simplifies — el estudiante puede con más\n"
+            "• Ideal para sugerir quiz si el tema lo permite"
+        ),
+        "frustration": (
+            "🔴 ESTADO: FRUSTRACIÓN DETECTADA\n"
+            "REGLAS (críticas para mantener motivación):\n"
+            "• PRIMERO valida la emoción: 'Entiendo que este tema puede ser complicado...'\n"
+            "• LUEGO simplifica al máximo — explica solo 1 cosa\n"
+            "• Refuerza lo que el estudiante SÍ sabe del tema\n"
+            "• Usa frases motivadoras: 'Ya lo tienes casi, es cuestión de práctica'\n"
+            "• Termina con una pregunta MUY fácil de responder para recuperar confianza\n"
+            "• NO hagas preguntas difíciles ni sugieras quiz"
+        ),
+        "curiosity": (
+            "🟣 ESTADO: CURIOSIDAD / EXPLORACIÓN\n"
+            "REGLAS:\n"
+            "• El estudiante quiere saber más — aliméntalo\n"
+            "• Ofrece conexiones con temas relacionados\n"
+            "• Menciona aplicaciones reales o datos interesantes\n"
+            "• Haz preguntas abiertas que inviten a profundizar\n"
+            "• Es buen momento para ampliar el tema"
+        ),
+        "normal": (
+            "⚪ ESTADO: NORMAL — enseñanza estándar\n"
+            "• Ritmo claro y motivador\n"
+            "• Ejemplos concretos del tema\n"
+            "• Verifica comprensión al final de cada bloque"
+        ),
     }
     instruction = state_instructions.get(cognitive_state, state_instructions["normal"])
-    return (
-        f"{_SYSTEM_PROMPT}\n\n"
-        f"📌 TEMA ACTUAL (usa ejemplos ESPECÍFICOS de este tema): **{topic}**\n"
-        f"{instruction}"
-    )
+
+    error_risk_ctx = ""
+    if error_risk > 0.45:
+        error_risk_ctx = (
+            f"\n🎯 RIESGO DE ERROR ALTO ({int(error_risk*100)}%): "
+            f"El estudiante tiene alta probabilidad de cometer un error. "
+            f"Refuerza la comprensión ANTES de avanzar al siguiente concepto."
+        )
+
+    # Construir el bloque de adaptación neuroconductual de forma explícita
+    neuro_block = "\n".join(filter(None, [
+        f"\n{'='*50}",
+        f"ADAPTACIÓN NEUROCONDUCTUAL ACTIVA:",
+        f"{'='*50}",
+        instruction,
+        quiz_ctx if quiz_ctx else "",
+        error_risk_ctx if error_risk_ctx else "",
+        f"\n{trend_ctx}" if trend_ctx else "",
+    ]))
+
+    return f"{_SYSTEM_PROMPT}\n\n📌 TEMA ACTUAL: **{topic}**\n{neuro_block}"
 
 
 def _has_automatic_quiz(response_text: str) -> bool:
@@ -149,6 +313,7 @@ async def start_session(
         action="teach",
         difficulty=request.difficulty,
         cognitive_state="normal",
+        confidence=1.0,
         suggestions=[],
         should_pause=False,
         metadata={"provider": result["provider"]},
@@ -159,11 +324,11 @@ async def start_session(
 async def send_message(
     request: ChatMessageRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
-    Envía mensaje al tutor IA.
-    Stateless: recibe topic + history en cada request (compatible con Vercel).
-    Siempre usa Groq o Gemini, nunca modo local.
+    Envía mensaje al tutor IA con análisis neuroconductual completo de 5 patrones.
+    Motor por-usuario para acumulación de baselines y estado de sesión.
     """
     try:
         if not ai_manager.providers:
@@ -174,74 +339,125 @@ async def send_message(
 
         topic = request.topic or "Preparación Saber 11"
         cognitive_state = request.cognitive_state or "normal"
-        active_modalities = []
+        active_modalities: List[str] = []
         error_risk = 0.0
-        quiz_recommended = False
-        
-        # ═══ ANÁLISIS NEUROCONDUCTUAL (PATRONES ACTIVOS) ═══
+
+        # ═══ PATRÓN 5: datos reales de quizzes (historial en DB) ═══
+        quiz_error_rate = 0.0
+        weak_concepts: List[str] = []
         try:
-            # Procesar datos multimodales si están disponibles
+            from app.models.learning import QuizHistory
+            prev_quizzes = db.query(QuizHistory).filter(
+                QuizHistory.user_id == current_user.id,
+                QuizHistory.topic.ilike(f"%{topic.split()[0]}%"),
+                QuizHistory.completed_at.isnot(None),
+            ).order_by(QuizHistory.completed_at.desc()).limit(5).all()
+
+            if prev_quizzes:
+                total_wrong = sum(q.wrong_answers or 0 for q in prev_quizzes)
+                total_q    = sum(q.questions_count or 1 for q in prev_quizzes)
+                quiz_error_rate = total_wrong / total_q if total_q else 0.0
+                for pq in prev_quizzes:
+                    if pq.weak_concepts:
+                        weak_concepts.extend(pq.weak_concepts)
+                weak_concepts = list(set(weak_concepts))[:5]
+        except Exception as eq:
+            logger.debug(f"Quiz history fetch failed (non-critical): {eq}")
+
+        # ═══ ANÁLISIS NEUROCONDUCTUAL — 5 PATRONES ═══
+        try:
             now = datetime.now()
 
-            behavioral_event = None
+            # Patrón 1 — Ritmo de Interacción (SIEMPRE activo, usa contenido como señal)
+            behavioral_event = BehavioralEvent(
+                timestamp=now,
+                event_type="response",
+                response_time_ms=request.response_time_ms or 3200.0,
+                typing_speed_cpm=request.typing_speed_cpm or 140.0,
+                # Patrón 2 — Secuencia de Decisión: correcciones reales
+                correction_made=request.corrections > 0,
+                error_occurred=request.corrections >= 5,  # muchas correcciones = confusión
+                pause_duration_ms=request.pause_before_ms,
+                content_length=len(request.message),
+            )
+
+            # Patrón 3 — Microexpresión Facial
             facial_event = None
-            voice_event = None
-
-            # Patrón 1: Ritmo de Interacción (datos de comportamiento)
-            if request.response_time_ms > 0 or request.typing_speed_cpm > 0:
-                behavioral_event = BehavioralEvent(
-                    timestamp=now,
-                    event_type="response",
-                    response_time_ms=request.response_time_ms,
-                    typing_speed_cpm=request.typing_speed_cpm,
-                    correction_made=bool(getattr(request, "corrections", 0)),
-                    pause_duration_ms=request.pause_before_ms,
-                )
-
-            # Patrón 3: Microexpresión Facial
             if request.facial_data:
+                from app.ai.cognitive.neuroconductual_engine import EmotionEnum
+                raw_emotion = request.facial_data.get("emotion", "neutral")
+                try:
+                    emotion_val = EmotionEnum(raw_emotion)
+                except (ValueError, KeyError):
+                    emotion_val = EmotionEnum.NEUTRAL
                 facial_event = FacialData(
                     timestamp=now,
-                    emotion=request.facial_data.get("emotion", "neutral"),
+                    emotion=emotion_val,
                     valence=request.facial_data.get("valence", 0.0),
                     arousal=request.facial_data.get("arousal", 0.0),
                     attention_score=request.facial_data.get("attention_score", 0.5),
-                    blink_rate=request.facial_data.get("blink_rate", 0.0),
-                    gaze_direction=request.facial_data.get("gaze_direction", "screen"),
+                    blink_rate=request.facial_data.get("blink_rate", 17.0),
+                    emotion_confidence=request.facial_data.get("emotion_confidence", 0.5),
+                    brow_furrow=request.facial_data.get("brow_furrow", 0.0),
+                    smile_intensity=request.facial_data.get("smile_intensity", 0.0),
                 )
 
-            # Patrón 4: Prosodia de Voz
+            # Patrón 4 — Prosodia de Voz
+            voice_event = None
             if request.voice_data:
                 voice_event = VoiceProsodyData(
                     timestamp=now,
-                    pitch_mean_hz=request.voice_data.get("pitch_mean_hz", 0.0),
-                    volume_db=request.voice_data.get("volume_db", 0.0),
-                    speech_rate_wpm=request.voice_data.get("speech_rate_wpm", 0.0),
+                    pitch_mean_hz=request.voice_data.get("pitch_mean_hz", 150.0),
+                    volume_db=request.voice_data.get("volume_db", 60.0),
+                    speech_rate_wpm=request.voice_data.get("speech_rate_wpm", 150.0),
                     filler_words_count=request.voice_data.get("filler_words_count", 0),
+                    voice_tremor=request.voice_data.get("voice_tremor", 0.0),
+                    energy_level=request.voice_data.get("energy_level", 0.5),
+                    pause_ratio=request.voice_data.get("pause_ratio", 0.0),
                 )
 
-            # Inferencia multimodal (solo si hay al menos un dato)
-            if behavioral_event or facial_event or voice_event:
-                analysis = neuro_engine.add_multimodal_event(
-                    behavioral=behavioral_event,
-                    facial=facial_event,
-                    voice=voice_event,
-                )
-                if analysis:
-                    cognitive_state = analysis.state.value
-                    active_modalities = analysis.active_modalities
-                    error_risk = analysis.error_risk
-                    logger.info(
-                        f"🧠 Estado: {cognitive_state} | "
-                        f"Modalidades: {active_modalities} | "
-                        f"Riesgo: {error_risk:.2f}"
-                    )
+            # Motor por usuario — mantiene baselines individuales
+            user_engine = _get_user_engine(current_user.id)
+            analysis = user_engine.add_multimodal_event(
+                behavioral=behavioral_event,
+                facial=facial_event,
+                voice=voice_event,
+            )
+            if analysis:
+                cognitive_state = analysis.state.value
+                active_modalities = analysis.active_modalities
+                error_risk = analysis.error_risk
+
+            # Patrón 5 — Predicción de Error: inyectar tasa histórica de errores
+            # Si hay historial alto de errores, elevar el riesgo de error
+            if quiz_error_rate > 0.4:
+                error_risk = max(error_risk, quiz_error_rate * 0.8)
+
+            # Actualizar estadísticas de sesión acumuladas
+            session_stats = _update_session_stats(
+                current_user.id,
+                response_time_ms=request.response_time_ms,
+                corrections=request.corrections,
+                quiz_error_rate=quiz_error_rate,
+                weak_concepts=weak_concepts,
+            )
+
+            logger.info(
+                f"🧠 Estado: {cognitive_state} | P={analysis.probability:.2f} "
+                f"error_risk={error_risk:.0%}  engagement={analysis.engagement:.2f} "
+                f"[{', '.join(active_modalities)}]"
+            )
 
         except Exception as e:
             logger.warning(f"⚠️ Análisis neuroconductual falló: {e}")
-            # Continuar sin análisis - usar estado del request
+            session_stats = _session_stats.get(f"u{current_user.id}", {})
 
-        system_prompt = _build_system_prompt(topic, cognitive_state)
+        system_prompt = _build_system_prompt(
+            topic,
+            cognitive_state,
+            session_stats=session_stats,
+            error_risk=error_risk,
+        )
 
         # Reconstruir historial de conversación
         context_messages: List[Dict] = []
@@ -281,13 +497,47 @@ async def send_message(
             cognitive_state=cognitive_state,
             confidence=0.8,
             suggestions=[],
-            should_pause=False,
+            should_pause=cognitive_state in ("fatigue", "overload", "frustration"),
             metadata={
                 "provider": result["provider"],
                 "fallback_used": result.get("fallback_used", False),
                 "quiz_suggested": quiz_suggested,
                 "active_modalities": active_modalities,
-                "error_risk": error_risk,
+                "error_risk": round(error_risk, 3),
+                # Datos reales de los 5 patrones para el CognitiveDashboard
+                "patterns": {
+                    "P1_interaction_rhythm": {
+                        "response_time_ms": request.response_time_ms,
+                        "typing_speed_cpm": request.typing_speed_cpm,
+                        "pause_before_ms": request.pause_before_ms,
+                        "active": True,
+                    },
+                    "P2_decision_sequence": {
+                        "corrections": request.corrections,
+                        "typing_bursts": request.typing_bursts,
+                        "is_question": request.is_question,
+                        "active": True,
+                    },
+                    "P3_facial": {
+                        "active": bool(request.facial_data),
+                        "data": request.facial_data or {},
+                    },
+                    "P4_voice": {
+                        "active": bool(request.voice_data),
+                        "data": request.voice_data or {},
+                    },
+                    "P5_error_prediction": {
+                        "quiz_error_rate": round(quiz_error_rate, 3),
+                        "weak_concepts": weak_concepts,
+                        "active": quiz_error_rate > 0,
+                    },
+                },
+                "session_stats": {
+                    "msg_count": session_stats.get("msg_count", 1),
+                    "error_streak": session_stats.get("error_streak", 0),
+                    "fast_replies": session_stats.get("fast_replies", 0),
+                    "slow_replies": session_stats.get("slow_replies", 0),
+                },
             },
         )
     except HTTPException:

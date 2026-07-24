@@ -24,21 +24,17 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
+import NeuronWelcome from '../../components/NeuronWelcome';
+import NeuronAvatar from '../../components/NeuronAvatar';
+import { NotificationsPanel } from '../../components/NotificationsPanel';
+import { useNotifications } from '../../hooks/useNotifications';
 
 const SKILL_ICONS: Record<string, React.ReactNode> = {
-  matematicas: <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><Calculator className="w-5 h-5 text-[#787774]" /></div>,
-  lectora:     <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><BookOpen    className="w-5 h-5 text-[#787774]" /></div>,
-  ingles:      <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><MessageSquare className="w-5 h-5 text-[#787774]" /></div>,
-  ciudadanas:  <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><Users       className="w-5 h-5 text-[#787774]" /></div>,
-  cientifico:  <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0"><Zap         className="w-5 h-5 text-[#787774]" /></div>,
-};
-
-const SKILL_COLORS: Record<string, string> = {
-  matematicas: 'bg-[#37352F]',
-  lectora:     'bg-[#37352F]',
-  ingles:      'bg-[#37352F]',
-  ciudadanas:  'bg-[#37352F]',
-  cientifico:  'bg-[#37352F]',
+  matematicas: <Calculator className="w-5 h-5" />,
+  lectora:     <BookOpen    className="w-5 h-5" />,
+  ingles:      <MessageSquare className="w-5 h-5" />,
+  ciudadanas:  <Users       className="w-5 h-5" />,
+  cientifico:  <Zap         className="w-5 h-5" />,
 };
 
 interface DashboardStats {
@@ -89,6 +85,8 @@ export default function StudentDashboard() {
   const [cognitive, setCognitive] = useState<CognitiveData>({ fatigue: 0, overload: 0, doubt: 0, mastery: 0 });
   const [subjects, setSubjects] = useState<Record<string, SubjectData>>({});
   const [, setLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const { notifications, unreadCount, markAllRead } = useNotifications();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -140,51 +138,49 @@ export default function StudentDashboard() {
     fetchData();
   }, []);
 
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Buenos días';
-    if (hour < 18) return 'Buenas tardes';
-    return 'Buenas noches';
-  };
-
   return (
     <div className="p-4 sm:p-6 md:p-10 max-w-[1400px] mx-auto">
+      {/* Neuron Welcome Banner */}
+      <NeuronWelcome
+        name={user?.full_name || user?.username || ''}
+        subtitle="Continúa desarrollando tus habilidades para el Saber 11"
+        streakDays={stats.streak_days}
+      />
+
       {/* Top action bar */}
       <div className="flex justify-between items-center mb-6 sm:mb-8">
-        <h1 className="text-xl sm:text-3xl font-bold text-[#191919] font-heading tracking-tight flex items-center gap-2">
-            ¡{greeting()}, {user?.full_name?.split(' ')[0] || user?.username}! <span role="img" aria-label="wave">👋</span>
-        </h1>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 ml-auto relative">
             <div className="flex items-center gap-1.5 bg-[#F7F6F3] border border-[#E9E9E7] px-2 sm:px-3 py-1.5 rounded-md">
                 <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#D9730D]" />
                 <span className="text-[#37352F] text-xs sm:text-sm font-semibold">{stats.streak_days}</span>
                 <span className="text-[#9B9A97] text-xs hidden sm:inline">días racha</span>
             </div>
-            <button className="relative w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center text-[#787774] hover:bg-[#F1F1EF] transition-colors">
+            <button
+                onClick={() => { setShowNotifications(v => !v); markAllRead(); }}
+                className="relative w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center text-[#787774] hover:bg-[#F1F1EF] transition-colors"
+            >
                 <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#7C5CBF] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
             </button>
+            {showNotifications && (
+              <NotificationsPanel
+                notifications={notifications}
+                onClose={() => setShowNotifications(false)}
+                onMarkAllRead={markAllRead}
+              />
+            )}
         </div>
       </div>
       
-      <p className="text-[#787774] text-[13px] sm:text-[15px] mb-6 sm:mb-8 mt-[-16px] sm:mt-[-24px]">Continúa desarrollando tus habilidades para el Saber 11</p>
-
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8">
         
-        {/* Left Column (2/3 width) - Hero, Skills, Actions */}
+        {/* Left Column (2/3 width) - Skills, Actions */}
         <div className="xl:col-span-2 space-y-8">
-            
-            {/* Hero / Banner */}
-            <div className="bg-[#37352F] rounded-md overflow-hidden relative h-[140px] sm:h-[180px] flex items-center">
-                <div className="p-6 sm:p-8 md:p-10">
-                    <p className="text-[#9B9A97] text-xs font-medium mb-1.5 sm:mb-2 uppercase tracking-wider">Tu aprendizaje, potenciado por</p>
-                    <div className="text-white text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4">NeuroLearn AI</div>
-                    <Link to="/bots" className="inline-flex items-center gap-2 bg-white text-[#37352F] px-3 sm:px-4 py-1.5 sm:py-2 rounded-md font-medium text-xs sm:text-sm hover:bg-[#F7F6F3] transition-colors">
-                        Continuar aprendiendo
-                        <ArrowRight className="w-3.5 h-3.5" />
-                    </Link>
-                </div>
-            </div>
 
             {/* Overall Progress and Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -247,53 +243,89 @@ export default function StudentDashboard() {
 
             {/* Skills & Focus Areas */}
             <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-semibold text-[#37352F] flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-[#9B9A97]" /> Habilidades Transversales Saber 11
+                {/* Header con Neuron */}
+                <div
+                  className="relative rounded-xl mb-4 flex items-center gap-4 px-5 py-4"
+                  style={{ background: 'linear-gradient(135deg, #ede9ff 0%, #ddd5ff 60%, #c8baff 100%)' }}
+                >
+                  <NeuronAvatar size={56} online variant="gradient" className="flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold text-[#7c3aed] uppercase tracking-widest mb-0.5">
+                      Neuron · Modo Práctica
+                    </p>
+                    <h3 className="text-[16px] font-bold text-[#2e1065] leading-tight">
+                      Habilidades Transversales Saber 11
                     </h3>
-                    <Link to="/bots" className="text-[#787774] text-sm font-medium hover:text-[#37352F] flex items-center gap-1 transition-colors">
-                        Ver todas <ArrowRight className="w-3.5 h-3.5" />
-                    </Link>
+                    <p className="text-[11px] text-[#6d28d9] opacity-80 mt-0.5">
+                      Selecciona una área y practica con tu asistente IA
+                    </p>
+                  </div>
+                  <Link
+                    to="/bots"
+                    className="flex-shrink-0 flex items-center gap-1.5 bg-white text-[#7c3aed] font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    Ver todas <ArrowRight className="w-3 h-3" />
+                  </Link>
                 </div>
 
                 {/* Skills Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
-                    { key: 'matematicas', name: 'Pensamiento Lógico-Matemático', desc: 'Razonamiento cuantitativo' },
-                    { key: 'lectora',     name: 'Comprensión Lectora Crítica',   desc: 'Lectura crítica y análisis' },
-                    { key: 'ingles',      name: 'Inglés Comunicativo',           desc: 'Competencia en inglés' },
-                    { key: 'ciudadanas',  name: 'Competencias Ciudadanas',        desc: 'Sociales y ciudadanía' },
-                    { key: 'cientifico',  name: 'Pensamiento Científico',         desc: 'Ciencias naturales' },
+                    { key: 'matematicas', name: 'Pensamiento Lógico-Matemático', desc: 'Razonamiento cuantitativo',  color: '#7c3aed', bg: '#ede9ff', bar: 'linear-gradient(90deg,#7c3aed,#4f46e5)' },
+                    { key: 'lectora',     name: 'Comprensión Lectora Crítica',   desc: 'Lectura crítica y análisis', color: '#0891b2', bg: '#e0f7fa', bar: 'linear-gradient(90deg,#0891b2,#0e7490)' },
+                    { key: 'ingles',      name: 'Inglés Comunicativo',           desc: 'Competencia en inglés',      color: '#059669', bg: '#d1fae5', bar: 'linear-gradient(90deg,#059669,#047857)' },
+                    { key: 'ciudadanas',  name: 'Competencias Ciudadanas',        desc: 'Sociales y ciudadanía',      color: '#d97706', bg: '#fef3c7', bar: 'linear-gradient(90deg,#d97706,#b45309)' },
+                    { key: 'cientifico',  name: 'Pensamiento Científico',         desc: 'Ciencias naturales',         color: '#db2777', bg: '#fce7f3', bar: 'linear-gradient(90deg,#db2777,#be185d)' },
                 ].map((skill) => {
                     const progress = stats.skill_scores[skill.key] ?? 0;
                     return (
                     <Link
-                    key={skill.key}
-                    to={`/chat?skill=${skill.key}`}
-                    className="bg-white border border-[#E9E9E7] hover:border-[#9B9A97] rounded-md p-4 transition-all group"
+                      key={skill.key}
+                      to={`/chat?skill=${skill.key}`}
+                      className="group bg-white border border-[#E9E9E7] hover:border-[#c4b5fd] rounded-xl p-4 transition-all hover:shadow-md"
                     >
-                    <div className="flex items-center gap-3 mb-3">
-                        {SKILL_ICONS[skill.key]}
-                        <div>
-                            <h4 className="font-medium text-[#37352F] text-sm leading-tight">
-                                {skill.name}
-                            </h4>
-                            <p className="text-xs text-[#9B9A97] mt-0.5">{skill.desc}</p>
+                      {/* Top row: icon + name + score */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105"
+                          style={{ background: skill.bg }}
+                        >
+                          <span style={{ color: skill.color }}>{SKILL_ICONS[skill.key]}</span>
                         </div>
-                    </div>
-                
-                {/* Progress bar */}
-                <div className="flex items-center gap-3">
-                    <div className="w-full bg-[#E9E9E7] rounded-full h-1">
-                       <div className={`${SKILL_COLORS[skill.key]} h-1 rounded-full transition-all duration-500`} style={{ width: `${progress}%` }}></div>
-                    </div>
-                    <span className="text-xs font-medium text-[#787774] whitespace-nowrap">
-                      {progress > 0 ? `${progress}%` : '—'}
-                    </span>
-                </div>
-                </Link>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-[#37352F] text-[13px] leading-tight truncate">
+                            {skill.name}
+                          </h4>
+                          <p className="text-[11px] text-[#9B9A97] mt-0.5">{skill.desc}</p>
+                        </div>
+                        <span
+                          className="text-[13px] font-bold flex-shrink-0"
+                          style={{ color: progress > 0 ? skill.color : '#9B9A97' }}
+                        >
+                          {progress > 0 ? `${progress}%` : '—'}
+                        </span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="w-full bg-[#F3F0FF] rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full transition-all duration-700"
+                          style={{ width: `${progress}%`, background: skill.bar }}
+                        />
+                      </div>
+
+                      {/* CTA footer */}
+                      <div className="flex items-center gap-1.5 mt-3">
+                        <NeuronAvatar size={18} online={false} variant="gradient" />
+                        <span className="text-[11px] text-[#9B9A97] group-hover:text-[#7c3aed] transition-colors">
+                          Practicar con Neuron
+                        </span>
+                        <ArrowRight className="w-3 h-3 text-[#9B9A97] group-hover:text-[#7c3aed] ml-auto transition-colors" />
+                      </div>
+                    </Link>
                     );
-                })}                </div>
+                })}
+                </div>
             </div>
 
             <div className="mt-2">
@@ -505,6 +537,32 @@ export default function StudentDashboard() {
                   </div>
                 );
               })()}
+            </div>
+
+            {/* Motivacional con Neuron */}
+            <div
+              className="relative rounded-xl overflow-hidden"
+              style={{
+                height: '140px',
+                background: 'linear-gradient(135deg, #ede9ff 0%, #ddd5ff 50%, #c8baff 100%)',
+              }}
+            >
+              {/* Fondo decorativo */}
+              <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-30 pointer-events-none"
+                style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
+
+              {/* Texto */}
+              <div className="relative z-10 flex flex-col justify-center h-full pl-5 pr-[45%]">
+                <p className="text-[15px] font-bold text-[#2e1065] leading-tight mb-1">¡Tú puedes!</p>
+                <p className="text-[11px] text-[#6d28d9] leading-snug opacity-85">
+                  Sigue así, cada paso te acerca a tu meta 🚀
+                </p>
+              </div>
+
+              {/* Neuron avatar — derecha */}
+              <div className="absolute right-6 top-0 bottom-0 flex items-center justify-center pointer-events-none">
+                <NeuronAvatar size={80} online variant="gradient" />
+              </div>
             </div>
 
         </div>

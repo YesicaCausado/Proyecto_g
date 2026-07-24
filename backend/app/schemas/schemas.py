@@ -70,14 +70,19 @@ class StartSessionRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(..., min_length=1)
-    topic: Optional[str] = None          # ← NUEVO: tema para modo stateless
-    history: Optional[List[Dict[str, Any]]] = None  # ← NUEVO: historial para serverless
-    cognitive_state: Optional[str] = None  # ← Estado cognitivo actual del estudiante
+    topic: Optional[str] = None
+    history: Optional[List[Dict[str, Any]]] = None
+    cognitive_state: Optional[str] = None
+    # Patrón 1 — Ritmo de Interacción
     response_time_ms: float = Field(default=0, ge=0)
     typing_speed_cpm: float = Field(default=0, ge=0)
-    corrections: int = Field(default=0, ge=0)
     pause_before_ms: float = Field(default=0, ge=0)
-    # Datos multimodales opcionales (Patrones 3-4)
+    # Patrón 2 — Secuencia de Decisión
+    corrections: int = Field(default=0, ge=0)       # backspaces reales
+    typing_bursts: int = Field(default=1, ge=0)     # ráfagas separadas por pausas
+    is_question: bool = Field(default=False)        # mensaje termina en '?'
+    message_length: int = Field(default=0, ge=0)    # longitud del mensaje
+    # Patrones 3 y 4 — datos multimodales opcionales
     facial_data: Optional[Dict[str, Any]] = None
     voice_data: Optional[Dict[str, Any]] = None
 

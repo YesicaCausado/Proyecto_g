@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
-import { Calculator, BookOpen, FlaskConical, Globe, Languages, ArrowLeft, Trophy, Clock, Target, RotateCcw, Play, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+﻿import { useState, useEffect, useCallback } from 'react';
+import { Calculator, BookOpen, FlaskConical, Globe, Languages, ArrowLeft, Trophy, Clock, Target, RotateCcw, Play, CheckCircle, XCircle, AlertCircle, Loader2, type LucideIcon } from 'lucide-react';
 import api from '../../services/api';
 
 type Screen = 'select' | 'generating' | 'quiz' | 'results' | 'history';
@@ -9,7 +9,7 @@ interface Subject {
   id: string;
   label: string;
   desc: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   color: string;
   bg: string;
   text: string;

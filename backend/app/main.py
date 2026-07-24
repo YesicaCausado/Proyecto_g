@@ -30,6 +30,7 @@ from app.api import teacher_materials        # Teacher materials (carpetas + arc
 from app.api import teacher_evaluations      # Teacher evaluations (evaluaciones)
 from app.api import license                  # License system
 from app.api import admin_users              # Admin: gestión de usuarios
+from app.api import notifications            # Sistema de notificaciones
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
@@ -226,6 +227,7 @@ app.include_router(teacher_materials.router,   prefix="/api/v1")
 app.include_router(teacher_evaluations.router, prefix="/api/v1")
 app.include_router(license.router,             prefix="/api/v1")
 app.include_router(admin_users.router,         prefix="/api/v1")
+app.include_router(notifications.router,       prefix="/api/v1")
 
 
 @app.get("/")
