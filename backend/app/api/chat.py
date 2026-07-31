@@ -755,11 +755,6 @@ async def submit_quiz_answers(
             classroom_id=validated_classroom_id,
             score_percentage=percentage,
         )
-
-    return QuizAnalysisResponse(
-        score=f"{correct}/{total}",
-        ...
-    )
     
     return QuizAnalysisResponse(
         score=f"{correct}/{total}",
