@@ -1,156 +1,252 @@
 /**
- * ForgotPasswordPage — Solicitar recuperación de contraseña
- * El usuario ingresa su usuario o email y recibe un correo con el enlace.
+ * ForgotPasswordPage — Recuperación de contraseña
+ * Mismo layout que LoginPage: robot izquierda + tarjeta derecha.
+ * El robot reacciona al input con lookingEmail / idle / loading / success.
  */
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Brain, ArrowLeft, Mail, Loader2, CheckCircle } from 'lucide-react';
-import api from '../../services/api';
+import { Link }     from 'react-router-dom';
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle, Mail } from 'lucide-react';
 
-export default function ForgotPasswordPage() {
+import AuthPageLayout        from './components/AuthPageLayout';
+import { useRobotContext }   from '../../context/RobotContext';
+import api                   from '../../services/api';
+
+// ── Paleta (idéntica a LoginCard) ─────────────────────────────
+const C = {
+  bgInput:     '#EDECEA',
+  bgInputFocus:'#FFFFFF',
+  border:      '#E2DFD9',
+  borderFocus: '#B8B0A4',
+  text:        '#2C2A27',
+  textSub:     '#7A766E',
+  textMute:    '#A8A49D',
+  accent:      '#1a1a1a',
+  accentHover: '#333',
+  error:       '#C0392B',
+  errorBg:     '#FDF2F2',
+  errorBorder: '#EAC4C4',
+  success:     '#0F7B6C',
+  successBg:   '#EEF7F4',
+  successBorder:'#B3E3DA',
+} as const;
+
+// ── Tarjeta de recuperación ───────────────────────────────────
+
+function ForgotPasswordCard() {
+  const { driver } = useRobotContext();
+
   const [username, setUsername] = useState('');
   const [loading, setLoading]   = useState(false);
   const [sent, setSent]         = useState(false);
   const [error, setError]       = useState('');
+  const [hoverBtn, setHoverBtn] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) return;
-
     setError('');
     setLoading(true);
+    driver.onEmailBlur();           // robot deja de mirar el campo
+    driver.notifySuccess();         // robot va a "loading" (reutilizamos driver)
 
     try {
       await api.post('/auth/forgot-password', { username: username.trim() });
-      // Siempre mostramos éxito — el backend no revela si el usuario existe
       setSent(true);
     } catch {
-      // Solo mostramos error si hay falla de red o servidor (500)
-      setError('Error al procesar la solicitud. Intenta de nuevo en unos momentos.');
+      setError('Error al procesar la solicitud. Intenta de nuevo.');
+      driver.notifyError();
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Pantalla de éxito ─────────────────────────────────────────
+  // ── Vista de éxito ────────────────────────────────────────
   if (sent) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-400/10 flex items-center justify-center px-4">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-md border border-[#E9E9E7] p-8 text-center">
-            <div className="w-14 h-14 bg-[#EEF7F4] rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-7 h-7 text-[#0F7B6C]" />
-            </div>
-            <h2 className="text-xl font-bold text-[#191919] mb-2">
-              Revisa tu correo
-            </h2>
-            <p className="text-sm text-[#787774] leading-relaxed mb-6">
-              Si los datos ingresados son correctos, recibirás un correo
-              con las instrucciones para restablecer tu contraseña.
-              <br /><br />
-              El enlace expira en <strong className="text-[#37352F]">15 minutos</strong>.
-            </p>
-            <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md p-3 mb-6 text-xs text-[#787774]">
-              ¿No ves el correo? Revisa tu carpeta de spam o solicita
-              un nuevo enlace en unos minutos.
-            </div>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 text-sm text-[#37352F] font-medium hover:underline"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Volver al inicio de sesión
-            </Link>
-          </div>
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0 }}>
+
+        {/* Ícono de éxito */}
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%',
+          background: C.successBg, border: `1.5px solid ${C.successBorder}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 20,
+        }}>
+          <CheckCircle size={22} color={C.success} strokeWidth={1.8} />
         </div>
+
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: '-0.5px', margin: '0 0 8px' }}>
+          Revisa tu correo
+        </h1>
+        <p style={{ fontSize: 13, color: C.textSub, lineHeight: 1.6, margin: '0 0 24px' }}>
+          Si los datos son correctos, recibirás las instrucciones para
+          restablecer tu contraseña. El enlace expira en{' '}
+          <strong style={{ color: C.text }}>15 minutos</strong>.
+        </p>
+
+        <div style={{
+          padding: '12px 14px', borderRadius: 10,
+          background: '#F7F6F3', border: `1px solid ${C.border}`,
+          fontSize: 11.5, color: C.textMute, lineHeight: 1.5, marginBottom: 28,
+        }}>
+          ¿No ves el correo? Revisa tu carpeta de spam o espera unos minutos.
+        </div>
+
+        <Link to="/login" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7,
+          fontSize: 13, color: C.textSub, textDecoration: 'none',
+          fontWeight: 500, transition: 'color 150ms',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.color = C.text)}
+          onMouseLeave={e => (e.currentTarget.style.color = C.textSub)}
+        >
+          <ArrowLeft size={14} strokeWidth={2} />
+          Volver al inicio de sesión
+        </Link>
       </div>
     );
   }
 
-  // ── Formulario ────────────────────────────────────────────────
+  // ── Formulario ─────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-accent-400/10 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-accent-600 rounded-md flex items-center justify-center mx-auto mb-4">
-            <Brain className="w-9 h-9 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-[#191919]">NeuroLearn IA</h1>
-          <p className="text-[#787774] mt-1">Recuperación de contraseña</p>
+      {/* Cabecera */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
+        <div style={{
+          width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
+          background: '#F0EDE9', border: `1.5px solid ${C.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Mail size={17} color={C.textSub} strokeWidth={1.8} />
         </div>
-
-        {/* Card */}
-        <div className="bg-white rounded-md border border-[#E9E9E7] p-8">
-
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-full flex items-center justify-center shrink-0">
-              <Mail className="w-5 h-5 text-[#37352F]" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-[#191919]">
-                ¿Olvidaste tu contraseña?
-              </h2>
-              <p className="text-xs text-[#787774]">
-                Ingresa tu usuario o correo y te enviaremos un enlace
-              </p>
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-[#FDEEEE] border border-[#F4BDBD] text-[#E03E3E] text-sm rounded-md px-4 py-3 mb-4">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-[#787774] mb-1">
-                Usuario o correo electrónico
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ej: 1023456789 o usuario@colegio.edu.co"
-                required
-                autoFocus
-                className="w-full px-4 py-2.5 border border-[#E9E9E7] rounded-md focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F] outline-none transition-colors text-sm text-[#37352F]"
-              />
-              <p className="text-xs text-[#9B9A97] mt-1">
-                Generalmente es tu número de documento
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || !username.trim()}
-              className="w-full bg-[#37352F] text-white py-2.5 rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Enviando...
-                </>
-              ) : (
-                'Enviar enlace de recuperación'
-              )}
-            </button>
-          </form>
-
-          <div className="flex justify-center mt-5">
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-1.5 text-xs text-[#787774] hover:text-[#37352F] transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Volver al inicio de sesión
-            </Link>
-          </div>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, letterSpacing: '-0.4px', margin: 0, lineHeight: 1.2 }}>
+            ¿Olvidaste tu contraseña?
+          </h1>
+          <p style={{ fontSize: 12.5, color: C.textMute, margin: '4px 0 0' }}>
+            Te enviaremos un enlace de recuperación
+          </p>
         </div>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          padding: '10px 14px', marginBottom: 18,
+          background: C.errorBg, border: `1px solid ${C.errorBorder}`,
+          borderRadius: 10,
+        }}>
+          <AlertCircle size={13} color={C.error} style={{ flexShrink: 0 }} />
+          <p style={{ fontSize: 12.5, color: C.error, margin: 0 }}>{error}</p>
+        </div>
+      )}
+
+      {/* Formulario */}
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Campo — conectado al robot */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <label htmlFor="fp-username" style={{
+            fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: C.textMute,
+          }}>
+            Usuario o correo
+          </label>
+          <input
+            id="fp-username"
+            type="text"
+            value={username}
+            autoFocus
+            required
+            placeholder="Ej: 1023456789 o tu@correo.com"
+            onChange={e => {
+              setUsername(e.target.value);
+              driver.onEmailChange();
+            }}
+            onFocus={driver.onEmailFocus}
+            onBlur={driver.onEmailBlur}
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              padding: '11px 14px',
+              background: C.bgInput,
+              border: `1.5px solid ${C.border}`,
+              borderRadius: 10,
+              fontSize: 13.5, color: C.text,
+              outline: 'none',
+              transition: 'border-color 180ms ease, box-shadow 180ms ease, background 180ms ease',
+              boxShadow: 'inset 2px 2px 5px rgba(0,0,0,0.06), inset -1px -1px 3px rgba(255,255,255,0.7)',
+            }}
+            onFocusCapture={e => {
+              e.currentTarget.style.background  = C.bgInputFocus;
+              e.currentTarget.style.borderColor = C.borderFocus;
+              e.currentTarget.style.boxShadow   = '0 0 0 3px rgba(0,0,0,0.06)';
+            }}
+            onBlurCapture={e => {
+              e.currentTarget.style.background  = C.bgInput;
+              e.currentTarget.style.borderColor = C.border;
+              e.currentTarget.style.boxShadow   = 'inset 2px 2px 5px rgba(0,0,0,0.06), inset -1px -1px 3px rgba(255,255,255,0.7)';
+            }}
+          />
+          <p style={{ fontSize: 10.5, color: C.textMute, margin: 0 }}>
+            Generalmente es tu número de documento
+          </p>
+        </div>
+
+        {/* Botón */}
+        <button
+          type="submit"
+          disabled={loading || !username.trim()}
+          onMouseEnter={() => setHoverBtn(true)}
+          onMouseLeave={() => setHoverBtn(false)}
+          style={{
+            marginTop: 4,
+            width: '100%', padding: '12px',
+            borderRadius: 10,
+            background: hoverBtn && !loading ? C.accentHover : C.accent,
+            border: 'none', color: '#FFF',
+            fontSize: 13.5, fontWeight: 600,
+            cursor: loading || !username.trim() ? 'not-allowed' : 'pointer',
+            opacity: loading || !username.trim() ? 0.55 : 1,
+            transition: 'background 150ms ease, transform 150ms ease, box-shadow 150ms ease',
+            transform: hoverBtn && !loading ? 'translateY(-1px)' : 'translateY(0)',
+            boxShadow: hoverBtn && !loading ? '0 6px 20px rgba(0,0,0,0.18)' : '0 2px 8px rgba(0,0,0,0.14)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          {loading
+            ? <><Loader2 size={14} className="animate-spin" />Enviando...</>
+            : 'Enviar enlace de recuperación'
+          }
+        </button>
+      </form>
+
+      {/* Link volver */}
+      <div style={{ textAlign: 'center', marginTop: 24 }}>
+        <Link to="/login" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          fontSize: 12, color: C.textMute, textDecoration: 'none',
+          transition: 'color 150ms',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.color = C.textSub)}
+          onMouseLeave={e => (e.currentTarget.style.color = C.textMute)}
+        >
+          <ArrowLeft size={12} strokeWidth={2} />
+          Volver al inicio de sesión
+        </Link>
+      </div>
+
     </div>
+  );
+}
+
+// ── Página ────────────────────────────────────────────────────
+
+export default function ForgotPasswordPage() {
+  return (
+    <AuthPageLayout>
+      <ForgotPasswordCard />
+    </AuthPageLayout>
   );
 }

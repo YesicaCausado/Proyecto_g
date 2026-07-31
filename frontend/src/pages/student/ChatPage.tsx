@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
 import { demoStartSession, demoSendMessage } from "../../services/demoChat";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
-import { Send, Loader2, Brain, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
+import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
@@ -13,6 +13,7 @@ import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor
 import LiveModeView from "../../components/LiveModeView";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
 import BotMessageWithActions from "../../components/BotMessageWithActions";
+import NeuronAvatar from "../../components/NeuronAvatar";
 
 function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const previewRef = useRef<HTMLVideoElement>(null);
@@ -287,6 +288,10 @@ export default function ChatPage() {
         typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
         corrections:       behavioralMetrics.corrections,
         pause_before_ms:   behavioralMetrics.pause_before_ms,
+        // Patrón 2 enriquecido
+        typing_bursts:     behavioralMetrics.typing_bursts,
+        is_question:       behavioralMetrics.is_question,
+        message_length:    behavioralMetrics.message_length,
         ...(facial.isStreaming && facial.snapshot.is_active ? {
           facial_data: {
             emotion: facial.snapshot.valence > 0.2 ? "happy" : facial.snapshot.valence < -0.2 ? "worried" : "neutral",
@@ -427,17 +432,15 @@ export default function ChatPage() {
         <div className="flex flex-col w-full max-w-2xl">
           {/* ── Header ── */}
           <div className="bg-white border-b border-[#E9E9E7] px-5 py-4 flex items-center gap-3">
-            <div className="w-11 h-11 bg-[#37352F] rounded-md flex items-center justify-center text-xl flex-shrink-0">
-              🤖
-            </div>
+            <NeuronAvatar size={44} online variant="dark" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-[#191919] text-base">Asistente IA</span>
-                <span className="flex items-center gap-1 text-[10px] font-bold bg-[#F7F3FB] text-[#6940A5] border border-[#D9CCE9] px-2 py-0.5 rounded-full">
-                  ✦ Con GPT-5
-                </span>
+                <span className="font-bold text-[#191919] text-base">Neuron</span>
+                <span className="text-[10px] font-semibold text-[#787774]">·</span>
+                <span className="text-xs text-[#787774]">Asistente IA de NeuroLearn</span>
+                
               </div>
-              <p className="text-xs text-[#9B9A97] mt-0.5">Tu tutor personal para el ICFES</p>
+              <p className="text-xs text-[#9B9A97] mt-0.5">Tu tutor personal para el ICFES Saber 11</p>
             </div>
             <span className="w-2.5 h-2.5 bg-[#0F7B6C] rounded-full flex-shrink-0" title="En línea" />
           </div>
@@ -468,12 +471,14 @@ export default function ChatPage() {
 
             {/* Burbuja de bienvenida del bot */}
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-[#37352F] rounded-md flex items-center justify-center text-sm flex-shrink-0 mt-0.5">
-                🤖
-              </div>
+              <NeuronAvatar size={32} online variant="dark" />
               <div className="bg-white rounded-md rounded-tl-sm px-4 py-3 border border-[#E9E9E7] max-w-md">
+                <p className="text-[10px] font-semibold text-[#6940A5] mb-1.5 flex items-center gap-1">
+                  <span>Neuron</span>
+                  <span className="text-[#9B9A97] font-normal">· Asistente IA</span>
+                </p>
                 <p className="text-sm text-[#37352F] leading-relaxed">
-                  ¡Hola! Soy tu asistente de IA para el ICFES. Puedo ayudarte con explicaciones paso a paso, resolver
+                  ¡Hola! Soy <strong>Neuron</strong>, tu asistente de inteligencia artificial para el ICFES. Puedo ayudarte con explicaciones paso a paso, resolver
                   dudas sobre cualquier tema, y darte consejos de estudio. ¿En qué puedo ayudarte hoy?
                 </p>
                 <p className="text-[10px] text-[#9B9A97] mt-2">
@@ -485,9 +490,7 @@ export default function ChatPage() {
             {/* Indicador de carga cuando se está iniciando sesión */}
             {sending && (
               <div className="flex items-start gap-3 animate-fadeIn">
-                <div className="w-8 h-8 bg-[#37352F] rounded-md flex items-center justify-center text-sm flex-shrink-0 mt-0.5">
-                  🤖
-                </div>
+                <NeuronAvatar size={32} online variant="dark" />
                 <div className="bg-white rounded-md rounded-tl-sm px-4 py-3 border border-[#E9E9E7]">
                   <div className="flex items-center gap-1 py-1">
                     <span className="typing-dot" />
@@ -541,11 +544,9 @@ export default function ChatPage() {
         {/* Header */}
         <div className="bg-white border-b border-[#E9E9E7] px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-accent-600 rounded-md flex items-center justify-center">
-              <Brain className="w-5 h-5 text-white" />
-            </div>
+            <NeuronAvatar size={36} online variant="dark" />
             <div>
-              <h2 className="font-semibold text-[#191919] text-sm">Tutor NeuroLearn</h2>
+              <h2 className="font-semibold text-[#191919] text-sm">Neuron</h2>
               <p className="text-xs text-[#787774]">
                 {SKILLS.find((s) => s.key === selectedSkill)?.name || "Sesión activa"}
               </p>
@@ -759,12 +760,11 @@ export default function ChatPage() {
           {sending && (
             <div className="flex justify-start animate-fadeIn w-full">
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-md bg-[#37352F] flex items-center justify-center text-base flex-shrink-0 mt-0.5 select-none">
-                  🤖
-                </div>
+                <NeuronAvatar size={32} online variant="dark" />
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-xs font-semibold text-[#787774]">Asistente IA</span>
+                    <span className="text-xs font-semibold text-[#191919]">Neuron</span>
+                    <span className="text-[10px] text-[#9B9A97]">· escribiendo...</span>
                   </div>
                   <div className="bg-white rounded-md rounded-tl-sm px-4 py-3.5 border border-[#E9E9E7]">
                     <div className="flex items-center gap-1 py-0.5">

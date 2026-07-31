@@ -2,6 +2,7 @@
 import {
   School, User, Mail, Hash, ShieldCheck, Copy, CheckCircle,
   ArrowLeft, Eye, EyeOff, Building2, FileText, BadgeCheck,
+  type LucideIcon,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
@@ -223,7 +224,7 @@ export default function CreateInstitution() {
 }
 
 function InputField({ label, icon: Icon, value, onChange, placeholder, type = 'text', error }: {
-  label: string; icon: React.ElementType; value: string;
+  label: string; icon: LucideIcon; value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string; type?: string; error?: string;
 }) {

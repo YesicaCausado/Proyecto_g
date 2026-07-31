@@ -124,13 +124,41 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
 
   const state = response.cognitive_state || 'normal';
   const stateInfo = STATE_CONFIG[state] || { label: state, color: 'bg-[#F7F6F3] text-[#37352F] border-[#E9E9E7]', emoji: '🧠' };
-  const activeModalities = response.active_modalities || [];
+  const activeModalities: string[] = response.active_modalities || [];
   const engagement = response.engagement_score ?? 0.5;
   const attention = response.attention_level ?? 1.0;
-  const errorRisk = response.error_risk ?? 0.0;
+  const errorRisk = (response.metadata?.error_risk as number) ?? response.error_risk ?? 0.0;
   const confidence = response.confidence ?? 0;
 
-  // Valores por patrón: usar datos reales de cámara/mic cuando estén activos
+  // ── Datos reales de los 5 patrones desde metadata.patterns ──
+  const patterns = (response.metadata?.patterns ?? {}) as Record<string, Record<string, unknown>>;
+  const p1 = patterns.P1_interaction_rhythm ?? {};
+  const p2 = patterns.P2_decision_sequence ?? {};
+  const p5 = patterns.P5_error_prediction ?? {};
+  const sessionStats = (response.metadata?.session_stats ?? {}) as Record<string, number>;
+  const _unusedSession = sessionStats; void _unusedSession; // disponible para future use
+
+  // Normalizar valores de patrón 1 a 0-1
+  const rtMs = (p1.response_time_ms as number) || 0;
+  const typingCpm = (p1.typing_speed_cpm as number) || 0;
+  // RT score: 0=muy lento, 1=muy rápido (baseline 3200ms → 0.5)
+  const rtScore = rtMs > 0 ? Math.min(1, 3200 / Math.max(rtMs, 500)) : 0.5;
+  const typingScore = typingCpm > 0 ? Math.min(1, typingCpm / 200) : 0.5;
+  const p1Score = (rtScore + typingScore) / 2;
+
+  // Patrón 2: decisión — menos correcciones y más bursts = mayor confianza
+  const corrections = (p2.corrections as number) || 0;
+  const bursts = (p2.typing_bursts as number) || 1;
+  const correctionPenalty = Math.min(1, corrections / 10); // 10 correcciones = máx penalidad
+  const burstBonus = bursts >= 3 ? 0.1 : 0; // ráfagas múltiples = exploración = duda
+  const p2Score = Math.max(0, Math.min(1, 1 - correctionPenalty - burstBonus));
+
+  // Patrón 5: predicción de error histórica
+  const quizErrRate = (p5.quiz_error_rate as number) || 0;
+  const weakConcepts = ((p5.weak_concepts as string[]) || []).slice(0, 3);
+  const p5Score = Math.max(0, 1 - quizErrRate);  // 1 = bajo riesgo
+
+  // Facial/voz en vivo
   const facialAttention = facialActive && facialSnapshot?.is_active
     ? facialSnapshot.attention_score
     : (activeModalities.includes('facial_microexpression') ? attention : 0);
@@ -140,11 +168,11 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
     : (activeModalities.includes('voice_prosody') ? 0.6 : 0);
 
   const patternValues: Record<string, number> = {
-    interaction_rhythm:     Math.min(1, engagement * 1.1),
-    decision_sequence:      Math.min(1, confidence),
+    interaction_rhythm:     p1Score,
+    decision_sequence:      p2Score,
     facial_microexpression: facialAttention,
     voice_prosody:          voiceEnergy,
-    error_prediction:       Math.min(1, 1 - errorRisk),
+    error_prediction:       p5Score,
   };
 
   const isFacialLive = !!(facialActive && facialSnapshot?.is_active);
@@ -223,7 +251,33 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
                   </span>
                 </div>
                 {isActive && (
-                  <MetricBar value={val} color={p.color} />
+                  <>
+                    <MetricBar value={val} color={p.color} />
+                    {/* Patrón 1: mostrar RT y velocidad real */}
+                    {p.id === 'interaction_rhythm' && rtMs > 0 && (
+                      <p className="text-xs text-[#9B9A97] mt-1">
+                        RT: {(rtMs/1000).toFixed(1)}s · {typingCpm.toFixed(0)} cpm
+                      </p>
+                    )}
+                    {/* Patrón 2: mostrar correcciones reales */}
+                    {p.id === 'decision_sequence' && (
+                      <p className="text-xs text-[#9B9A97] mt-1">
+                        {corrections} correc. · {bursts} ráfaga{bursts !== 1 ? 's' : ''}
+                        {(p2.is_question as boolean) ? ' · ❓pregunta' : ''}
+                      </p>
+                    )}
+                    {/* Patrón 5: conceptos débiles del historial */}
+                    {p.id === 'error_prediction' && weakConcepts.length > 0 && (
+                      <p className="text-xs text-[#E03E3E] mt-1">
+                        ⚠️ Débil en: {weakConcepts.join(', ')}
+                      </p>
+                    )}
+                    {p.id === 'error_prediction' && quizErrRate > 0 && (
+                      <p className="text-xs text-[#9B9A97] mt-0.5">
+                        {Math.round(quizErrRate * 100)}% errores históricos
+                      </p>
+                    )}
+                  </>
                 )}
                 {!isActive && (
                   <p className="text-xs text-[#9B9A97]">Datos insuficientes</p>
