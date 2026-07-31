@@ -134,6 +134,7 @@ class QuizSubmission(BaseModel):
     """Envío de respuestas del quiz por parte del usuario"""
     quiz_title: str
     user_answers: Dict[int, str]  # {question_id: selected_answer}
+    classroom_id: Optional[int] = None 
 
 class QuizAnalysisResponse(BaseModel):
     """Respuesta del análisis de quiz con recomendaciones adaptativas"""

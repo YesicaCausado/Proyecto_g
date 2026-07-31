@@ -2,6 +2,9 @@
 NeuroLearn AI - API de Chat
 Stateless para Vercel. Siempre usa IA real (Groq → Gemini). Sin fallback local.
 """
+
+from app.services.enrollment_tracking_service import EnrollmentTrackingService
+from app.models.classroom import Enrollment
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
@@ -723,6 +726,40 @@ async def submit_quiz_answers(
     db.commit()
     
     logger.info(f"Quiz analizado: {percentage}% - Conceptos débiles: {weak_concepts}")
+
+    db.commit()
+    logger.info(f"Quiz analizado: {percentage}% - Conceptos débiles: {weak_concepts}")
+
+    # ── NUEVO: validar y registrar seguimiento (Enrollment) ─────────────
+    validated_classroom_id = None
+    if submission.classroom_id is not None:
+        active_enrollment = db.query(Enrollment).filter(
+            Enrollment.student_id == current_user.id,
+            Enrollment.classroom_id == submission.classroom_id,
+            Enrollment.is_active == True,
+        ).first()
+        if active_enrollment:
+            validated_classroom_id = submission.classroom_id
+            quiz_entry.classroom_id = validated_classroom_id
+            db.commit()
+        else:
+            logger.warning(
+                f"submit_quiz_answers: classroom_id={submission.classroom_id} "
+                f"no corresponde a un Enrollment activo de user_id={current_user.id}. Se ignora."
+            )
+
+    if validated_classroom_id is not None:
+        EnrollmentTrackingService.register_quiz_completion(
+            db=db,
+            student_id=current_user.id,
+            classroom_id=validated_classroom_id,
+            score_percentage=percentage,
+        )
+
+    return QuizAnalysisResponse(
+        score=f"{correct}/{total}",
+        ...
+    )
     
     return QuizAnalysisResponse(
         score=f"{correct}/{total}",

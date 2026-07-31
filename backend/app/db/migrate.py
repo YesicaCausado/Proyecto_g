@@ -185,6 +185,9 @@ def run_migrations(engine) -> None:
         "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS notes TEXT",
         "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_type  VARCHAR(30)",
         "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)",
+
+        # ── 11. classroom_id en quiz_history — vínculo quiz ↔ clase para seguimiento ──
+    "ALTER TABLE quiz_history ADD COLUMN IF NOT EXISTS classroom_id INTEGER REFERENCES classrooms(id)",
     ]
 
     applied = 0
