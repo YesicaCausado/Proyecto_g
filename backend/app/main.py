@@ -158,12 +158,16 @@ def _ensure_demo_institution():
                 inst = Institution(
                     name="Institución Demo NeuroLearn",
                     dane_code="DEMO0001",
-                    license_type="premium",
+                    license_type="basica",
                     is_active=True,
                 )
                 db.add(inst)
                 db.flush()
                 log.info(f"✅ Institución demo creada: id={inst.id}")
+            else:
+                if inst.license_type != "basica":
+                    inst.license_type = "basica"
+                    log.info(f"ℹ️ Institución demo actualizada a licencia basica: id={inst.id}")
 
             # 2. Asignar a todos los super_profesor / profesor sin institución
             for username in ("superprofesor", "profesor"):

@@ -18,6 +18,7 @@ from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment
 from app.models.events import ClassroomEvent
+from app.services.license_service import get_license, require_active_license, LicenseInfo
 
 router = APIRouter(prefix="/events", tags=["Calendario - Eventos"])
 
@@ -65,6 +66,7 @@ async def list_events(
     classroom_id: Optional[int] = Query(None),
     month: Optional[str]        = Query(None, description="YYYY-MM para filtrar por mes"),
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
     """
@@ -84,6 +86,12 @@ async def list_events(
             Enrollment.is_active == True,
         ).all()
         cids = [e.classroom_id for e in enrollments]
+
+    # Verificar acceso al módulo 'calendario'
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("calendario"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("calendario"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
 
     # Eventos de las clases del usuario O eventos globales (classroom_id IS NULL)
     from sqlalchemy import or_
@@ -115,11 +123,17 @@ async def list_events(
 async def create_event(
     body: EventCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Crear un evento en el calendario (solo profesores)."""
     if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
         raise HTTPException(status_code=403, detail="Solo profesores pueden crear eventos")
+
+    # Verificar módulo calendario
+    if not license_info.has_teacher_module("calendario"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
 
     # Verificar que la clase le pertenece (si se especificó)
     if body.classroom_id:
@@ -151,6 +165,8 @@ async def update_event(
     event_id: int,
     body: EventUpdate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Editar un evento (solo el profesor que lo creó)."""
@@ -164,6 +180,10 @@ async def update_event(
     ).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado o sin permiso")
+
+    # Verificar módulo calendario
+    if not license_info.has_teacher_module("calendario"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
 
     if body.title is not None:       ev.title = body.title
     if body.event_type is not None:  ev.event_type = body.event_type
@@ -180,6 +200,8 @@ async def update_event(
 async def delete_event(
     event_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Eliminar un evento (solo el profesor que lo creó)."""
@@ -193,6 +215,10 @@ async def delete_event(
     ).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Evento no encontrado o sin permiso")
+
+    # Verificar módulo calendario
+    if not license_info.has_teacher_module("calendario"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
 
     ev.is_active = False
     db.commit()

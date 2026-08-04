@@ -34,16 +34,6 @@ interface TeacherLicense {
   bots_limit: number | 'unlimited';
   expiry_date: string;
 }
-
-// ── Demo datos ────────────────────────────────────────────────────────────────
-const DEMO_LICENSE: TeacherLicense = {
-  plan: 'premium',
-  groups_limit: 30,
-  students_limit: 1500,
-  bots_limit: 10,
-  expiry_date: '2027-01-15',
-};
-
 const PLAN_COLORS: Record<LicensePlan, { bg: string; text: string; label: string }> = {
   basica:   { bg: 'bg-[#F7F6F3]',   text: 'text-[#787774]', label: 'Básica'   },
   premium:  { bg: 'bg-amber-50',    text: 'text-amber-700',  label: 'Premium'  },
@@ -63,7 +53,7 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
   dashboard:      { label: 'Dashboard',       icon: LayoutDashboard, module: 'dashboard'      },
   grupos:         { label: 'Mis Grupos',       icon: BookOpen,        module: 'grupos'         },
   neurobots:      { label: 'NeuroBots',        icon: Bot,             module: 'neurobots'      },
-  alertas:        { label: 'NeuroAlertas',     icon: BrainCircuit,    module: 'dashboard', badge: 'alert' },
+  alertas:        { label: 'NeuroAlertas',     icon: BrainCircuit,    module: 'alertas', badge: 'alert' },
   tablero:        { label: 'Tablero',          icon: LayoutList,      module: 'cursos'         },
   evaluaciones:   { label: 'Evaluaciones',     icon: ClipboardList,   module: 'evaluaciones'   },
   materiales:     { label: 'Materiales',       icon: FolderOpen,      module: 'recursos'       },
@@ -146,11 +136,29 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function TeacherPanel() {
   const { user, logout } = useAuth();
-  const { licenseStatus, licenseType, hasTeacherModule } = useLicense();
+  const { licenseInfo, licenseStatus, licenseType, hasTeacherModule } = useLicense();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [license]  = useState<TeacherLicense>(DEMO_LICENSE);
-  const [_groups, setGroups]         = useState<any[]>([]);
+  const info = licenseInfo ?? {
+    license_type: 'basica' as const,
+    license_status: 'active' as const,
+    days_left: null,
+    teacher_modules: ['dashboard', 'cursos', 'grupos', 'estudiantes', 'evaluaciones', 'recursos', 'calendario', 'mensajes', 'perfil'],
+    student_modules: ['inicio', 'mis_cursos', 'mis_tareas', 'evaluaciones', 'recursos', 'calendario', 'mensajes', 'perfil'],
+    teacher_dashboard_kpis: ['cursos_activos', 'estudiantes', 'evaluaciones_creadas', 'actividades_pendientes'],
+    neurobot_limit: 1,
+    groups_limit: 10,
+    students_limit: 300,
+    export_formats: ['csv'],
+    institution_name: '',
+  };
+  const _license: TeacherLicense = {
+    plan: licenseType,
+    groups_limit: info.groups_limit,
+    students_limit: info.students_limit,
+    bots_limit: info.neurobot_limit === 999_999 ? 'unlimited' : info.neurobot_limit,
+    expiry_date: info.days_left === null ? 'Sin fecha' : `${info.days_left} días`,
+  };
   const [unreadMsgs,  setUnreadMsgs] = useState(0);
   const [activeAlerts,setActiveAlerts] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -164,7 +172,6 @@ export default function TeacherPanel() {
   }
 
   useEffect(() => {
-    api.get('/classrooms/my-classes').then(r => setGroups(r.data?.classrooms || [])).catch(() => {});
     // Real alert count from teacher stats
     api.get('/teacher/stats')
       .then(r => setActiveAlerts(r.data?.alert_count ?? 0))
@@ -182,6 +189,7 @@ export default function TeacherPanel() {
   const handleLogout = () => { logout(); navigate('/login'); };
   const meta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
   const planStyle = PLAN_COLORS[(licenseType as LicensePlan)] ?? PLAN_COLORS['basica'];
+  const license = _license;
 
   const handleNav = (id: string) => {
     setActiveTab(id);

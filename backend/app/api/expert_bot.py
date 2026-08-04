@@ -11,6 +11,7 @@ from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User
 from app.models.expert_bot import ExpertBot, BotTrainingData
+from app.services.license_service import require_active_license, require_teacher_module, LicenseInfo
 from app.schemas.schemas import (
     ExpertBotCreate,
     ExpertBotResponse,
@@ -33,6 +34,8 @@ active_trainers: Dict[int, ExpertBotTrainer] = {}
 async def create_bot(
     request: ExpertBotCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Crea un nuevo bot experto e inicia el proceso de entrenamiento"""
@@ -80,6 +83,8 @@ async def set_bot_personality(
     bot_id: int,
     config: BotPersonalityConfig,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Configura la personalidad del bot"""
@@ -113,6 +118,8 @@ async def add_bot_step(
     bot_id: int,
     step: BotStepCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Añade un paso al proceso del bot"""
@@ -154,6 +161,8 @@ async def add_bot_warning(
     bot_id: int,
     warning: BotWarningCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Añade una advertencia al bot"""
@@ -185,6 +194,8 @@ async def add_bot_rule(
     bot_id: int,
     rule: Dict,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
 ):
     """Añade una regla operativa al bot"""
     trainer = active_trainers.get(bot_id)
@@ -199,6 +210,8 @@ async def add_bot_tip(
     bot_id: int,
     tip: Dict,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
 ):
     """Añade una recomendación práctica al bot"""
     trainer = active_trainers.get(bot_id)
@@ -213,6 +226,8 @@ async def add_bot_scenario(
     bot_id: int,
     scenario: BotScenarioCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
 ):
     """Añade un escenario de simulación al bot"""
     trainer = active_trainers.get(bot_id)
@@ -235,6 +250,8 @@ async def add_bot_qa(
     bot_id: int,
     qa: BotQACreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
 ):
     """Añade un par de pregunta/respuesta al bot"""
     trainer = active_trainers.get(bot_id)
@@ -253,6 +270,8 @@ async def add_bot_qa(
 async def review_bot(
     bot_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
 ):
     """Obtiene la revisión del bot en entrenamiento"""
     trainer = active_trainers.get(bot_id)
@@ -266,6 +285,8 @@ async def review_bot(
 async def finalize_bot(
     bot_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Finaliza el entrenamiento del bot y lo marca como activo"""
@@ -336,6 +357,8 @@ async def list_bots_root(
 async def publish_bot(
     bot_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Publica un bot para que otros usuarios lo puedan usar"""
@@ -356,6 +379,7 @@ async def publish_bot(
 @router.get("/my-bots")
 async def list_my_bots(
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
     db: Session = Depends(get_db),
 ):
     """Lista los bots creados por el usuario actual"""
@@ -393,6 +417,8 @@ async def update_bot(
     bot_id: int,
     payload: _BotUpdate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Actualiza is_active / is_public de un bot del usuario actual"""
@@ -414,6 +440,8 @@ async def update_bot(
 async def delete_bot(
     bot_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Elimina un bot creado por el usuario actual"""

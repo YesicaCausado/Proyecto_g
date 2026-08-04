@@ -28,13 +28,13 @@ TEACHER_MODULES: dict[str, list[str]] = {
     ],
     "premium": [
         "dashboard", "cursos", "grupos", "estudiantes",
-        "evaluaciones", "recursos", "neurobots", "reportes",
+        "evaluaciones", "recursos", "neurobots", "alertas", "reportes",
         "calendario", "mensajes", "perfil", "ia", "analitica",
         "banco_preguntas",
     ],
     "pro": [
         "dashboard", "cursos", "grupos", "estudiantes",
-        "evaluaciones", "recursos", "neurobots", "ia", "reportes",
+        "evaluaciones", "recursos", "neurobots", "alertas", "ia", "reportes",
         "analitica", "banco_preguntas", "integraciones",
         "automatizaciones", "configuracion", "perfil",
     ],
@@ -96,6 +96,18 @@ EXPORT_FORMATS: dict[str, list[str]] = {
     "pro":     ["csv", "pdf", "excel"],
 }
 
+GROUP_LIMITS: dict[str, int] = {
+    "basica":  10,
+    "premium": 30,
+    "pro":     999_999,
+}
+
+STUDENT_LIMITS: dict[str, int] = {
+    "basica":  300,
+    "premium": 1500,
+    "pro":     999_999,
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Clase de resultado de licencia
@@ -112,6 +124,8 @@ class LicenseInfo:
         teacher_dashboard_kpis: list[str],
         neurobot_limit: int,
         export_formats: list[str],
+        groups_limit: int,
+        students_limit: int,
         institution_name: str,
     ):
         self.license_type            = license_type
@@ -122,6 +136,8 @@ class LicenseInfo:
         self.teacher_dashboard_kpis  = teacher_dashboard_kpis
         self.neurobot_limit          = neurobot_limit
         self.export_formats          = export_formats
+        self.groups_limit            = groups_limit
+        self.students_limit          = students_limit
         self.institution_name        = institution_name
 
     def to_dict(self) -> dict:
@@ -134,6 +150,8 @@ class LicenseInfo:
             "teacher_dashboard_kpis": self.teacher_dashboard_kpis,
             "neurobot_limit":         self.neurobot_limit,
             "export_formats":         self.export_formats,
+            "groups_limit":           self.groups_limit,
+            "students_limit":         self.students_limit,
             "institution_name":       self.institution_name,
         }
 
@@ -221,6 +239,8 @@ def get_license_for_user(user: User, db: Session) -> LicenseInfo:
         teacher_dashboard_kpis=TEACHER_DASHBOARD_KPIS.get(plan, TEACHER_DASHBOARD_KPIS["basica"]),
         neurobot_limit=NEUROBOT_LIMITS.get(plan, 1),
         export_formats=EXPORT_FORMATS.get(plan, ["csv"]),
+        groups_limit=GROUP_LIMITS.get(plan, GROUP_LIMITS["basica"]),
+        students_limit=STUDENT_LIMITS.get(plan, STUDENT_LIMITS["basica"]),
         institution_name=institution.name,
     )
 
@@ -230,6 +250,7 @@ def get_license_for_user(user: User, db: Session) -> LicenseInfo:
 # ─────────────────────────────────────────────────────────────────────────────
 
 from app.api.auth import get_current_user  # no circular: auth.py doesn't import license_service
+from app.models.user import UserRole
 
 
 def get_license(
@@ -276,6 +297,41 @@ def require_active_license():
     Úsalo en endpoints de escritura (POST/PUT/DELETE).
     """
     def _check(license_info: LicenseInfo = Depends(get_license)):
+        if license_info.license_status == "suspended":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="La licencia institucional está suspendida. Contacta al administrador.",
+            )
+        if license_info.license_status == "expired":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="La licencia institucional ha expirado. El panel está en modo solo lectura.",
+            )
+        return license_info
+    return _check
+
+
+def require_chat_access():
+    """
+    Permite acceso a la IA de chat según el rol y la licencia.
+    Profesores requieren el módulo "ia"; estudiantes requieren "tutor_ia".
+    """
+    def _check(
+        current_user: User = Depends(get_current_user),
+        license_info: LicenseInfo = Depends(get_license),
+    ):
+        if current_user.role in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value):
+            if not license_info.has_teacher_module("ia"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"El módulo 'ia' no está disponible en tu licencia ({license_info.license_type}).",
+                )
+        else:
+            if not license_info.has_student_module("tutor_ia"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"El módulo 'tutor_ia' no está disponible en tu licencia ({license_info.license_type}).",
+                )
         if license_info.license_status == "suspended":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

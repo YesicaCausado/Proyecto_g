@@ -37,6 +37,8 @@ export interface LicenseInfo {
   student_modules:        string[];
   teacher_dashboard_kpis: string[];
   neurobot_limit:         number;
+  groups_limit:           number;
+  students_limit:         number;
   export_formats:         string[];
   institution_name:       string;
 }
@@ -74,6 +76,8 @@ const BASIC_ACTIVE: LicenseInfo = {
     'cursos_activos', 'estudiantes', 'evaluaciones_creadas', 'actividades_pendientes',
   ],
   neurobot_limit:         1,
+  groups_limit:           10,
+  students_limit:         300,
   export_formats:         ['csv'],
   institution_name:       '',
 };

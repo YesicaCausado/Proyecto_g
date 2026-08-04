@@ -21,6 +21,7 @@ from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment
 from app.models.posts import Post, PostReaction, PostComment
+from app.services.license_service import get_license, require_active_license, LicenseInfo
 
 router = APIRouter(prefix="/posts", tags=["Tablero - Posts"])
 
@@ -94,6 +95,7 @@ async def list_posts(
     classroom_id: Optional[int] = Query(None, description="Filtrar por clase"),
     post_type: Optional[str]    = Query(None, description="Filtrar por tipo"),
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
     """
@@ -138,11 +140,17 @@ async def list_posts(
 async def create_post(
     body: PostCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Crear un post en el tablero (solo profesores dueños de la clase)."""
     if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
         raise HTTPException(status_code=403, detail="Solo profesores pueden publicar")
+
+    # Verificar módulo 'cursos' para profesores
+    if not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
 
     classroom = db.query(Classroom).filter(
         Classroom.id == body.classroom_id,
@@ -171,8 +179,15 @@ async def create_post(
 async def get_post(
     post_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
+    # Verificar acceso al módulo 'mis_cursos' o 'cursos'
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
@@ -183,9 +198,17 @@ async def get_post(
 async def toggle_reaction(
     post_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Toggle de reacción 👍 del usuario actual en un post."""
+    # Verificar acceso al módulo 'mis_cursos'/'cursos'
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
@@ -212,8 +235,15 @@ async def toggle_reaction(
 async def list_comments(
     post_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
+    # Verificar módulo de lectura
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
@@ -242,9 +272,17 @@ async def add_comment(
     post_id: int,
     body: CommentCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Añadir comentario a un post (profesores y estudiantes pueden comentar)."""
+    # Verificar módulo 'mis_cursos'/'cursos'
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
@@ -275,6 +313,8 @@ async def add_comment(
 async def delete_post(
     post_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     """Desactivar un post (solo el profesor que lo creó)."""

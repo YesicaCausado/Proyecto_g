@@ -14,6 +14,7 @@ from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User
 from app.models.learning import LearningSession, CognitiveState
+from app.services.license_service import require_chat_access, LicenseInfo
 from app.schemas.schemas import (
     StartSessionRequest,
     ChatMessageRequest,
@@ -291,6 +292,7 @@ def _quiz_suggested(response_text: str) -> bool:
 async def start_session(
     request: StartSessionRequest,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_chat_access()),
     db: Session = Depends(get_db),
 ):
     """Inicia sesión: la IA genera un mensaje de bienvenida al tema."""
@@ -327,6 +329,7 @@ async def start_session(
 async def send_message(
     request: ChatMessageRequest,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_chat_access()),
     db: Session = Depends(get_db),
 ):
     """
@@ -554,7 +557,10 @@ async def send_message(
 
 
 @router.get("/stats", response_model=SessionStatsResponse)
-async def get_session_stats(current_user: User = Depends(get_current_user)):
+async def get_session_stats(
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_chat_access()),
+):
     return SessionStatsResponse(
         total_messages=0, correct_answers=0, wrong_answers=0,
         average_response_time=0, topics_covered=[], session_duration=0,
@@ -565,6 +571,7 @@ async def get_session_stats(current_user: User = Depends(get_current_user)):
 async def generate_cognitive_quiz(
     request: QuizRequest,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_chat_access()),
     db: Session = Depends(get_db)
 ):
     """
@@ -848,6 +855,7 @@ async def generate_cognitive_quiz(
 async def submit_quiz_answers(
     submission: QuizSubmission,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_chat_access()),
     db: Session = Depends(get_db)
 ):
     """

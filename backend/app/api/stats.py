@@ -4,15 +4,19 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from app.db.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.learning import QuizHistory, LearningSession
 from app.api.auth import get_current_user
+from app.services.license_service import get_license, LicenseInfo
 
 router = APIRouter()
 
 @router.get("/dashboard")
-def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), license_info: LicenseInfo = Depends(get_license)):
     user_id = current_user.id
+    # Bloquear si la licencia está suspendida
+    if license_info.license_status == "suspended":
+        raise HTTPException(status_code=403, detail="La licencia institucional está suspendida.")
     
     # 1. Total Exercises (sum of questions answered in quizzes)
     total_exercises = db.query(func.sum(QuizHistory.questions_count)).filter(
@@ -95,6 +99,7 @@ def _avg(entries, field="performance_score"):
 def get_performance_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
 ):
     """
     Análisis detallado de desempeño para la sección Desempeño:
@@ -102,6 +107,10 @@ def get_performance_stats(
     indicadores cognitivos derivados, logros y distribución horaria.
     """
     user_id = current_user.id
+    # Verificar acceso a estadísticas para estudiantes
+    if current_user.role == UserRole.ESTUDIANTE.value:
+        if not license_info.has_student_module("estadisticas"):
+            raise HTTPException(status_code=403, detail=f"El módulo 'estadisticas' no está disponible en tu licencia ({license_info.license_type}).")
     now = datetime.utcnow()
     today = now.date()
 
@@ -202,13 +211,11 @@ def get_performance_stats(
             fecha = f"Ayer, {e.completed_at.strftime('%H:%M')}"
         else:
             fecha = f"Hace {delta.days} días"
-
         parts = e.user_score.split("/") if e.user_score else ["0", str(e.questions_count)]
         recent.append({
             "materia":   _SUBJECT_LABELS.get(sk, e.topic[:20]),
             "topic_key": sk,
             "fecha":     fecha,
-            "score":     int(parts[0]) if parts[0].isdigit() else 0,
             "total":     int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else e.questions_count,
             "tiempo":    f"{round(e.time_spent_seconds / 60)}min" if e.time_spent_seconds else "—",
             "diff":      e.difficulty or "Medio",

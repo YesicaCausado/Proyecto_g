@@ -2,7 +2,7 @@
 Sistema de Notificaciones NeuroLearn
 GET /api/v1/notifications  →  lista de notificaciones contextuales del usuario
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -10,6 +10,7 @@ from app.db.database import get_db
 from app.models.user import User
 from app.models.learning import QuizHistory, LearningSession
 from app.api.auth import get_current_user
+from app.services.license_service import get_license, LicenseInfo
 
 router = APIRouter()
 
@@ -159,8 +160,13 @@ def _build_notifications(user: User, db: Session) -> list[dict]:
 def get_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
 ):
     """Retorna notificaciones contextuales del usuario autenticado."""
+    # Bloquear si la licencia está suspendida
+    if license_info.license_status == "suspended":
+        raise HTTPException(status_code=403, detail="La licencia institucional está suspendida.")
+
     try:
         notifs = _build_notifications(current_user, db)
     except Exception:
