@@ -115,18 +115,28 @@ async def list_my_classrooms(
 ):
     """Listar las clases del profesor actual"""
     require_teacher(current_user)
-
+    # Obtener todas las clases del profesor en una sola consulta
     classrooms = db.query(Classroom).filter(
         Classroom.teacher_id == current_user.id,
         Classroom.is_active == True,
     ).all()
 
+    # Si no hay clases, responder rápido
+    if not classrooms:
+        return ClassroomListResponse(classrooms=[], total=0)
+
+    # Obtener contadores de estudiantes por classroom_id en una sola consulta
+    classroom_ids = [c.id for c in classrooms]
+    counts = db.query(Enrollment.classroom_id, func.count(Enrollment.id).label("cnt")).filter(
+        Enrollment.classroom_id.in_(classroom_ids),
+        Enrollment.is_active == True,
+    ).group_by(Enrollment.classroom_id).all()
+
+    counts_map = {cid: cnt for (cid, cnt) in counts}
+
     result = []
     for c in classrooms:
-        student_count = db.query(Enrollment).filter(
-            Enrollment.classroom_id == c.id,
-            Enrollment.is_active == True,
-        ).count()
+        student_count = counts_map.get(c.id, 0)
         result.append(ClassroomResponse(
             id=c.id,
             teacher_id=c.teacher_id,
