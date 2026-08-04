@@ -26,9 +26,11 @@ from app.models.user import User, UserRole
 from app.models.institution import Institution, AuditLog, LICENSE_LIMITS
 from app.schemas.schemas import (
     InstitutionCreate, InstitutionResponse, InstitutionListItem,
-    TeacherCreate, StudentCreate, BulkCreateResponse, CredentialItem,
-    LicenseUsage, ChangePasswordRequest,
+    TeacherCreate, TeacherListItem, StudentCreate, BulkCreateResponse,
+    CredentialItem, LicenseUsage, ChangePasswordRequest, AdminStats,
 )
+
+from app.services.email_service import send_credentials_email
 
 router = APIRouter(tags=["Credenciales B2B"])
 
@@ -169,6 +171,14 @@ async def create_institution(
 
     db.commit()
 
+    send_credentials_email(
+        to_email=sp.email,
+        to_name=sp.full_name or sp.username,
+        username=sp.username,
+        temp_password=temp_pwd,
+        role=sp.role,
+    )
+
     return {
         "id": institution.id,
         "name": institution.name,
@@ -183,6 +193,40 @@ async def create_institution(
             role=sp.role,
         ),
     }
+
+@router.get("/admin/stats", response_model=AdminStats)
+async def get_admin_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estadísticas globales del sistema — solo para administradores."""
+    _require_role(current_user, UserRole.ADMIN.value)
+
+    total_institutions  = db.query(Institution).count()
+    active_institutions = db.query(Institution).filter(Institution.is_active == True).count()
+
+    total_super_profesores = db.query(User).filter(
+        User.role == UserRole.SUPER_PROFESOR.value,
+        User.is_active == True,
+    ).count()
+
+    total_profesores = db.query(User).filter(
+        User.role == UserRole.PROFESOR.value,
+        User.is_active == True,
+    ).count()
+
+    total_estudiantes = db.query(User).filter(
+        User.role == UserRole.ESTUDIANTE.value,
+        User.is_active == True,
+    ).count()
+
+    return AdminStats(
+        total_institutions=total_institutions,
+        active_institutions=active_institutions,
+        total_super_profesores=total_super_profesores,
+        total_profesores=total_profesores,
+        total_estudiantes=total_estudiantes,
+    )
 
 
 @router.get("/admin/institutions", response_model=List[InstitutionListItem])
@@ -215,6 +259,32 @@ def _get_my_institution(db: Session, user: User) -> Institution:
     if not inst:
         raise HTTPException(404, "Institución no encontrada")
     return inst
+
+
+@router.get("/super/teachers", response_model=List[TeacherListItem])
+async def list_teachers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    teachers = db.query(User).filter(
+        User.institution_id == institution.id,
+        User.role == UserRole.PROFESOR.value,
+    ).order_by(User.full_name).all()
+    return [
+        TeacherListItem(
+            id=t.id,
+            full_name=t.full_name,
+            username=t.username,
+            email=t.email or "",
+            document_type=t.document_type or "",
+            document_number=t.document_number or "",
+            subject_area=t.subject_area or "",
+            is_active=t.is_active,
+        )
+        for t in teachers
+    ]
 
 
 @router.post("/super/teachers", response_model=CredentialItem, status_code=201)
@@ -254,6 +324,14 @@ async def create_teacher(
          teacher.id, "profesor", _client_ip(request))
     db.commit()
 
+    send_credentials_email(
+        to_email=teacher.email,
+        to_name=teacher.full_name or teacher.username,
+        username=teacher.username,
+        temp_password=temp_pwd,
+        role=teacher.role,
+    )
+
     return CredentialItem(
         full_name=teacher.full_name,
         username=teacher.username,
@@ -278,6 +356,8 @@ async def bulk_create_teachers(
 
     created: List[CredentialItem] = []
     errors = []
+    seen_docs: set = set()   # duplicados dentro del mismo batch
+    seen_emails: set = set()
 
     for i, row in enumerate(reader, start=2):
         row = {k.strip().lower(): v.strip() for k, v in row.items()}
@@ -294,6 +374,10 @@ async def bulk_create_teachers(
             err = "Documento vacío"
         elif not _validate_email(row.get("correo", "")):
             err = "Correo inválido"
+        elif row["numero_documento"] in seen_docs:
+            err = "Documento duplicado en este archivo"
+        elif row["correo"] in seen_emails:
+            err = "Correo duplicado en este archivo"
         elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
             err = "Documento duplicado en el sistema"
         elif db.query(User).filter(User.email == row["correo"]).first():
@@ -328,6 +412,8 @@ async def bulk_create_teachers(
         )
         db.add(teacher)
         db.flush()
+        seen_docs.add(row["numero_documento"])
+        seen_emails.add(row["correo"])
         _log(db, "bulk_create_teacher", current_user, institution.id,
              teacher.id, "profesor", _client_ip(request))
         created.append(CredentialItem(
@@ -336,16 +422,51 @@ async def bulk_create_teachers(
             temp_password=temp_pwd,
             role=teacher.role,
         ))
+        # Email se envía dentro del loop porque aquí tenemos row["correo"]
+        send_credentials_email(
+            to_email=row["correo"],
+            to_name=teacher.full_name or teacher.username,
+            username=teacher.username,
+            temp_password=temp_pwd,
+            role=teacher.role,
+        )
 
     db.commit()
     return BulkCreateResponse(
-        created=created, errors=errors,
+        credentials=created, errors=errors,
         total_processed=len(created) + len(errors),
         total_created=len(created), total_errors=len(errors),
     )
 
 
 # ─── Super Profesor: Estudiantes ──────────────────────────────────────────────
+
+@router.get("/super/students")
+async def list_students(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    students = db.query(User).filter(
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).order_by(User.full_name).all()
+    return [
+        {
+            "id": s.id,
+            "full_name": s.full_name,
+            "username": s.username,
+            "email": s.email or "",
+            "document_type": s.document_type or "",
+            "document_number": s.document_number or "",
+            "grade": s.grade or "",
+            "birth_date": s.birth_date or "",
+            "is_active": s.is_active,
+        }
+        for s in students
+    ]
+
 
 @router.post("/super/students", response_model=CredentialItem, status_code=201)
 async def create_student(
@@ -383,6 +504,15 @@ async def create_student(
          student.id, "estudiante", _client_ip(request))
     db.commit()
 
+    if payload.email:
+        send_credentials_email(
+            to_email=student.email,
+            to_name=student.full_name or student.username,
+            username=student.username,
+            temp_password=temp_pwd,
+            role=student.role,
+        )
+
     return CredentialItem(
         full_name=student.full_name,
         username=student.username,
@@ -407,6 +537,7 @@ async def bulk_create_students(
 
     created: List[CredentialItem] = []
     errors = []
+    seen_docs_s: set = set()
 
     for i, row in enumerate(reader, start=2):
         row = {k.strip().lower(): v.strip() for k, v in row.items()}
@@ -420,6 +551,8 @@ async def bulk_create_students(
             err = "Nombre vacío"
         elif not row.get("numero_documento"):
             err = "Documento vacío"
+        elif row["numero_documento"] in seen_docs_s:
+            err = "Documento duplicado en este archivo"
         elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
             err = "Documento duplicado"
 
@@ -453,6 +586,7 @@ async def bulk_create_students(
         )
         db.add(student)
         db.flush()
+        seen_docs_s.add(row["numero_documento"])
         _log(db, "bulk_create_student", current_user, institution.id,
              student.id, "estudiante", _client_ip(request))
         created.append(CredentialItem(
@@ -461,10 +595,18 @@ async def bulk_create_students(
             temp_password=temp_pwd,
             role=student.role,
         ))
-
+        # Solo enviar si tiene email real (no el @neurolearn.local generado)
+        if row.get("correo"):
+            send_credentials_email(
+                to_email=row["correo"],
+                to_name=student.full_name or student.username,
+                username=student.username,
+                temp_password=temp_pwd,
+                role=student.role,
+            )
     db.commit()
     return BulkCreateResponse(
-        created=created, errors=errors,
+        credentials=created, errors=errors,
         total_processed=len(created) + len(errors),
         total_created=len(created), total_errors=len(errors),
     )

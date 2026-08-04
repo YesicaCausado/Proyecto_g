@@ -112,6 +112,8 @@ class QuizHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     session_id = Column(Integer, ForeignKey("learning_sessions.id"), nullable=True)
+    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)  # ← NUEVO
+    quiz_title = Column(String(200), nullable=False)
     
     # Información del quiz
     quiz_title = Column(String(200), nullable=False)

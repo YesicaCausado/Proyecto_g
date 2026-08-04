@@ -1,4 +1,5 @@
 ﻿import { Link } from 'react-router-dom';
+import NeuronAvatar from '../../components/NeuronAvatar';
 
 export default function BotsPage() {
   // Página de habilidades / bots disponibles
@@ -48,9 +49,24 @@ export default function BotsPage() {
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
       <div className="pb-5 mb-6 border-b border-[#E9E9E7]">
+        {/* Neuron intro card */}
+        <div className="flex items-center gap-4 bg-[#1a1a1a] rounded-md p-5 mb-6 text-white">
+          <NeuronAvatar size={52} online variant="gradient" />
+          <div>
+            <p className="text-[#9B9A97] text-[10px] uppercase tracking-widest font-semibold mb-0.5">
+              Tu asistente inteligente
+            </p>
+            <h2 className="text-base font-bold text-white leading-tight">
+              Neuron <span className="text-[#60C8FF] font-normal text-sm">· NeuroLearn AI</span>
+            </h2>
+            <p className="text-[#787774] text-xs mt-1">
+              Selecciona una habilidad y empieza a practicar con Neuron
+            </p>
+          </div>
+        </div>
         <h1 className="text-xl font-semibold text-[#37352F]">Habilidades Transversales</h1>
         <p className="text-[#787774] text-sm mt-1">
-          5 competencias clave para el Saber 11. Selecciona una para empezar a practicar.
+          5 competencias clave para el Saber 11. Selecciona una para practicar con Neuron.
         </p>
       </div>
 

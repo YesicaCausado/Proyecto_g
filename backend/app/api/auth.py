@@ -8,10 +8,9 @@ from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
-from dataclasses import dataclass, field
 from typing import Optional
-
 import secrets
+
 from app.db.database import get_db
 from app.core.config import settings
 from app.models.user import User as UserModel
@@ -24,7 +23,6 @@ from app.services.email_service import send_password_reset_email
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-# auto_error=False → si no hay token, devuelve None en vez de lanzar 401
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
@@ -36,7 +34,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -55,7 +53,7 @@ async def get_current_user(
         detail="Credenciales inválidas",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     if not token:
         raise credentials_exception
 
@@ -70,6 +68,15 @@ async def get_current_user(
     user = db.query(UserModel).filter(UserModel.username == username).first()
     if user is None:
         raise credentials_exception
+
+    # FIX #5: sin esto, un usuario desactivado sigue autenticado hasta que
+    # su token expira (hasta 24h con ACCESS_TOKEN_EXPIRE_MINUTES=1440).
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cuenta desactivada. Contacta al administrador.",
+        )
+
     return user
 
 
@@ -173,6 +180,14 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         role=user.role,
         full_name=user.full_name,
         must_change_password=getattr(user, 'must_change_password', False) or False,
+        email=user.email,
+        username=user.username,
+        is_active=user.is_active,
+        is_expert=getattr(user, 'is_expert', False) or False,
+        institution_id=getattr(user, 'institution_id', None),
+        document_number=getattr(user, 'document_number', None),
+        cognitive_profile=getattr(user, 'cognitive_profile', None),
+        created_at=user.created_at,
     )
 
 
@@ -180,7 +195,58 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 async def get_me(current_user=Depends(get_current_user)):
     """Obtener perfil del usuario actual."""
     return current_user
-    
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Actualizar nombre y/o email del usuario autenticado."""
+    if "full_name" in data and data["full_name"]:
+        current_user.full_name = data["full_name"]
+    if "email" in data and data["email"]:
+        existing = db.query(UserModel).filter(
+            UserModel.email == data["email"],
+            UserModel.id != current_user.id,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="El email ya está en uso por otra cuenta.")
+        current_user.email = data["email"]
+    try:
+        db.commit()
+        db.refresh(current_user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar: {str(e)}")
+    return current_user
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Cambiar contraseña del usuario autenticado."""
+    current_pwd = data.get("current_password", "")
+    new_pwd     = data.get("new_password", "")
+
+    if not verify_password(current_pwd, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta.")
+    if len(new_pwd) < 8:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres.")
+
+    current_user.hashed_password = get_password_hash(new_pwd)
+    current_user.must_change_password = False
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al guardar: {str(e)}")
+
+
 @router.post("/forgot-password", status_code=200)
 async def forgot_password(
     payload: ForgotPasswordRequest,
@@ -192,24 +258,18 @@ async def forgot_password(
     Siempre devuelve el mismo mensaje para no revelar
     si el email/usuario existe en el sistema.
     """
-    from datetime import timezone
-    from sqlalchemy import text
-
     GENERIC_RESPONSE = {
         "message": "Si los datos son correctos, recibirás un correo con las instrucciones."
     }
 
-    # Buscar usuario por username O email
     user = db.query(UserModel).filter(
         (UserModel.username == payload.username) |
         (UserModel.email == payload.username)
     ).first()
 
-    # Respuesta genérica si no existe — no revela información
     if not user or not user.is_active:
         return GENERIC_RESPONSE
 
-    # Rate limiting básico: máx 5 tokens activos por usuario
     from app.models.password_reset import PasswordResetToken
     active_count = db.query(PasswordResetToken).filter(
         PasswordResetToken.user_id == user.id,
@@ -220,13 +280,11 @@ async def forgot_password(
     if active_count >= 5:
         return GENERIC_RESPONSE
 
-    # Invalidar tokens anteriores del mismo usuario
     db.query(PasswordResetToken).filter(
         PasswordResetToken.user_id == user.id,
         PasswordResetToken.used == False,
     ).update({"used": True})
 
-    # Generar token criptográfico seguro
     token = secrets.token_urlsafe(64)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
     ip = request.headers.get("X-Forwarded-For") or getattr(request.client, "host", None)
@@ -240,7 +298,6 @@ async def forgot_password(
     db.add(reset_token)
     db.commit()
 
-    # Enviar email
     send_password_reset_email(
         to_email=user.email,
         to_name=user.full_name or user.username,
@@ -253,11 +310,7 @@ async def forgot_password(
 
 @router.get("/reset-password/validate", status_code=200)
 async def validate_reset_token(token: str, db: Session = Depends(get_db)):
-    """
-    Valida que el token de recuperación existe, no está usado y no expiró.
-    El frontend lo llama al cargar la página /reset-password?token=xxx
-    """
-    from datetime import timezone
+    """Valida que el token de recuperación existe, no está usado y no expiró."""
     from app.models.password_reset import PasswordResetToken
 
     reset = db.query(PasswordResetToken).filter(
@@ -266,10 +319,8 @@ async def validate_reset_token(token: str, db: Session = Depends(get_db)):
 
     if not reset:
         raise HTTPException(status_code=400, detail="Token inválido o inexistente")
-
     if reset.used:
         raise HTTPException(status_code=400, detail="Este enlace ya fue utilizado")
-
     if reset.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="El enlace ha expirado. Solicita uno nuevo")
 
@@ -281,26 +332,19 @@ async def reset_password(
     payload: ResetPasswordRequest,
     db: Session = Depends(get_db),
 ):
-    """
-    Restablece la contraseña usando el token recibido por email.
-    El token se invalida inmediatamente después de usarse.
-    """
+    """Restablece la contraseña usando el token recibido por email."""
     import re
-    from datetime import timezone
     from app.models.password_reset import PasswordResetToken
 
-    # Validar token
     reset = db.query(PasswordResetToken).filter(
         PasswordResetToken.token == payload.token,
     ).first()
 
     if not reset or reset.used:
         raise HTTPException(status_code=400, detail="Token inválido o ya utilizado")
-
     if reset.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="El enlace ha expirado. Solicita uno nuevo")
 
-    # Validar fortaleza de la contraseña
     pwd = payload.new_password
     if (len(pwd) < 8
             or not re.search(r"[A-Z]", pwd)
@@ -313,17 +357,14 @@ async def reset_password(
                    "una mayúscula, una minúscula, un número y un carácter especial",
         )
 
-    # Obtener usuario y actualizar contraseña
     user = db.query(UserModel).filter(UserModel.id == reset.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     user.hashed_password = get_password_hash(pwd)
     user.must_change_password = False
-
-    # Invalidar el token usado
     reset.used = True
-
     db.commit()
 
     return {"message": "Contraseña restablecida correctamente. Ya puedes iniciar sesión"}
+

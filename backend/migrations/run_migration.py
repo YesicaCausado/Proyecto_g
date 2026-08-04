@@ -16,7 +16,7 @@ from app.db.database import engine
 def run_migration():
     """Ejecuta la migración para agregar columnas adaptativas"""
     
-    migration_file = Path(__file__).parent / "add_adaptive_quiz_columns.sql"
+    migration_file = Path(__file__).parent / "applied" / "002_add_adaptive_quiz_columns.sql"
     
     if not migration_file.exists():
         print(f"❌ Archivo de migración no encontrado: {migration_file}")

@@ -1,56 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BookOpen, Users, TrendingUp, ClipboardList, Bot, AlertTriangle,
   ChevronRight, Star, Clock, Calendar, Zap,
 } from 'lucide-react';
+import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 interface Props {
   license: any;
   onNavigate: (tab: string) => void;
 }
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
-const KPI = [
-  { id: 'grupos',      label: 'Mis Grupos',          value: '6',   sub: '2 activos hoy',           icon: BookOpen,     color: 'text-[#2E6FDB]', bg: 'bg-[#EEF3FD]', nav: 'grupos'      },
-  { id: 'estudiantes', label: 'Estudiantes',          value: '187', sub: '+5 esta semana',           icon: Users,        color: 'text-[#0F7B6C]', bg: 'bg-emerald-50', nav: 'grupos'     },
-  { id: 'promedio',    label: 'Promedio General',     value: '7.8', sub: '+0.3 vs mes anterior',    icon: TrendingUp,   color: 'text-[#D9730D]', bg: 'bg-orange-50',  nav: 'alertas'    },
-  { id: 'pendientes',  label: 'Actividades Pendientes',value: '8',  sub: 'por revisar',             icon: ClipboardList,color: 'text-[#E03E3E]', bg: 'bg-red-50',     nav: 'evaluaciones'},
-  { id: 'bots',        label: 'NeuroBots Activos',    value: '3',   sub: '520 consultas este mes',  icon: Bot,          color: 'text-[#6940A5]', bg: 'bg-purple-50',  nav: 'neurobots'  },
-  { id: 'alertas',     label: 'Alertas Académicas',   value: '4',   sub: '1 alta prioridad',        icon: AlertTriangle,color: 'text-[#E03E3E]', bg: 'bg-red-50',     nav: 'alertas'    },
-];
+interface TeacherStats {
+  total_groups: number;
+  total_students: number;
+  avg_global: number;
+  active_bots: number;
+  alert_count: number;
+  groups_perf: { name: string; avg: number; color: string }[];
+  top_students: { name: string; group: string; avg: number; trend: string }[];
+  upcoming: { type: string; label: string; date: string; color: string }[];
+  ai_usage: { name: string; pct: number; color: string }[];
+}
 
 const WEEK_DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb'];
-const WEEK_DATA = [72, 85, 68, 91, 78, 45];
-
-const GROUPS_PERF = [
-  { name: 'Matemáticas 9A', avg: 8.2, color: 'bg-[#2E6FDB]' },
-  { name: 'Física 10B',     avg: 7.6, color: 'bg-[#0F7B6C]' },
-  { name: 'Algebra 8C',     avg: 6.9, color: 'bg-[#D9730D]' },
-  { name: 'Cálculo 11A',    avg: 8.8, color: 'bg-[#6940A5]' },
-  { name: 'Geometría 7A',   avg: 7.1, color: 'bg-[#0B6E99]' },
-];
-
-const AI_USAGE = [
-  { name: 'MateBot 9A', pct: 87, color: 'bg-[#2E6FDB]' },
-  { name: 'FísicaBot',  pct: 72, color: 'bg-[#0F7B6C]' },
-  { name: 'AlgebraBot', pct: 58, color: 'bg-[#6940A5]' },
-];
-
 const today = new Date();
-const UPCOMING = [
-  { type: 'tarea',   label: 'Ecuaciones cuadráticas — 9A', date: 'Hoy',     color: 'bg-[#E03E3E]' },
-  { type: 'examen',  label: 'Parcial Física — 10B',        date: 'Mañana',  color: 'bg-[#D9730D]' },
-  { type: 'anuncio', label: 'Reunión padres de familia',   date: '4 Jul',   color: 'bg-[#2E6FDB]' },
-  { type: 'evento',  label: 'Feria de ciencias',           date: '8 Jul',   color: 'bg-[#0F7B6C]' },
-  { type: 'clase',   label: 'Cálculo diferencial 11A',     date: '10 Jul',  color: 'bg-[#6940A5]' },
-];
-
-const RANKING = [
-  { name: 'Valentina Torres', group: '9A', avg: 9.4, trend: '+0.3' },
-  { name: 'Carlos Silva',     group: '10B', avg: 9.1, trend: '+0.1' },
-  { name: 'María González',   group: '11A', avg: 8.9, trend: '+0.5' },
-  { name: 'Andrés Mora',      group: '8C',  avg: 8.7, trend: '-0.2' },
-];
 
 // ── Mini calendario ───────────────────────────────────────────────────────────
 function MiniCalendar() {
@@ -99,8 +73,28 @@ function MiniCalendar() {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function DashboardTab({ onNavigate }: Props) {
+  useAuth(); // provides context; user not needed directly here
+  const [stats, setStats] = useState<TeacherStats | null>(null);
   const hour = today.getHours();
   const greeting = hour < 12 ? 'Buenos días' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
+
+  useEffect(() => {
+    api.get('/teacher/stats')
+      .then(r => setStats(r.data))
+      .catch(() => {});
+  }, []);
+
+  // KPI cards derived from real stats
+  const KPI = [
+    { id:'grupos',      label:'Mis Grupos',            value: String(stats?.total_groups ?? '…'),    sub: `${stats?.total_groups ?? 0} activos`,       icon:BookOpen,     color:'text-[#2E6FDB]', bg:'bg-[#EEF3FD]', nav:'grupos'      },
+    { id:'estudiantes', label:'Estudiantes',            value: String(stats?.total_students ?? '…'),  sub: 'inscritos en mis grupos',                    icon:Users,        color:'text-[#0F7B6C]', bg:'bg-emerald-50', nav:'grupos'     },
+    { id:'promedio',    label:'Promedio General',       value: stats ? `${stats.avg_global}` : '…',  sub: 'sobre 10 puntos',                            icon:TrendingUp,   color:'text-[#D9730D]', bg:'bg-orange-50',  nav:'alertas'    },
+    { id:'bots',        label:'NeuroBots Activos',      value: String(stats?.active_bots ?? '…'),     sub: 'creados por ti',                             icon:Bot,          color:'text-[#6940A5]', bg:'bg-purple-50',  nav:'neurobots'  },
+    { id:'alertas',     label:'Alertas Académicas',     value: String(stats?.alert_count ?? '…'),     sub: 'estudiantes en riesgo',                      icon:AlertTriangle,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'alertas'    },
+    { id:'pendientes',  label:'Evaluaciones',           value: '—',                                   sub: 'próximamente',                               icon:ClipboardList,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'evaluaciones'},
+  ];
+
+  const WEEK_DATA = [72, 85, 68, 91, 78, 45]; // placeholder until real attendance API
   const maxWeek = Math.max(...WEEK_DATA);
 
   return (
@@ -110,7 +104,12 @@ export default function DashboardTab({ onNavigate }: Props) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-[#191919]">{greeting} 👋</h2>
-          <p className="text-sm text-[#787774]">Tienes <span className="font-semibold text-[#E03E3E]">8 actividades</span> pendientes y <span className="font-semibold text-[#2E6FDB]">4 alertas</span> activas.</p>
+          <p className="text-sm text-[#787774]">
+          {stats
+            ? <>Tienes <span className="font-semibold text-[#E03E3E]">{stats.alert_count} alertas</span> activas y <span className="font-semibold text-[#2E6FDB]">{stats.total_groups} grupos</span>.</>
+            : 'Cargando estadísticas…'
+          }
+        </p>
         </div>
         <button
           onClick={() => onNavigate('alertas')}
@@ -173,7 +172,7 @@ export default function DashboardTab({ onNavigate }: Props) {
             <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
               <h3 className="font-semibold text-[#191919] text-sm mb-4">Desempeño por grupo</h3>
               <div className="space-y-3">
-                {GROUPS_PERF.map(g => (
+                {(stats?.groups_perf ?? []).map(g => (
                   <div key={g.name}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-[#37352F] truncate max-w-[70%]">{g.name}</span>
@@ -184,6 +183,7 @@ export default function DashboardTab({ onNavigate }: Props) {
                     </div>
                   </div>
                 ))}
+                {!stats && <p className="text-xs text-[#AEADAB]">Cargando…</p>}
               </div>
             </div>
 
@@ -191,7 +191,7 @@ export default function DashboardTab({ onNavigate }: Props) {
             <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
               <h3 className="font-semibold text-[#191919] text-sm mb-4">Uso de NeuroBots</h3>
               <div className="space-y-3">
-                {AI_USAGE.map(a => (
+                {(stats?.ai_usage ?? []).map(a => (
                   <div key={a.name}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-[#37352F]">{a.name}</span>
@@ -216,7 +216,7 @@ export default function DashboardTab({ onNavigate }: Props) {
               <button onClick={() => onNavigate('alertas')} className="text-xs text-[#2E6FDB] hover:underline">Ver todos</button>
             </div>
             <div className="space-y-2">
-              {RANKING.map((s, i) => (
+              {(stats?.top_students ?? []).map((s, i) => (
                 <div key={s.name} className="flex items-center gap-3 py-2 border-b border-[#F7F6F3] last:border-0">
                   <span className="text-xs font-bold text-[#AEADAB] w-4">{i+1}</span>
                   <div className="w-7 h-7 rounded-full bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -247,7 +247,7 @@ export default function DashboardTab({ onNavigate }: Props) {
               <Calendar className="w-4 h-4 text-[#787774]" /> Próximamente
             </h3>
             <div className="space-y-2">
-              {UPCOMING.map((ev, i) => (
+              {(stats?.upcoming ?? []).map((ev, i) => (
                 <div key={i} className="flex items-center gap-2.5 py-1.5 border-b border-[#F7F6F3] last:border-0">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ev.color}`} />
                   <div className="flex-1 min-w-0">

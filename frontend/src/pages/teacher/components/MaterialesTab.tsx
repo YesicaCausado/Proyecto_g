@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   FolderPlus, Upload, FileText, File, Presentation,
-  Link2, Folder, Trash2, Share2, Eye, Download, MoreVertical, X,
+  Link2, Folder, Trash2, Share2, Eye, Download, MoreVertical, X, Loader2,
 } from 'lucide-react';
+import api from '../../../services/api';
 
 type FileType = 'pdf' | 'doc' | 'ppt' | 'link' | 'img';
 
@@ -24,30 +25,7 @@ interface MaterialFolder {
 
 const GROUPS = ['Matemáticas 9A','Física 10B','Álgebra 8C','Cálculo 11A','Geometría 7A'];
 
-const MOCK_FOLDERS: MaterialFolder[] = [
-  {
-    id:'f1', name:'Matemáticas 9A', color:'#2E6FDB',
-    files:[
-      {id:'m1',name:'Algebra_Cap1.pdf',       type:'pdf',  size:'2.1 MB',date:'2026-06-10',sharedWith:['Matemáticas 9A']},
-      {id:'m2',name:'Ecuaciones_cuadraticas.pdf',type:'pdf',size:'1.4 MB',date:'2026-06-15',sharedWith:['Matemáticas 9A']},
-      {id:'m3',name:'Ejercicios_Práctica.pptx',type:'ppt', size:'5.2 MB',date:'2026-06-20',sharedWith:['Matemáticas 9A']},
-    ],
-  },
-  {
-    id:'f2', name:'Física 10B', color:'#0F7B6C',
-    files:[
-      {id:'m4',name:'Newton_Leyes.pdf',  type:'pdf', size:'3.0 MB',date:'2026-05-20',sharedWith:['Física 10B']},
-      {id:'m5',name:'Termodinámica.doc', type:'doc', size:'1.2 MB',date:'2026-05-22',sharedWith:['Física 10B']},
-    ],
-  },
-  {
-    id:'f3', name:'Recursos Generales', color:'#6940A5',
-    files:[
-      {id:'m6',name:'Guía de Estudio Matemáticas',type:'link',size:'—',date:'2026-04-01',sharedWith:['Todos']},
-      {id:'m7',name:'Khan Academy — Álgebra',     type:'link',size:'—',date:'2026-04-01',sharedWith:['Todos']},
-    ],
-  },
-];
+const INITIAL_FOLDERS: MaterialFolder[] = [];
 
 const FILE_TYPE_CONFIG: Record<FileType, { icon: any; color: string; bg: string }> = {
   pdf:  { icon: FileText,      color:'text-[#E03E3E]', bg:'bg-red-50'    },
@@ -58,7 +36,8 @@ const FILE_TYPE_CONFIG: Record<FileType, { icon: any; color: string; bg: string 
 };
 
 export default function MaterialesTab({ license: _license }: { license: any }) {
-  const [folders,    setFolders]    = useState<MaterialFolder[]>(MOCK_FOLDERS);
+  const [folders,    setFolders]    = useState<MaterialFolder[]>(INITIAL_FOLDERS);
+  const [loading,    setLoading]    = useState(true);
   const [selected,   setSelected]   = useState<MaterialFolder | null>(null);
   const [menuId,     setMenuId]     = useState<string | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -67,42 +46,78 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
   const [shareGroups,   setShareGroups]   = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleCreateFolder = () => {
+  /* ── Load folders from backend ─────────────────────────────────────── */
+  useEffect(() => {
+    api.get('/teacher/materials')
+      .then(r => setFolders((r.data.folders ?? []).map((f: any) => ({
+        id:    String(f.id),
+        name:  f.name,
+        color: f.color,
+        files: (f.files ?? []).map((m: any) => ({
+          id:         String(m.id),
+          name:       m.name,
+          type:       m.type as FileType,
+          size:       m.size,
+          date:       m.date,
+          sharedWith: m.sharedWith ?? [],
+        })),
+      }))))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
-    const f: MaterialFolder = {
-      id:   Date.now().toString(),
-      name: newFolderName.trim(),
-      color: '#787774',
-      files: [],
-    };
-    setFolders(prev => [...prev, f]);
+    try {
+      const r = await api.post('/teacher/materials/folders', { name: newFolderName.trim() });
+      const f: MaterialFolder = { id: String(r.data.id), name: r.data.name, color: r.data.color, files: [] };
+      setFolders(prev => [...prev, f]);
+    } catch { /* noop */ }
     setNewFolderName('');
     setShowNewFolder(false);
   };
 
-  const handleUpload = (folderId: string, files: FileList | null) => {
+  const handleUpload = async (folderId: string, files: FileList | null) => {
     if (!files) return;
-    const newFiles: MaterialFile[] = Array.from(files).map(f => ({
-      id:          Date.now().toString() + f.name,
-      name:        f.name,
-      type:        f.name.endsWith('.pdf') ? 'pdf' : f.name.endsWith('.pptx') || f.name.endsWith('.ppt') ? 'ppt' : 'doc',
-      size:        `${(f.size / 1024 / 1024).toFixed(1)} MB`,
-      date:        new Date().toISOString().slice(0, 10),
-      sharedWith:  [],
-    }));
-    setFolders(prev => prev.map(fo => fo.id === folderId ? { ...fo, files: [...fo.files, ...newFiles] } : fo));
-    if (selected?.id === folderId) {
-      setSelected(prev => prev ? { ...prev, files: [...prev.files, ...newFiles] } : prev);
+    for (const f of Array.from(files)) {
+      const fileType: FileType = f.name.endsWith('.pdf') ? 'pdf'
+        : f.name.endsWith('.pptx') || f.name.endsWith('.ppt') ? 'ppt' : 'doc';
+      const payload = {
+        folder_id:  folderId,
+        name:       f.name,
+        type:       fileType,
+        size:       `${(f.size / 1024 / 1024).toFixed(1)} MB`,
+        sharedWith: [],
+      };
+      try {
+        const r = await api.post('/teacher/materials/files', payload);
+        const newFile: MaterialFile = {
+          id:         String(r.data.id),
+          name:       r.data.name,
+          type:       r.data.type as FileType,
+          size:       r.data.size,
+          date:       r.data.date,
+          sharedWith: r.data.sharedWith ?? [],
+        };
+        setFolders(prev => prev.map(fo => fo.id === folderId ? { ...fo, files: [...fo.files, newFile] } : fo));
+        setSelected(prev => prev?.id === folderId ? { ...prev, files: [...prev.files, newFile] } : prev);
+      } catch { /* noop */ }
     }
   };
 
-  const handleDeleteFile = (folderId: string, fileId: string) => {
+  const handleDeleteFile = async (folderId: string, fileId: string) => {
+    try {
+      await api.delete(`/teacher/materials/files/${fileId}`);
+    } catch { /* noop */ }
     setFolders(prev => prev.map(fo => fo.id === folderId ? { ...fo, files: fo.files.filter(f => f.id !== fileId) } : fo));
     setSelected(prev => prev ? { ...prev, files: prev.files.filter(f => f.id !== fileId) } : prev);
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!showShare || shareGroups.length === 0) return;
+    try {
+      await api.patch(`/teacher/materials/files/${showShare.id}`, { sharedWith: shareGroups });
+    } catch { /* noop */ }
     setFolders(prev => prev.map(fo => ({
       ...fo,
       files: fo.files.map(f => f.id === showShare.id ? { ...f, sharedWith: shareGroups } : f),
@@ -147,7 +162,7 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
             <p className="text-sm text-[#787774]">Carpeta vacía. Sube tu primer archivo.</p>
           </div>
         ) : (
-          <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+          <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
@@ -202,6 +217,12 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
 
   return (
     <div className="space-y-5">
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 text-[#2E6FDB] animate-spin" />
+        </div>
+      )}
+      {!loading && <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#787774]"><strong className="text-[#191919]">{folders.length}</strong> carpetas · <strong className="text-[#191919]">{folders.reduce((a,f)=>a+f.files.length,0)}</strong> archivos</p>
         <button onClick={() => setShowNewFolder(true)}
@@ -235,7 +256,7 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
                     {menuId===folder.id && (
                       <div className="absolute right-0 top-8 bg-white border border-[#E9E9E7] rounded-lg shadow-lg z-20 py-1 w-32"
                         onMouseLeave={() => setMenuId(null)}>
-                        <button onClick={() => { setFolders(prev=>prev.filter(f=>f.id!==folder.id)); setMenuId(null); }}
+                        <button onClick={async () => { try { await api.delete(`/teacher/materials/folders/${folder.id}`); } catch { /* noop */ } setFolders(prev=>prev.filter(f=>f.id!==folder.id)); setMenuId(null); }}
                           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#E03E3E] hover:bg-red-50">
                           <Trash2 className="w-3.5 h-3.5" /> Eliminar
                         </button>
@@ -310,6 +331,7 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

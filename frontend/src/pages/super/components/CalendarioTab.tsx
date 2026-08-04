@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Calendar, Plus, X, ChevronLeft, ChevronRight, Clock, Tag } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Calendar, Plus, X, ChevronLeft, ChevronRight, Clock, Tag, Loader2 } from 'lucide-react';
+import api from '../../../services/api';
 
 type EventType = 'examen' | 'reunion' | 'feriado' | 'capacitacion' | 'importante';
 
@@ -20,26 +21,39 @@ const TYPE_CONFIG: Record<EventType, { label: string; color: string; bg: string;
   importante:    { label: 'Fecha importante', color: 'text-[#D9730D]', bg: 'bg-orange-50 border-orange-200', dot: 'bg-[#D9730D]' },
 };
 
-const INITIAL_EVENTS: CalEvent[] = [
-  { id: 1,  date: '2026-07-05', title: 'Reunión de docentes',          type: 'reunion',      time: '08:00' },
-  { id: 2,  date: '2026-07-10', title: 'Exámenes Período 2 — Grado 8', type: 'examen',       time: '07:00' },
-  { id: 3,  date: '2026-07-20', title: 'Día del Docente',               type: 'feriado' },
-  { id: 4,  date: '2026-07-15', title: 'Capacitación NeuroLearn',       type: 'capacitacion', time: '14:00' },
-  { id: 5,  date: '2026-07-28', title: 'Cierre primer semestre',        type: 'importante',   time: '12:00' },
-  { id: 6,  date: '2026-07-03', title: 'Entrega calificaciones período', type: 'importante',  time: '17:00' },
-];
-
 const DAYS_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function mapEvent(raw: any): CalEvent {
+  return {
+    id:          raw.id,
+    date:        raw.event_date ?? raw.date,
+    title:       raw.title,
+    type:        (raw.event_type ?? raw.type) as EventType,
+    time:        raw.event_time ?? raw.time,
+    description: raw.description,
+  };
+}
 
 export default function CalendarioTab() {
   const today = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
-  const [events, setEvents]     = useState<CalEvent[]>(INITIAL_EVENTS);
+  const [events, setEvents]     = useState<CalEvent[]>([]);
+  const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', type: 'reunion' as EventType, time: '', description: '' });
+
+  const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+  useEffect(() => {
+    setLoading(true);
+    api.get(`/events?month=${monthStr}`)
+      .then(r => setEvents((r.data.events ?? r.data ?? []).map(mapEvent)))
+      .catch(() => setEvents([]))
+      .finally(() => setLoading(false));
+  }, [monthStr]);
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
@@ -55,21 +69,41 @@ export default function CalendarioTab() {
   const eventsOn = (d: number) => events.filter(e => e.date === dateStr(d));
   const todayStr  = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
-  const handleAddEvent = () => {
+  const handleAddEvent = async () => {
     if (!form.title.trim() || !selected) return;
-    const ev: CalEvent = { id: Date.now(), date: selected, title: form.title, type: form.type, time: form.time || undefined, description: form.description || undefined };
-    setEvents(prev => [...prev, ev]);
+    try {
+      const res = await api.post('/events', {
+        title: form.title,
+        event_type: form.type,
+        event_date: selected,
+        event_time: form.time || null,
+        description: form.description || null,
+      });
+      setEvents(prev => [...prev, mapEvent(res.data)]);
+    } catch {
+      // optimistic fallback: add with temp id
+      setEvents(prev => [...prev, { id: Date.now(), date: selected, title: form.title, type: form.type, time: form.time || undefined, description: form.description || undefined }]);
+    }
     setForm({ title: '', type: 'reunion', time: '', description: '' });
     setShowForm(false);
   };
 
-  const handleDelete = (id: number) => setEvents(prev => prev.filter(e => e.id !== id));
+  const handleDelete = async (id: number) => {
+    setEvents(prev => prev.filter(e => e.id !== id));
+    try { await api.delete(`/events/${id}`); } catch { /* already removed from UI */ }
+  };
 
   const selectedEvents = selected ? events.filter(e => e.date === selected) : [];
   const upcomingEvents = events.filter(e => e.date >= todayStr).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 5);
 
   return (
     <div className="space-y-6">
+
+      {loading && (
+        <div className="flex items-center justify-center py-4 gap-2 text-sm text-[#787774]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando eventos…
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 

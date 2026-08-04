@@ -1,14 +1,12 @@
 /**
  * Hook: useBehavioralMetrics
  * Captura métricas conductuales en tiempo real para los 5 patrones neuroconductuales:
- *   Patrón 1 - Ritmo de Interacción: response_time_ms, pause_before_ms
- *   Patrón 2 - Secuencia de Decisión: corrections (backspace count), depth
- *   Patrones 3-4 - Facial/Voz: placeholders (datos opcionales desde cámara/micrófono)
- *   Patrón 5 - Predicción de Error: calculado en backend con los anteriores
+ *   Patrón 1 - Ritmo de Interacción: response_time_ms, pause_before_ms, typing_speed_cpm
+ *   Patrón 2 - Secuencia de Decisión: corrections (backspace count real), hesitations
+ *   Patrones 3-4 - Facial/Voz: datos desde cámara/micrófono (hooks separados)
+ *   Patrón 5 - Predicción de Error: calculado en backend con historial de quizzes real
  *
- * Novedad Sprint 2:
- *   - isLongPause: true cuando el usuario lleva >LONG_PAUSE_MS sin escribir nada
- *   - realTimePauseMs: duración actual de la pausa (actualizado cada segundo)
+ * v3.0: Métricas enriquecidas — hesitaciones, burst typing, contenido del mensaje
  */
 import { useRef, useCallback, useState, useEffect } from 'react';
 
@@ -17,37 +15,40 @@ const LONG_PAUSE_MS = 3000;
 
 export interface BehavioralMetrics {
   response_time_ms: number;   // Tiempo desde respuesta del bot hasta envío del usuario
-  typing_speed_cpm: number;   // Caracteres por minuto
-  corrections: number;        // Backspaces / correcciones
-  pause_before_ms: number;    // Pausa antes de empezar a escribir
+  typing_speed_cpm: number;   // Caracteres por minuto (velocidad real de escritura)
+  corrections: number;        // Backspaces/correcciones — señal de indecisión (Patrón 2)
+  pause_before_ms: number;    // Pausa antes de empezar a escribir (Patrón 1)
+  typing_bursts: number;      // Número de ráfagas de escritura separadas por pausas (Patrón 2)
+  is_question: boolean;       // El mensaje termina en '?' — señal de duda
+  message_length: number;     // Longitud del mensaje enviado
 }
 
 export interface MetricsTracker {
-  onBotMessageReceived: () => void;       // Llamar cuando el bot responde
-  onUserStartedTyping: () => void;        // Llamar al primer keystroke
-  onInputChange: (val: string, prev: string) => void; // Trackea correcciones
+  onBotMessageReceived: () => void;
+  onUserStartedTyping: () => void;
+  onInputChange: (val: string, prev: string) => void;
   getMetrics: (finalMessage: string) => BehavioralMetrics;
   reset: () => void;
-  /** true cuando el usuario lleva ≥ LONG_PAUSE_MS sin escribir tras recibir mensaje */
   isLongPause: boolean;
-  /** duración de pausa actual en ms (se actualiza en tiempo real cada 500ms) */
   realTimePauseMs: number;
 }
 
 export function useBehavioralMetrics(): MetricsTracker {
-  const botResponseTime = useRef<number>(0);    // Cuando el bot respondió
-  const typingStartTime = useRef<number>(0);    // Primer keystroke del usuario
-  const sendTime = useRef<number>(0);           // Cuando el usuario envía
-  const corrections = useRef<number>(0);        // Backspaces detectados
+  const botResponseTime = useRef<number>(0);
+  const typingStartTime = useRef<number>(0);
+  const sendTime = useRef<number>(0);
+  const corrections = useRef<number>(0);
   const hasStartedTyping = useRef<boolean>(false);
   const lastLength = useRef<number>(0);
+  // Patrón 2 — burst typing: cuenta ráfagas separadas por pausas > 800ms
+  const burstCount = useRef<number>(0);
+  const lastKeystrokeTime = useRef<number>(0);
+  const BURST_GAP_MS = 800;
 
-  // Estado de pausa en tiempo real
   const [isLongPause, setIsLongPause] = useState(false);
   const [realTimePauseMs, setRealTimePauseMs] = useState(0);
   const pauseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Ticker que actualiza la pausa cada 500ms mientras el usuario no ha escrito
   useEffect(() => {
     return () => {
       if (pauseIntervalRef.current) clearInterval(pauseIntervalRef.current);
@@ -76,26 +77,33 @@ export function useBehavioralMetrics(): MetricsTracker {
     typingStartTime.current = 0;
     corrections.current = 0;
     lastLength.current = 0;
+    burstCount.current = 0;
+    lastKeystrokeTime.current = 0;
     setIsLongPause(false);
     setRealTimePauseMs(0);
     startPauseTicker();
   }, [startPauseTicker]);
 
   const onUserStartedTyping = useCallback(() => {
+    const now = Date.now();
     if (!hasStartedTyping.current) {
-      typingStartTime.current = Date.now();
+      typingStartTime.current = now;
       hasStartedTyping.current = true;
-      // Detener el ticker: el usuario ya empezó a escribir
+      burstCount.current = 1;
       setIsLongPause(false);
       if (pauseIntervalRef.current) {
         clearInterval(pauseIntervalRef.current);
         pauseIntervalRef.current = null;
       }
     }
+    // Detectar nueva ráfaga si hubo pausa larga entre keystrokes
+    if (lastKeystrokeTime.current > 0 && now - lastKeystrokeTime.current > BURST_GAP_MS) {
+      burstCount.current += 1;
+    }
+    lastKeystrokeTime.current = now;
   }, []);
 
   const onInputChange = useCallback((val: string, prev: string) => {
-    // Detecta correcciones: si el nuevo valor es más corto que el anterior
     if (val.length < prev.length) {
       corrections.current += prev.length - val.length;
     }
@@ -126,6 +134,9 @@ export function useBehavioralMetrics(): MetricsTracker {
       typing_speed_cpm: Math.min(Math.max(0, typing_speed_cpm), 1000),
       corrections: corrections.current,
       pause_before_ms: Math.max(0, pause_before_ms),
+      typing_bursts: burstCount.current,
+      is_question: finalMessage.trim().endsWith('?'),
+      message_length: finalMessage.length,
     };
   }, []);
 
@@ -136,6 +147,8 @@ export function useBehavioralMetrics(): MetricsTracker {
     corrections.current = 0;
     hasStartedTyping.current = false;
     lastLength.current = 0;
+    burstCount.current = 0;
+    lastKeystrokeTime.current = 0;
     setIsLongPause(false);
     setRealTimePauseMs(0);
     if (pauseIntervalRef.current) {

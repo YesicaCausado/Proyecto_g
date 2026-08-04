@@ -1,23 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bot, Search, Edit3, Trash2, Copy, PowerOff, BarChart2, Globe, Lock, FileText, MessageSquare } from 'lucide-react';
+import api from '../../../services/api';
 
-const MOCK_BOTS = [
-  { id: 1, name: 'MateBot 8A',     teacher: 'Carlos Martínez', group: 'Matemáticas 8A', subject: 'Matemáticas', docs: 12, queries: 342, status: 'activo',   visibility: 'privado',  created: '2026-02-10' },
-  { id: 2, name: 'CienciasBot',    teacher: 'Laura González',  group: 'Ciencias 9B',    subject: 'Ciencias',    docs:  8, queries: 218, status: 'activo',   visibility: 'publico',  created: '2026-02-15' },
-  { id: 3, name: 'LenguajeAI',     teacher: 'Ana Torres',      group: 'Lenguaje 7C',    subject: 'Lenguaje',    docs: 15, queries: 189, status: 'activo',   visibility: 'privado',  created: '2026-03-01' },
-  { id: 4, name: 'HistoriaBot',    teacher: 'Pedro Ramírez',   group: 'Historia 10A',   subject: 'Sociales',    docs:  6, queries: 145, status: 'inactivo', visibility: 'privado',  created: '2026-03-10' },
-  { id: 5, name: 'FísicaExpert',   teacher: 'María López',     group: 'Física 11B',     subject: 'Física',      docs: 20, queries: 401, status: 'activo',   visibility: 'publico',  created: '2026-01-20' },
-  { id: 6, name: 'InglésHelper',   teacher: 'Juan Herrera',    group: 'Inglés 6A',      subject: 'Inglés',      docs:  9, queries:  98, status: 'inactivo', visibility: 'privado',  created: '2026-04-05' },
-  { id: 7, name: 'TecnoBot Pro',   teacher: 'Sofía Castro',    group: 'Tecnología 8B',  subject: 'Tecnología',  docs: 18, queries: 520, status: 'activo',   visibility: 'publico',  created: '2026-01-15' },
-];
+interface BotItem {
+  id: number; name: string; teacher: string; group: string; subject: string;
+  docs: number; queries: number; status: string; visibility: string; created: string;
+}
 
 type Filter = 'todos' | 'activo' | 'inactivo';
 
 export default function NeuroBots() {
-  const [search, setSearch]           = useState('');
-  const [filter, setFilter]           = useState<Filter>('todos');
-  const [bots, setBots]               = useState(MOCK_BOTS);
-  const [toast, setToast]             = useState('');
+  const [search, setSearch]   = useState('');
+  const [filter, setFilter]   = useState<Filter>('todos');
+  const [bots, setBots]       = useState<BotItem[]>([]);
+  const [toast, setToast]     = useState('');
+
+  useEffect(() => {
+    api.get('/super/bots')
+      .then(r => setBots(r.data.bots ?? []))
+      .catch(() => setBots([]));
+  }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -28,7 +30,7 @@ export default function NeuroBots() {
     }
   };
 
-  const handleDuplicate = (bot: typeof MOCK_BOTS[0]) => {
+  const handleDuplicate = (bot: BotItem) => {
     const copy = { ...bot, id: Date.now(), name: `${bot.name} (copia)`, queries: 0, created: new Date().toISOString().slice(0,10) };
     setBots(prev => [copy, ...prev]);
     showToast(`NeuroBots "${bot.name}" duplicado.`);
@@ -99,7 +101,7 @@ export default function NeuroBots() {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
             <tr>
@@ -171,7 +173,6 @@ export default function NeuroBots() {
         )}
         <div className="px-4 py-3 border-t border-[#E9E9E7] bg-[#F7F6F3] flex justify-between items-center">
           <p className="text-xs text-[#787774]">Mostrando {filtered.length} de {bots.length} NeuroBots</p>
-          <span className="text-[10px] bg-[#FCF6E5] text-[#D9730D] border border-[#EDD88A] px-2 py-0.5 rounded font-semibold">DEMO</span>
         </div>
       </div>
     </div>

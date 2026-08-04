@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Plus, Copy, Share2, RefreshCw, Users, BookOpen, MoreVertical,
   Check, ChevronLeft, Megaphone, ClipboardList, UserCheck,
-  Trash2, Eye, EyeOff,
+  Trash2, Eye, EyeOff, Loader2,
 } from 'lucide-react';
+import api from '../../../services/api';
 
 interface Group {
   id: string;
@@ -19,6 +20,15 @@ interface Group {
   created: string;
 }
 
+interface StudentRow {
+  id: string;
+  name: string;
+  email: string;
+  avg: number;
+  last: string;
+  status: string;
+}
+
 const COLORS = [
   { name: 'Azul',    value: '#2E6FDB' },
   { name: 'Verde',   value: '#0F7B6C' },
@@ -28,33 +38,49 @@ const COLORS = [
   { name: 'Teal',    value: '#0B6E99' },
 ];
 
-function generateCode(subject: string): string {
-  const prefix  = subject.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 4).padEnd(4, 'X');
-  const chars   = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const rand    = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `${prefix}-${rand(4)}-${rand(4)}`;
+function mapGroup(raw: any): Group {
+  return {
+    id:          String(raw.id),
+    name:        raw.name,
+    subject:     raw.subject,
+    grade:       raw.grade ?? '',
+    description: raw.description ?? '',
+    color:       raw.color ?? COLORS[0].value,
+    students:    raw.student_count ?? 0,
+    avg:         raw.avg ?? 0,
+    code:        raw.invite_code ?? raw.code ?? '',
+    active:      raw.is_active ?? true,
+    created:     (raw.created_at ?? '').slice(0, 10),
+  };
 }
 
-const MOCK_GROUPS: Group[] = [
-  { id: '1', name: 'Matemáticas 9A',  subject: 'Matemáticas',  grade: '9°A',  description: 'Álgebra, geometría y cálculo introductorio.', color: '#2E6FDB', students: 32, avg: 8.2, code: 'MATE-7XQ9-LP2K', active: true,  created: '2026-02-10' },
-  { id: '2', name: 'Física 10B',      subject: 'Física',        grade: '10°B', description: 'Mecánica, termodinámica y electromagnetismo.',  color: '#0F7B6C', students: 28, avg: 7.6, code: 'FISI-4RTZ-AB2D', active: true,  created: '2026-02-11' },
-  { id: '3', name: 'Álgebra 8C',      subject: 'Álgebra',       grade: '8°C',  description: 'Fundamentos de álgebra y ecuaciones.',          color: '#D9730D', students: 30, avg: 6.9, code: 'ALGE-NW7H-XQ3P', active: true,  created: '2026-02-12' },
-  { id: '4', name: 'Cálculo 11A',     subject: 'Cálculo',       grade: '11°A', description: 'Cálculo diferencial e integral.',               color: '#6940A5', students: 25, avg: 8.8, code: 'CALC-3MPN-VF9J', active: true,  created: '2026-02-13' },
-  { id: '5', name: 'Geometría 7A',    subject: 'Geometría',     grade: '7°A',  description: 'Geometría plana y trigonometría básica.',       color: '#0B6E99', students: 33, avg: 7.1, code: 'GEOM-HK2L-ZQ4R', active: false, created: '2026-02-14' },
-  { id: '6', name: 'Estadística 10A', subject: 'Estadística',   grade: '10°A', description: 'Probabilidad y estadística descriptiva.',       color: '#E03E3E', students: 29, avg: 7.8, code: 'ESTA-PV5W-YN8S', active: true,  created: '2026-02-15' },
-];
-
-const MOCK_STUDENTS = [
-  { id:'s1', name:'Valentina Torres', email:'v.torres@escuela.edu', avg:9.4, last:'Hoy',        status:'active' },
-  { id:'s2', name:'Carlos Silva',     email:'c.silva@escuela.edu',  avg:9.1, last:'Hoy',        status:'active' },
-  { id:'s3', name:'María González',   email:'m.gonzalez@escuela.edu',avg:8.7,last:'Ayer',       status:'active' },
-  { id:'s4', name:'Juan Pérez',       email:'j.perez@escuela.edu',  avg:4.2, last:'Hace 3 días',status:'risk'   },
-  { id:'s5', name:'Ana Rodríguez',    email:'a.rodriguez@escuela.edu',avg:7.5,last:'Hace 2 días',status:'active'},
-];
+function mapStudent(raw: any): StudentRow {
+  const student = raw.student ?? raw;
+  return {
+    id:     String(student.id ?? raw.student_id ?? ''),
+    name:   student.full_name ?? student.username ?? '—',
+    email:  student.email ?? '—',
+    avg:    raw.average_score != null ? Math.round((raw.average_score / 10) * 10) / 10 : 0,
+    last:   raw.last_activity ? new Date(raw.last_activity).toLocaleDateString('es-CO') : 'Sin actividad',
+    status: raw.average_score < 40 || (raw.last_activity && (new Date().getTime() - new Date(raw.last_activity).getTime()) > 5 * 86400_000) ? 'risk' : 'active',
+  };
+}
 
 // ── Vista detalle de un grupo ────────────────────────────────────────────────
 function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
   const [tab, setTab] = useState<'inicio' | 'tablero' | 'estudiantes'>('inicio');
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+
+  useEffect(() => {
+    if (tab === 'estudiantes') {
+      setLoadingStudents(true);
+      api.get(`/classrooms/${group.id}/students`)
+        .then(r => setStudents((r.data ?? []).map(mapStudent)))
+        .catch(() => setStudents([]))
+        .finally(() => setLoadingStudents(false));
+    }
+  }, [tab, group.id]);
 
   return (
     <div className="space-y-4">
@@ -132,7 +158,12 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
       )}
 
       {tab === 'estudiantes' && (
-        <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+        <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden overflow-x-auto">
+          {loadingStudents ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-sm text-[#787774]">
+              <Loader2 className="w-4 h-4 animate-spin" /> Cargando estudiantes…
+            </div>
+          ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
@@ -144,7 +175,7 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {MOCK_STUDENTS.map(s => (
+              {students.map((s: StudentRow) => (
                 <tr key={s.id} className="border-b border-[#F7F6F3] hover:bg-[#F7F6F3]/50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -166,8 +197,12 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
                   </td>
                 </tr>
               ))}
+              {students.length === 0 && (
+                <tr><td colSpan={5} className="text-center py-8 text-xs text-[#787774]">Sin estudiantes inscritos aún.</td></tr>
+              )}
             </tbody>
           </table>
+          )}
         </div>
       )}
     </div>
@@ -176,7 +211,10 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function MisGruposTab({ license }: { license: any }) {
-  const [groups,      setGroups]      = useState<Group[]>(MOCK_GROUPS);
+  const [groups,      setGroups]      = useState<Group[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [createError, setCreateError] = useState('');
+  const [creating,    setCreating]    = useState(false);
   const [selected,    setSelected]    = useState<Group | null>(null);
   const [showModal,   setShowModal]   = useState(false);
   const [copiedId,    setCopiedId]    = useState<string | null>(null);
@@ -188,6 +226,13 @@ export default function MisGruposTab({ license }: { license: any }) {
     color: COLORS[0].value, image: '',
   });
 
+  useEffect(() => {
+    api.get('/classrooms/my-classes')
+      .then(r => setGroups((r.data.classrooms ?? []).map(mapGroup)))
+      .catch(() => setGroups([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   const maxGroups  = license?.groups_limit  ?? 10;
   const usedGroups = groups.length;
 
@@ -197,44 +242,59 @@ export default function MisGruposTab({ license }: { license: any }) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const regenerateCode = (id: string) => {
-    setGroups(prev => prev.map(g => g.id === id
-      ? { ...g, code: generateCode(g.subject) } : g));
+  const regenerateCode = (_id: string) => {
+    // No backend endpoint for code regeneration — show copied code
   };
 
-  const toggleActive = (id: string) => {
+  const toggleActive = async (id: string) => {
+    // Optimistic toggle — no backend endpoint yet
     setGroups(prev => prev.map(g => g.id === id ? { ...g, active: !g.active } : g));
   };
 
-  const deleteGroup = (id: string) => {
+  const deleteGroup = async (id: string) => {
     if (!window.confirm('¿Eliminar este grupo? Esta acción no se puede deshacer.')) return;
-    setGroups(prev => prev.filter(g => g.id !== id));
+    try {
+      await api.delete(`/classrooms/${id}`);
+      setGroups(prev => prev.filter(g => g.id !== id));
+    } catch {
+      setGroups(prev => prev.filter(g => g.id !== id));
+    }
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!form.name.trim() || !form.subject.trim()) return;
-    const newGroup: Group = {
-      id:          Date.now().toString(),
-      name:        form.name.trim(),
-      subject:     form.subject.trim(),
-      grade:       form.grade,
-      description: form.description,
-      color:       form.color,
-      students:    0,
-      avg:         0,
-      code:        generateCode(form.subject),
-      active:      true,
-      created:     new Date().toISOString().slice(0, 10),
-    };
-    setGroups(prev => [newGroup, ...prev]);
-    setShowModal(false);
-    setForm({ name:'', subject:'', grade:'', description:'', color: COLORS[0].value, image:'' });
+    setCreating(true);
+    setCreateError('');
+    try {
+      const res = await api.post('/classrooms/', {
+        name:         form.name.trim(),
+        subject:      form.subject.trim(),
+        grade:        form.grade,
+        description:  form.description,
+        max_students: 40,
+        color:        form.color,
+      });
+      setGroups(prev => [mapGroup(res.data), ...prev]);
+      setShowModal(false);
+      setForm({ name:'', subject:'', grade:'', description:'', color: COLORS[0].value, image:'' });
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? 'Error al crear el grupo. Intenta de nuevo.';
+      setCreateError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setCreating(false);
+    }
   };
 
   if (selected) return <GroupDetail group={selected} onBack={() => setSelected(null)} />;
 
   return (
     <div className="space-y-5">
+
+      {loading && (
+        <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#787774]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando grupos…
+        </div>
+      )}
 
       {/* Barra superior */}
       <div className="flex items-center justify-between">
@@ -407,13 +467,20 @@ export default function MisGruposTab({ license }: { license: any }) {
                 </button>
               </div>
             </div>
-            <div className="px-6 pb-5 flex justify-end gap-2">
-              <button onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg transition-colors">Cancelar</button>
-              <button onClick={handleCreate} disabled={!form.name.trim() || !form.subject.trim()}
-                className="px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                <Plus className="w-4 h-4 inline mr-1.5" />Crear Grupo
-              </button>
+            <div className="px-6 pb-5 flex flex-col gap-2">
+              {createError && (
+                <p className="text-xs text-[#E03E3E] bg-red-50 border border-red-100 rounded-lg px-3 py-2">{createError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => { setShowModal(false); setCreateError(''); }}
+                  className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg transition-colors">Cancelar</button>
+                <button onClick={handleCreate} disabled={!form.name.trim() || !form.subject.trim() || creating}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {creating
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Creando…</>
+                    : <><Plus className="w-4 h-4" />Crear Grupo</>}
+                </button>
+              </div>
             </div>
           </div>
         </div>

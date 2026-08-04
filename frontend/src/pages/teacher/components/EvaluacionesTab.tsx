@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Plus, Clock, CheckCircle, Eye,
-  Trash2, ToggleLeft, ToggleRight, X, Sparkles,
+  Trash2, ToggleLeft, ToggleRight, X, Sparkles, Loader2,
 } from 'lucide-react';
+import api from '../../../services/api';
 
 type QuestionType = 'multiple' | 'truefalse' | 'open' | 'match';
 
@@ -30,24 +31,6 @@ interface Evaluation {
 
 const GROUPS = ['Matemáticas 9A', 'Física 10B', 'Álgebra 8C', 'Cálculo 11A'];
 
-const MOCK_EVALS: Evaluation[] = [
-  {
-    id:'e1', title:'Parcial 1 — Álgebra Lineal', group:'Matemáticas 9A', type:'examen',
-    date:'2026-07-10', duration:60, attempts:1, submissions:28, active:true,
-    questions:[
-      {id:'q1',type:'multiple',text:'¿Cuál es la fórmula general para resolver ecuaciones de segundo grado?',options:['x = (-b ± √(b²-4ac)) / 2a','x = b/2a','x = -b/a','x = (-b ± √b²) / 2a'],correct:'x = (-b ± √(b²-4ac)) / 2a',points:2},
-      {id:'q2',type:'truefalse',text:'Un polinomio de grado 2 siempre tiene exactamente dos raíces reales.',options:['Verdadero','Falso'],correct:'Falso',points:1},
-    ],
-  },
-  {
-    id:'e2', title:'Quiz Rápido — Leyes de Newton', group:'Física 10B', type:'cuestionario',
-    date:'2026-07-05', duration:20, attempts:2, submissions:15, active:true,
-    questions:[
-      {id:'q3',type:'multiple',text:'La Primera Ley de Newton establece que:',options:['Todo cuerpo en movimiento permanece en movimiento','Fuerza = masa × aceleración','A toda acción le corresponde una reacción igual','La energía se conserva'],correct:'Todo cuerpo en movimiento permanece en movimiento',points:2},
-    ],
-  },
-];
-
 const AI_GENERATED_QUESTIONS: Question[] = [
   { id:'ai1', type:'multiple', text:'¿Cuál de los siguientes es un número irracional?', options:['√4','√9','√2','√16'], correct:'√2', points:2 },
   { id:'ai2', type:'truefalse', text:'El número π es exactamente igual a 22/7.', options:['Verdadero','Falso'], correct:'Falso', points:1 },
@@ -62,7 +45,8 @@ const TYPE_LABELS: Record<QuestionType, string> = {
 };
 
 export default function EvaluacionesTab({ license }: { license: any }) {
-  const [evals,       setEvals]       = useState<Evaluation[]>(MOCK_EVALS);
+  const [evals,       setEvals]       = useState<Evaluation[]>([]);
+  const [loading,     setLoading]     = useState(true);
   const [showModal,   setShowModal]   = useState(false);
   const [viewEval,    setViewEval]    = useState<Evaluation | null>(null);
   const [step,        setStep]        = useState<1 | 2>(1);
@@ -75,8 +59,39 @@ export default function EvaluacionesTab({ license }: { license: any }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [newQ, setNewQ] = useState({ type:'multiple' as QuestionType, text:'', options:['','','',''], correct:'', points:2 });
 
-  const toggleEval  = (id: string) => setEvals(prev => prev.map(e => e.id===id ? {...e,active:!e.active} : e));
-  const deleteEval  = (id: string) => { if(!window.confirm('¿Eliminar evaluación?')) return; setEvals(prev=>prev.filter(e=>e.id!==id)); };
+  /* ── Load evaluations from backend ────────────────────────────────── */
+  useEffect(() => {
+    api.get('/teacher/evaluations')
+      .then(r => setEvals((r.data.evaluations ?? []).map((e: any) => ({
+        id:          String(e.id),
+        title:       e.title,
+        group:       e.group,
+        type:        e.type,
+        date:        e.date,
+        duration:    e.duration,
+        attempts:    e.attempts,
+        questions:   e.questions ?? [],
+        active:      e.active,
+        submissions: e.submissions,
+      }))))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggleEval = async (id: string) => {
+    try {
+      const r = await api.post(`/teacher/evaluations/${id}/toggle`);
+      setEvals(prev => prev.map(e => e.id === id ? { ...e, active: r.data.active } : e));
+    } catch {
+      setEvals(prev => prev.map(e => e.id === id ? { ...e, active: !e.active } : e));
+    }
+  };
+
+  const deleteEval = async (id: string) => {
+    if (!window.confirm('¿Eliminar evaluación?')) return;
+    try { await api.delete(`/teacher/evaluations/${id}`); } catch { /* noop */ }
+    setEvals(prev => prev.filter(e => e.id !== id));
+  };
 
   const addQuestion = () => {
     if (!newQ.text.trim()) return;
@@ -93,10 +108,24 @@ export default function EvaluacionesTab({ license }: { license: any }) {
     setTimeout(() => { setQuestions(prev => [...prev, ...AI_GENERATED_QUESTIONS]); setAiLoading(false); }, 1500);
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!form.title.trim() || questions.length === 0) return;
-    const ev: Evaluation = { id:Date.now().toString(), ...form, questions, active:true, submissions:0 };
-    setEvals(prev => [ev, ...prev]);
+    try {
+      const r = await api.post('/teacher/evaluations', { ...form, questions });
+      const ev: Evaluation = {
+        id:          String(r.data.id),
+        title:       r.data.title,
+        group:       r.data.group,
+        type:        r.data.type,
+        date:        r.data.date,
+        duration:    r.data.duration,
+        attempts:    r.data.attempts,
+        questions:   r.data.questions ?? [],
+        active:      r.data.active,
+        submissions: r.data.submissions,
+      };
+      setEvals(prev => [ev, ...prev]);
+    } catch { /* noop */ }
     setShowModal(false);
     setStep(1);
     setForm({ title:'', group:GROUPS[0], type:'cuestionario', date:'', duration:30, attempts:1 });
@@ -137,6 +166,12 @@ export default function EvaluacionesTab({ license }: { license: any }) {
 
   return (
     <div className="space-y-5">
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 text-[#2E6FDB] animate-spin" />
+        </div>
+      )}
+      {!loading && <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#787774]"><strong className="text-[#191919]">{evals.length}</strong> evaluaciones creadas</p>
         <button onClick={() => { setShowModal(true); setStep(1); }}
@@ -145,7 +180,7 @@ export default function EvaluacionesTab({ license }: { license: any }) {
         </button>
       </div>
 
-      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
@@ -328,6 +363,7 @@ export default function EvaluacionesTab({ license }: { license: any }) {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

@@ -10,6 +10,8 @@ import {
   BarChart3,
   Loader2,
 } from 'lucide-react';
+import NeuronWelcome from '../../components/NeuronWelcome';
+import NeuronAvatar from '../../components/NeuronAvatar';
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
@@ -32,22 +34,13 @@ export default function TeacherDashboard() {
 
   const totalStudents = classrooms.reduce((sum, c) => sum + c.student_count, 0);
 
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Buenos días';
-    if (hour < 18) return 'Buenas tardes';
-    return 'Buenas noches';
-  };
-
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
-      <div className="pb-6 mb-6 border-b border-[#E9E9E7]">
-        <h1 className="text-2xl font-semibold text-[#37352F]">
-          {greeting()}, Prof. {user?.full_name?.split(' ')[0] || user?.username} 👋
-        </h1>
-        <p className="text-[#787774] text-sm mt-1">Panel de control del profesor</p>
-      </div>
+      {/* Neuron Welcome Banner */}
+      <NeuronWelcome
+        name={user?.full_name || user?.username || ''}
+        subtitle="Gestiona tus clases y monitorea el progreso de tus estudiantes"
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -131,6 +124,25 @@ export default function TeacherDashboard() {
           ))}
         </div>
       )}
+
+      {/* Motivacional */}
+      <div
+        className="relative rounded-xl overflow-hidden mt-6"
+        style={{ height: '130px', background: 'linear-gradient(135deg, #ede9ff 0%, #ddd5ff 50%, #c8baff 100%)' }}
+      >
+        <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-30 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
+        <div className="relative z-10 flex flex-col justify-center h-full pl-6 pr-32">
+          <p className="text-[14px] font-bold text-[#2e1065] leading-tight mb-1">¡Sigue adelante!</p>
+          <p className="text-[11px] text-[#6d28d9] leading-snug opacity-85">
+            Tu dedicación marca la diferencia en tus estudiantes 🌟
+          </p>
+        </div>
+        <div className="absolute right-6 top-0 bottom-0 flex items-center justify-center pointer-events-none">
+          <NeuronAvatar size={80} online variant="gradient" />
+        </div>
+      </div>
+
     </div>
   );
 }

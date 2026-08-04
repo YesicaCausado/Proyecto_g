@@ -49,6 +49,15 @@ class Token(BaseModel):
     role: Optional[str] = None
     full_name: Optional[str] = None
     must_change_password: Optional[bool] = False
+    # Datos completos del usuario para evitar un segundo GET /auth/me
+    email: Optional[str] = None
+    username: Optional[str] = None
+    is_active: Optional[bool] = True
+    is_expert: Optional[bool] = False
+    institution_id: Optional[int] = None
+    document_number: Optional[str] = None
+    cognitive_profile: Optional[Dict] = None
+    created_at: Optional[datetime] = None
 
 
 # ===== CHAT / APRENDIZAJE =====
@@ -61,14 +70,19 @@ class StartSessionRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     message: str = Field(..., min_length=1)
-    topic: Optional[str] = None          # ← NUEVO: tema para modo stateless
-    history: Optional[List[Dict[str, Any]]] = None  # ← NUEVO: historial para serverless
-    cognitive_state: Optional[str] = None  # ← Estado cognitivo actual del estudiante
+    topic: Optional[str] = None
+    history: Optional[List[Dict[str, Any]]] = None
+    cognitive_state: Optional[str] = None
+    # Patrón 1 — Ritmo de Interacción
     response_time_ms: float = Field(default=0, ge=0)
     typing_speed_cpm: float = Field(default=0, ge=0)
-    corrections: int = Field(default=0, ge=0)
     pause_before_ms: float = Field(default=0, ge=0)
-    # Datos multimodales opcionales (Patrones 3-4)
+    # Patrón 2 — Secuencia de Decisión
+    corrections: int = Field(default=0, ge=0)       # backspaces reales
+    typing_bursts: int = Field(default=1, ge=0)     # ráfagas separadas por pausas
+    is_question: bool = Field(default=False)        # mensaje termina en '?'
+    message_length: int = Field(default=0, ge=0)    # longitud del mensaje
+    # Patrones 3 y 4 — datos multimodales opcionales
     facial_data: Optional[Dict[str, Any]] = None
     voice_data: Optional[Dict[str, Any]] = None
 
@@ -125,6 +139,7 @@ class QuizSubmission(BaseModel):
     """Envío de respuestas del quiz por parte del usuario"""
     quiz_title: str
     user_answers: Dict[int, str]  # {question_id: selected_answer}
+    classroom_id: Optional[int] = None 
 
 class QuizAnalysisResponse(BaseModel):
     """Respuesta del análisis de quiz con recomendaciones adaptativas"""
@@ -170,8 +185,9 @@ class SessionStatsResponse(BaseModel):
 
 class ExpertBotCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    description: str
-    category: str = Field(..., max_length=50)
+    description: str = ""
+    category: str = Field(default="General", max_length=50)
+    is_public: bool = True
 
 
 class ExpertBotResponse(BaseModel):
@@ -246,6 +262,7 @@ class ClassroomCreate(BaseModel):
     subject: str = Field(..., max_length=100)
     grade: str = Field(default="", max_length=20)
     max_students: int = Field(default=40, ge=1, le=100)
+    color: str = Field(default="#2E6FDB", max_length=20)
 
 
 class ClassroomResponse(BaseModel):
@@ -259,6 +276,7 @@ class ClassroomResponse(BaseModel):
     is_active: bool
     max_students: int
     student_count: int = 0
+    color: str = "#2E6FDB"
     created_at: datetime
 
     class Config:
@@ -357,39 +375,8 @@ class InstitutionResponse(BaseModel):
         from_attributes = True
 
 
-class InstitutionListItem(BaseModel):
-    id: int
-    name: str
-    dane_code: str
-    license_type: str
-    is_active: bool
-    created_at: datetime
-    teacher_count: int = 0
-    student_count: int = 0
-
-    class Config:
-        from_attributes = True
-
-
-class TeacherCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
-    email: str = Field(..., max_length=100)
-    subject_area: str = Field(default="", max_length=100)
-
-
-class StudentCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
-    birth_date: Optional[str] = None    # YYYY-MM-DD
-    email: Optional[str] = None
-    grade: str = Field(default="", max_length=20)
-
-
 class BulkCreateResponse(BaseModel):
-    created: List[CredentialItem]
+    credentials: List[CredentialItem]
     errors: List[Dict[str, Any]] = []
     total_processed: int
     total_created: int
@@ -403,7 +390,15 @@ class LicenseUsage(BaseModel):
     max_students: int
     current_students: int
 
+class AdminStats(BaseModel):
+    """Estadísticas globales del sistema para el panel del administrador"""
+    total_institutions:   int
+    active_institutions:  int
+    total_super_profesores: int
+    total_profesores:     int
+    total_estudiantes:    int
 
+    
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)
@@ -425,3 +420,53 @@ class CSVValidationRow(BaseModel):
     data: Dict[str, Any]
     error: Optional[str] = None
     valid: bool = True
+
+
+# ===== SCHEMAS B2B FALTANTES =====
+
+class TeacherCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: str = Field(..., max_length=100)
+    subject_area: Optional[str] = None
+
+
+class TeacherListItem(BaseModel):
+    id: int
+    full_name: str
+    username: str
+    email: str
+    document_type: Optional[str] = None
+    document_number: Optional[str] = None
+    subject_area: Optional[str] = None
+    is_active: bool = True
+    temp_password: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class StudentCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
+    document_number: str = Field(..., min_length=4, max_length=30)
+    email: Optional[str] = None
+    grade: Optional[str] = None
+    birth_date: Optional[str] = None
+
+
+
+
+class InstitutionListItem(BaseModel):
+    id: int
+    name: str
+    dane_code: str
+    license_type: str
+    is_active: bool
+    created_at: datetime
+    teacher_count: int
+    student_count: int
+
+class Config:
+        from_attributes = True

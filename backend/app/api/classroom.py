@@ -36,8 +36,8 @@ router = APIRouter(prefix="/classrooms", tags=["Clases - Rol Profesor"])
 # ===== UTILIDADES =====
 
 def require_teacher(user: User):
-    """Verifica que el usuario sea profesor"""
-    if user.role != UserRole.PROFESOR.value:
+    """Verifica que el usuario sea profesor o super_profesor"""
+    if user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value, "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo los profesores pueden realizar esta acción",
@@ -71,6 +71,7 @@ async def create_classroom(
         subject=request.subject,
         grade=request.grade,
         max_students=request.max_students,
+        color=getattr(request, 'color', '#2E6FDB'),
         invite_code=Classroom.generate_invite_code(),
     )
     db.add(classroom)
@@ -87,6 +88,7 @@ async def create_classroom(
         invite_code=classroom.invite_code,
         is_active=classroom.is_active,
         max_students=classroom.max_students,
+        color=classroom.color or '#2E6FDB',
         student_count=0,
         created_at=classroom.created_at,
     )
@@ -121,6 +123,7 @@ async def list_my_classrooms(
             invite_code=c.invite_code,
             is_active=c.is_active,
             max_students=c.max_students,
+            color=getattr(c, 'color', '#2E6FDB') or '#2E6FDB',
             student_count=student_count,
             created_at=c.created_at,
         ))
@@ -160,6 +163,7 @@ async def list_enrolled_classrooms(
             invite_code=c.invite_code,
             is_active=c.is_active,
             max_students=c.max_students,
+            color=getattr(c, 'color', '#2E6FDB') or '#2E6FDB',
             student_count=student_count,
             created_at=c.created_at,
         ))

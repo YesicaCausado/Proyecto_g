@@ -1,76 +1,88 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import { FileText, Download, CheckCircle, Clock, Building2, Users, GraduationCap, BookOpen, Bot, AlertTriangle, TrendingUp, Calendar, FileSpreadsheet } from 'lucide-react';
+import api from '../../../services/api';
 
-// ── Datos tabulares por tipo de reporte ─────────────────────────────────────
+// ── Tipos ────────────────────────────────────────────────────────────────────
 type ReportData = { headers: string[]; rows: string[][] };
 
-function getReportData(id: string, periodLabel: string): { title: string; subtitle: string; data: ReportData } {
+interface DashStats {
+  total_teachers: number;
+  total_students: number;
+  total_groups: number;
+  avg_score: number;
+  at_risk_count: number;
+  teacher_ranking: { name: string; subject: string; avg: number; participation: number; students: number }[];
+  at_risk_detail: { name: string; grade: string; avg: number; subject: string; risk: string }[];
+  areas_data: { label: string; pct: number }[];
+}
+
+function getReportData(id: string, periodLabel: string, stats: DashStats | null, instName: string): { title: string; subtitle: string; data: ReportData } {
   const base: Record<string, { title: string; subtitle: string; data: ReportData }> = {
     institucional: {
       title: 'Reporte Institucional', subtitle: `Resumen ejecutivo — ${periodLabel}`,
-      data: { headers: ['Indicador','Valor','Variación'], rows: [
-        ['Total profesores','18','+2 este mes'], ['Total estudiantes','745','+15 este mes'],
-        ['Grupos activos','24','Sin cambios'], ['NeuroBots activos','8','+3 este mes'],
-        ['Promedio institucional','7.8 / 10','-0.2 este mes'], ['Índice de participación','82%','+3%'],
-        ['Estudiantes en riesgo','12','+4 este mes'],
+      data: { headers: ['Indicador','Valor'], rows: [
+        ['Total profesores',    String(stats?.total_teachers  ?? '—')],
+        ['Total estudiantes',   String(stats?.total_students  ?? '—')],
+        ['Grupos activos',      String(stats?.total_groups    ?? '—')],
+        ['Promedio institucional', stats ? `${stats.avg_score} / 10` : '—'],
+        ['Estudiantes en riesgo',  String(stats?.at_risk_count ?? '—')],
       ]},
     },
     profesores: {
       title: 'Reporte por Profesor', subtitle: `Rendimiento docente — ${periodLabel}`,
-      data: { headers: ['Nombre','Materia','Grupos','Promedio','Participación','Uso IA'], rows: [
-        ['Sofía Castro','Tecnología','2','8.7','94%','87%'], ['Pedro Ramírez','Sociales','2','8.4','88%','72%'],
-        ['Laura González','Ciencias','2','8.1','85%','68%'], ['Ana Torres','Lenguaje','2','7.8','79%','55%'],
-        ['Carlos Martínez','Matemáticas','2','7.2','61%','43%'], ['María López','Física','2','6.9','74%','51%'],
-      ]},
+      data: { headers: ['Nombre','Materia','Promedio','Participación','Estudiantes'], rows:
+        stats?.teacher_ranking.map(t => [
+          t.name, t.subject, String(t.avg), `${t.participation}%`, String(t.students),
+        ]) ?? [],
+      },
     },
     estudiantes: {
-      title: 'Reporte por Estudiante', subtitle: `Rendimiento estudiantil — ${periodLabel}`,
-      data: { headers: ['Nombre','Grado','Promedio','Asistencia','Última conexión'], rows: [
-        ['Juan Pérez','8°A','4.2','72%','Ayer'], ['María Gómez','9°B','4.8','68%','Hace 2 días'],
-        ['Luis Herrera','7°C','5.1','81%','Hoy'], ['Ana Rodríguez','10°A','4.5','65%','Hace 3 días'],
-        ['Carlos Silva','8°A','7.8','90%','Hoy'], ['Valentina Torres','9°B','8.2','95%','Hoy'],
-      ]},
+      title: 'Reporte por Estudiante', subtitle: `Estudiantes en riesgo — ${periodLabel}`,
+      data: { headers: ['Nombre','Grado','Promedio','Materia','Riesgo'], rows:
+        stats?.at_risk_detail.map(s => [
+          s.name, s.grade, String(s.avg), s.subject, s.risk.toUpperCase(),
+        ]) ?? [],
+      },
     },
     grado: {
-      title: 'Reporte por Grado', subtitle: `Comparativo por nivel — ${periodLabel}`,
-      data: { headers: ['Grado','Promedio','Participación','Grupos','Estudiantes'], rows: [
-        ['6°','7.2','82%','3','102'], ['7°','7.8','79%','4','126'], ['8°','6.5','71%','4','128'],
-        ['9°','8.1','85%','3','121'], ['10°','8.4','88%','3','123'], ['11°','7.9','83%','2','145'],
-      ]},
+      title: 'Reporte por Área', subtitle: `Distribución por áreas — ${periodLabel}`,
+      data: { headers: ['Área','% del total'], rows:
+        stats?.areas_data.map(a => [a.label, `${a.pct}%`]) ?? [],
+      },
     },
     alertas: {
-      title: 'Reporte de Alertas IA', subtitle: `NeuroAlertas generadas — ${periodLabel}`,
-      data: { headers: ['Prioridad','Categoría','Descripción','Afectados','Fecha'], rows: [
-        ['ALTA','Riesgo académico','18 estudiantes con descenso >20% en 4 semanas','18 est.','2026-07-01'],
-        ['ALTA','Asistencia','Grado 10° con 34% más ausencias','7 est.','2026-07-01'],
-        ['MEDIA','Docente','Prof. Martínez con participación 35% menor','42 est.','2026-06-30'],
-        ['MEDIA','Uso IA','Matemáticas 9B: 94% de respuestas copiadas','28 est.','2026-06-29'],
-        ['BAJA','Participación','Ciencias 7A: 48% tasa de entrega','24 est.','2026-06-27'],
-      ]},
+      title: 'Reporte de Alertas IA', subtitle: `Estudiantes en riesgo académico — ${periodLabel}`,
+      data: { headers: ['Nombre','Grado','Promedio','Materia','Nivel de riesgo'], rows:
+        stats?.at_risk_detail.map(s => [
+          s.name, s.grade, String(s.avg), s.subject, s.risk.toUpperCase(),
+        ]) ?? [],
+      },
     },
     neurobots: {
-      title: 'Uso de NeuroBots', subtitle: `Estadísticas de bots — ${periodLabel}`,
-      data: { headers: ['NeuroBots','Profesor','Materia','Docs','Consultas','Estado'], rows: [
-        ['TecnoBot Pro','Sofía Castro','Tecnología','18','520','Activo'],
-        ['FísicaExpert','María López','Física','20','401','Activo'],
-        ['MateBot 8A','Carlos Martínez','Matemáticas','12','342','Activo'],
-        ['CienciasBot','Laura González','Ciencias','8','218','Activo'],
-        ['LenguajeAI','Ana Torres','Lenguaje','15','189','Activo'],
+      title: 'Uso de NeuroBots', subtitle: `Estadísticas institucionales — ${periodLabel}`,
+      data: { headers: ['Indicador','Valor'], rows: [
+        ['Total profesores con bots', String(stats?.total_teachers ?? '—')],
+        ['Grupos activos', String(stats?.total_groups ?? '—')],
+        ['Institución', instName || '—'],
       ]},
     },
     comparativo: {
-      title: 'Comparativo Mensual', subtitle: 'Evolución de métricas 2026',
-      data: { headers: ['Mes','Promedio','Participación','Tareas','Est. Riesgo'], rows: [
-        ['Enero','7.4','78%','82%','15'], ['Febrero','7.6','80%','85%','14'],
-        ['Marzo','7.5','77%','83%','13'], ['Abril','7.9','83%','88%','11'],
-        ['Mayo','8.0','85%','90%','10'], ['Junio','7.8','84%','89%','12'],
+      title: 'Comparativo Mensual', subtitle: `Métricas actuales — ${periodLabel}`,
+      data: { headers: ['Indicador','Valor Actual'], rows: [
+        ['Promedio institucional', stats ? `${stats.avg_score} / 10` : '—'],
+        ['Total estudiantes', String(stats?.total_students ?? '—')],
+        ['Estudiantes en riesgo', String(stats?.at_risk_count ?? '—')],
+        ['Grupos activos', String(stats?.total_groups ?? '—')],
       ]},
     },
     anual: {
-      title: 'Comparativo Anual', subtitle: 'Histórico institucional',
-      data: { headers: ['Año','Promedio','Estudiantes','Profesores','NeuroBots'], rows: [
-        ['2024','7.2','680','15','3'], ['2025','7.6','712','17','5'], ['2026','7.8','745','18','8'],
+      title: 'Resumen Anual', subtitle: `Histórico institucional — ${periodLabel}`,
+      data: { headers: ['Indicador','Valor'], rows: [
+        ['Profesores activos', String(stats?.total_teachers ?? '—')],
+        ['Estudiantes activos', String(stats?.total_students ?? '—')],
+        ['Grupos', String(stats?.total_groups ?? '—')],
+        ['Promedio general', stats ? `${stats.avg_score} / 10` : '—'],
       ]},
     },
   };
@@ -78,13 +90,13 @@ function getReportData(id: string, periodLabel: string): { title: string; subtit
 }
 
 // ── Generador real de PDF con jsPDF ─────────────────────────────────────────
-function generatePDF(id: string, period: string) {
+function generatePDF(id: string, period: string, stats: DashStats | null, instName: string) {
   const PERIOD_LABELS: Record<string, string> = {
     periodo1: 'Período 1 (Ene–Mar)', periodo2: 'Período 2 (Abr–Jun)',
     periodo3: 'Período 3 (Jul–Sep)', periodo4: 'Período 4 (Oct–Dic)', anual: 'Año completo 2026',
   };
   const periodLabel = PERIOD_LABELS[period] ?? period;
-  const { title, subtitle, data } = getReportData(id, periodLabel);
+  const { title, subtitle, data } = getReportData(id, periodLabel, stats, instName);
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
@@ -103,7 +115,7 @@ function generatePDF(id: string, period: string) {
 
   doc.setTextColor(55, 53, 47);
   doc.setFontSize(8.5);
-  doc.text('Institución: Colegio Nacional Demo  |  NIT: 900.123.456-7', 14, 36);
+  doc.text(`Institución: ${instName || 'NeuroLearn AI'}`, 14, 36);
 
   // Cabecera de tabla
   const colCount = data.headers.length;
@@ -153,13 +165,13 @@ function generatePDF(id: string, period: string) {
 }
 
 // ── Generador real de CSV ────────────────────────────────────────────────────
-function generateCSV(id: string, period: string) {
+function generateCSV(id: string, period: string, stats: DashStats | null, instName: string) {
   const PERIOD_LABELS: Record<string, string> = {
     periodo1: 'Período 1', periodo2: 'Período 2',
     periodo3: 'Período 3', periodo4: 'Período 4', anual: 'Año completo 2026',
   };
   const periodLabel = PERIOD_LABELS[period] ?? period;
-  const { title, data } = getReportData(id, periodLabel);
+  const { title, data } = getReportData(id, periodLabel, stats, instName);
   const meta    = `"Reporte: ${title}"\n"Periodo: ${periodLabel}"\n"Generado: ${new Date().toLocaleString('es-CO')}"\n\n`;
   const headers = data.headers.join(',');
   const rows    = data.rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
@@ -191,6 +203,13 @@ export default function ReportesTab() {
   const [generated,  setGenerated]  = useState<Set<string>>(new Set());
   const [period,     setPeriod]     = useState('periodo1');
   const [formatType, setFormatType] = useState<'pdf' | 'csv'>('pdf');
+  const [dashStats,  setDashStats]  = useState<DashStats | null>(null);
+  const [instName,   setInstName]   = useState('');
+
+  useEffect(() => {
+    api.get('/super/stats/dashboard').then(r => setDashStats(r.data)).catch(() => {});
+    api.get('/super/institution').then(r => setInstName(r.data?.name ?? '')).catch(() => {});
+  }, []);
 
   const handleGenerate = (id: string) => {
     setGenerating(id);
@@ -202,9 +221,9 @@ export default function ReportesTab() {
 
   const handleDownload = (id: string) => {
     if (formatType === 'pdf') {
-      generatePDF(id, period);
+      generatePDF(id, period, dashStats, instName);
     } else {
-      generateCSV(id, period);
+      generateCSV(id, period, dashStats, instName);
     }
   };
 

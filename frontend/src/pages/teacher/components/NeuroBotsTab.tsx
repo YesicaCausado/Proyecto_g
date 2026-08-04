@@ -1,9 +1,139 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Plus, Trash2, Globe, Lock, FileText, Upload, X,
-  CheckCircle, Clock, AlertCircle, MessageSquare, BarChart2,
-  ToggleLeft, ToggleRight, BookOpen,
+  CheckCircle, Clock, AlertCircle, BarChart2, MessageSquare, BookOpen,
+  ToggleLeft, ToggleRight, Play, Send, Loader2,
 } from 'lucide-react';
+import api from '../../../services/api';
+
+interface ChatMsg { role: 'user' | 'bot'; text: string; }
+
+// ── Chat modal para probar el bot ─────────────────────────────────────────────
+function BotChatModal({ bot, onClose }: { bot: NeuroBot; onClose: () => void }) {
+  const [msgs,    setMsgs]    = useState<ChatMsg[]>([]);
+  const [input,   setInput]   = useState('');
+  const [sending, setSending] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [history, setHistory] = useState<{role:string; content:string}[]>([]);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
+
+  useEffect(() => {
+    // Auto-start session when modal opens
+    (async () => {
+      setSending(true);
+      try {
+        const res = await api.post('/chat/start', {
+          topic: bot.description || bot.subject || bot.name,
+          difficulty: 'medium',
+          bot_id: Number(bot.id),
+        });
+        const reply = res.data?.message ?? '¡Hola! Soy tu NeuroBot. ¿En qué puedo ayudarte?';
+        setMsgs([{ role: 'bot', text: reply }]);
+        setHistory([{ role: 'assistant', content: reply }]);
+      } catch {
+        const reply = `¡Hola! Soy ${bot.name}. ¿En qué puedo ayudarte sobre ${bot.subject}?`;
+        setMsgs([{ role: 'bot', text: reply }]);
+        setHistory([{ role: 'assistant', content: reply }]);
+      } finally {
+        setSending(false);
+        setStarted(true);
+      }
+    })();
+  }, []);
+
+  const send = async () => {
+    if (!input.trim() || sending) return;
+    const userText = input.trim();
+    setInput('');
+    const newHistory = [...history, { role: 'user', content: userText }];
+    setMsgs(prev => [...prev, { role: 'user', text: userText }]);
+    setHistory(newHistory);
+    setSending(true);
+    try {
+      const res = await api.post('/chat/message', {
+        message: userText,
+        topic: bot.description || bot.subject || bot.name,
+        history: newHistory.slice(-10),
+      });
+      const reply = res.data?.message ?? '...';
+      setMsgs(prev => [...prev, { role: 'bot', text: reply }]);
+      setHistory(prev => [...prev, { role: 'assistant', content: reply }]);
+    } catch {
+      setMsgs(prev => [...prev, { role: 'bot', text: 'No se pudo conectar con la IA. Verifica la configuración.' }]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col h-[600px]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E9E9E7] bg-[#F7F6F3] rounded-t-xl">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-[#EEF3FD] rounded-lg flex items-center justify-center">
+              <Bot className="w-4 h-4 text-[#2E6FDB]" />
+            </div>
+            <div>
+              <p className="font-semibold text-[#191919] text-sm">{bot.name}</p>
+              <p className="text-[10px] text-[#787774]">{bot.subject} · Modo prueba</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#787774] hover:text-[#191919] transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          {!started && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-[#2E6FDB]" />
+            </div>
+          )}
+          {msgs.map((m, i) => (
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
+                m.role === 'user'
+                  ? 'bg-[#2E6FDB] text-white rounded-br-sm'
+                  : 'bg-[#F7F6F3] text-[#191919] rounded-bl-sm'
+              }`}>
+                {m.text}
+              </div>
+            </div>
+          ))}
+          {sending && started && (
+            <div className="flex justify-start">
+              <div className="bg-[#F7F6F3] px-3.5 py-2 rounded-2xl rounded-bl-sm flex gap-1 items-center">
+                <span className="w-1.5 h-1.5 bg-[#AEADAB] rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                <span className="w-1.5 h-1.5 bg-[#AEADAB] rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
+                <span className="w-1.5 h-1.5 bg-[#AEADAB] rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className="flex items-center gap-2 px-4 py-3 border-t border-[#E9E9E7]">
+          <input
+            value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}
+            placeholder="Escribe un mensaje..."
+            disabled={!started}
+            className="flex-1 px-4 py-2 border border-[#E9E9E7] rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB] disabled:bg-[#F7F6F3]"
+          />
+          <button onClick={send} disabled={!input.trim() || sending || !started}
+            className="w-9 h-9 flex items-center justify-center bg-[#2E6FDB] text-white rounded-full hover:bg-[#255DC0] disabled:opacity-50 transition-all shadow-sm">
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface KnowledgeFile {
   id: string;
@@ -25,35 +155,6 @@ interface NeuroBot {
   created: string;
 }
 
-const MOCK_BOTS: NeuroBot[] = [
-  {
-    id:'b1', name:'MateBot 9A', description:'Asistente de álgebra y geometría para grado 9A.',
-    subject:'Matemáticas', mode:'public', active:true, queries:342,
-    docs:[
-      {id:'d1',name:'algebra_cap1.pdf',size:'2.1 MB',date:'2026-06-10',status:'processed'},
-      {id:'d2',name:'geometria_basica.pdf',size:'3.4 MB',date:'2026-06-12',status:'processed'},
-      {id:'d3',name:'ejercicios_ecuaciones.md',size:'0.3 MB',date:'2026-06-15',status:'processed'},
-    ],
-    created:'2026-02-20',
-  },
-  {
-    id:'b2', name:'FísicaBot 10B', description:'Explica mecánica, óptica y electromagnetismo.',
-    subject:'Física', mode:'public', active:true, queries:218,
-    docs:[
-      {id:'d4',name:'mecanica_newton.pdf',size:'4.2 MB',date:'2026-05-20',status:'processed'},
-      {id:'d5',name:'electromagnetismo.pdf',size:'5.1 MB',date:'2026-05-22',status:'processed'},
-    ],
-    created:'2026-02-21',
-  },
-  {
-    id:'b3', name:'AlgebraBot 8C', description:'Apoyo en ecuaciones y funciones básicas.',
-    subject:'Álgebra', mode:'private', active:false, queries:89,
-    docs:[
-      {id:'d6',name:'funciones_lineales.pdf',size:'1.8 MB',date:'2026-04-05',status:'processed'},
-    ],
-    created:'2026-03-15',
-  },
-];
 
 const STATUS_CONFIG = {
   processed:  { icon: CheckCircle, color: 'text-[#0F7B6C]', label: 'Procesado'  },
@@ -177,42 +278,96 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function NeuroBotsTab({ license }: { license: any }) {
-  const [bots,      setBots]      = useState<NeuroBot[]>(MOCK_BOTS);
-  const [selected,  setSelected]  = useState<NeuroBot | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [form,      setForm]      = useState({ name:'', description:'', subject:'', mode:'public' as 'public'|'private' });
+  const [bots,       setBots]       = useState<NeuroBot[]>([]);
+  const [selected,   setSelected]   = useState<NeuroBot | null>(null);
+  const [showModal,  setShowModal]  = useState(false);
+  const [creating,   setCreating]   = useState(false);
+  const [testBot,    setTestBot]    = useState<NeuroBot | null>(null);
+  const [form,       setForm]       = useState({ name:'', description:'', subject:'', mode:'public' as 'public'|'private' });
   const fileRef = useRef<HTMLInputElement>(null);
   const [previewImg, setPreviewImg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get('/bots/my-bots')
+      .then(r => setBots((r.data.bots ?? []).map((b: any): NeuroBot => ({
+        id:          String(b.id),
+        name:        b.name,
+        description: b.description ?? '',
+        subject:     b.category ?? b.subject ?? 'General',
+        mode:        b.is_public ? 'public' : 'private',
+        active:      b.is_active ?? true,
+        queries:     b.total_users ?? 0,
+        docs:        [],
+        created:     (b.created_at ?? '').slice(0, 10),
+      }))))
+      .catch(() => setBots([]));
+  }, []);
 
   const maxBots = license?.bots_limit === 'unlimited' ? Infinity : (license?.bots_limit ?? 1);
   const usedBots = bots.length;
 
-  const handleCreate = () => {
-    if (!form.name.trim()) return;
-    const newBot: NeuroBot = {
-      id:          Date.now().toString(),
-      name:        form.name.trim(),
-      description: form.description.trim(),
-      subject:     form.subject.trim() || 'General',
-      mode:        form.mode,
-      active:      true,
-      queries:     0,
-      docs:        [],
-      created:     new Date().toISOString().slice(0, 10),
-    };
-    setBots(prev => [newBot, ...prev]);
-    setShowModal(false);
-    setForm({ name:'', description:'', subject:'', mode:'public' });
-    setPreviewImg(null);
+  const handleCreate = async () => {
+    if (!form.name.trim() || creating) return;
+    setCreating(true);
+    try {
+      const res = await api.post('/bots/create', {
+        name:        form.name.trim(),
+        description: form.description.trim(),
+        category:    form.subject.trim() || 'General',
+        is_public:   form.mode === 'public',
+      });
+      const b = res.data;
+      const newBot: NeuroBot = {
+        id:          String(b.id),
+        name:        b.name,
+        description: b.description ?? '',
+        subject:     b.category ?? 'General',
+        mode:        b.is_public ? 'public' : 'private',
+        active:      b.is_active ?? true,
+        queries:     0,
+        docs:        [],
+        created:     (b.created_at ?? new Date().toISOString()).slice(0, 10),
+      };
+      setBots(prev => [newBot, ...prev]);
+    } catch {
+      // Fallback optimista si el backend falla
+      const newBot: NeuroBot = {
+        id:          Date.now().toString(),
+        name:        form.name.trim(),
+        description: form.description.trim(),
+        subject:     form.subject.trim() || 'General',
+        mode:        form.mode,
+        active:      true, queries: 0, docs: [],
+        created:     new Date().toISOString().slice(0, 10),
+      };
+      setBots(prev => [newBot, ...prev]);
+    } finally {
+      setCreating(false);
+      setShowModal(false);
+      setForm({ name:'', description:'', subject:'', mode:'public' });
+      setPreviewImg(null);
+    }
   };
 
-  const toggleBot = (id: string) => {
+  const toggleBot = async (id: string) => {
+    const bot = bots.find(b => b.id === id);
+    if (!bot) return;
     setBots(prev => prev.map(b => b.id === id ? { ...b, active: !b.active } : b));
+    try {
+      await api.patch(`/bots/${id}`, { is_active: !bot.active });
+    } catch { /* keep optimistic */ }
   };
 
-  const deleteBot = (id: string) => {
+  const deleteBot = async (id: string) => {
     if (!window.confirm('¿Eliminar este NeuroBot?')) return;
     setBots(prev => prev.filter(b => b.id !== id));
+    try {
+      await api.delete(`/bots/${id}`);
+    } catch { /* already removed from UI */ }
+  };
+
+  const tryBot = (bot: NeuroBot) => {
+    setTestBot(bot);
   };
 
   const updateBot = (updated: NeuroBot) => {
@@ -224,6 +379,8 @@ export default function NeuroBotsTab({ license }: { license: any }) {
 
   return (
     <div className="space-y-5">
+      {/* Chat modal */}
+      {testBot && <BotChatModal bot={testBot} onClose={() => setTestBot(null)} />}
 
       {/* Barra */}
       <div className="flex items-center justify-between">
@@ -242,7 +399,7 @@ export default function NeuroBotsTab({ license }: { license: any }) {
       </div>
 
       {/* Tabla */}
-      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
@@ -291,6 +448,10 @@ export default function NeuroBotsTab({ license }: { license: any }) {
                 </td>
                 <td className="px-5 py-3">
                   <div className="flex items-center justify-center gap-2">
+                    <button onClick={() => tryBot(bot)}
+                      className="px-2.5 py-1 bg-[#EEF7F4] text-[#0F7B6C] rounded text-xs font-medium hover:bg-[#0F7B6C] hover:text-white transition-colors flex items-center gap-1">
+                      <Play className="w-3 h-3" /> Probar
+                    </button>
                     <button onClick={() => setSelected(bot)}
                       className="px-2.5 py-1 bg-[#EEF3FD] text-[#2E6FDB] rounded text-xs font-medium hover:bg-[#2E6FDB] hover:text-white transition-colors">
                       Gestionar
@@ -367,9 +528,12 @@ export default function NeuroBotsTab({ license }: { license: any }) {
             </div>
             <div className="px-6 pb-5 flex justify-end gap-2">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
-              <button onClick={handleCreate} disabled={!form.name.trim()}
+              <button onClick={handleCreate} disabled={!form.name.trim() || creating}
                 className="px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
-                <Bot className="w-4 h-4 inline mr-1.5" />Crear Bot
+                {creating
+                  ? <><span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin inline-block mr-1.5" />Creando...</>
+                  : <><Bot className="w-4 h-4 inline mr-1.5" />Crear Bot</>
+                }
               </button>
             </div>
           </div>

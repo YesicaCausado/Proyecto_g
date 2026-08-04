@@ -31,6 +31,7 @@ class Institution(Base):
     dane_code    = Column(String(20),  unique=True, index=True, nullable=False)
     license_type = Column(String(20),  default=LicenseType.BASICA.value, nullable=False)
     is_active    = Column(Boolean, default=True)
+    expiry_date  = Column(DateTime, nullable=True)   # None = sin vencimiento
     created_at   = Column(DateTime, default=datetime.utcnow)
     created_by   = Column(Integer, ForeignKey("users.id"), nullable=True)
 

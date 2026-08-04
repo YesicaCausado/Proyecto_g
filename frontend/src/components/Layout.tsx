@@ -1,5 +1,8 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLicense } from '../context/LicenseContext';
+import LicenseBanner from './LicenseBanner';
+import SuspendedScreen from './SuspendedScreen';
 import {
   Brain,
   LogOut,
@@ -19,6 +22,7 @@ import { useState } from 'react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const { hasStudentModule, licenseStatus } = useLicense();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -30,23 +34,53 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const isTeacher = user?.role === 'profesor';
 
-  const navItems = isTeacher
+  // Pantalla de suspensión
+  if (licenseStatus === 'suspended' && user?.role === 'estudiante') {
+    return <SuspendedScreen role="estudiante" />;
+  }
+
+  const navSections = isTeacher
     ? [
-        { to: '/dashboard', icon: Home,    label: 'Inicio'    },
-        { to: '/classrooms', icon: Users,  label: 'Mis Clases'},
+        {
+          label: 'PRINCIPAL',
+          items: [
+            { to: '/dashboard',  icon: Home,  label: 'Inicio'    },
+            { to: '/classrooms', icon: Users, label: 'Mis Clases'},
+          ],
+        },
       ]
     : [
-        { to: '/dashboard',   icon: Home,         label: 'Inicio'      },
-        { to: '/bots',        icon: BookOpen,      label: 'Habilidades' },
-        { to: '/chat',        icon: MessageSquare, label: 'Aprender'    },
-        { to: '/quizzes',     icon: BookOpen,      label: 'Desafíos'    },
-        { to: '/performance', icon: TrendingUp,    label: 'Desempeño'   },
-        { to: '/material',    icon: BookMarked,    label: 'Material'    },
-        { to: '/my-classes',  icon: Users,         label: 'Mis Clases'  },
-        { to: '/tablero',     icon: LayoutList,    label: 'Tablero'     },
-        { to: '/messages',    icon: MessageSquare, label: 'Mensajes'    },
-        { to: '/calendar',    icon: Calendar,      label: 'Calendario'  },
-      ];
+        {
+          label: 'INICIO',
+          items: [
+            { to: '/dashboard',   icon: Home,         label: 'Inicio'     },
+          ],
+        },
+        {
+          label: 'APRENDIZAJE',
+          items: [
+            { to: '/bots',        icon: BookOpen,      label: 'Habilidades',  module: 'mis_cursos'  },
+            { to: '/chat',        icon: MessageSquare, label: 'Aprender',     module: 'tutor_ia'    },
+            { to: '/quizzes',     icon: BookOpen,      label: 'Desafíos',     module: 'evaluaciones'},
+            { to: '/performance', icon: TrendingUp,    label: 'Desempeño',    module: 'estadisticas'},
+            { to: '/material',    icon: BookMarked,    label: 'Material',     module: 'recursos'    },
+          ].filter(i => !i.module || hasStudentModule(i.module)),
+        },
+        {
+          label: 'MI INSTITUCIÓN',
+          items: [
+            { to: '/my-classes',  icon: Users,        label: 'Mis Clases',   module: 'mis_cursos' },
+            { to: '/tablero',     icon: LayoutList,   label: 'Tablero',      module: 'mis_cursos' },
+            { to: '/calendar',    icon: Calendar,     label: 'Calendario',   module: 'calendario' },
+          ].filter(i => !i.module || hasStudentModule(i.module)),
+        },
+        {
+          label: 'COMUNICACIÓN',
+          items: [
+            { to: '/messages',    icon: MessageSquare, label: 'Mensajes',    module: 'mensajes' },
+          ].filter(i => !i.module || hasStudentModule(i.module)),
+        },
+      ].filter(sec => sec.items.length > 0);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -76,58 +110,43 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Nav section */}
-      <div className="flex-1 overflow-y-auto py-3 px-2">
-        <p className="px-2 mb-1.5 text-[10px] font-semibold text-[#787774] uppercase tracking-widest">
-          Navegación
-        </p>
-        <nav className="space-y-0.5">
-          {navItems.map((item) => {
-            const active = isActive(item.to);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => mobile && setSidebarOpen(false)}
-                className={`group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-colors duration-100 ${
-                  active
-                    ? 'bg-[#F1F1EF] text-[#37352F]'
-                    : 'text-[#787774] hover:bg-[#F1F1EF] hover:text-[#37352F]'
-                }`}
-              >
-                <item.icon
-                  className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                    active ? 'text-[#37352F]' : 'text-[#9B9A97] group-hover:text-[#37352F]'
-                  }`}
-                  strokeWidth={active ? 2.5 : 2}
-                />
-                <span className="flex-1 truncate">{item.label}</span>
-                {active && (
-                  <ChevronRight className="w-3.5 h-3.5 text-[#9B9A97] ml-auto flex-shrink-0" />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Progreso — solo estudiante */}
-        {!isTeacher && (
-          <div className="mt-5">
-            <p className="px-2 mb-1.5 text-[10px] font-semibold text-[#787774] uppercase tracking-widest">
-              Mi progreso
+      {/* Nav sections */}
+      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+        {navSections.map((section) => (
+          <div key={section.label}>
+            <p className="px-2 mb-1 text-[10px] font-semibold text-[#AEADAB] uppercase tracking-widest">
+              {section.label}
             </p>
-            <div className="px-2 space-y-1.5">
-              <div className="flex items-center justify-between py-1.5">
-                <span className="text-[12px] text-[#787774]">Nivel</span>
-                <span className="text-[12px] font-semibold text-[#37352F]">Intermedio</span>
-              </div>
-              <div className="flex items-center justify-between py-1.5 border-t border-[#E9E9E7]">
-                <span className="text-[12px] text-[#787774]">Puntos</span>
-                <span className="text-[12px] font-semibold text-[#37352F]">2 450 pts</span>
-              </div>
-            </div>
+            <nav className="space-y-0.5">
+              {section.items.map((item) => {
+                const active = isActive(item.to);
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => mobile && setSidebarOpen(false)}
+                    className={`group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-colors duration-100 ${
+                      active
+                        ? 'bg-[#F1F1EF] text-[#37352F]'
+                        : 'text-[#787774] hover:bg-[#F1F1EF] hover:text-[#37352F]'
+                    }`}
+                  >
+                    <item.icon
+                      className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                        active ? 'text-[#37352F]' : 'text-[#9B9A97] group-hover:text-[#37352F]'
+                      }`}
+                      strokeWidth={active ? 2.5 : 2}
+                    />
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {active && (
+                      <ChevronRight className="w-3.5 h-3.5 text-[#9B9A97] ml-auto flex-shrink-0" />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
-        )}
+        ))}
       </div>
 
       {/* User footer */}
@@ -205,11 +224,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* ── Main content ── */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="pt-12 md:pt-0 min-h-full">
+      <main className="flex-1 overflow-y-auto flex flex-col">
+        {/* Banner de licencia para estudiante */}
+        {!isTeacher && <LicenseBanner showContactButton={false} />}
+        <div className="pt-12 md:pt-0 pb-16 md:pb-0 min-h-full flex-1">
           {children}
         </div>
       </main>
+
+      {/* ── Mobile Bottom Nav (estudiante) ── */}
+      {!isTeacher && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#E9E9E7] flex items-center justify-around px-1 h-16 safe-area-pb">
+          {[
+            { to: '/dashboard',   icon: Home,         label: 'Inicio',       module: 'inicio'      },
+            { to: '/bots',        icon: BookOpen,      label: 'Habilidades',  module: 'mis_cursos'  },
+            { to: '/chat',        icon: MessageSquare, label: 'Aprender',     module: 'tutor_ia'    },
+            { to: '/my-classes',  icon: Users,         label: 'Clases',       module: 'mis_cursos'  },
+            { to: '/performance', icon: TrendingUp,    label: 'Progreso',     module: 'estadisticas'},
+          ].filter(i => hasStudentModule(i.module)).map(item => {
+            const active = isActive(item.to);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={() => setSidebarOpen(false)}
+                className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]"
+              >
+                <item.icon className={`w-5 h-5 transition-colors ${active ? 'text-[#37352F]' : 'text-[#AEADAB]'}`} strokeWidth={active ? 2.5 : 2} />
+                <span className={`text-[10px] font-medium transition-colors ${active ? 'text-[#37352F]' : 'text-[#AEADAB]'}`}>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }

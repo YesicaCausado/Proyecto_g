@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BrainCircuit, AlertTriangle, TrendingDown, UserX, Users, BookOpen,
-  Clock, Filter, RefreshCw, ChevronRight, CheckCircle, Info, Zap
+  Clock, Filter, RefreshCw, ChevronRight, CheckCircle, Info, Zap, Loader2
 } from 'lucide-react';
+import api from '../../../services/api';
 
 type Priority = 'alta' | 'media' | 'baja';
 
@@ -18,54 +19,6 @@ interface Alert {
   time: string;
   resolved: boolean;
 }
-
-const MOCK_ALERTS: Alert[] = [
-  {
-    id: 1, priority: 'alta', category: 'Riesgo académico',
-    title: 'Estudiantes en riesgo de reprobación',
-    description: '18 estudiantes de grado 8° presentan un descenso sostenido mayor al 20% en sus promedios durante las últimas 4 semanas.',
-    prediction: '83% de probabilidad de que requieran acompañamiento académico antes del período.',
-    affectedCount: 18, affectedLabel: 'estudiantes', time: 'Hace 2 horas', resolved: false,
-  },
-  {
-    id: 2, priority: 'alta', category: 'Asistencia',
-    title: 'Incremento de ausencias en grado 10°',
-    description: 'El grado 10° registra un 34% más de ausencias respecto a la semana anterior. Posible señal de deserción temprana.',
-    prediction: '3 estudiantes tienen más de 5 ausencias consecutivas sin justificación.',
-    affectedCount: 7, affectedLabel: 'estudiantes', time: 'Hace 5 horas', resolved: false,
-  },
-  {
-    id: 3, priority: 'media', category: 'Rendimiento docente',
-    title: 'Bajo nivel de participación — Profesor Martínez',
-    description: 'El Profesor Carlos Martínez presenta un índice de participación estudiantil 35% inferior al promedio institucional en las últimas 3 semanas.',
-    affectedCount: 42, affectedLabel: 'estudiantes asignados', time: 'Hace 1 día', resolved: false,
-  },
-  {
-    id: 4, priority: 'media', category: 'Uso de IA',
-    title: 'Uso excesivo de NeuroBot en un grupo',
-    description: 'El grupo "Matemáticas 9B" muestra un patrón de uso del NeuroBot que sugiere dependencia excesiva: 94% de las respuestas son copiadas directamente.',
-    affectedCount: 28, affectedLabel: 'estudiantes', time: 'Hace 2 días', resolved: false,
-  },
-  {
-    id: 5, priority: 'media', category: 'Promedio',
-    title: 'Descenso en promedio de Matemáticas',
-    description: 'Grado 8° presenta un descenso del 12% en Matemáticas durante las últimas cuatro semanas. Afecta principalmente a los grupos A y C.',
-    prediction: 'Tendencia negativa proyectada si no hay intervención en las próximas 2 semanas.',
-    affectedCount: 3, affectedLabel: 'grupos', time: 'Hace 3 días', resolved: false,
-  },
-  {
-    id: 6, priority: 'baja', category: 'Participación',
-    title: 'Grupo con baja participación en tareas',
-    description: '"Ciencias 7A" tiene una tasa de entrega de tareas del 48%, por debajo del umbral institucional del 70%.',
-    affectedCount: 24, affectedLabel: 'estudiantes', time: 'Hace 4 días', resolved: false,
-  },
-  {
-    id: 7, priority: 'baja', category: 'Licencia',
-    title: 'Licencia próxima a vencer',
-    description: 'La licencia Premium vence en 45 días. Se recomienda iniciar el proceso de renovación para evitar interrupciones del servicio.',
-    affectedCount: 1, affectedLabel: 'institución', time: 'Hace 1 semana', resolved: false,
-  },
-];
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; border: string; dot: string; icon: any }> = {
   alta:  { label: 'Alta',   color: 'text-[#E03E3E]', bg: 'bg-[#FDEEEE]',  border: 'border-[#F4BDBD]', dot: 'bg-[#E03E3E]', icon: AlertTriangle },
@@ -83,25 +36,34 @@ const PREDICTIVE_INSIGHTS = [
 export default function NeuroAlertasTab() {
   const [filterPriority, setFilterPriority] = useState<Priority | 'todas'>('todas');
   const [resolved, setResolved] = useState<Set<number>>(new Set());
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = MOCK_ALERTS.filter(a =>
+  useEffect(() => {
+    api.get('/super/stats/alerts')
+      .then(r => setAlerts(r.data.alerts ?? []))
+      .catch(() => setAlerts([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = alerts.filter(a =>
     (filterPriority === 'todas' || a.priority === filterPriority) && !resolved.has(a.id)
   );
 
   const counts = {
-    alta:  MOCK_ALERTS.filter(a => a.priority === 'alta'  && !resolved.has(a.id)).length,
-    media: MOCK_ALERTS.filter(a => a.priority === 'media' && !resolved.has(a.id)).length,
-    baja:  MOCK_ALERTS.filter(a => a.priority === 'baja'  && !resolved.has(a.id)).length,
+    alta:  alerts.filter(a => a.priority === 'alta'  && !resolved.has(a.id)).length,
+    media: alerts.filter(a => a.priority === 'media' && !resolved.has(a.id)).length,
+    baja:  alerts.filter(a => a.priority === 'baja'  && !resolved.has(a.id)).length,
   };
 
   return (
     <div className="space-y-8">
 
-      {/* Banner DEMO */}
-      <div className="bg-[#FCF6E5] border border-[#EDD88A] rounded-md px-4 py-2.5 flex items-center gap-2 text-xs text-[#D9730D] font-medium">
-        <span className="bg-[#D9730D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded">DEMO</span>
-        Las alertas mostradas son de demostración. Con el backend activo se generarán alertas reales basadas en el análisis de IA.
-      </div>
+      {loading && (
+        <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#787774]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando alertas…
+        </div>
+      )}
 
       {/* ── Analítica Predictiva ── */}
       <div className="bg-gradient-to-r from-[#6940A5]/5 to-[#0B6E99]/5 border border-[#E9E9E7] rounded-lg p-5">

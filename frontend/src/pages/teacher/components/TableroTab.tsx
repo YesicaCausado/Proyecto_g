@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Megaphone, ClipboardList, Link2, FileText,
   Plus, MessageCircle, Send, Paperclip,
-  MoreVertical, BookOpen, X,
+  MoreVertical, BookOpen, X, Loader2,
 } from 'lucide-react';
+import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 type PostType = 'anuncio' | 'tarea' | 'recordatorio' | 'enlace' | 'material';
 
@@ -29,37 +31,22 @@ interface Post {
 
 const GROUPS = ['Matemáticas 9A','Física 10B','Álgebra 8C','Cálculo 11A'];
 
-const MOCK_POSTS: Post[] = [
-  {
-    id:'p1', type:'anuncio', group:'Todos los grupos',
-    title:'Bienvenida al segundo semestre',
-    content:'Estimados estudiantes, les damos la bienvenida al segundo período académico 2026. Recuerden revisar el NeuroBots para repasar los temas del parcial.',
-    date:'2026-07-01', reactions:[{emoji:'👍',count:18},{emoji:'❤️',count:7},{emoji:'😊',count:4}],
-    comments:[
-      {id:'c1',author:'Valentina Torres',text:'¡Gracias profe! Lista para el semestre.',date:'Hace 2h'},
-      {id:'c2',author:'Carlos Silva',text:'¿El examen parcial es el 15 o el 18?',date:'Hace 1h'},
-    ],
-    attachments:[],
-  },
-  {
-    id:'p2', type:'tarea', group:'Matemáticas 9A',
-    title:'Tarea #4 — Ecuaciones cuadráticas',
-    content:'Resolver los ejercicios 1 al 15 del capítulo 4. Subir foto del desarrollo en la plataforma. Recuerden mostrar el procedimiento completo.',
-    date:'2026-06-30', dueDate:'2026-07-05',
-    reactions:[{emoji:'👍',count:12},{emoji:'😅',count:8}],
-    comments:[{id:'c3',author:'Juan Pérez',text:'¿El ejercicio 10 es con fórmula general?',date:'Hace 3h'}],
-    attachments:['cap4_ejercicios.pdf'],
-  },
-  {
-    id:'p3', type:'recordatorio', group:'Física 10B',
-    title:'Parcial de Física — Viernes 5 de julio',
-    content:'Recuerden que el parcial cubre los temas de la Unidad 2: Termodinámica y Ondas. Traer calculadora científica.',
-    date:'2026-06-28',
-    reactions:[{emoji:'😰',count:15},{emoji:'💪',count:10}],
-    comments:[],
-    attachments:[],
-  },
-];
+function mapPost(raw: any): Post {
+  return {
+    id:          String(raw.id),
+    type:        (raw.post_type ?? raw.type ?? 'anuncio') as PostType,
+    title:       raw.title,
+    content:     raw.content,
+    date:        (raw.created_at ?? raw.date ?? '').slice(0, 10),
+    group:       raw.classroom_name ?? raw.group ?? 'Todos los grupos',
+    dueDate:     raw.due_date ?? raw.dueDate,
+    reactions:   Array.isArray(raw.reactions) ? raw.reactions : [],
+    comments:    Array.isArray(raw.comments) ? raw.comments.map((c: any) => ({
+      id: String(c.id), author: c.author_name ?? c.author, text: c.content ?? c.text, date: c.created_at ?? c.date,
+    })) : [],
+    attachments: raw.attachments ?? [],
+  };
+}
 
 const TYPE_CONFIG: Record<PostType, { label:string; color:string; bg:string; icon:any; borderColor:string }> = {
   anuncio:     { label:'Anuncio',     color:'text-[#2E6FDB]', bg:'bg-[#EEF3FD]',  icon:Megaphone,  borderColor:'border-[#2E6FDB]'  },
@@ -72,7 +59,9 @@ const TYPE_CONFIG: Record<PostType, { label:string; color:string; bg:string; ico
 const REACTION_EMOJIS = ['👍','❤️','😊','😮','😂','💪'];
 
 export default function TableroTab() {
-  const [posts,       setPosts]       = useState<Post[]>(MOCK_POSTS);
+  const { user } = useAuth();
+  const [posts,       setPosts]       = useState<Post[]>([]);
+  const [loading,     setLoading]     = useState(true);
   const [showCompose, setShowCompose] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState('Todos los grupos');
   const [commentText,   setCommentText]   = useState<Record<string, string>>({});
@@ -82,11 +71,21 @@ export default function TableroTab() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ type:'anuncio' as PostType, title:'', content:'', group:'Todos los grupos', dueDate:'', attachments: [] as string[] });
 
+  useEffect(() => {
+    api.get('/posts')
+      .then(r => setPosts((r.data.posts ?? r.data ?? []).map(mapPost)))
+      .catch(() => setPosts([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   const toggleComments = (id: string) => {
     setExpandComments(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
-  const addReaction = (postId: string, emoji: string) => {
+  const addReaction = async (postId: string, emoji: string) => {
+    try {
+      await api.post(`/posts/${postId}/reactions`, { emoji });
+    } catch { /* noop */ }
     setPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
       const existing = p.reactions.find(r => r.emoji === emoji);
@@ -97,34 +96,46 @@ export default function TableroTab() {
     }));
   };
 
-  const addComment = (postId: string) => {
+  const addComment = async (postId: string) => {
     const text = commentText[postId]?.trim();
     if (!text) return;
-    const c: Comment = { id: Date.now().toString(), author:'Yo (Profesor)', text, date:'Ahora' };
-    setPosts(prev => prev.map(p => p.id === postId ? {...p, comments:[...p.comments, c]} : p));
+    try {
+      const res = await api.post(`/posts/${postId}/comments`, { content: text });
+      const c: Comment = { id: String(res.data.id ?? Date.now()), author: user?.full_name ?? 'Profesor', text, date: 'Ahora' };
+      setPosts(prev => prev.map(p => p.id === postId ? {...p, comments:[...p.comments, c]} : p));
+    } catch {
+      const c: Comment = { id: Date.now().toString(), author: user?.full_name ?? 'Profesor', text, date: 'Ahora' };
+      setPosts(prev => prev.map(p => p.id === postId ? {...p, comments:[...p.comments, c]} : p));
+    }
     setCommentText(prev => ({...prev, [postId]:''}));
   };
 
-  const deletePost = (id: string) => {
+  const deletePost = async (id: string) => {
+    try { await api.delete(`/posts/${id}`); } catch { /* noop */ }
     setPosts(prev => prev.filter(p => p.id !== id));
     setMenuPostId(null);
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!form.title.trim() || !form.content.trim()) return;
-    const newPost: Post = {
-      id:          Date.now().toString(),
-      type:        form.type,
-      title:       form.title.trim(),
-      content:     form.content.trim(),
-      group:       form.group,
-      date:        new Date().toISOString().slice(0,10),
-      dueDate:     form.dueDate || undefined,
-      reactions:   [],
-      comments:    [],
-      attachments: form.attachments,
-    };
-    setPosts(prev => [newPost, ...prev]);
+    try {
+      const res = await api.post('/posts', {
+        post_type: form.type,
+        title:     form.title.trim(),
+        content:   form.content.trim(),
+        due_date:  form.dueDate || null,
+      });
+      setPosts(prev => [mapPost(res.data), ...prev]);
+    } catch {
+      const newPost: Post = {
+        id: Date.now().toString(), type: form.type, title: form.title.trim(),
+        content: form.content.trim(), group: form.group,
+        date: new Date().toISOString().slice(0,10),
+        dueDate: form.dueDate || undefined,
+        reactions: [], comments: [], attachments: form.attachments,
+      };
+      setPosts(prev => [newPost, ...prev]);
+    }
     setShowCompose(false);
     setForm({ type:'anuncio', title:'', content:'', group:'Todos los grupos', dueDate:'', attachments:[] });
   };
@@ -135,6 +146,12 @@ export default function TableroTab() {
 
   return (
     <div className="space-y-4">
+
+      {loading && (
+        <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#787774]">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando publicaciones…
+        </div>
+      )}
 
       {/* Barra filtro + publicar */}
       <div className="flex items-center gap-3 flex-wrap">

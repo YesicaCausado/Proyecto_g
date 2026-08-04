@@ -3,18 +3,18 @@ import api from '../services/api';
 import type { User, LoginRequest, RegisterRequest, Token } from '../types';
 
 // false = backend real | true = demo offline sin backend
-const DEMO_MODE = false;
+export const DEMO_MODE = false;
 
 // ─────────────────────────────────────────────────────────────────
 // Usuarios demo por rol — credenciales temporales de prueba
-//   demo        / demo1234          → Panel Estudiante
-//   profesor    / profesor1234      → Panel Profesor
-//   admin       / admin1234         → Panel Admin
-//   superprofesor / superprofesor1234 → Panel Super Profesor (Rector)
+//   demo        / demo            → Panel Estudiante
+//   profesor    / profesor        → Panel Profesor
+//   admin       / admin1234       → Panel Admin
+//   superprofesor / superprofesor → Panel Super Profesor (Rector)
 // ─────────────────────────────────────────────────────────────────
 const DEMO_USERS: Record<string, User & { _password: string }> = {
   demo: {
-    _password: 'demo1234',
+    _password: 'demo',
     id: 10,
     username: 'demo',
     email: 'estudiante@neurolearn.app',
@@ -26,7 +26,7 @@ const DEMO_USERS: Record<string, User & { _password: string }> = {
     cognitive_profile: null,
   },
   profesor: {
-    _password: 'profesor1234',
+    _password: 'profesor',
     id: 20,
     username: 'profesor',
     email: 'profesor@neurolearn.app',
@@ -50,7 +50,7 @@ const DEMO_USERS: Record<string, User & { _password: string }> = {
     cognitive_profile: null,
   },
   superprofesor: {
-    _password: 'superprofesor1234',
+    _password: 'superprofesor',
     id: 40,
     username: 'superprofesor',
     email: 'rector@neurolearn.app',
@@ -83,29 +83,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadUser = async () => {
       if (DEMO_MODE) {
-        // Restaurar sesión demo desde localStorage si existe
         const savedDemo = localStorage.getItem('demo_user');
         if (savedDemo) {
-          try {
-            setUser(JSON.parse(savedDemo));
-          } catch {
-            localStorage.removeItem('demo_user');
-          }
+          try { setUser(JSON.parse(savedDemo)); }
+          catch { localStorage.removeItem('demo_user'); }
         }
         setLoading(false);
         return;
       }
 
       if (token) {
-        try {
-          const { data } = await api.get<User>('/auth/me');
-          setUser(data);
-        } catch {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setToken(null);
-          setUser(null);
+        // 1. Restaurar desde caché inmediatamente (sin esperar red)
+        const cached = localStorage.getItem('user');
+        if (cached) {
+          try { setUser(JSON.parse(cached)); } catch { /* ignorar */ }
         }
+        // 2. Validar token en background (sin bloquear la UI)
+        api.get<User>('/auth/me')
+          .then(({ data }) => {
+            setUser(data);
+            localStorage.setItem('user', JSON.stringify(data));
+          })
+          .catch(() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setToken(null);
+            setUser(null);
+          })
+          .finally(() => setLoading(false));
+        return;
       }
       setLoading(false);
     };
@@ -130,7 +136,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', tokenData.access_token);
     setToken(tokenData.access_token);
 
-    const { data: userData } = await api.get<User>('/auth/me');
+    // Construir user desde los datos del token (sin segundo request a /auth/me)
+    const userData: User = {
+      id:                   tokenData.user_id!,
+      username:             tokenData.username ?? loginData.username,
+      email:                tokenData.email ?? '',
+      full_name:            tokenData.full_name ?? null,
+      role:                 (tokenData.role ?? 'estudiante') as User['role'],
+      is_active:            tokenData.is_active ?? true,
+      is_expert:            tokenData.is_expert ?? false,
+      created_at:           tokenData.created_at ?? new Date().toISOString(),
+      cognitive_profile:    tokenData.cognitive_profile ?? null,
+      must_change_password: tokenData.must_change_password ?? false,
+      institution_id:       tokenData.institution_id ?? undefined,
+      document_number:      tokenData.document_number ?? undefined,
+    };
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   };
