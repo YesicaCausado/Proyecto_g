@@ -218,7 +218,7 @@ export default function BotMessageWithActions({
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-xs font-semibold text-[#191919]">Neuron</span>
           <span className="text-[9px] font-bold bg-[#F7F3FB] text-[#6940A5] border border-[#D9CCE9] px-1.5 py-0.5 rounded-full leading-none">
-            ✦ GPT-5
+            ✦ IA
           </span>
         </div>
 
