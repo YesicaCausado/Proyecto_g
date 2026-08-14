@@ -219,7 +219,7 @@ app.add_middleware(
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(chat.router,          prefix="/api/v1")
 app.include_router(expert_bot.router,    prefix="/api/v1/bots")
-app.include_router(classroom.router,     prefix="/api/v1/classrooms")
+app.include_router(classroom.router,     prefix="/api/v1")
 app.include_router(stats.router,         prefix="/api/v1/stats")
 app.include_router(credentials.router,   prefix="/api/v1")
 app.include_router(posts.router,         prefix="/api/v1")
