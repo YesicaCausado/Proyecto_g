@@ -2,6 +2,19 @@ import { useState, useRef, useEffect } from 'react';
 import { Settings, Upload, Globe, Clock, Building2, Phone, Mail, MapPin, Save, RefreshCw, Loader2 } from 'lucide-react';
 import api from '../../../services/api';
 
+const normalizeInstitutionData = (data: any) => ({
+  name: data?.name ?? '',
+  dane: data?.dane_code ?? '',
+  email: data?.email ?? '',
+  phone: data?.phone ?? '',
+  address: data?.address ?? '',
+  timezone: data?.timezone ?? 'America/Bogota',
+  language: data?.language ?? 'es',
+  primaryColor: data?.primary_color ?? '#6940A5',
+  website: data?.website ?? '',
+  logoUrl: data?.logo_url ?? '',
+});
+
 export default function ConfiguracionTab() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -18,6 +31,7 @@ export default function ConfiguracionTab() {
     language: 'es',
     primaryColor: '#6940A5',
     website: '',
+    logoUrl: '',
   });
   const [origForm, setOrigForm] = useState({
     name: '',
@@ -29,28 +43,21 @@ export default function ConfiguracionTab() {
     language: 'es',
     primaryColor: '#6940A5',
     website: '',
+    logoUrl: '',
   });
+
+  const hydrateInstitution = (data: any) => {
+    const next = normalizeInstitutionData(data);
+    setForm(prev => ({ ...prev, ...next }));
+    setOrigForm(next);
+    const nextLogo = next.logoUrl || null;
+    setLogoPreview(nextLogo);
+    setForm(prev => ({ ...prev, logoUrl: nextLogo ?? '' }));
+  };
 
   useEffect(() => {
     api.get('/super/institution')
-      .then(r => {
-        const next = {
-          name: r.data.name ?? '',
-          dane: r.data.dane_code ?? '',
-          email: r.data.email ?? '',
-          phone: r.data.phone ?? '',
-          address: r.data.address ?? '',
-          timezone: r.data.timezone ?? 'America/Bogota',
-          language: r.data.language ?? 'es',
-          primaryColor: r.data.primary_color ?? '#6940A5',
-          website: r.data.website ?? '',
-        };
-        setForm(prev => ({ ...prev, ...next }));
-        setOrigForm(next);
-        if (r.data.logo_url) {
-          setLogoPreview(r.data.logo_url);
-        }
-      })
+      .then(r => hydrateInstitution(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -90,8 +97,13 @@ export default function ConfiguracionTab() {
         primary_color: form.primaryColor,
         logo_url: logoPreview || null,
       };
-      await api.patch('/super/institution', payload);
-      setOrigForm({ ...form });
+      const response = await api.patch('/super/institution', payload);
+      const savedData = response.data ?? {};
+      const nextForm = normalizeInstitutionData(savedData);
+      setForm(prev => ({ ...prev, ...nextForm }));
+      setOrigForm(nextForm);
+      setLogoPreview(nextForm.logoUrl || null);
+      window.dispatchEvent(new CustomEvent('institution-config-updated', { detail: savedData }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {

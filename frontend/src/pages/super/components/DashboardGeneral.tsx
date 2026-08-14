@@ -24,14 +24,25 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
   const [stats, setStats] = useState<DashStats | null>(null);
   const [institution, setInstitution] = useState<{ name: string } | null>(null);
 
-  useEffect(() => {
-    Promise.all([
+  const loadDashboardData = async () => {
+    const [statsData, institutionData] = await Promise.all([
       api.get('/super/stats/dashboard').then(r => r.data).catch(() => null),
       api.get('/super/institution').then(r => r.data).catch(() => null),
-    ]).then(([statsData, institutionData]) => {
-      setStats(statsData);
-      setInstitution(institutionData);
-    });
+    ]);
+    setStats(statsData);
+    setInstitution(institutionData);
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+    const onInstitutionUpdated = () => {
+      loadDashboardData();
+    };
+    window.addEventListener('institution-config-updated', onInstitutionUpdated);
+
+    return () => {
+      window.removeEventListener('institution-config-updated', onInstitutionUpdated);
+    };
   }, []);
 
   const institutionName = institution?.name ?? license?.institution_name ?? '—';
