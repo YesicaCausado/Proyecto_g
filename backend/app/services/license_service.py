@@ -24,7 +24,7 @@ from app.models.institution import Institution
 TEACHER_MODULES: dict[str, list[str]] = {
     "basica": [
         "dashboard", "cursos", "grupos", "estudiantes",
-        "evaluaciones", "recursos", "calendario", "mensajes", "perfil",
+        "evaluaciones", "recursos", "calendario", "mensajes", "perfil", "ia",
     ],
     "premium": [
         "dashboard", "cursos", "grupos", "estudiantes",
@@ -43,7 +43,7 @@ TEACHER_MODULES: dict[str, list[str]] = {
 STUDENT_MODULES: dict[str, list[str]] = {
     "basica": [
         "inicio", "mis_cursos", "mis_tareas", "evaluaciones",
-        "recursos", "calendario", "mensajes", "perfil",
+        "recursos", "calendario", "mensajes", "perfil", "tutor_ia",
     ],
     "premium": [
         "inicio", "mis_cursos", "mis_tareas", "evaluaciones",
