@@ -25,20 +25,24 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
   const [institution, setInstitution] = useState<{ name: string } | null>(null);
 
   useEffect(() => {
-    api.get('/super/stats/dashboard').then(r => setStats(r.data)).catch(() => {});
-    api.get('/super/institution').then(r => setInstitution(r.data)).catch(() => {});
+    Promise.all([
+      api.get('/super/stats/dashboard').then(r => r.data).catch(() => null),
+      api.get('/super/institution').then(r => r.data).catch(() => null),
+    ]).then(([statsData, institutionData]) => {
+      setStats(statsData);
+      setInstitution(institutionData);
+    });
   }, []);
 
-  // Días reales desde el backend (license viene de /super/license-usage)
-  const institutionName = institution?.name ?? license?.institution_name ?? '—';;
+  const institutionName = institution?.name ?? license?.institution_name ?? '—';
 
   const metrics = [
-    { label: 'Profesores activos', value: stats?.total_teachers ?? license?.current_teachers ?? '—', trend: '',   status: 'good',    icon: Users,          tab: 'profesores' },
-    { label: 'Estudiantes',        value: stats?.total_students ?? license?.current_students ?? '—', trend: '',   status: 'good',    icon: GraduationCap,  tab: 'estudiantes' },
-    { label: 'Grupos',             value: stats?.total_groups ?? '—',                                trend: '',   status: 'neutral', icon: BookOpen,       tab: 'grupos' },
-    { label: 'NeuroBots',          value: '—',                                                       trend: '',   status: 'good',    icon: Bot,            tab: 'neurobots' },
-    { label: 'Promedio general',   value: stats ? `${stats.avg_score}/10` : '—',                     trend: '',   status: stats && stats.avg_score >= 7 ? 'good' : 'warning', icon: TrendingUp, tab: null },
-    { label: 'En riesgo',          value: stats?.at_risk_count ?? '—',                               trend: '',   status: 'danger',  icon: AlertTriangle,  tab: 'alertas' },
+    { label: 'Profesores activos', value: stats?.total_teachers ?? license?.current_teachers ?? 0, trend: '', status: 'good', icon: Users, tab: 'profesores' },
+    { label: 'Estudiantes', value: stats?.total_students ?? license?.current_students ?? 0, trend: '', status: 'good', icon: GraduationCap, tab: 'estudiantes' },
+    { label: 'Grupos', value: stats?.total_groups ?? 0, trend: '', status: 'neutral', icon: BookOpen, tab: 'grupos' },
+    { label: 'NeuroBots', value: '—', trend: '', status: 'good', icon: Bot, tab: 'neurobots' },
+    { label: 'Promedio general', value: stats ? `${stats.avg_score}/10` : '—', trend: '', status: stats && stats.avg_score >= 7 ? 'good' : 'warning', icon: TrendingUp, tab: null },
+    { label: 'En riesgo', value: stats?.at_risk_count ?? 0, trend: '', status: 'danger', icon: AlertTriangle, tab: 'alertas' },
   ];
 
   const daysLeft   = license?.days_left ?? null;
@@ -47,11 +51,9 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
   return (
     <div className="space-y-6">
 
-      {/* Banner DEMO — visible cuando license es null (backend offline) */}
-      {!license && (
-        <div className="bg-[#FCF6E5] border border-[#EDD88A] rounded-md px-4 py-2.5 flex items-center gap-2 text-xs text-[#D9730D] font-medium">
-          <span className="bg-[#D9730D] text-white text-[10px] font-bold px-1.5 py-0.5 rounded">DEMO</span>
-          El backend no está disponible. Los datos mostrados son de ejemplo. Inicia el servidor para ver datos reales.
+      {!license && !stats && (
+        <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-4 py-2.5 text-xs text-[#787774] font-medium">
+          Cargando datos reales de la institución…
         </div>
       )}
 
@@ -77,9 +79,10 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
         <div className="bg-gradient-to-br from-[#6940A5] to-[#5A358F] text-white p-6 md:w-56 flex-shrink-0 flex flex-col justify-between">
           <div>
             <ShieldCheck className="w-7 h-7 opacity-70 mb-3" />
-            <h2 className="text-lg font-bold">Licencia {license?.license_type || 'Premium'}</h2>
+            <h2 className="text-lg font-bold">Licencia {license?.license_type || '—'}</h2>
             <div className="inline-flex items-center gap-1.5 mt-2 bg-white/20 px-2.5 py-1 rounded-full text-xs font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Activa
+              <span className={`w-1.5 h-1.5 rounded-full ${license?.license_status === 'expired' ? 'bg-red-400' : license?.license_status === 'suspended' ? 'bg-gray-400' : 'bg-green-400'} animate-pulse`} />
+              {license?.license_status ? (license.license_status === 'active' ? 'Activa' : license.license_status === 'expiring_soon' ? 'Próxima a vencer' : license.license_status === 'expired' ? 'Vencida' : 'Suspendida') : 'Sin datos'}
             </div>
           </div>
           <div className="mt-5">
@@ -100,10 +103,10 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
 
         <div className="p-6 flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
           {[
-            { label: 'Docentes', current: license?.current_teachers ?? 18, max: license?.max_teachers ?? 60, color: '#0B6E99' },
-            { label: 'Estudiantes', current: license?.current_students ?? 745, max: license?.max_students ?? 1500, color: '#0F7B6C' },
+            { label: 'Docentes', current: license?.current_teachers ?? 0, max: license?.max_teachers ?? 0, color: '#0B6E99' },
+            { label: 'Estudiantes', current: license?.current_students ?? 0, max: license?.max_students ?? 0, color: '#0F7B6C' },
           ].map(item => {
-            const pct = Math.round((item.current / item.max) * 100);
+            const pct = item.max > 0 ? Math.round((item.current / item.max) * 100) : 0;
             return (
               <div key={item.label}>
                 <div className="flex justify-between text-sm mb-1.5">
@@ -113,7 +116,7 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
                 <div className="h-2 bg-[#F7F6F3] rounded-full overflow-hidden border border-[#E9E9E7]">
                   <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: item.color }} />
                 </div>
-                <p className="text-[10px] text-[#AEADAB] mt-0.5 text-right">{pct}%</p>
+                <p className="text-[10px] text-[#AEADAB] mt-0.5 text-right">{item.max > 0 ? `${pct}%` : 'Sin límite'}</p>
               </div>
             );
           })}
@@ -158,58 +161,41 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
 
       {/* ── Gráficas + Ranking ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Rendimiento por grado */}
         <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
-          <div className="flex justify-between items-center mb-5">
-            <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2">
-              <BarChart2 className="w-4 h-4 text-[#787774]" /> Rendimiento por grado
-            </h3>
-            <select className="text-xs border border-[#E9E9E7] rounded px-2 py-1 bg-white text-[#787774] outline-none">
-              <option>Período 1</option><option>Período 2</option>
-            </select>
-          </div>
-          <div className="flex items-end justify-between gap-2 h-40 px-1">
-            {[
-              { g: '6°', h: 72 }, { g: '7°', h: 78 }, { g: '8°', h: 65 },
-              { g: '9°', h: 81 }, { g: '10°', h: 84 }, { g: '11°', h: 79 },
-            ].map(({ g, h }) => (
-              <div key={g} className="flex flex-col items-center gap-1 flex-1 group">
-                <span className="text-[10px] text-[#787774] font-semibold opacity-0 group-hover:opacity-100 transition-opacity">{(h / 10).toFixed(1)}</span>
-                <div className="w-full relative" style={{ height: `${h}%` }}>
-                  <div className="absolute bottom-0 w-full bg-[#E5F3FF] rounded-t-md group-hover:bg-[#0B6E99] transition-colors" style={{ height: '100%' }} />
-                  <div className="absolute bottom-0 w-full bg-[#0B6E99] rounded-t-md opacity-70 group-hover:opacity-100 transition-opacity" style={{ height: `${h - 10}%` }} />
+          <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2 mb-4">
+            <BarChart2 className="w-4 h-4 text-[#787774]" /> Rendimiento por grado
+          </h3>
+          {stats && stats.areas_data?.length ? (
+            <div className="space-y-3">
+              {stats.areas_data.map((area, i) => (
+                <div key={area.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-[#37352F] font-medium">{area.label}</span>
+                    <span className="text-[#787774]">{area.pct}%</span>
+                  </div>
+                  <div className="h-2 bg-[#F7F6F3] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${area.pct}%`, backgroundColor: AREA_COLORS[i % AREA_COLORS.length] }} />
+                  </div>
                 </div>
-                <span className="text-xs font-medium text-[#787774]">{g}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[#AEADAB] py-8 text-center">Aún no hay datos suficientes para graficar rendimiento institucional.</p>
+          )}
         </div>
 
-        {/* Tendencia institucional */}
         <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
-          <div className="flex justify-between items-center mb-5">
-            <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2">
-              <LineChart className="w-4 h-4 text-[#787774]" /> Tendencia institucional
-            </h3>
-          </div>
-          <div className="h-36 border-b border-l border-[#E9E9E7] relative ml-4">
-            <svg viewBox="0 0 200 100" className="w-full h-full" preserveAspectRatio="none">
-              {/* Promedio */}
-              <polyline points="0,60 33,50 66,55 100,30 133,35 167,20 200,25"
-                fill="none" stroke="#0F7B6C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              {/* Participación */}
-              <polyline points="0,75 33,68 66,72 100,55 133,50 167,45 200,40"
-                fill="none" stroke="#0B6E99" strokeWidth="1.5" strokeDasharray="4 2" strokeLinecap="round"/>
-            </svg>
-          </div>
-          <div className="flex gap-4 mt-2 text-[10px] text-[#787774]">
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#0F7B6C] inline-block rounded" /> Promedio</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#0B6E99] inline-block rounded border-dashed" style={{ borderBottom: '1px dashed #0B6E99' }} /> Participación</span>
-          </div>
-          <div className="flex justify-between mt-1 text-[10px] text-[#AEADAB] px-1">
-            {['Ene','Feb','Mar','Abr','May','Jun','Jul'].map(m => <span key={m}>{m}</span>)}
-          </div>
+          <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2 mb-4">
+            <LineChart className="w-4 h-4 text-[#787774]" /> Tendencia institucional
+          </h3>
+          {stats ? (
+            <div className="space-y-3">
+              <p className="text-sm text-[#37352F] font-medium">Promedio general: {stats.avg_score}/10</p>
+              <p className="text-xs text-[#787774]">La tendencia se calcula con los registros reales de la institución disponibles en el backend.</p>
+            </div>
+          ) : (
+            <p className="text-xs text-[#AEADAB] py-8 text-center">No hay información histórica disponible aún.</p>
+          )}
         </div>
       </div>
 

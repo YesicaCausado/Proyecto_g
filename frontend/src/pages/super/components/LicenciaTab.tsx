@@ -1,4 +1,4 @@
-import { CreditCard, ShieldCheck, Users, GraduationCap, HardDrive, Cpu, ExternalLink, AlertTriangle, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
+import { CreditCard, ShieldCheck, Users, GraduationCap, ExternalLink, AlertTriangle, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
 
 function UsageBar({ label, current, max, color, icon: Icon }: { label: string; current: number; max: number; color: string; icon: any }) {
   const pct = max > 90000 ? 30 : Math.round((current / max) * 100);
@@ -30,10 +30,10 @@ export default function LicenciaTab({ license }: { license: any }) {
   // Calcula días restantes desde la fecha real si el backend la provee
   const expiryDate = license?.expiry_date ? new Date(license.expiry_date) : null;
   const today      = new Date();
-  const daysLeft   = expiryDate ? Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  const daysLeft   = license?.days_left ?? (expiryDate ? Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null);
   const isExpiring = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
-  const isExpired  = daysLeft !== null && daysLeft <= 0;
-  const licType    = (license?.license_type ?? 'premium') as 'basica' | 'premium' | 'pro';
+  const isExpired  = license?.license_status === 'expired' || (daysLeft !== null && daysLeft <= 0);
+  const licType    = (license?.license_type ?? 'basica') as 'basica' | 'premium' | 'pro';
 
   const PLAN_FEATURES: Record<'basica' | 'premium' | 'pro', string[]> = {
     basica: [
@@ -89,14 +89,16 @@ export default function LicenciaTab({ license }: { license: any }) {
               </div>
               <h2 className="text-2xl font-bold">Licencia {licType}</h2>
               <div className="flex items-center gap-1.5 mt-2">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-sm font-medium opacity-90">Activa</span>
+                <span className={`w-2 h-2 rounded-full ${license?.license_status === 'expired' ? 'bg-red-400' : license?.license_status === 'suspended' ? 'bg-gray-400' : 'bg-green-400'} animate-pulse`} />
+                <span className="text-sm font-medium opacity-90">
+                  {license?.license_status === 'active' ? 'Activa' : license?.license_status === 'expiring_soon' ? 'Próxima a vencer' : license?.license_status === 'expired' ? 'Vencida' : license?.license_status === 'suspended' ? 'Suspendida' : 'Sin estado'}
+                </span>
               </div>
             </div>
             <div className="text-right">
               <p className="text-sm opacity-70">Vence en</p>
-              <p className="text-3xl font-bold">{daysLeft}</p>
-              <p className="text-sm opacity-70">días</p>
+              <p className="text-3xl font-bold">{daysLeft ?? '—'}</p>
+              <p className="text-sm opacity-70">{daysLeft !== null ? 'días' : 'sin límite'}</p>
             </div>
           </div>
         </div>
@@ -106,7 +108,7 @@ export default function LicenciaTab({ license }: { license: any }) {
             <Calendar className="w-5 h-5 text-[#787774]" />
             <div>
               <p className="text-xs text-[#787774]">Fecha de inicio</p>
-              <p className="text-sm font-semibold text-[#37352F]">1 Enero 2026</p>
+              <p className="text-sm font-semibold text-[#37352F]">{license?.created_at ? new Date(license.created_at).toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' }) : 'Sin fecha de inicio'}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 bg-[#F7F6F3] rounded-md">
@@ -127,32 +129,19 @@ export default function LicenciaTab({ license }: { license: any }) {
         <div className="space-y-5">
           <UsageBar
             label="Docentes"
-            current={license?.current_teachers ?? 18}
-            max={license?.max_teachers ?? 60}
+            current={license?.current_teachers ?? 0}
+            max={license?.max_teachers ?? 0}
             color="#0B6E99"
             icon={Users}
           />
           <UsageBar
             label="Estudiantes"
-            current={license?.current_students ?? 745}
-            max={license?.max_students ?? 1500}
+            current={license?.current_students ?? 0}
+            max={license?.max_students ?? 0}
             color="#0F7B6C"
             icon={GraduationCap}
           />
-          <UsageBar
-            label="Almacenamiento"
-            current={12}
-            max={50}
-            color="#6940A5"
-            icon={HardDrive}
-          />
-          <UsageBar
-            label="Consumo de IA (este mes)"
-            current={8240}
-            max={20000}
-            color="#D9730D"
-            icon={Cpu}
-          />
+          <div className="text-xs text-[#787774] py-2">Los demás consumos operativos se calcularán desde los registros reales del sistema cuando estén disponibles.</div>
         </div>
       </div>
 

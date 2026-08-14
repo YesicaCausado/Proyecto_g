@@ -1255,10 +1255,13 @@ class ErrorPredictionAnalyzer:
 
         P(error | señales) = P(señales | error) × P(error) / P(señales)
 
-    Prior: tasa de error base del estudiante (actualizada con cada interacción).
+    Prior: tasa de error RECIENTE del estudiante (ventana móvil, ver
+    _PRIOR_WINDOW). Se usa una ventana en vez del histórico completo de la
+    sesión para que el prior refleje el desempeño actual, no un promedio
+    diluido con el paso del tiempo.
     Likelihood: señales conductuales asociadas al error en literatura:
 
-    - RT > 2× baseline → P(error) sube ~35% (Luce 1986)
+    - RT > 1.8× el baseline PERSONAL del estudiante → P(error) sube ~35% (Luce 1986)
     - Racha de 2+ errores previos → P(error siguiente) sube a ~60%
       Fuente: Metcalfe (1998) JPSP — "region of proximal learning"
     - Correcciones frecuentes → P(error) sube ~25%
@@ -1280,6 +1283,12 @@ class ErrorPredictionAnalyzer:
         "frustration":     2.5,   # D'Mello et al. (2014) UMUAI
     }
 
+    # Ventana móvil para el prior: solo las últimas N interacciones cuentan.
+    # Con el histórico completo, después de ~30-40 eventos un error nuevo
+    # apenas mueve el prior (~1%), y el riesgo de error deja de "adaptarse"
+    # al desempeño reciente del estudiante.
+    _PRIOR_WINDOW = 25
+
     def __init__(self):
         self.interaction_history: List[Dict] = []
         self.error_contexts: List[str]       = []
@@ -1294,9 +1303,13 @@ class ErrorPredictionAnalyzer:
         })
         if had_error:
             self.error_contexts.append(context)
-        # Actualizar prior con suavizado de Laplace (evitar prior=0 o prior=1)
-        n      = len(self.interaction_history)
-        errors = sum(1 for r in self.interaction_history if r["had_error"])
+        # Prior con ventana móvil + suavizado de Laplace (evitar prior=0 o prior=1).
+        # Antes se usaba TODO el historial acumulado, lo que hacía que el prior
+        # se congelara con sesiones largas. Con ventana móvil, el prior
+        # siempre refleja el desempeño de las últimas _PRIOR_WINDOW interacciones.
+        window = self.interaction_history[-self._PRIOR_WINDOW:]
+        n      = len(window)
+        errors = sum(1 for r in window if r["had_error"])
         self.prior = (errors + 1) / (n + 5)   # pseudocuentas: 1 error previo, 5 observaciones
 
     def predict(self, current_metrics: Dict,
@@ -1355,9 +1368,13 @@ class ErrorPredictionAnalyzer:
         # Convertir prior a odds
         odds = prior / max(1 - prior, 1e-9)
 
-        # Señales conductuales
-        rt = metrics.get("avg_rt", 0)
-        if rt > self.interaction_history[-1]["metrics"].get("avg_rt", 3200) * 1.8 if self.interaction_history else rt > 5000:
+        # Señal de RT elevado: se usa "rt_ratio", que ya viene calculado por
+        # InteractionRhythmAnalyzer contra el baseline PERSONALIZADO del
+        # estudiante (no contra sí mismo — antes se comparaba metrics["avg_rt"]
+        # contra el propio "avg_rt" recién guardado en el historial, lo cual
+        # nunca podía ser cierto y dejaba esta señal muerta).
+        rt_ratio = metrics.get("rt_ratio", 1.0)
+        if rt_ratio > 1.8:
             odds *= self._LIKELIHOOD_RATIOS["high_rt"]
 
         recent_err = self._recent_rate(5)
@@ -1437,6 +1454,15 @@ class MultimodalCognitiveEngine:
     - La "fusión bayesiana" ahora es matemáticamente correcta
     - Todos los inputs son validados antes de procesarse
     - Fallos de un analizador son capturados sin bloquear el pipeline
+
+    IMPORTANTE — persistencia:
+    Esta clase mantiene TODO su estado (baselines, historial, EMA) en
+    memoria de proceso. Si se instancia una vez por request en un entorno
+    serverless (p. ej. funciones de Vercel), el motor se REINICIA en cada
+    invocación fría y NUNCA acumula suficiente historial para personalizarse.
+    Debe vivir en un pool de larga duración por usuario (ver
+    `_user_engines` en chat.py) o, mejor aún, serializar/restaurar su
+    estado desde una base de datos o caché externa (Redis) entre requests.
     """
 
     # Pesos base por modalidad (redistribuidos dinámicamente)

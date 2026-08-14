@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User } from 'lucide-react';
+import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User, Trash2 } from 'lucide-react';
 import api from '../../../services/api';
 
 // ── Utilidad: imprime solo las credenciales en una ventana nueva ─────────────
@@ -174,6 +174,10 @@ export function TeachersTab({ license }: { license: any }) {
   const [newCredentials, setNewCredentials] = useState<any[]>([]);
   const [existingTeachers, setExistingTeachers] = useState<any[]>([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<number[]>([]);
+  const [copiedTeacherId, setCopiedTeacherId] = useState<number | null>(null);
+  const [deleteTeacherId, setDeleteTeacherId] = useState<number | null>(null);
+  const [deletingTeacher, setDeletingTeacher] = useState(false);
 
   const loadTeachers = async () => {
     try {
@@ -184,6 +188,45 @@ export function TeachersTab({ license }: { license: any }) {
   };
 
   useEffect(() => { loadTeachers(); }, []);
+
+  const toggleTeacherSelection = (id: number) => {
+    setSelectedTeacherIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAllTeachers = () => {
+    if (selectedTeacherIds.length === existingTeachers.length) {
+      setSelectedTeacherIds([]);
+      return;
+    }
+    setSelectedTeacherIds(existingTeachers.map(t => t.id));
+  };
+
+  const copyTeacherCredentials = async (teacher: any) => {
+    const text = `Usuario: ${teacher.username}\nContraseña temporal: ${teacher.temp_password || 'No disponible'}\nNombre: ${teacher.full_name || '-'}\nCorreo: ${teacher.email || '-'}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedTeacherId(teacher.id);
+      setTimeout(() => setCopiedTeacherId(null), 1200);
+    } catch {
+      setError('No se pudo copiar la credencial. Inténtalo de nuevo.');
+    }
+  };
+
+  const deleteTeacher = async () => {
+    if (!deleteTeacherId) return;
+    setDeletingTeacher(true);
+    try {
+      await api.delete(`/super/teachers/${deleteTeacherId}`);
+      setDeleteTeacherId(null);
+      setSelectedTeacherIds(prev => prev.filter(id => id !== deleteTeacherId));
+      await loadTeachers();
+      setMessage('Profesor eliminado correctamente.');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'No se pudo eliminar el profesor.');
+    } finally {
+      setDeletingTeacher(false);
+    }
+  };
 
   // Individual Form
   const [firstName, setFirstName]       = useState('');
@@ -496,12 +539,49 @@ export function TeachersTab({ license }: { license: any }) {
       {/* Lista persistente de profesores existentes */}
       {(existingTeachers.length > 0 || loadingList) && (
         <div className="mt-6 bg-white border border-[#E9E9E7] rounded-lg overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-[#37352F]" />
               <h3 className="font-medium text-[#37352F]">Todos los Profesores Registrados</h3>
             </div>
-            <span className="text-xs text-[#787774]">{existingTeachers.length} profesor(es)</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={toggleSelectAllTeachers}
+                className="text-xs text-[#37352F] bg-white border border-[#E9E9E7] rounded px-2 py-1 hover:bg-[#F7F6F3]"
+              >
+                {selectedTeacherIds.length === existingTeachers.length && existingTeachers.length > 0 ? 'Deseleccionar todos' : 'Seleccionar todos'}
+              </button>
+              <button
+                onClick={() => {
+                  const selected = existingTeachers.filter(t => selectedTeacherIds.includes(t.id));
+                  if (!selected.length) return;
+                  const text = selected.map(t => `Usuario: ${t.username}\nNombre: ${t.full_name || '-'}\nCorreo: ${t.email || '-'}\nDocumento: ${t.document_type || ''} ${t.document_number || ''}`).join('\n\n');
+                  navigator.clipboard.writeText(text);
+                }}
+                disabled={selectedTeacherIds.length === 0}
+                className="text-xs text-[#37352F] bg-white border border-[#E9E9E7] rounded px-2 py-1 hover:bg-[#F7F6F3] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Copiar seleccionados
+              </button>
+              <button
+                onClick={async () => {
+                  if (!selectedTeacherIds.length) return;
+                  try {
+                    await api.post('/super/teachers/bulk-delete', { ids: selectedTeacherIds });
+                    setSelectedTeacherIds([]);
+                    await loadTeachers();
+                    setMessage('Profesores seleccionados eliminados correctamente.');
+                  } catch (err: any) {
+                    setError(err.response?.data?.detail || 'No se pudieron eliminar los profesores seleccionados.');
+                  }
+                }}
+                disabled={selectedTeacherIds.length === 0}
+                className="text-xs text-[#B42318] bg-white border border-[#F3C7C3] rounded px-2 py-1 hover:bg-[#FEF3F2] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Borrar seleccionados
+              </button>
+              <span className="text-xs text-[#787774]">{existingTeachers.length} profesor(es)</span>
+            </div>
           </div>
           {loadingList ? (
             <div className="p-6 text-center text-sm text-[#787774]">Cargando...</div>
@@ -510,17 +590,24 @@ export function TeachersTab({ license }: { license: any }) {
               <table className="w-full text-left bg-white">
                 <thead className="bg-[#F7F6F3]/50">
                   <tr>
+                    <th className="pl-6 pr-2 py-3">
+                      <input type="checkbox" checked={selectedTeacherIds.length === existingTeachers.length && existingTeachers.length > 0} onChange={toggleSelectAllTeachers} className="w-4 h-4 accent-[#0B6E99] cursor-pointer" />
+                    </th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Nombre</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Usuario</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Documento</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Correo</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Área</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Estado</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E9E9E7]">
                   {existingTeachers.map((t: any) => (
                     <tr key={t.id} className="hover:bg-[#F7F6F3]/50 transition-colors">
+                      <td className="pl-6 pr-2 py-3">
+                        <input type="checkbox" checked={selectedTeacherIds.includes(t.id)} onChange={() => toggleTeacherSelection(t.id)} className="w-4 h-4 accent-[#0B6E99] cursor-pointer" />
+                      </td>
                       <td className="px-6 py-3 text-sm text-[#37352F] font-medium">{t.full_name}</td>
                       <td className="px-6 py-3 text-sm font-mono text-[#37352F]">{t.username}</td>
                       <td className="px-6 py-3 text-sm text-[#787774]">{t.document_type} {t.document_number}</td>
@@ -531,12 +618,37 @@ export function TeachersTab({ license }: { license: any }) {
                           {t.is_active ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex justify-end items-center gap-2">
+                          <button onClick={() => copyTeacherCredentials(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Copiar credencial">
+                            {copiedTeacherId === t.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          <button onClick={() => setDeleteTeacherId(t.id)} className="p-2 hover:bg-[#FEF3F2] rounded text-[#787774] hover:text-[#B42318]" title="Eliminar profesor">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {deleteTeacherId && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-[#191919] mb-2">Eliminar profesor</h3>
+            <p className="text-sm text-[#787774] mb-4">¿Seguro que quieres eliminar este profesor? Esta acción no se puede deshacer.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteTeacherId(null)} className="px-4 py-2 border border-[#E9E9E7] rounded-md text-sm text-[#787774]">Cancelar</button>
+              <button onClick={deleteTeacher} disabled={deletingTeacher} className="px-4 py-2 bg-[#B42318] text-white rounded-md text-sm hover:bg-[#912018] disabled:opacity-50">
+                {deletingTeacher ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -552,6 +664,10 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
   const [newCredentials, setNewCredentials] = useState<any[]>([]);
   const [existingStudents, setExistingStudents] = useState<any[]>([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
+  const [copiedStudentId, setCopiedStudentId] = useState<number | null>(null);
+  const [deleteStudentId, setDeleteStudentId] = useState<number | null>(null);
+  const [deletingStudent, setDeletingStudent] = useState(false);
 
   const loadStudents = async () => {
     try {
@@ -562,6 +678,45 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
   };
 
   useEffect(() => { loadStudents(); }, []);
+
+  const toggleStudentSelection = (id: number) => {
+    setSelectedStudentIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAllStudents = () => {
+    if (selectedStudentIds.length === existingStudents.length) {
+      setSelectedStudentIds([]);
+      return;
+    }
+    setSelectedStudentIds(existingStudents.map(s => s.id));
+  };
+
+  const copyStudentCredentials = async (student: any) => {
+    const text = `Usuario: ${student.username}\nContraseña temporal: ${student.temp_password || 'No disponible'}\nNombre: ${student.full_name || '-'}\nDocumento: ${student.document_type || ''} ${student.document_number || ''}\nGrado: ${student.grade || '-'}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedStudentId(student.id);
+      setTimeout(() => setCopiedStudentId(null), 1200);
+    } catch {
+      setError('No se pudo copiar la credencial. Inténtalo de nuevo.');
+    }
+  };
+
+  const deleteStudent = async () => {
+    if (!deleteStudentId) return;
+    setDeletingStudent(true);
+    try {
+      await api.delete(`/super/students/${deleteStudentId}`);
+      setDeleteStudentId(null);
+      setSelectedStudentIds(prev => prev.filter(id => id !== deleteStudentId));
+      await loadStudents();
+      setMessage('Estudiante eliminado correctamente.');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'No se pudo eliminar el estudiante.');
+    } finally {
+      setDeletingStudent(false);
+    }
+  };
 
 // Individual Form
   const [firstName, setFirstName]           = useState('');
@@ -878,12 +1033,49 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
       {/* Lista persistente de estudiantes existentes */}
       {(existingStudents.length > 0 || loadingList) && (
         <div className="mt-6 bg-white border border-[#E9E9E7] rounded-lg overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-[#E9E9E7] bg-[#F7F6F3] flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-[#37352F]" />
               <h3 className="font-medium text-[#37352F]">Todos los Estudiantes Registrados</h3>
             </div>
-            <span className="text-xs text-[#787774]">{existingStudents.length} estudiante(s)</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={toggleSelectAllStudents}
+                className="text-xs text-[#37352F] bg-white border border-[#E9E9E7] rounded px-2 py-1 hover:bg-[#F7F6F3]"
+              >
+                {selectedStudentIds.length === existingStudents.length && existingStudents.length > 0 ? 'Deseleccionar todos' : 'Seleccionar todos'}
+              </button>
+              <button
+                onClick={() => {
+                  const selected = existingStudents.filter(s => selectedStudentIds.includes(s.id));
+                  if (!selected.length) return;
+                  const text = selected.map(s => `Usuario: ${s.username}\nNombre: ${s.full_name || '-'}\nDocumento: ${s.document_type || ''} ${s.document_number || ''}\nGrado: ${s.grade || '-'}\nEstado: ${s.is_active ? 'Activo' : 'Inactivo'}`).join('\n\n');
+                  navigator.clipboard.writeText(text);
+                }}
+                disabled={selectedStudentIds.length === 0}
+                className="text-xs text-[#37352F] bg-white border border-[#E9E9E7] rounded px-2 py-1 hover:bg-[#F7F6F3] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Copiar seleccionados
+              </button>
+              <button
+                onClick={async () => {
+                  if (!selectedStudentIds.length) return;
+                  try {
+                    await api.post('/super/students/bulk-delete', { ids: selectedStudentIds });
+                    setSelectedStudentIds([]);
+                    await loadStudents();
+                    setMessage('Estudiantes seleccionados eliminados correctamente.');
+                  } catch (err: any) {
+                    setError(err.response?.data?.detail || 'No se pudieron eliminar los estudiantes seleccionados.');
+                  }
+                }}
+                disabled={selectedStudentIds.length === 0}
+                className="text-xs text-[#B42318] bg-white border border-[#F3C7C3] rounded px-2 py-1 hover:bg-[#FEF3F2] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Borrar seleccionados
+              </button>
+              <span className="text-xs text-[#787774]">{existingStudents.length} estudiante(s)</span>
+            </div>
           </div>
           {loadingList ? (
             <div className="p-6 text-center text-sm text-[#787774]">Cargando...</div>
@@ -892,16 +1084,23 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
               <table className="w-full text-left bg-white">
                 <thead className="bg-[#F7F6F3]/50">
                   <tr>
+                    <th className="pl-6 pr-2 py-3">
+                      <input type="checkbox" checked={selectedStudentIds.length === existingStudents.length && existingStudents.length > 0} onChange={toggleSelectAllStudents} className="w-4 h-4 accent-[#0B6E99] cursor-pointer" />
+                    </th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Nombre</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Usuario</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Documento</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Grado</th>
                     <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">Estado</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E9E9E7]">
                   {existingStudents.map((s: any) => (
                     <tr key={s.id} className="hover:bg-[#F7F6F3]/50 transition-colors">
+                      <td className="pl-6 pr-2 py-3">
+                        <input type="checkbox" checked={selectedStudentIds.includes(s.id)} onChange={() => toggleStudentSelection(s.id)} className="w-4 h-4 accent-[#0B6E99] cursor-pointer" />
+                      </td>
                       <td className="px-6 py-3 text-sm text-[#37352F] font-medium">{s.full_name}</td>
                       <td className="px-6 py-3 text-sm font-mono text-[#37352F]">{s.username}</td>
                       <td className="px-6 py-3 text-sm text-[#787774]">{s.document_type} {s.document_number}</td>
@@ -911,12 +1110,37 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
                           {s.is_active ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex justify-end items-center gap-2">
+                          <button onClick={() => copyStudentCredentials(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Copiar credencial">
+                            {copiedStudentId === s.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          <button onClick={() => setDeleteStudentId(s.id)} className="p-2 hover:bg-[#FEF3F2] rounded text-[#787774] hover:text-[#B42318]" title="Eliminar estudiante">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {deleteStudentId && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-[#191919] mb-2">Eliminar estudiante</h3>
+            <p className="text-sm text-[#787774] mb-4">¿Seguro que quieres eliminar este estudiante? Esta acción no se puede deshacer.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteStudentId(null)} className="px-4 py-2 border border-[#E9E9E7] rounded-md text-sm text-[#787774]">Cancelar</button>
+              <button onClick={deleteStudent} disabled={deletingStudent} className="px-4 py-2 bg-[#B42318] text-white rounded-md text-sm hover:bg-[#912018] disabled:opacity-50">
+                {deletingStudent ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

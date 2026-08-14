@@ -14,47 +14,46 @@ from sqlalchemy import text
 from app.db.database import engine
 
 def run_migration():
-    """Ejecuta la migración para agregar columnas adaptativas"""
-    
-    migration_file = Path(__file__).parent / "applied" / "002_add_adaptive_quiz_columns.sql"
-    
-    if not migration_file.exists():
-        print(f"❌ Archivo de migración no encontrado: {migration_file}")
-        return False
-    
-    print("📋 Leyendo archivo de migración...")
-    with open(migration_file, 'r', encoding='utf-8') as f:
-        sql_content = f.read()
-    
-    print("🔄 Ejecutando migración en la base de datos...")
-    
-    try:
-        with engine.connect() as conn:
-            # Ejecutar cada statement SQL
-            for statement in sql_content.split(';'):
-                statement = statement.strip()
-                if statement and not statement.startswith('--'):
-                    print(f"   Ejecutando: {statement[:60]}...")
-                    conn.execute(text(statement))
-            
-            conn.commit()
-        
-        print("✅ Migración completada exitosamente!")
-        print("\nColumnas agregadas:")
-        print("  - mistakes (JSONB)")
-        print("  - weak_concepts (JSONB)")
-        print("  - adaptation_applied (VARCHAR(500))")
-        print("  - performance_score (FLOAT)")
-        print("  - recommended_difficulty (VARCHAR(20))")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Error ejecutando migración: {e}")
-        return False
+    """Ejecuta todas las migraciones requeridas del sistema: quizzes adaptativos + patrones neuroconductuales."""
+    migration_files = [
+        Path(__file__).parent / "applied" / "002_add_adaptive_quiz_columns.sql",
+        Path(__file__).parent / "applied" / "003_add_chat_patterns_tables.sql",
+    ]
+
+    for migration_file in migration_files:
+        if not migration_file.exists():
+            print(f"❌ Archivo de migración no encontrado: {migration_file}")
+            return False
+
+        print(f"📋 Leyendo migración: {migration_file.name}")
+        with open(migration_file, 'r', encoding='utf-8') as f:
+            sql_content = f.read()
+
+        print(f"🔄 Ejecutando migración en la base de datos: {migration_file.name}")
+        try:
+            with engine.connect() as conn:
+                for statement in sql_content.split(';'):
+                    statement = statement.strip()
+                    if statement and not statement.startswith('--'):
+                        print(f"   Ejecutando: {statement[:60]}...")
+                        conn.execute(text(statement))
+                conn.commit()
+        except Exception as e:
+            print(f"❌ Error ejecutando migración {migration_file.name}: {e}")
+            return False
+
+    print("✅ Migraciones completadas exitosamente!")
+    print("\nTablas/columnas garantizadas:")
+    print("  - quiz_history adaptativo")
+    print("  - cognitive_session_state")
+    print("  - learning_sessions")
+    print("  - cognitive_events")
+    print("  - chat_messages")
+    return True
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("MIGRACIÓN: Sistema de Quizzes Adaptativos")
+    print("MIGRACIÓN: Quizzes adaptativos + patrones neuroconductuales")
     print("=" * 60)
     
     if not engine:

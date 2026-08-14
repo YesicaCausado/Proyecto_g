@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 from app.db.database import get_db
 from app.models.user import User, UserRole
-from app.models.learning import QuizHistory, LearningSession
+from app.models.learning import QuizHistory, LearningSession, CognitiveEvent
 from app.api.auth import get_current_user
 from app.services.license_service import get_license, LicenseInfo
 
@@ -20,7 +20,10 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
     
     # 1. Total Exercises (sum of questions answered in quizzes)
     total_exercises = db.query(func.sum(QuizHistory.questions_count)).filter(
-        QuizHistory.user_id == user_id
+        QuizHistory.user_id == user_id,
+        QuizHistory.completed_at.isnot(None),
+        QuizHistory.performance_score.isnot(None),
+        QuizHistory.user_score.isnot(None),
     ).scalar() or 0
     
     # 2. Total Class Sessions
@@ -31,20 +34,28 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
     # 3. Overall Progress (%)
     avg_performance = db.query(func.avg(QuizHistory.performance_score)).filter(
         QuizHistory.user_id == user_id,
-        QuizHistory.performance_score != None
+        QuizHistory.completed_at.isnot(None),
+        QuizHistory.performance_score.isnot(None),
+        QuizHistory.user_score.isnot(None),
     ).scalar() or 0
     
     # 4. Total Study Time (hours)
     # Estimate based on learning sessions 
     # (Here we sum session time if added later, but for now we fallback to standard 1 hour per session approximation or use Quiz time spent if we had it populated always)
     total_study_time_seconds = db.query(func.sum(QuizHistory.time_spent_seconds)).filter(
-        QuizHistory.user_id == user_id
+        QuizHistory.user_id == user_id,
+        QuizHistory.completed_at.isnot(None),
+        QuizHistory.performance_score.isnot(None),
+        QuizHistory.user_score.isnot(None),
     ).scalar() or 0
     total_study_hours = (total_study_time_seconds / 3600) + (total_classes * 0.5) 
     
     # 5. Active Skills (Topics attempted)
     active_skills_query = db.query(QuizHistory.topic).filter(
-        QuizHistory.user_id == user_id
+        QuizHistory.user_id == user_id,
+        QuizHistory.completed_at.isnot(None),
+        QuizHistory.performance_score.isnot(None),
+        QuizHistory.user_score.isnot(None),
     ).distinct().all()
     active_skills_count = len(active_skills_query)
     
@@ -95,6 +106,43 @@ def _avg(entries, field="performance_score"):
     return round(sum(vals) / len(vals), 1) if vals else 0
 
 
+def _build_cognitive_summary_from_events(events) -> dict:
+    """Deriva indicadores cognitivos reales desde los eventos neuroconductuales guardados."""
+    if not events:
+        return {"fatigue": 0, "overload": 0, "doubt": 0, "mastery": 0}
+
+    state_counts = {"fatigue": 0, "overload": 0, "doubt": 0, "mastery": 0, "flow": 0, "normal": 0}
+    for event in events:
+        payload = event.event_data or {}
+        state = (payload.get("cognitive_state") or event.inferred_state or "normal").strip().lower()
+        if state in {"focused", "flow"}:
+            state = "flow"
+        elif state in {"confused", "confusion"}:
+            state = "doubt"
+        elif state in {"struggling", "overload"}:
+            state = "overload"
+        elif state in {"stressed", "fatigue"}:
+            state = "fatigue"
+        elif state in {"happy", "mastery"}:
+            state = "mastery"
+        elif state in {"neutral", "normal"}:
+            state = "normal"
+
+        if state in state_counts:
+            state_counts[state] += 1
+
+    total = sum(state_counts.values())
+    if total == 0:
+        return {"fatigue": 0, "overload": 0, "doubt": 0, "mastery": 0}
+
+    fatigue = int((state_counts["fatigue"] / total) * 100)
+    overload = int((state_counts["overload"] / total) * 100)
+    doubt = int((state_counts["doubt"] / total) * 100)
+    mastery = int(((state_counts["mastery"] + state_counts["flow"]) / total) * 100)
+
+    return {"fatigue": fatigue, "overload": overload, "doubt": doubt, "mastery": mastery}
+
+
 @router.get("/performance")
 def get_performance_stats(
     db: Session = Depends(get_db),
@@ -121,6 +169,7 @@ def get_performance_stats(
             QuizHistory.user_id == user_id,
             QuizHistory.completed_at.isnot(None),
             QuizHistory.performance_score.isnot(None),
+            QuizHistory.user_score.isnot(None),
         )
         .order_by(QuizHistory.completed_at.desc())
         .all()
@@ -257,29 +306,44 @@ def get_performance_stats(
         else:
             break
 
-    # ── 9. Indicadores cognitivos (derivados de patrones) ─────────────────────
-    recent5 = all_history[:5]
-    if len(recent5) >= 3:
-        diff_fatigue = _avg(recent5[:2]) - _avg(recent5[2:])
-        fatigue = min(90, max(10, int((diff_fatigue + 30) * 1.5)))
-    else:
-        fatigue = 25
-
-    avg_t_per_q = (
-        sum((e.time_spent_seconds or 0) / max(e.questions_count, 1) for e in recent5) / len(recent5)
-        if recent5 else 60
+    # ── 9. Indicadores cognitivos reales (entradas neuroconductuales) ────────
+    recent_events = (
+        db.query(CognitiveEvent)
+        .filter(CognitiveEvent.user_id == user_id)
+        .order_by(CognitiveEvent.timestamp.desc())
+        .limit(30)
+        .all()
     )
-    overload = min(90, max(10, int(avg_t_per_q * 1.2)))
+    event_cognitive = _build_cognitive_summary_from_events(recent_events)
 
-    last3 = all_history[:3]
-    if last3:
-        tot3   = sum(e.questions_count for e in last3)
-        wrong3 = sum(e.wrong_answers or 0 for e in last3)
-        doubt  = min(90, max(10, int(wrong3 / max(tot3, 1) * 100 * 0.8)))
+    if recent_events:
+        fatigue = event_cognitive["fatigue"]
+        overload = event_cognitive["overload"]
+        doubt = event_cognitive["doubt"]
+        mastery = event_cognitive["mastery"]
     else:
-        doubt = 25
+        recent5 = all_history[:5]
+        if len(recent5) >= 3:
+            diff_fatigue = _avg(recent5[:2]) - _avg(recent5[2:])
+            fatigue = min(90, max(10, int((diff_fatigue + 30) * 1.5)))
+        else:
+            fatigue = 25
 
-    mastery = min(95, max(5, int(avg_sc)))
+        avg_t_per_q = (
+            sum((e.time_spent_seconds or 0) / max(e.questions_count, 1) for e in recent5) / len(recent5)
+            if recent5 else 60
+        )
+        overload = min(90, max(10, int(avg_t_per_q * 1.2)))
+
+        last3 = all_history[:3]
+        if last3:
+            tot3   = sum(e.questions_count for e in last3)
+            wrong3 = sum(e.wrong_answers or 0 for e in last3)
+            doubt  = min(90, max(10, int(wrong3 / max(tot3, 1) * 100 * 0.8)))
+        else:
+            doubt = 25
+
+        mastery = min(95, max(5, int(avg_sc)))
 
     # ── 10. Logros ────────────────────────────────────────────────────────────
     math_80       = len([e for e in subject_all.get("matematicas", []) if (e.performance_score or 0) >= 80])

@@ -4,9 +4,33 @@ NeuroLearn AI - Modelos de Sesión de Aprendizaje y Eventos Cognitivos
 from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey, Text, Enum
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.db.database import Base
 import enum
 
+from app.db.database import Base
+from app.models.user import User
+from app.models.expert_bot import ExpertBot
+
+class CognitiveSessionState(Base):
+        __tablename__ = "cognitive_session_state"
+
+        id = Column(Integer, primary_key=True, index=True)
+        user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+        topic = Column(String, nullable=False, index=True)
+
+        msg_count = Column(Integer, default=0)
+        error_streak = Column(Integer, default=0)
+        fast_replies = Column(Integer, default=0)
+        slow_replies = Column(Integer, default=0)
+        total_rt_ms = Column(Float, default=0.0)
+        quiz_error_rate = Column(Float, default=0.0)
+        weak_concepts = Column(JSON, default=list)
+
+        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+        __table_args__ = (
+            # un registro por usuario+tema
+            # UniqueConstraint("user_id", "topic", name="uq_user_topic_state"),
+        )
 
 class CognitiveState(str, enum.Enum):
     NORMAL = "normal"

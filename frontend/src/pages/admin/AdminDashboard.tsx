@@ -22,6 +22,7 @@ import UserManagement from './UserManagement';
 import AuditLogs from './AuditLogs';
 import LicenseManagement from './LicenseManagement';
 import SystemConfig from './SystemConfig';
+import BotManagement from './BotManagement';
 
 // Ítems del menú lateral
 const NAV_ITEMS = [
@@ -59,6 +60,13 @@ const NAV_ITEMS = [
     icon: ClipboardList,
     label: 'Auditoría',
     description: 'Logs del sistema',
+  },
+  {
+    to: '/admin/bots',
+    end: false,
+    icon: Brain,
+    label: 'Bots',
+    description: 'Moderación de bots',
   },
   {
     to: '/admin/configuracion',
@@ -214,6 +222,7 @@ export default function AdminDashboard() {
             <Route path="usuarios"             element={<UserManagement />} />
             <Route path="licencias"            element={<LicenseManagement />} />
             <Route path="auditoria"            element={<AuditLogs />} />
+            <Route path="bots"                element={<BotManagement />} />
             <Route path="configuracion"        element={<SystemConfig />} />
             <Route path="*"                    element={<Navigate to="/admin" replace />} />
           </Routes>

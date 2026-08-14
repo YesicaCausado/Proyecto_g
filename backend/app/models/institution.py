@@ -32,6 +32,14 @@ class Institution(Base):
     license_type = Column(String(20),  default=LicenseType.BASICA.value, nullable=False)
     is_active    = Column(Boolean, default=True)
     expiry_date  = Column(DateTime, nullable=True)   # None = sin vencimiento
+    email        = Column(String(200), nullable=True)
+    phone        = Column(String(50), nullable=True)
+    address      = Column(String(255), nullable=True)
+    website      = Column(String(255), nullable=True)
+    timezone     = Column(String(80), default="America/Bogota", nullable=True)
+    language     = Column(String(20), default="es", nullable=True)
+    primary_color = Column(String(20), default="#6940A5", nullable=True)
+    logo_url     = Column(Text, nullable=True)
     created_at   = Column(DateTime, default=datetime.utcnow)
     created_by   = Column(Integer, ForeignKey("users.id"), nullable=True)
 

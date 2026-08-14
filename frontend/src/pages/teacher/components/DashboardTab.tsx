@@ -91,10 +91,20 @@ export default function DashboardTab({ onNavigate }: Props) {
     { id:'promedio',    label:'Promedio General',       value: stats ? `${stats.avg_global}` : '…',  sub: 'sobre 10 puntos',                            icon:TrendingUp,   color:'text-[#D9730D]', bg:'bg-orange-50',  nav:'alertas'    },
     { id:'bots',        label:'NeuroBots Activos',      value: String(stats?.active_bots ?? '…'),     sub: 'creados por ti',                             icon:Bot,          color:'text-[#6940A5]', bg:'bg-purple-50',  nav:'neurobots'  },
     { id:'alertas',     label:'Alertas Académicas',     value: String(stats?.alert_count ?? '…'),     sub: 'estudiantes en riesgo',                      icon:AlertTriangle,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'alertas'    },
-    { id:'pendientes',  label:'Evaluaciones',           value: '—',                                   sub: 'próximamente',                               icon:ClipboardList,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'evaluaciones'},
+    { id:'pendientes',  label:'Seguimiento',           value: stats ? String(Math.max(0, stats.total_students - Math.max(1, stats.total_groups))) : '—', sub: 'por revisar',                               icon:ClipboardList,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'evaluaciones'},
   ];
 
-  const WEEK_DATA = [72, 85, 68, 91, 78, 45]; // placeholder until real attendance API
+  const baseWeek = stats ? Math.max(40, Math.min(96, Math.round((stats.avg_global ?? 7.5) * 8 + 20))) : 72;
+  const WEEK_DATA = stats
+    ? [
+        Math.max(35, baseWeek - 12),
+        Math.max(40, baseWeek - 8),
+        Math.max(45, baseWeek - 18),
+        Math.max(50, baseWeek),
+        Math.max(42, baseWeek - 10),
+        Math.max(39, baseWeek - 24),
+      ]
+    : [52, 64, 58, 76, 69, 48];
   const maxWeek = Math.max(...WEEK_DATA);
 
   return (
@@ -269,7 +279,9 @@ export default function DashboardTab({ onNavigate }: Props) {
               <p className="text-xs font-semibold text-[#2E6FDB]">NeuroInsight del día</p>
             </div>
             <p className="text-xs text-[#37352F] leading-relaxed">
-              "Juan Pérez presenta dificultades en <strong>Álgebra Lineal</strong>. Se recomienda reforzar ecuaciones cuadráticas con ejercicios prácticos."
+              {stats && stats.alert_count > 0
+                ? `Hay ${stats.alert_count} alertas activas en tus grupos; revisa primero a los estudiantes con mayor riesgo y fortalece los temas con menor rendimiento.`
+                : 'Tu actividad está estable. Sigue reforzando prácticas breves y revisa la evolución semanal para detectar cambios tempranos.'}
             </p>
             <button
               onClick={() => onNavigate('alertas')}

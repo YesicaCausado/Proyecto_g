@@ -103,8 +103,17 @@ def run_migrations(engine) -> None:
         )
         """,
 
-        # ── 5. Columna expiry_date en institutions (sistema de licencias) ───
+        # ── 5. Columnas de configuración institucional ─────────────────────
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS email VARCHAR(200)",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS address VARCHAR(255)",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS website VARCHAR(255)",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS timezone VARCHAR(80) DEFAULT 'America/Bogota'",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS language VARCHAR(20) DEFAULT 'es'",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS primary_color VARCHAR(20) DEFAULT '#6940A5'",
+        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS logo_url TEXT",
+        "ALTER TABLE institutions ALTER COLUMN logo_url TYPE TEXT",
 
         # ── 6. Columnas que pueden faltar en institutions si la tabla fue
         #      creada antes de agregar estos campos ────────────────────────

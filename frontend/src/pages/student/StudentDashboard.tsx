@@ -436,8 +436,8 @@ export default function StudentDashboard() {
                 <Link to="/performance" className="ml-auto text-[10px] text-[#787774] hover:text-[#37352F]">Ver todo →</Link>
               </div>
 
-              {cognitive.mastery === 0 && cognitive.fatigue === 0 ? (
-                <p className="text-xs text-[#9B9A97] text-center py-3">Completa tu primer quiz para activar los NeuroInsights.</p>
+              {Object.values(cognitive).every((v) => v === 0) ? (
+                <p className="text-xs text-[#9B9A97] text-center py-3">Completa tu primer quiz o usa la IA para activar los NeuroInsights.</p>
               ) : (
                 <div className="space-y-3">
                   {[
@@ -499,36 +499,68 @@ export default function StudentDashboard() {
               </div>
 
               {(() => {
-                // Ordenar materias por score ascendente → las más débiles primero
                 const sorted = Object.entries(subjects)
                   .filter(([, s]) => s.score > 0)
                   .sort(([, a], [, b]) => a.score - b.score);
 
-                if (sorted.length === 0) {
-                  return <p className="text-xs text-[#9B9A97]">Practica algunos quizzes para recibir recomendaciones personalizadas.</p>;
-                }
+                const seen = new Set<string>();
+                const addRec = (text: string, link: string) => {
+                  if (!text || seen.has(text)) return;
+                  seen.add(text);
+                  recs.push({ text, link });
+                };
 
                 const recs: { text: string; link: string }[] = [];
+
+                if (cognitive.fatigue >= 60) {
+                  addRec('Tu atención está cansada: haz 10 minutos de repaso breve y vuelve con calma.', '/performance');
+                }
+
+                if (cognitive.doubt >= 50) {
+                  addRec('Hay varias dudas en tu proceso. Practica 3 ejercicios cortos y revisa tus errores.', '/performance');
+                }
+
+                if (cognitive.overload >= 55) {
+                  addRec('La carga está alta. Divide la práctica en bloques de 15 minutos y prioriza lo más difícil.', '/performance');
+                }
+
+                if (sorted.length === 0) {
+                  addRec('Completa tu primer quiz para recibir recomendaciones personalizadas de IA.', '/performance');
+                  return (
+                    <div className="space-y-2">
+                      {recs.map((r, i) => (
+                        <Link key={i} to={r.link} className="flex items-center gap-3 p-3 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md hover:border-[#9B9A97] transition-colors">
+                          <span className="w-5 h-5 bg-white border border-[#E9E9E7] rounded text-[#787774] text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                          <span className="text-[#37352F] text-xs leading-snug">{r.text}</span>
+                          <ArrowRight className="w-3 h-3 text-[#9B9A97] ml-auto flex-shrink-0" />
+                        </Link>
+                      ))}
+                    </div>
+                  );
+                }
+
                 sorted.slice(0, 2).forEach(([key, s]) => {
                   const label = SUBJECT_LABELS[key] ?? key;
-                  const weak  = s.weaknesses?.[0];
-                  recs.push({
-                    text: weak && weak !== 'Sin datos aún'
-                      ? `Refuerza "${weak}" en ${label} (${s.score}%)`
-                      : `Practica más ejercicios de ${label} (${s.score}%)`,
-                    link: `/chat?skill=${key}`,
-                  });
+                  const weak = s.weaknesses?.[0];
+                  const actionText = weak && weak !== 'Sin datos aún'
+                    ? `Refuerza "${weak}" en ${label}: tu puntaje actual es ${s.score}%.`
+                    : `Practica más ejercicios de ${label}; ahora estás en ${s.score}%.`;
+                  addRec(actionText, `/chat?skill=${key}`);
                 });
+
                 if (sorted[0]?.[1].trend < -5) {
                   const [key] = sorted[0];
-                  recs.push({ text: `Tu rendimiento en ${SUBJECT_LABELS[key] ?? key} bajó ${Math.abs(sorted[0][1].trend)} pts esta semana`, link: '/performance' });
+                  addRec(`Tu rendimiento en ${SUBJECT_LABELS[key] ?? key} bajó ${Math.abs(sorted[0][1].trend)} puntos esta semana. Revisa la clase y repite un ejercicio clave.`, '/performance');
+                }
+
+                if (recs.length === 0) {
+                  addRec('Sigue con tu rutina actual: una práctica breve diaria mejora más que una sesión larga.', '/performance');
                 }
 
                 return (
                   <div className="space-y-2">
-                    {recs.map((r, i) => (
-                      <Link key={i} to={r.link}
-                        className="flex items-center gap-3 p-3 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md hover:border-[#9B9A97] transition-colors">
+                    {recs.slice(0, 3).map((r, i) => (
+                      <Link key={i} to={r.link} className="flex items-center gap-3 p-3 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md hover:border-[#9B9A97] transition-colors">
                         <span className="w-5 h-5 bg-white border border-[#E9E9E7] rounded text-[#787774] text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
                         <span className="text-[#37352F] text-xs leading-snug">{r.text}</span>
                         <ArrowRight className="w-3 h-3 text-[#9B9A97] ml-auto flex-shrink-0" />

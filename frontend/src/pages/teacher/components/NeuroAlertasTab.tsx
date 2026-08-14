@@ -237,6 +237,18 @@ export default function NeuroAlertasTab() {
 
   const filtered = alerts.filter(a => filterPrio === 'todas' || a.priority === filterPrio);
   const unresolved = alerts.filter(a => !a.resolved).length;
+  const studentsAtRisk = students.filter(s => s.risk !== 'low').length;
+  const avgScore = students.length
+    ? (students.reduce((sum, s) => sum + s.avg, 0) / students.length).toFixed(1)
+    : '0.0';
+  const avgStudy = students.length
+    ? (() => {
+        const minutes = students
+          .map((s) => Number.parseFloat((s.study_time ?? '0').replace(/[^\d.]/g, '')) || 0)
+          .reduce((sum, value) => sum + value, 0);
+        return `${Math.round(minutes / students.length)} min`;
+      })()
+    : '—';
 
   if (selected) return <StudentProfile student={selected} onBack={() => setSelected(null)} />;
 
@@ -251,10 +263,10 @@ export default function NeuroAlertasTab() {
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label:'Estudiantes en riesgo', value:'2',   color:'text-[#E03E3E]', bg:'bg-red-50'     },
-          { label:'Alertas activas',        value:String(unresolved), color:'text-[#D9730D]', bg:'bg-orange-50' },
-          { label:'Promedio general',       value:'7.8', color:'text-[#0F7B6C]', bg:'bg-emerald-50' },
-          { label:'Tiempo prom. estudio',   value:'35 min', color:'text-[#2E6FDB]', bg:'bg-[#EEF3FD]'  },
+          { label:'Estudiantes en riesgo', value:String(studentsAtRisk), color:'text-[#E03E3E]', bg:'bg-red-50' },
+          { label:'Alertas activas', value:String(unresolved), color:'text-[#D9730D]', bg:'bg-orange-50' },
+          { label:'Promedio general', value:String(avgScore), color:'text-[#0F7B6C]', bg:'bg-emerald-50' },
+          { label:'Tiempo prom. estudio', value:avgStudy, color:'text-[#2E6FDB]', bg:'bg-[#EEF3FD]' },
         ].map(k => (
           <div key={k.label} className={`${k.bg} border border-[#E9E9E7] rounded-lg p-4`}>
             <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>

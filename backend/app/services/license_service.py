@@ -44,6 +44,7 @@ STUDENT_MODULES: dict[str, list[str]] = {
     "basica": [
         "inicio", "mis_cursos", "mis_tareas", "evaluaciones",
         "recursos", "calendario", "mensajes", "perfil", "tutor_ia",
+        "estadisticas",
     ],
     "premium": [
         "inicio", "mis_cursos", "mis_tareas", "evaluaciones",

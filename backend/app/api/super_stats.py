@@ -57,12 +57,29 @@ async def get_institution(
         "dane_code":    inst.dane_code,
         "license_type": inst.license_type,
         "is_active":    inst.is_active,
+        "email":        inst.email,
+        "phone":        inst.phone,
+        "address":      inst.address,
+        "website":      inst.website,
+        "timezone":     inst.timezone or "America/Bogota",
+        "language":     inst.language or "es",
+        "primary_color": inst.primary_color or "#6940A5",
+        "logo_url":     inst.logo_url,
         "created_at":   inst.created_at.isoformat() if inst.created_at else None,
     }
 
 
 class InstitutionUpdate(BaseModel):
     name: Optional[str] = None
+    dane_code: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    website: Optional[str] = None
+    timezone: Optional[str] = None
+    language: Optional[str] = None
+    primary_color: Optional[str] = None
+    logo_url: Optional[str] = None
 
 
 # ── PATCH /super/institution ──────────────────────────────────────────────────
@@ -77,11 +94,44 @@ async def update_institution(
     inst = db.query(Institution).filter(Institution.id == current_user.institution_id).first()
     if not inst:
         raise HTTPException(404, "Institución no encontrada")
-    if payload.name and payload.name.strip():
-        inst.name = payload.name.strip()
+
+    for field_name in [
+        "name",
+        "dane_code",
+        "email",
+        "phone",
+        "address",
+        "website",
+        "timezone",
+        "language",
+        "primary_color",
+        "logo_url",
+    ]:
+        value = getattr(payload, field_name, None)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            value = value.strip()
+            if field_name in {"email", "phone", "address", "website", "timezone", "language", "primary_color", "logo_url"} and value == "":
+                value = None
+        setattr(inst, field_name, value)
+
     db.commit()
     db.refresh(inst)
-    return {"name": inst.name, "dane_code": inst.dane_code, "license_type": inst.license_type}
+    return {
+        "id": inst.id,
+        "name": inst.name,
+        "dane_code": inst.dane_code,
+        "license_type": inst.license_type,
+        "email": inst.email,
+        "phone": inst.phone,
+        "address": inst.address,
+        "website": inst.website,
+        "timezone": inst.timezone,
+        "language": inst.language,
+        "primary_color": inst.primary_color,
+        "logo_url": inst.logo_url,
+    }
 
 
 # ── GET /super/stats/dashboard ────────────────────────────────────────────────

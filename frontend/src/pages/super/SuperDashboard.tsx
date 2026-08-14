@@ -78,8 +78,13 @@ export default function SuperDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    api.get('/super/license-usage').then(r => setLicense(r.data)).catch(() => {});
-    api.get('/super/teachers').then(r => setTeachers(r.data)).catch(() => {});
+    Promise.all([
+      api.get('/super/license-usage').then(r => r.data).catch(() => null),
+      api.get('/super/teachers').then(r => r.data).catch(() => []),
+    ]).then(([licenseData, teachersData]) => {
+      setLicense(licenseData);
+      setTeachers(teachersData);
+    });
   }, []);
 
   const handleLogout = () => { logout(); navigate('/login'); };

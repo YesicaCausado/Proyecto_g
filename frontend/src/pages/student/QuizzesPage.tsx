@@ -49,15 +49,26 @@ interface QuizAnalysisResponse {
   duration: number;
 }
 
+interface HistoryQuestionDetail {
+  id: number;
+  question: string;
+  selected_answer?: string;
+  correct_answer?: string;
+  is_correct?: boolean;
+  explanation?: string;
+}
+
 interface HistoryEntry {
   id: number;
-  quiz_title: string;
-  performance_score: number;
-  questions_count: number;
-  difficulty: string;
-  user_score: number;
-  created_at: string;
+  title?: string;
+  quiz_title?: string;
+  performance_score?: number;
+  questions_count?: number;
+  difficulty?: string;
+  user_score?: string | number;
+  created_at?: string;
   recommended_difficulty?: string;
+  details?: HistoryQuestionDetail[];
 }
 
 const SUBJECTS: Subject[] = [
@@ -94,6 +105,7 @@ export default function QuizzesPage() {
   const [analysisResult, setAnalysisResult] = useState<QuizAnalysisResponse | null>(null);
   const [quizHistory, setQuizHistory] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
 
@@ -110,13 +122,30 @@ export default function QuizzesPage() {
     setHistoryLoading(true);
     try {
       const res = await api.get('/chat/quiz-history');
-      setQuizHistory(res.data || []);
+      const history = Array.isArray(res.data) ? res.data : (res.data?.history ?? []);
+      const mapped = history.map((entry: any) => ({
+        ...entry,
+        id: entry.id ?? entry.quiz_id,
+        title: entry.title ?? entry.quiz_title,
+        quiz_title: entry.quiz_title ?? entry.title,
+        performance_score: entry.performance_score ?? 0,
+        questions_count: entry.questions_count ?? 0,
+        difficulty: entry.difficulty ?? 'medio',
+        user_score: entry.user_score ?? '0/0',
+        created_at: entry.created_at ?? entry.date,
+        recommended_difficulty: entry.recommended_difficulty,
+        details: Array.isArray(entry.details) ? entry.details : [],
+      }));
+      setQuizHistory(mapped);
+      if (mapped.length > 0 && selectedHistoryId === null) {
+        setSelectedHistoryId(mapped[0].id);
+      }
     } catch {
       // silently ignore
     } finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [selectedHistoryId]);
 
   useEffect(() => {
     loadHistory();
@@ -189,12 +218,11 @@ export default function QuizzesPage() {
     });
     setLocalScore(score);
     try {
-      const userAnswers = quiz.questions.map(q => ({
-        question_id: q.id,
-        selected_answer: selectedAnswers[q.id] || '',
-        correct_answer: q.correct_answer,
-        is_correct: selectedAnswers[q.id] === q.correct_answer,
-      }));
+      const userAnswers: Record<number, string> = {};
+      quiz.questions.forEach(q => {
+        userAnswers[q.id] = selectedAnswers[q.id] || '';
+      });
+
       const res = await api.post('/chat/submit-quiz', {
         quiz_title: quiz.quiz_title,
         user_answers: userAnswers,
@@ -540,6 +568,8 @@ export default function QuizzesPage() {
 
   // ── HISTORY SCREEN ─────────────────────────────────────────────
   if (screen === 'history') {
+    const selectedHistory = quizHistory.find(entry => entry.id === selectedHistoryId) ?? quizHistory[0] ?? null;
+
     return (
       <div className="p-6 max-w-4xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
         <div className="pb-5 mb-6 border-b border-[#E9E9E7] flex items-center justify-between">
@@ -563,37 +593,89 @@ export default function QuizzesPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
-            {quizHistory.map(entry => {
-              const pctH = entry.questions_count > 0 ? Math.round((entry.user_score / entry.questions_count) * 100) : Math.round((entry.performance_score ?? 0) * 100);
-              const passedH = pctH >= 60;
-              const diff = (entry.difficulty ?? 'medio') as Difficulty;
-              return (
-                <div key={entry.id} className="bg-white border border-[#E9E9E7] rounded-md p-4 flex items-center gap-4 hover:border-[#9B9A97] transition-colors">
-                  <div className={`w-12 h-12 rounded-md flex items-center justify-center text-sm font-semibold text-white flex-shrink-0 ${passedH ? 'bg-[#0F7B6C]' : 'bg-[#37352F]'}`}>
-                    {pctH}%
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-[#37352F] text-sm truncate">{entry.quiz_title}</p>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[diff] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
-                        {DIFF_LABELS[diff] ?? diff}
-                      </span>
-                      <span className="text-xs text-[#9B9A97]">{entry.user_score ?? Math.round((entry.performance_score ?? 0) * (entry.questions_count ?? 10))}/{entry.questions_count ?? 10} correctas</span>
-                      <span className="text-xs text-[#9B9A97]">{new Date(entry.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              {quizHistory.map(entry => {
+                const rawScore = typeof entry.user_score === 'string'
+                  ? Number(entry.user_score.split('/')[0] || 0)
+                  : Number(entry.user_score || 0);
+                const questions = entry.questions_count ?? 1;
+                const pctH = questions > 0 ? Math.round((rawScore / questions) * 100) : Math.round((entry.performance_score ?? 0) * 100);
+                const passedH = pctH >= 60;
+                const diff = (entry.difficulty ?? 'medio') as Difficulty;
+                const isSelected = selectedHistory?.id === entry.id;
+
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => setSelectedHistoryId(entry.id)}
+                    className={`w-full text-left bg-white border rounded-md p-4 flex items-center gap-4 transition-colors ${isSelected ? 'border-[#37352F] bg-[#F7F6F3]' : 'border-[#E9E9E7] hover:border-[#9B9A97]'}`}>
+                    <div className={`w-12 h-12 rounded-md flex items-center justify-center text-sm font-semibold text-white flex-shrink-0 ${passedH ? 'bg-[#0F7B6C]' : 'bg-[#37352F]'}`}>
+                      {pctH}%
                     </div>
-                  </div>
-                  {entry.recommended_difficulty && (
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xs text-[#9B9A97]">Recomendado</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[entry.recommended_difficulty as Difficulty] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
-                        {DIFF_LABELS[entry.recommended_difficulty as Difficulty] ?? entry.recommended_difficulty}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[#37352F] text-sm truncate">{entry.quiz_title ?? entry.title}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[diff] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
+                          {DIFF_LABELS[diff] ?? diff}
+                        </span>
+                        <span className="text-xs text-[#9B9A97]">{entry.user_score ?? `${Math.round((entry.performance_score ?? 0) * (entry.questions_count ?? 10))}/${entry.questions_count ?? 10}`} correctas</span>
+                        <span className="text-xs text-[#9B9A97]">{entry.created_at ? new Date(entry.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</span>
+                      </div>
                     </div>
-                  )}
+                    {entry.recommended_difficulty && (
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs text-[#9B9A97]">Recomendado</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${DIFF_COLORS[entry.recommended_difficulty as Difficulty] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
+                          {DIFF_LABELS[entry.recommended_difficulty as Difficulty] ?? entry.recommended_difficulty}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedHistory && (
+              <div className="bg-white border border-[#E9E9E7] rounded-md p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#37352F]">Detalle del quiz</h3>
+                    <p className="text-xs text-[#9B9A97]">{selectedHistory.quiz_title ?? selectedHistory.title}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-md border font-medium ${DIFF_COLORS[(selectedHistory.difficulty ?? 'medio') as Difficulty] ?? 'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]'}`}>
+                    {DIFF_LABELS[(selectedHistory.difficulty ?? 'medio') as Difficulty] ?? selectedHistory.difficulty}
+                  </span>
                 </div>
-              );
-            })}
+
+                {selectedHistory.details && selectedHistory.details.length > 0 ? (
+                  <div className="space-y-4">
+                    {selectedHistory.details.map((item, index) => (
+                      <div key={`${selectedHistory.id}-${item.id ?? index}`} className={`rounded-md border p-4 ${item.is_correct ? 'border-[#B7DDD6] bg-[#EEF7F4]' : 'border-[#F4BDBD] bg-[#FDEEEE]'}`}>
+                        <div className="flex items-start gap-3">
+                          {item.is_correct ? <CheckCircle className="w-4 h-4 text-[#0F7B6C] mt-0.5 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-[#E03E3E] mt-0.5 flex-shrink-0" />}
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-[#37352F] mb-1">{index + 1}. {item.question}</p>
+                            <p className="text-xs text-[#787774]">
+                              Tu respuesta: <span className={`font-semibold ${item.is_correct ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>{item.selected_answer || 'Sin respuesta'}</span>
+                            </p>
+                            {!item.is_correct && item.correct_answer && (
+                              <p className="text-xs text-[#787774]">Correcta: <span className="font-semibold text-[#0F7B6C]">{item.correct_answer}</span></p>
+                            )}
+                            {item.explanation && (
+                              <p className="text-xs text-[#9B9A97] mt-2 italic">{item.explanation}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#787774]">No hay detalle de respuestas guardado para este quiz.</p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

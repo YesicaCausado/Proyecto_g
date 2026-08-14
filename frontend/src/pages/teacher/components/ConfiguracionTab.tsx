@@ -1,31 +1,56 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Camera, Lock, Bell, Globe, Shield, Eye, EyeOff, CheckCircle,
 } from 'lucide-react';
 import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
+import { useLicense } from '../../../context/LicenseContext';
 
 interface Props {
   user: any;
 }
 
 const LANGUAGES = ['Español (Colombia)', 'Español (México)', 'Inglés (US)', 'Portugués (BR)'];
+const PLAN_LABELS = { basica: 'Básica', premium: 'Premium', pro: 'Pro' } as const;
 
 export default function ConfiguracionTab({ user }: Props) {
+  const { updateUser } = useAuth();
+  const { licenseInfo } = useLicense();
   const [tab,         setTab]         = useState<'perfil' | 'seguridad' | 'notificaciones'>('perfil');
   const [avatarPrev,  setAvatarPrev]  = useState<string | null>(null);
   const [profileForm, setProfileForm] = useState({ name: user?.full_name || '', email: user?.email || '', lang: LANGUAGES[0] });
   const [passwords,   setPasswords]   = useState({ current:'', next:'', confirm:'' });
   const [showPwd,     setShowPwd]     = useState(false);
   const [saved,       setSaved]       = useState(false);
-  const [notifications, setNotifications] = useState({
-    nuevaTarea:     true,
-    nuevaAlerta:    true,
-    mensajeDirecto: true,
-    resumenSemanal: false,
-    emailDigest:    true,
+  type NotificationPrefs = {
+    nuevaTarea: boolean;
+    nuevaAlerta: boolean;
+    mensajeDirecto: boolean;
+    resumenSemanal: boolean;
+    emailDigest: boolean;
+  };
+
+  const [notifications, setNotifications] = useState<NotificationPrefs>(() => {
+    const stored = localStorage.getItem('teacher_notifications');
+    if (!stored) {
+      return {
+        nuevaTarea: true,
+        nuevaAlerta: true,
+        mensajeDirecto: true,
+        resumenSemanal: false,
+        emailDigest: true,
+      };
+    }
+    try { return JSON.parse(stored) as NotificationPrefs; } catch { return { nuevaTarea: true, nuevaAlerta: true, mensajeDirecto: true, resumenSemanal: false, emailDigest: true }; }
   });
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const nextName = user?.full_name || '';
+    const nextEmail = user?.email || '';
+    setProfileForm(prev => ({ ...prev, name: nextName || prev.name, email: nextEmail || prev.email }));
+  }, [user?.full_name, user?.email]);
 
   const handleAvatarChange = (files: FileList | null) => {
     const f = files?.[0];
@@ -37,13 +62,21 @@ export default function ConfiguracionTab({ user }: Props) {
 
   const handleSaveProfile = async () => {
     try {
-      await api.patch('/auth/me', {
-        full_name: profileForm.name,
-        email:     profileForm.email,
+      const payload = {
+        full_name: profileForm.name.trim(),
+        email: profileForm.email.trim(),
+      };
+      await api.patch('/auth/me', payload);
+      updateUser({
+        ...user,
+        full_name: payload.full_name || user?.full_name || '',
+        email: payload.email || user?.email || '',
       });
-    } catch { /* noop */ }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setSaved(false);
+    }
   };
 
   const strength = (pwd: string) => {
@@ -99,7 +132,9 @@ export default function ConfiguracionTab({ user }: Props) {
             </div>
             <div>
               <p className="font-semibold text-[#191919]">{profileForm.name || 'Nombre del profesor'}</p>
-              <p className="text-sm text-[#787774]">Docente · Premium</p>
+              <p className="text-sm text-[#787774]">
+                {user?.role === 'profesor' ? 'Docente' : user?.role || 'Usuario'} · {PLAN_LABELS[(licenseInfo?.license_type || 'basica')]}
+              </p>
               <p className="text-xs text-[#AEADAB] mt-1">Haz clic en el ícono para cambiar la foto</p>
             </div>
           </div>
@@ -130,9 +165,14 @@ export default function ConfiguracionTab({ user }: Props) {
           {/* Institución (readonly) */}
           <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg p-4">
             <p className="text-xs font-semibold text-[#787774] uppercase mb-1">Institución</p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Globe className="w-4 h-4 text-[#787774]" />
-              <p className="text-sm text-[#37352F] font-medium">Colegio Nacional Demo</p>
+              <p className="text-sm text-[#37352F] font-medium">
+                {licenseInfo?.institution_name || user?.institution_id ? 'Institución asignada' : 'Sin institución asociada'}
+              </p>
+              {licenseInfo?.institution_name && (
+                <span className="text-xs text-[#AEADAB]">{licenseInfo.institution_name}</span>
+              )}
               <span className="text-xs text-[#AEADAB]">(asignado por el rector — no editable)</span>
             </div>
           </div>
@@ -211,7 +251,7 @@ export default function ConfiguracionTab({ user }: Props) {
       {tab === 'notificaciones' && (
         <div className="bg-white border border-[#E9E9E7] rounded-xl p-6 space-y-4">
           <h3 className="font-semibold text-[#191919]">Preferencias de notificaciones</h3>
-          {(Object.entries(notifications) as [keyof typeof notifications, boolean][]).map(([key, val]) => {
+          {(Object.entries(notifications) as Array<[keyof typeof notifications, boolean]>).map(([key, val]) => {
             const labels: Record<keyof typeof notifications, { label:string; sub:string }> = {
               nuevaTarea:     { label:'Nueva tarea entregada',    sub:'Cuando un estudiante entrega una actividad'     },
               nuevaAlerta:    { label:'Nueva NeuroAlerta',        sub:'Cuando el sistema detecta un estudiante en riesgo' },
@@ -220,14 +260,17 @@ export default function ConfiguracionTab({ user }: Props) {
               emailDigest:    { label:'Digest por correo',        sub:'Resumen diario por email'                       },
             };
             const info = labels[key];
+            const toggleNotification = (notificationKey: keyof NotificationPrefs) => {
+              setNotifications((prev: NotificationPrefs) => ({ ...prev, [notificationKey]: !prev[notificationKey] }));
+            };
             return (
-              <div key={key} className="flex items-center justify-between py-3 border-b border-[#F7F6F3] last:border-0">
+              <div key={String(key)} className="flex items-center justify-between py-3 border-b border-[#F7F6F3] last:border-0">
                 <div>
                   <p className="text-sm font-medium text-[#191919]">{info.label}</p>
                   <p className="text-xs text-[#787774] mt-0.5">{info.sub}</p>
                 </div>
                 <button
-                  onClick={() => setNotifications(p=>({...p,[key]:!val}))}
+                  onClick={() => toggleNotification(key)}
                   className={`relative w-10 h-5 rounded-full transition-colors ${val ? 'bg-[#2E6FDB]' : 'bg-[#E9E9E7]'}`}
                 >
                   <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${val ? 'translate-x-5' : 'translate-x-0.5'}`} />
@@ -235,7 +278,11 @@ export default function ConfiguracionTab({ user }: Props) {
               </div>
             );
           })}
-          <button onClick={handleSaveProfile}
+          <button onClick={() => {
+            localStorage.setItem('teacher_notifications', JSON.stringify(notifications));
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+          }}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm ${saved ? 'bg-[#0F7B6C] text-white' : 'bg-[#2E6FDB] text-white hover:bg-[#255DC0]'}`}>
             {saved ? <><CheckCircle className="w-4 h-4" /> Guardado</> : 'Guardar preferencias'}
           </button>

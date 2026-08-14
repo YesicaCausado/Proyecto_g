@@ -134,34 +134,34 @@ export default function LiveModeView({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#191919] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-[#191919] flex flex-col overflow-hidden">
 
       {/* ── Top bar ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-6 py-3 bg-[#191919]/90 backdrop-blur border-b border-[#37352F] flex-shrink-0">
+      <div className="flex items-center justify-between gap-2 px-3 sm:px-6 py-3 bg-[#191919]/90 backdrop-blur border-b border-[#37352F] flex-shrink-0">
         <button
           onClick={onExit}
-          className="flex items-center gap-2 text-[#9B9A97] hover:text-white transition-colors text-sm font-medium"
+          className="flex items-center gap-2 text-[#9B9A97] hover:text-white transition-colors text-xs sm:text-sm font-medium"
         >
           <X className="w-4 h-4" />
           Salir
         </button>
 
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 bg-[#E03E3E] rounded-full animate-pulse" />
-          <span className="text-white font-bold text-sm tracking-widest">🎬 MODO LIVE</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 bg-[#E03E3E] rounded-full animate-pulse flex-shrink-0" />
+          <span className="text-white font-bold text-[10px] sm:text-sm tracking-widest whitespace-nowrap">🎬 MODO LIVE</span>
         </div>
 
-        <span className="text-[#787774] text-xs">NeuroLearn AI</span>
+        <span className="text-[#787774] text-[10px] sm:text-xs whitespace-nowrap">NeuroLearn AI</span>
       </div>
 
       {/* ── Área principal ─────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden flex-col xl:flex-row">
 
         {/* Centro: Avatar + subtítulos */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6 py-4 relative">
+        <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-6 py-3 sm:py-4 relative overflow-y-auto">
 
           {/* Avatar VRM grande */}
-          <div className="w-full max-w-sm" style={{ height: '58vh' }}>
+          <div className="w-full max-w-sm h-[36vh] sm:h-[46vh] xl:h-[58vh]">
             <VRMTutor
               ref={vrmRef}
               className="w-full h-full"
@@ -208,7 +208,7 @@ export default function LiveModeView({
         </div>
 
         {/* ── Panel derecho: Patrones activos ──────────────────────────────── */}
-        <div className="w-72 bg-[#191919] border-l border-[#37352F] flex flex-col p-4 gap-3 overflow-y-auto flex-shrink-0">
+        <div className="w-full xl:w-72 bg-[#191919] border-t border-[#37352F] xl:border-t-0 xl:border-l xl:border-[#37352F] flex flex-col p-3 sm:p-4 gap-3 overflow-y-auto flex-shrink-0 max-h-[38vh] xl:max-h-none">
 
           <h3 className="text-white font-semibold text-sm flex items-center gap-2">
             📊 Panel en Vivo
@@ -372,7 +372,7 @@ export default function LiveModeView({
       </div>
 
       {/* ── Controles inferiores ───────────────────────────────────────────── */}
-      <div className="bg-[#191919] border-t border-[#37352F] px-6 py-5 flex items-center justify-center gap-8 flex-shrink-0">
+      <div className="bg-[#191919] border-t border-[#37352F] px-3 sm:px-6 py-4 sm:py-5 flex items-center justify-center gap-3 sm:gap-8 flex-wrap flex-shrink-0 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
 
         {/* Cámara (opcional) */}
         {facial.hardwareAvailable && (
@@ -396,20 +396,22 @@ export default function LiveModeView({
           onTouchStart={(e) => { e.preventDefault(); voiceTutor.startPTT(); }}
           onTouchEnd={(e) => { e.preventDefault(); voiceTutor.stopPTT(); }}
           disabled={voiceTutor.isSpeaking}
-          className={`px-8 py-4 rounded-md font-semibold text-base transition-all select-none flex items-center gap-3 ${
+          className={`px-5 sm:px-8 py-3 sm:py-4 rounded-md font-semibold text-sm sm:text-base transition-all select-none flex items-center justify-center gap-2 sm:gap-3 ${
             voiceTutor.isListening
               ? 'bg-[#6940A5] text-white scale-105 shadow-violet-500/40 ring-4 ring-violet-500/20'
               : voiceTutor.isSpeaking
               ? 'bg-[#2F2D2B] text-[#787774] cursor-not-allowed opacity-60'
               : 'bg-[#2F2D2B] text-[#D9CCE9] hover:bg-[#5A358F] hover:scale-105'
-          }`}
+          } min-w-[170px] sm:min-w-[220px]`}
         >
-          <Mic className={`w-5 h-5 ${voiceTutor.isListening ? 'animate-pulse' : ''}`} />
-          {voiceTutor.isListening
-            ? 'Escuchando…'
-            : voiceTutor.isSpeaking
-            ? 'Tutor hablando…'
-            : 'Mantén para hablar'}
+          <Mic className={`w-4 h-4 sm:w-5 sm:h-5 ${voiceTutor.isListening ? 'animate-pulse' : ''}`} />
+          <span className="whitespace-nowrap text-center">
+            {voiceTutor.isListening
+              ? 'Escuchando…'
+              : voiceTutor.isSpeaking
+              ? 'Tutor hablando…'
+              : 'Mantén para hablar'}
+          </span>
         </button>
 
         {/* Salir */}

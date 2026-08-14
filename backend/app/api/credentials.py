@@ -15,6 +15,7 @@ import io
 import re
 import secrets
 import string
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
@@ -55,6 +56,18 @@ def _gen_temp_password(length: int = 10) -> str:
 
 def _validate_email(email: str) -> bool:
     return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email))
+
+
+def _normalize_csv_row(raw_row: Optional[dict]) -> dict:
+    if not raw_row:
+        return {}
+
+    normalized = {}
+    for key, value in raw_row.items():
+        if key is None:
+            continue
+        normalized[str(key).strip().lower()] = "" if value is None else str(value).strip()
+    return normalized
 
 
 def _require_role(current_user: User, *roles: str):
@@ -287,6 +300,56 @@ async def list_teachers(
     ]
 
 
+@router.delete("/super/teachers/{user_id}")
+async def delete_teacher(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    teacher = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.PROFESOR.value,
+    ).first()
+    if not teacher:
+        raise HTTPException(404, "Profesor no encontrado en tu institución")
+    if teacher.id == current_user.id:
+        raise HTTPException(400, "No puedes eliminar tu propia cuenta de profesor")
+
+    db.delete(teacher)
+    db.commit()
+    return {"ok": True, "message": "Profesor eliminado correctamente"}
+
+
+@router.post("/super/teachers/bulk-delete")
+async def bulk_delete_teachers(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    ids = payload.get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "Debes enviar al menos un ID válido")
+
+    teachers = db.query(User).filter(
+        User.id.in_(ids),
+        User.institution_id == institution.id,
+        User.role == UserRole.PROFESOR.value,
+    ).all()
+
+    for teacher in teachers:
+        if teacher.id == current_user.id:
+            continue
+        db.delete(teacher)
+
+    db.commit()
+    return {"ok": True, "deleted": len(teachers), "message": "Profesores eliminados correctamente"}
+
+
 @router.post("/super/teachers", response_model=CredentialItem, status_code=201)
 async def create_teacher(
     payload: TeacherCreate,
@@ -351,7 +414,13 @@ async def bulk_create_teachers(
     institution = _get_my_institution(db, current_user)
 
     content = await file.read()
+    if not content.strip():
+        raise HTTPException(400, "El archivo CSV está vacío")
+
     reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+    if not reader.fieldnames:
+        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
+
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
 
     created: List[CredentialItem] = []
@@ -359,8 +428,10 @@ async def bulk_create_teachers(
     seen_docs: set = set()   # duplicados dentro del mismo batch
     seen_emails: set = set()
 
-    for i, row in enumerate(reader, start=2):
-        row = {k.strip().lower(): v.strip() for k, v in row.items()}
+    for i, raw_row in enumerate(reader, start=2):
+        row = _normalize_csv_row(raw_row)
+        if not row or not any((value or "").strip() for value in row.values()):
+            continue
         missing = required_cols - set(row.keys())
         if missing:
             errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
@@ -468,6 +539,56 @@ async def list_students(
     ]
 
 
+@router.delete("/super/students/{user_id}")
+async def delete_student(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    student = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).first()
+    if not student:
+        raise HTTPException(404, "Estudiante no encontrado en tu institución")
+    if student.id == current_user.id:
+        raise HTTPException(400, "No puedes eliminar tu propia cuenta de estudiante")
+
+    db.delete(student)
+    db.commit()
+    return {"ok": True, "message": "Estudiante eliminado correctamente"}
+
+
+@router.post("/super/students/bulk-delete")
+async def bulk_delete_students(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    ids = payload.get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "Debes enviar al menos un ID válido")
+
+    students = db.query(User).filter(
+        User.id.in_(ids),
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).all()
+
+    for student in students:
+        if student.id == current_user.id:
+            continue
+        db.delete(student)
+
+    db.commit()
+    return {"ok": True, "deleted": len(students), "message": "Estudiantes eliminados correctamente"}
+
+
 @router.post("/super/students", response_model=CredentialItem, status_code=201)
 async def create_student(
     payload: StudentCreate,
@@ -532,15 +653,23 @@ async def bulk_create_students(
     institution = _get_my_institution(db, current_user)
 
     content = await file.read()
+    if not content.strip():
+        raise HTTPException(400, "El archivo CSV está vacío")
+
     reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+    if not reader.fieldnames:
+        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
+
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
 
     created: List[CredentialItem] = []
     errors = []
     seen_docs_s: set = set()
 
-    for i, row in enumerate(reader, start=2):
-        row = {k.strip().lower(): v.strip() for k, v in row.items()}
+    for i, raw_row in enumerate(reader, start=2):
+        row = _normalize_csv_row(raw_row)
+        if not row or not any((value or "").strip() for value in row.values()):
+            continue
         missing = required_cols - set(row.keys())
         if missing:
             errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
@@ -630,12 +759,39 @@ async def get_license_usage(
         User.institution_id == institution.id,
         User.role == UserRole.ESTUDIANTE.value, User.is_active == True,
     ).count()
+
+    if not institution.is_active:
+        license_status = "suspended"
+        days_left = None
+    elif institution.expiry_date is None:
+        license_status = "active"
+        days_left = None
+    else:
+        expiry = institution.expiry_date
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        delta = (expiry - now).days
+        if delta < 0:
+            license_status = "expired"
+            days_left = 0
+        elif delta <= 30:
+            license_status = "expiring_soon"
+            days_left = delta
+        else:
+            license_status = "active"
+            days_left = delta
+
     return LicenseUsage(
         license_type=institution.license_type,
+        license_status=license_status,
         max_teachers=limits["teachers"],
         current_teachers=t_count,
         max_students=limits["students"],
         current_students=s_count,
+        expiry_date=institution.expiry_date.isoformat() if institution.expiry_date else None,
+        days_left=days_left,
+        institution_name=institution.name,
     )
 
 

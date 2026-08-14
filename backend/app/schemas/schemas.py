@@ -74,14 +74,14 @@ class ChatMessageRequest(BaseModel):
     history: Optional[List[Dict[str, Any]]] = None
     cognitive_state: Optional[str] = None
     # Patrón 1 — Ritmo de Interacción
-    response_time_ms: float = Field(default=0, ge=0)
-    typing_speed_cpm: float = Field(default=0, ge=0)
-    pause_before_ms: float = Field(default=0, ge=0)
+    response_time_ms: Optional[float] = Field(default=None, ge=0)
+    typing_speed_cpm: Optional[float] = Field(default=None, ge=0)
+    pause_before_ms: Optional[float] = Field(default=None, ge=0)
     # Patrón 2 — Secuencia de Decisión
-    corrections: int = Field(default=0, ge=0)       # backspaces reales
-    typing_bursts: int = Field(default=1, ge=0)     # ráfagas separadas por pausas
-    is_question: bool = Field(default=False)        # mensaje termina en '?'
-    message_length: int = Field(default=0, ge=0)    # longitud del mensaje
+    corrections: Optional[int] = Field(default=None, ge=0)       # backspaces reales
+    typing_bursts: Optional[int] = Field(default=None, ge=0)     # ráfagas separadas por pausas
+    is_question: Optional[bool] = None        # mensaje termina en '?'
+    message_length: Optional[int] = Field(default=None, ge=0)    # longitud del mensaje
     # Patrones 3 y 4 — datos multimodales opcionales
     facial_data: Optional[Dict[str, Any]] = None
     voice_data: Optional[Dict[str, Any]] = None
@@ -96,6 +96,45 @@ class ChatMessageResponse(BaseModel):
     suggestions: List[str]
     should_pause: bool
     metadata: Dict[str, Any]
+
+
+class ChatPatternPayload(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=200)
+    cognitive_state: Optional[str] = None
+    response_time_ms: Optional[float] = Field(default=None, ge=0)
+    typing_speed_cpm: Optional[float] = Field(default=None, ge=0)
+    pause_before_ms: Optional[float] = Field(default=None, ge=0)
+    corrections: Optional[int] = Field(default=None, ge=0)
+    typing_bursts: Optional[int] = Field(default=None, ge=0)
+    is_question: Optional[bool] = None
+    message_length: Optional[int] = Field(default=None, ge=0)
+    facial_data: Optional[Dict[str, Any]] = None
+    voice_data: Optional[Dict[str, Any]] = None
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ChatPatternHistoryEntry(BaseModel):
+    timestamp: datetime
+    topic: str
+    cognitive_state: Optional[str] = None
+    response_time_ms: Optional[float] = None
+    typing_speed_cpm: Optional[float] = None
+    pause_before_ms: Optional[float] = None
+    corrections: Optional[int] = None
+    typing_bursts: Optional[int] = None
+    is_question: Optional[bool] = None
+    message_length: Optional[int] = None
+    facial_data: Optional[Dict[str, Any]] = None
+    voice_data: Optional[Dict[str, Any]] = None
+    confidence: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ChatPatternHistoryResponse(BaseModel):
+    topic: Optional[str] = None
+    total: int
+    items: List[ChatPatternHistoryEntry]
 
 # ===== QUIZ COGNITIVO (Formato Gemini) =====
 
@@ -120,6 +159,7 @@ class QuizRequest(BaseModel):
 
 class QuizHistoryEntry(BaseModel):
     """Entrada individual del historial de quizzes con adaptación"""
+    id: Optional[int] = None
     date: str  # YYYY-MM-DD
     title: str
     questions_count: int
@@ -129,6 +169,7 @@ class QuizHistoryEntry(BaseModel):
     adaptation: Optional[str] = None  # Descripción de cómo se ajustó el siguiente quiz
     performance_score: Optional[float] = None  # Porcentaje de aciertos
     recommended_difficulty: Optional[str] = None  # Dificultad sugerida
+    details: Optional[List[Dict[str, Any]]] = None  # Revisión por pregunta
 
 class QuizHistoryResponse(BaseModel):
     """Respuesta con el historial completo de quizzes"""
@@ -385,10 +426,14 @@ class BulkCreateResponse(BaseModel):
 
 class LicenseUsage(BaseModel):
     license_type: str
+    license_status: str
     max_teachers: int
     current_teachers: int
     max_students: int
     current_students: int
+    expiry_date: Optional[str] = None
+    days_left: Optional[int] = None
+    institution_name: str = ""
 
 class AdminStats(BaseModel):
     """Estadísticas globales del sistema para el panel del administrador"""

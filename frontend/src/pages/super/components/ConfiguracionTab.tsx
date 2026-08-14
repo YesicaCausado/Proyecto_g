@@ -19,27 +19,79 @@ export default function ConfiguracionTab() {
     primaryColor: '#6940A5',
     website: '',
   });
-  const [origName, setOrigName] = useState('');
+  const [origForm, setOrigForm] = useState({
+    name: '',
+    dane: '',
+    email: '',
+    phone: '',
+    address: '',
+    timezone: 'America/Bogota',
+    language: 'es',
+    primaryColor: '#6940A5',
+    website: '',
+  });
 
   useEffect(() => {
     api.get('/super/institution')
       .then(r => {
-        setForm(prev => ({
-          ...prev,
+        const next = {
           name: r.data.name ?? '',
           dane: r.data.dane_code ?? '',
-        }));
-        setOrigName(r.data.name ?? '');
+          email: r.data.email ?? '',
+          phone: r.data.phone ?? '',
+          address: r.data.address ?? '',
+          timezone: r.data.timezone ?? 'America/Bogota',
+          language: r.data.language ?? 'es',
+          primaryColor: r.data.primary_color ?? '#6940A5',
+          website: r.data.website ?? '',
+        };
+        setForm(prev => ({ ...prev, ...next }));
+        setOrigForm(next);
+        if (r.data.logo_url) {
+          setLogoPreview(r.data.logo_url);
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
+  const handleFieldChange = (field: keyof typeof form, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleLogoSelection = (file: File | null | undefined) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('El archivo supera el límite de 2 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      setLogoPreview(dataUrl);
+      setForm(prev => ({ ...prev, logoUrl: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = async () => {
     setSaveError('');
     try {
-      await api.patch('/super/institution', { name: form.name });
-      setOrigName(form.name);
+      const payload = {
+        name: form.name,
+        dane_code: form.dane,
+        email: form.email,
+        phone: form.phone,
+        address: form.address,
+        website: form.website,
+        timezone: form.timezone,
+        language: form.language,
+        primary_color: form.primaryColor,
+        logo_url: logoPreview || null,
+      };
+      await api.patch('/super/institution', payload);
+      setOrigForm({ ...form });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {
@@ -80,13 +132,7 @@ export default function ConfiguracionTab() {
               accept="image/png,image/jpeg,image/webp"
               ref={logoInputRef}
               className="hidden"
-              onChange={e => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  if (file.size > 2 * 1024 * 1024) { alert('El archivo supera el límite de 2 MB.'); return; }
-                  setLogoPreview(URL.createObjectURL(file));
-                }
-              }}
+              onChange={e => handleLogoSelection(e.target.files?.[0])}
             />
             <div
               onClick={() => logoInputRef.current?.click()}
@@ -107,7 +153,7 @@ export default function ConfiguracionTab() {
               <input
                 type="text"
                 value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
+                onChange={e => handleFieldChange('name', e.target.value)}
                 className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none"
               />
             </Field>
@@ -115,7 +161,7 @@ export default function ConfiguracionTab() {
               <input
                 type="text"
                 value={form.dane}
-                onChange={e => setForm({ ...form, dane: e.target.value })}
+                onChange={e => handleFieldChange('dane', e.target.value)}
                 className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm font-mono focus:ring-1 focus:ring-[#37352F] outline-none"
               />
             </Field>
@@ -130,19 +176,19 @@ export default function ConfiguracionTab() {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Correo institucional" icon={Mail}>
-            <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+            <input type="email" value={form.email} onChange={e => handleFieldChange('email', e.target.value)}
               className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none" />
           </Field>
           <Field label="Teléfono" icon={Phone}>
-            <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+            <input type="tel" value={form.phone} onChange={e => handleFieldChange('phone', e.target.value)}
               className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none" />
           </Field>
           <Field label="Sitio web" icon={Globe}>
-            <input type="url" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })}
+            <input type="url" value={form.website} onChange={e => handleFieldChange('website', e.target.value)}
               className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none" />
           </Field>
           <Field label="Dirección" icon={MapPin}>
-            <input type="text" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
+            <input type="text" value={form.address} onChange={e => handleFieldChange('address', e.target.value)}
               className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none" />
           </Field>
         </div>
@@ -155,7 +201,7 @@ export default function ConfiguracionTab() {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Zona horaria" icon={Clock}>
-            <select value={form.timezone} onChange={e => setForm({ ...form, timezone: e.target.value })}
+            <select value={form.timezone} onChange={e => handleFieldChange('timezone', e.target.value)}
               className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none bg-white">
               <option value="America/Bogota">America/Bogota (UTC-5)</option>
               <option value="America/Lima">America/Lima (UTC-5)</option>
@@ -165,7 +211,7 @@ export default function ConfiguracionTab() {
             </select>
           </Field>
           <Field label="Idioma" icon={Globe}>
-            <select value={form.language} onChange={e => setForm({ ...form, language: e.target.value })}
+            <select value={form.language} onChange={e => handleFieldChange('language', e.target.value)}
               className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none bg-white">
               <option value="es">Español</option>
               <option value="en">English</option>
@@ -188,7 +234,7 @@ export default function ConfiguracionTab() {
               <input
                 type="color"
                 value={form.primaryColor}
-                onChange={e => setForm({ ...form, primaryColor: e.target.value })}
+                onChange={e => handleFieldChange('primaryColor', e.target.value)}
                 className="w-10 h-10 border border-[#E9E9E7] rounded-md cursor-pointer p-0.5"
               />
               <span className="font-mono text-sm text-[#787774]">{form.primaryColor}</span>
@@ -208,7 +254,9 @@ export default function ConfiguracionTab() {
       {/* Botón guardar */}
       <div className="flex justify-end gap-3">
         <button
-          onClick={() => setForm(prev => ({ ...prev, name: origName }))}
+          onClick={() => {
+            setForm({ ...origForm });
+          }}
           className="flex items-center gap-2 px-4 py-2 border border-[#E9E9E7] rounded-md text-sm text-[#787774] hover:bg-[#F7F6F3] transition-colors"
         >
           <RefreshCw className="w-4 h-4" /> Restablecer
