@@ -138,9 +138,8 @@ class QuizHistory(Base):
     session_id = Column(Integer, ForeignKey("learning_sessions.id"), nullable=True)
     classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)  # ← NUEVO
     quiz_title = Column(String(200), nullable=False)
-    
+
     # Información del quiz
-    quiz_title = Column(String(200), nullable=False)
     topic = Column(String(200), nullable=False)
     difficulty = Column(String(20), nullable=False)  # Fácil/Medio/Difícil
     questions_count = Column(Integer, nullable=False)
@@ -168,3 +167,4 @@ class QuizHistory(Base):
     
     # Relaciones
     user = relationship("User", back_populates="quiz_history")
+    session = relationship("LearningSession")  # sesión de aprendizaje (LearningSession) asociada

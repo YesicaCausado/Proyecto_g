@@ -178,6 +178,10 @@ export function TeachersTab({ license }: { license: any }) {
   const [copiedTeacherId, setCopiedTeacherId] = useState<number | null>(null);
   const [deleteTeacherId, setDeleteTeacherId] = useState<number | null>(null);
   const [deletingTeacher, setDeletingTeacher] = useState(false);
+  // ── Flujo de carga masiva en dos pasos (preview → confirmar) ──────────────
+  const [previewPendingFile, setPreviewPendingFile] = useState<File | null>(null);
+  const [previewResult, setPreviewResult] = useState<any | null>(null);
+  const previewFileInputRef = useRef<HTMLInputElement>(null);
 
   const loadTeachers = async () => {
     try {
@@ -274,35 +278,71 @@ export function TeachersTab({ license }: { license: any }) {
     }
   };
 
-  const handleCreateBatch = async (e: React.FormEvent) => {
+  // Paso 1 de la carga masiva: validar el archivo (preview) sin crear usuarios.
+  const handleReviewBatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fileInputRef.current?.files?.[0]) {
+    const file = previewFileInputRef.current?.files?.[0];
+    if (!file) {
       setError('Por favor sube un archivo CSV');
       return;
     }
-    
+
     setIsLoading(true);
     setMessage('');
     setError('');
-    
+    setPreviewResult(null);
+
     const formData = new FormData();
-    formData.append('file', fileInputRef.current.files[0]);
-    
+    formData.append('file', file);
+
+    try {
+      const response = await api.post('/super/teachers/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setPreviewResult(response.data);
+      setPreviewPendingFile(file);
+      setMessage(response.data.message || 'Archivo revisado. Confirma para crear las cuentas.');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Error al revisar el archivo CSV');
+      setPreviewPendingFile(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Paso 2 de la carga masiva: confirmar y crear (solo los registros válidos).
+  const handleConfirmBatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const file = previewPendingFile;
+    if (!file) {
+      setError('El archivo ya no está disponible. Vuelve a cargarlo.');
+      setPreviewResult(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage('');
+    setError('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
     try {
       const response = await api.post('/super/teachers/bulk', formData, {
-      headers: {
-      'Content-Type': 'multipart/form-data',
-      },
-    });
-      
-      setMessage(`Se han procesado ${response.data.total_processed} profesores en lote.`);
-      setNewCredentials(response.data.credentials);
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const d = response.data;
+      setMessage(`Se han creado ${d.total_created || 0} profesor(es). ${d.total_errors || 0} registro(s) con errores fueron omitidos.`);
+      setNewCredentials(d.credentials || []);
+      setPreviewResult(null);
+      setPreviewPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (previewFileInputRef.current) previewFileInputRef.current.value = '';
       loadTeachers();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al procesar el archivo CSV');
     } finally {
       setIsLoading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -497,35 +537,89 @@ export function TeachersTab({ license }: { license: any }) {
                </button>
              </div>
              
-             <form onSubmit={handleCreateBatch} className="space-y-4">
-               <div>
-                  <label className="block text-sm font-medium text-[#787774] mb-2">
-                    Subir archivo (.csv)
-                  </label>
-                  <input
-                    type="file"
-                    accept=".csv"
-                    ref={fileInputRef}
-                    className="block w-full text-sm text-[#787774]
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-[#F7F6F3] file:text-[#37352F]
-                      hover:file:bg-[#E9E9E7] cursor-pointer
-                      border border-[#E9E9E7] rounded-md p-2 transition-colors"
-                  />
-               </div>
-               
-               <div className="pt-2 flex justify-end">
-                 <button
-                   type="submit"
-                   disabled={isLoading}
-                   className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
-                 >
-                   {isLoading ? 'Procesando...' : 'Cargar y Generar Lote'}
-                 </button>
-               </div>
-             </form>
+             {previewResult ? (
+               <form onSubmit={handleConfirmBatch} className="space-y-4">
+                 {/* Resumen de validación */}
+                 <div className={`${previewResult.total_valid > 0 ? 'bg-[#EEF7F4] border-[#0F7B6C]/30' : 'bg-[#FDEEEE] border-[#F4BDBD]'} border rounded-md p-4 text-sm`}>
+                   <div className="flex items-center gap-2 mb-1">
+                     {previewResult.total_valid > 0
+                       ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" />
+                       : <AlertCircle className="w-4 h-4 text-[#E03E3E]" />}
+                     <span className={`font-semibold ${previewResult.total_valid > 0 ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>
+                       Revisión del archivo
+                     </span>
+                   </div>
+                   <p className="text-[#787774] mt-1">
+                     <span className="font-semibold text-[#0F7B6C]">{previewResult.total_valid}</span> válido(s)
+                     &nbsp;·&nbsp;
+                     <span className="font-semibold text-[#D9730D]">{previewResult.total_errors}</span> con errores
+                   </p>
+                 </div>
+
+                 {previewResult.errors && previewResult.errors.length > 0 && (
+                   <div className="border border-[#E9E9E7] rounded-md p-3 max-h-44 overflow-y-auto">
+                     <p className="text-xs font-semibold text-[#787774] uppercase tracking-wider mb-2">Errores a corregir</p>
+                     <ul className="space-y-1 text-xs text-[#E03E3E]">
+                       {previewResult.errors.slice(0, 20).map((e: any, idx: number) => (
+                         <li key={idx}>Fila {e.row}: {e.error}</li>
+                       ))}
+                       {previewResult.errors.length > 20 && (
+                         <li className="text-[#9B9A97]">… y {previewResult.errors.length - 20} más</li>
+                       )}
+                     </ul>
+                   </div>
+                 )}
+
+                 <div className="flex justify-end gap-2 pt-1">
+                   <button
+                     type="button"
+                     onClick={() => { setPreviewResult(null); setPreviewPendingFile(null); setMessage(''); }}
+                     disabled={isLoading}
+                     className="px-4 py-2.5 text-sm border border-[#E9E9E7] rounded hover:bg-[#F7F6F3] text-[#787774] disabled:opacity-50"
+                   >
+                     Elegir otro archivo
+                   </button>
+                   <button
+                     type="submit"
+                     disabled={isLoading || previewResult.total_valid === 0}
+                     className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
+                   >
+                     {isLoading ? 'Creando...' : `Confirmar y crear (${previewResult.total_valid})`}
+                   </button>
+                 </div>
+               </form>
+             ) : (
+               <form onSubmit={handleReviewBatch} className="space-y-4">
+                 <div>
+                   <label className="block text-sm font-medium text-[#787774] mb-2">
+                     Subir archivo (.csv)
+                   </label>
+                   <input
+                     type="file"
+                     accept=".csv"
+                     ref={previewFileInputRef}
+                     onChange={() => { setMessage(''); setError(''); }}
+                     className="block w-full text-sm text-[#787774]
+                       file:mr-4 file:py-2 file:px-4
+                       file:rounded file:border-0
+                       file:text-sm file:font-semibold
+                       file:bg-[#F7F6F3] file:text-[#37352F]
+                       hover:file:bg-[#E9E9E7] cursor-pointer
+                       border border-[#E9E9E7] rounded-md p-2 transition-colors"
+                   />
+                 </div>
+
+                 <div className="pt-2 flex justify-end">
+                   <button
+                     type="submit"
+                     disabled={isLoading}
+                     className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
+                   >
+                     {isLoading ? 'Revisando...' : 'Revisar lote antes de crear'}
+                   </button>
+                 </div>
+               </form>
+             )}
           </div>
         )}
       </div>
@@ -668,6 +762,10 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
   const [copiedStudentId, setCopiedStudentId] = useState<number | null>(null);
   const [deleteStudentId, setDeleteStudentId] = useState<number | null>(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
+  // ── Flujo de carga masiva en dos pasos (preview → confirmar) ──────────────
+  const [previewPendingFile, setPreviewPendingFile] = useState<File | null>(null);
+  const [previewResult, setPreviewResult] = useState<any | null>(null);
+  const previewFileInputRef = useRef<HTMLInputElement>(null);
 
   const loadStudents = async () => {
     try {
@@ -768,38 +866,74 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
     }
   };
 
-  const handleCreateBatch = async (e: React.FormEvent) => {
+  // Paso 1 de la carga masiva: validar el archivo (preview) sin crear usuarios.
+  const handleReviewBatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fileInputRef.current?.files?.[0]) {
+    const file = previewFileInputRef.current?.files?.[0];
+    if (!file) {
       setError('Por favor sube un archivo CSV');
       return;
     }
-    
+
     setIsLoading(true);
     setMessage('');
     setError('');
-    
+    setPreviewResult(null);
+
     const formData = new FormData();
-    formData.append('file', fileInputRef.current.files[0]);
-    if (assignedTeacherId) {
-       formData.append('default_teacher_id', assignedTeacherId);
+    formData.append('file', file);
+
+    try {
+      const response = await api.post('/super/students/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setPreviewResult(response.data);
+      setPreviewPendingFile(file);
+      setMessage(response.data.message || 'Archivo revisado. Confirma para crear las cuentas.');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Error al revisar el archivo CSV');
+      setPreviewPendingFile(null);
+    } finally {
+      setIsLoading(false);
     }
-    
+  };
+
+  // Paso 2 de la carga masiva: confirmar y crear (solo los registros válidos).
+  const handleConfirmBatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const file = previewPendingFile;
+    if (!file) {
+      setError('El archivo ya no está disponible. Vuelve a cargarlo.');
+      setPreviewResult(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage('');
+    setError('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (assignedTeacherId) {
+      formData.append('default_teacher_id', assignedTeacherId);
+    }
+
     try {
       const response = await api.post('/super/students/bulk', formData, {
-          headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      
-      setMessage(`Se han procesado ${response.data.total_processed} estudiantes en lote.`);
-      setNewCredentials(response.data.credentials);
+      const d = response.data;
+      setMessage(`Se han creado ${d.total_created || 0} estudiante(s). ${d.total_errors || 0} registro(s) con errores fueron omitidos.`);
+      setNewCredentials(d.credentials || []);
+      setPreviewResult(null);
+      setPreviewPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (previewFileInputRef.current) previewFileInputRef.current.value = '';
       loadStudents();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Error al procesar el archivo CSV');
     } finally {
       setIsLoading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -975,51 +1109,121 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
                </div>
              </div>
              
-             <form onSubmit={handleCreateBatch} className="space-y-4">
-               <div>
-                  <label className="block text-sm font-medium text-[#787774] mb-2">
-                    Subir archivo (.csv)
-                  </label>
-                  <input
-                    type="file"
-                    accept=".csv"
-                    ref={fileInputRef}
-                    className="block w-full text-sm text-[#787774]
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-[#F7F6F3] file:text-[#37352F]
-                      hover:file:bg-[#E9E9E7] cursor-pointer
-                      border border-[#E9E9E7] rounded-md p-2 transition-colors"
-                  />
-               </div>
+             {previewResult ? (
+               <form onSubmit={handleConfirmBatch} className="space-y-4">
+                 {/* Resumen de validación */}
+                 <div className={`${previewResult.total_valid > 0 ? 'bg-[#EEF7F4] border-[#0F7B6C]/30' : 'bg-[#FDEEEE] border-[#F4BDBD]'} border rounded-md p-4 text-sm`}>
+                   <div className="flex items-center gap-2 mb-1">
+                     {previewResult.total_valid > 0
+                       ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" />
+                       : <AlertCircle className="w-4 h-4 text-[#E03E3E]" />}
+                     <span className={`font-semibold ${previewResult.total_valid > 0 ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>
+                       Revisión del archivo
+                     </span>
+                   </div>
+                   <p className="text-[#787774] mt-1">
+                     <span className="font-semibold text-[#0F7B6C]">{previewResult.total_valid}</span> válido(s)
+                     &nbsp;·&nbsp;
+                     <span className="font-semibold text-[#D9730D]">{previewResult.total_errors}</span> con errores
+                   </p>
+                 </div>
 
-               <div>
-                 <label className="block text-sm font-medium text-[#787774] mb-1">
-                   Asignar todo el lote a un Profesor (Opcional)
-                 </label>
-                 <select
-                   value={assignedTeacherId}
-                   onChange={(e) => setAssignedTeacherId(e.target.value)}
-                   className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
-                 >
-                   <option value="">-- Sin asignar --</option>
-                   {(teachers || []).map(t => (
-                     <option key={t.id} value={t.id}>{t.full_name}</option>
-                   ))}
-                 </select>
-               </div>
-               
-               <div className="pt-2 flex justify-end">
-                 <button
-                   type="submit"
-                   disabled={isLoading}
-                   className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
-                 >
-                   {isLoading ? 'Procesando...' : 'Cargar y Generar Lote'}
-                 </button>
-               </div>
-             </form>
+                 {previewResult.errors && previewResult.errors.length > 0 && (
+                   <div className="border border-[#E9E9E7] rounded-md p-3 max-h-44 overflow-y-auto">
+                     <p className="text-xs font-semibold text-[#787774] uppercase tracking-wider mb-2">Errores a corregir</p>
+                     <ul className="space-y-1 text-xs text-[#E03E3E]">
+                       {previewResult.errors.slice(0, 20).map((e: any, idx: number) => (
+                         <li key={idx}>Fila {e.row}: {e.error}</li>
+                       ))}
+                       {previewResult.errors.length > 20 && (
+                         <li className="text-[#9B9A97]">… y {previewResult.errors.length - 20} más</li>
+                       )}
+                     </ul>
+                   </div>
+                 )}
+
+                 <div>
+                   <label className="block text-sm font-medium text-[#787774] mb-1">
+                     Asignar todo el lote a un Profesor (Opcional)
+                   </label>
+                   <select
+                     value={assignedTeacherId}
+                     onChange={(e) => setAssignedTeacherId(e.target.value)}
+                     className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
+                   >
+                     <option value="">-- Sin asignar --</option>
+                     {(teachers || []).map(t => (
+                       <option key={t.id} value={t.id}>{t.full_name}</option>
+                     ))}
+                   </select>
+                 </div>
+
+                 <div className="flex justify-end gap-2 pt-1">
+                   <button
+                     type="button"
+                     onClick={() => { setPreviewResult(null); setPreviewPendingFile(null); setMessage(''); }}
+                     disabled={isLoading}
+                     className="px-4 py-2.5 text-sm border border-[#E9E9E7] rounded hover:bg-[#F7F6F3] text-[#787774] disabled:opacity-50"
+                   >
+                     Elegir otro archivo
+                   </button>
+                   <button
+                     type="submit"
+                     disabled={isLoading || previewResult.total_valid === 0}
+                     className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
+                   >
+                     {isLoading ? 'Creando...' : `Confirmar y crear (${previewResult.total_valid})`}
+                   </button>
+                 </div>
+               </form>
+             ) : (
+               <form onSubmit={handleReviewBatch} className="space-y-4">
+                 <div>
+                   <label className="block text-sm font-medium text-[#787774] mb-2">
+                     Subir archivo (.csv)
+                   </label>
+                   <input
+                     type="file"
+                     accept=".csv"
+                     ref={previewFileInputRef}
+                     onChange={() => { setMessage(''); setError(''); }}
+                     className="block w-full text-sm text-[#787774]
+                       file:mr-4 file:py-2 file:px-4
+                       file:rounded file:border-0
+                       file:text-sm file:font-semibold
+                       file:bg-[#F7F6F3] file:text-[#37352F]
+                       hover:file:bg-[#E9E9E7] cursor-pointer
+                       border border-[#E9E9E7] rounded-md p-2 transition-colors"
+                   />
+                 </div>
+
+                 <div>
+                   <label className="block text-sm font-medium text-[#787774] mb-1">
+                     Asignar todo el lote a un Profesor (Opcional)
+                   </label>
+                   <select
+                     value={assignedTeacherId}
+                     onChange={(e) => setAssignedTeacherId(e.target.value)}
+                     className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
+                   >
+                     <option value="">-- Sin asignar --</option>
+                     {(teachers || []).map(t => (
+                       <option key={t.id} value={t.id}>{t.full_name}</option>
+                     ))}
+                   </select>
+                 </div>
+
+                 <div className="pt-2 flex justify-end">
+                   <button
+                     type="submit"
+                     disabled={isLoading}
+                     className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
+                   >
+                     {isLoading ? 'Revisando...' : 'Revisar lote antes de crear'}
+                   </button>
+                 </div>
+               </form>
+             )}
           </div>
         )}
       </div>

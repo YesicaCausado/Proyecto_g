@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LoginCard.tsx — Neumorphism premium
  * Estilo: limpio, minimalista, tarjeta flotante sobre fondo neutro.
  * Inspirado en la referencia de la imagen.
@@ -37,21 +37,6 @@ interface CardInputProps {
   value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onFocus?: () => void; onBlur?: () => void; required?: boolean;
 }
-
-interface DemoBtn {
-  label: string; role: string;
-  dot: string; text: string; bg: string; border: string;
-}
-
-const DEMOS: DemoBtn[] = [
-  { label: 'Estudiante',     role: 'demo',          dot: '#5AAFD8', text: '#0B6E99', bg: '#EAF4FB', border: '#C8E5F5' },
-  { label: 'Profesor',       role: 'profesor',      dot: '#5DC8B4', text: '#0F7B6C', bg: '#EEF7F4', border: '#B3E3DA' },
-  { label: 'Admin',          role: 'admin',         dot: '#F2C84B', text: '#D9730D', bg: '#FEF4E8', border: '#F5D9A8' },
-  { label: 'Super Profesor', role: 'superprofesor', dot: '#A78BCA', text: '#6940A5', bg: '#F4EFFB', border: '#D9CCE9' },
-];
-const DEMO_PWD: Record<string, string> = {
-  demo: 'demo', profesor: 'profesor', admin: 'admin1234', superprofesor: 'superprofesor',
-};
 
 // ── Input neumorphism ─────────────────────────────────────────
 
@@ -242,46 +227,8 @@ export default function LoginCard({ className = '' }: LoginCardProps) {
         </button>
       </form>
 
-      {/* ── Divisor ───────────────────────────────────── */}
-      <div style={{
-        margin: '24px 0 20px',
-        display: 'flex', alignItems: 'center', gap: '12px',
-      }}>
-        <div style={{ flex: 1, height: '1px', background: C.border }}/>
-        <span style={{ fontSize: '10.5px', color: C.textMute, fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          Demo
-        </span>
-        <div style={{ flex: 1, height: '1px', background: C.border }}/>
-      </div>
-
-      {/* ── Accesos demo — grid 2x2 ───────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-        {DEMOS.map(d => (
-          <button
-            key={d.role}
-            type="button"
-            onClick={() => setForm({ username: d.role, password: DEMO_PWD[d.role] ?? d.role })}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '9px 11px',
-              background: d.bg, border: `1px solid ${d.border}`,
-              borderRadius: '9px', cursor: 'pointer',
-              transition: 'opacity 140ms, transform 140ms',
-              textAlign: 'left',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '0.75'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1';    e.currentTarget.style.transform = 'translateY(0)'; }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: d.dot, flexShrink: 0 }}/>
-            <span style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: d.text }}>{d.label}</span>
-              <span style={{ fontSize: '9.5px', fontFamily: 'monospace', color: d.text, opacity: 0.55 }}>{d.role}</span>
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <p style={{ fontSize: '10px', color: C.textMute, textAlign: 'center', marginTop: '10px' }}>
+      {/* ── Nota institucional ────────────────────────── */}
+      <p style={{ fontSize: '10px', color: C.textMute, textAlign: 'center', marginTop: '22px' }}>
         Tu cuenta es asignada por tu institución educativa
       </p>
     </div>

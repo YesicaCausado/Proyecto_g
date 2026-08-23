@@ -21,6 +21,16 @@ interface InstitutionItem {
   student_count: number;
 }
 
+interface InstitutionListEnvelope {
+  total: number;
+  page: number;
+  page_size: number;
+  institutions: Array<Omit<InstitutionItem, 'teacher_count' | 'student_count'> & {
+    teachers_count: number;
+    students_count: number;
+  }>;
+}
+
 const LICENSE_BADGE: Record<string, string> = {
   basica:  'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]',
   premium: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',
@@ -29,6 +39,7 @@ const LICENSE_BADGE: Record<string, string> = {
 
 export default function InstitutionList() {
   const [institutions, setInstitutions] = useState<InstitutionItem[]>([]);
+  const [total, setTotal]               = useState(0);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState<string | null>(null);
   const [search, setSearch]             = useState('');
@@ -37,8 +48,21 @@ export default function InstitutionList() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get<InstitutionItem[]>('/admin/institutions');
-      setInstitutions(data);
+      const { data } = await api.get<InstitutionListEnvelope>('/admin/institutions');
+      // El endpoint canónico (admin_users.py) devuelve un objeto {institutions, total}
+      // con campos teachers_count / students_count.
+      const rows = (data.institutions ?? []).map<InstitutionItem>(i => ({
+        id: i.id,
+        name: i.name,
+        dane_code: i.dane_code,
+        license_type: i.license_type,
+        is_active: i.is_active,
+        created_at: i.created_at ?? new Date().toISOString(),
+        teacher_count: i.teachers_count ?? 0,
+        student_count: i.students_count ?? 0,
+      }));
+      setInstitutions(rows);
+      setTotal(data.total ?? rows.length);
     } catch {
       setError('No se pudieron cargar las instituciones. Intenta de nuevo.');
     } finally {
@@ -62,7 +86,7 @@ export default function InstitutionList() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-[#191919]">Instituciones</h1>
           <p className="text-[#787774] text-sm mt-1">
-            {institutions.length} colegio{institutions.length !== 1 ? 's' : ''} registrado{institutions.length !== 1 ? 's' : ''}
+            {total} colegio{total !== 1 ? 's' : ''} registrado{total !== 1 ? 's' : ''}
           </p>
         </div>
         <Link

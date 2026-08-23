@@ -20,6 +20,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.security import (
+    SecurityHeadersMiddleware,
+    HSTSHeaderMiddleware,
+)
 from app.db.database import engine, Base
 from app.api import auth, chat, expert_bot, classroom, stats
 from app.api import credentials  # B2B credential system
@@ -28,9 +32,11 @@ from app.api import super_stats               # Super Profesor stats institucion
 from app.api import teacher_stats            # Teacher dashboard stats
 from app.api import teacher_materials        # Teacher materials (carpetas + archivos)
 from app.api import teacher_evaluations      # Teacher evaluations (evaluaciones)
+from app.api import teacher_reports          # Teacher reports (export PDF/CSV)
 from app.api import license                  # License system
 from app.api import admin_users              # Admin: gestión de usuarios
 from app.api import notifications            # Sistema de notificaciones
+from app.api import admin_bots               # Admin: moderación de bots
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
@@ -215,6 +221,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Seguridad HTTP (cabeceras de seguridad + mitigación XSS/clickjacking) ──
+# OJO: Starlette invoca los middlewares en orden INVERSO de registro.
+# Los registramos primero para que la capa de seguridad sea la más externa.
+app.add_middleware(HSTSHeaderMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Rutas — prefijo /api/v1 tanto en local como en Vercel
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(chat.router,          prefix="/api/v1")
@@ -229,9 +241,11 @@ app.include_router(super_stats.router,         prefix="/api/v1")
 app.include_router(teacher_stats.router,       prefix="/api/v1")
 app.include_router(teacher_materials.router,   prefix="/api/v1")
 app.include_router(teacher_evaluations.router, prefix="/api/v1")
+app.include_router(teacher_reports.router,     prefix="/api/v1")
 app.include_router(license.router,             prefix="/api/v1")
 app.include_router(admin_users.router,         prefix="/api/v1")
 app.include_router(notifications.router,       prefix="/api/v1")
+app.include_router(admin_bots.router,          prefix="/api/v1")
 
 
 @app.get("/")

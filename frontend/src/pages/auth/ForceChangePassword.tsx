@@ -14,7 +14,7 @@ const RULES = [
 
 export default function ForceChangePassword() {
   const navigate  = useNavigate();
-  const { user }  = useAuth();
+  const { logout }  = useAuth();
 
   const [current,  setCurrent]  = useState('');
   const [newPwd,   setNewPwd]   = useState('');
@@ -40,13 +40,11 @@ export default function ForceChangePassword() {
         new_password: newPwd,
         });
       setSuccess(true);
-      setTimeout(() => {
-        const role = user?.role;
-        if (role === 'admin')          navigate('/admin');
-        else if (role === 'super_profesor') navigate('/super');
-        else if (role === 'profesor')       navigate('/teacher');
-        else                                navigate('/dashboard');
-      }, 2000);
+      // Tras cambiar la contraseña temporal se Cierra la sesión (el token actual
+      // pertenecía a la sesión con la contraseña temporal) y se redirige al login
+      // para que el usuario inicie sesión con su NUEVA contraseña.
+      logout();
+      setTimeout(() => navigate('/login', { replace: true }), 1800);
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? 'Error al cambiar la contraseña');
     } finally { setLoading(false); }
@@ -60,7 +58,7 @@ export default function ForceChangePassword() {
             <CheckCircle className="w-7 h-7 text-[#0F7B6C]" />
           </div>
           <h2 className="text-xl font-bold text-[#191919] mb-2">¡Contraseña actualizada!</h2>
-          <p className="text-sm text-[#787774]">Redirigiendo a tu panel…</p>
+          <p className="text-sm text-[#787774]">Tu sesión se cerró. Redirigiendo al inicio de sesión…</p>
         </div>
       </div>
     );

@@ -13,6 +13,12 @@ import secrets
 
 from app.db.database import get_db
 from app.core.config import settings
+from app.core.security import (
+    check_origin,
+    check_rate_limit,
+    rate_limiter,
+    failed_login_tracker,
+)
 from app.models.user import User as UserModel
 from app.schemas.schemas import (
     UserCreate, UserLogin, UserResponse, Token,
@@ -41,6 +47,27 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def validate_password_strength(password: str) -> Optional[str]:
+    """
+    Valida la fortaleza de una contraseña nueva.
+    Retorna un mensaje de error si no cumple, o None si es válida.
+    Reglas: mínimo 8 caracteres, una mayúscula, una minúscula,
+    un número y un carácter especial.
+    """
+    import re
+    if len(password) < 8:
+        return "La contraseña debe tener al menos 8 caracteres."
+    if not re.search(r"[A-Z]", password):
+        return "La contraseña debe incluir una letra mayúscula."
+    if not re.search(r"[a-z]", password):
+        return "La contraseña debe incluir una letra minúscula."
+    if not re.search(r"\d", password):
+        return "La contraseña debe incluir un número."
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return "La contraseña debe incluir un carácter especial (!@#$%^&*...)."
+    return None
 
 
 async def get_current_user(
@@ -83,6 +110,7 @@ async def get_current_user(
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
@@ -92,6 +120,9 @@ async def register(
     El flujo B2B usa /admin/institutions y /super/teachers|students.
     Este endpoint queda como respaldo interno protegido.
     """
+    check_origin(request)
+    check_rate_limit(request)
+
     # Solo admin y super_profesor pueden crear cuentas
     if current_user.role not in ("admin", "super_profesor"):
         raise HTTPException(
@@ -141,8 +172,40 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """Iniciar sesión validando contra la base de datos (Postgres/Supabase)."""
+async def login(
+    user_data: UserLogin,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Iniciar sesión validando contra la base de datos (Postgres/Supabase).
+
+    Seguridad (6.2.1 / P4-14):
+    - check_origin: bloquea peticiones cross-site maliciosas (CSRF).
+    - failed_login_tracker + check_rate_limit: anti fuerza bruta. Cada
+      intento fallido cuenta; al superar el máximo se bloquea la cuenta
+      (username+IP) durante la ventana de lockout.
+    """
+    # 1) CSRF / origin enforcement (solo navegadores; las llamadas API puras
+    #    sin Origin/Referer siguen pasando).
+    check_origin(request)
+
+    ip = failed_login_tracker.get_client_ip(request)
+
+    # 2) Si la cuenta quedó bloqueada por demasiados fallos previos → 429.
+    if failed_login_tracker.is_blocked(user_data.username, ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Demasiados intentos fallidos. Cuenta temporalmente bloqueada. "
+                "Espera unos minutos e intenta de nuevo."
+            ),
+            headers={"Retry-After": str(settings.RATE_LIMIT_LOCKOUT_SECONDS)},
+        )
+
+    # 3) Cap genérico de peticiones (ráfagas por IP) incluso antes de validar.
+    check_rate_limit(request, user_data.username)
+
     try:
         user = db.query(UserModel).filter(UserModel.username == user_data.username).first()
     except Exception as e:
@@ -151,7 +214,18 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             detail=f"Error de base de datos: {str(e)}. Verifica DATABASE_URL en Vercel.",
         )
 
+    # 4) Validación de credenciales. Los fallos se registran para el lockout.
     if not user or not verify_password(user_data.password, user.hashed_password):
+        # Si este fallo alcanza el límite, bloqueamos LA CUENTA ya de inmediato.
+        if failed_login_tracker.on_failure(user_data.username, ip):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Demasiados intentos fallidos. Cuenta temporalmente bloqueada. "
+                    "Espera unos minutos e intenta de nuevo."
+                ),
+                headers={"Retry-After": str(settings.RATE_LIMIT_LOCKOUT_SECONDS)},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña incorrectos",
@@ -162,6 +236,9 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cuenta desactivada. Contacta al administrador.",
         )
+
+    # 5) Credenciales correctas: limpiamos el historial de fallos de esa cuenta.
+    failed_login_tracker.on_success(user_data.username, ip)
 
     try:
         user.last_login = datetime.utcnow()
@@ -226,17 +303,22 @@ async def update_me(
 @router.post("/change-password", status_code=204)
 async def change_password(
     data: dict,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
     """Cambiar contraseña del usuario autenticado."""
+    check_origin(request)
+    check_rate_limit(request, current_user.username)
     current_pwd = data.get("current_password", "")
     new_pwd     = data.get("new_password", "")
 
     if not verify_password(current_pwd, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta.")
-    if len(new_pwd) < 8:
-        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres.")
+
+    strength_error = validate_password_strength(new_pwd)
+    if strength_error:
+        raise HTTPException(status_code=400, detail=strength_error)
 
     current_user.hashed_password = get_password_hash(new_pwd)
     current_user.must_change_password = False
@@ -257,7 +339,13 @@ async def forgot_password(
     Solicitar recuperación de contraseña.
     Siempre devuelve el mismo mensaje para no revelar
     si el email/usuario existe en el sistema.
+
+    Seguridad: valida origen (CSRF), limita peticiones por IP y limita
+    tokens activos por usuario para evitar spam de correos.
     """
+    check_origin(request)
+    check_rate_limit(request)  # ventana por IP para este endpoint público
+
     GENERIC_RESPONSE = {
         "message": "Si los datos son correctos, recibirás un correo con las instrucciones."
     }
@@ -330,9 +418,13 @@ async def validate_reset_token(token: str, db: Session = Depends(get_db)):
 @router.post("/reset-password", status_code=200)
 async def reset_password(
     payload: ResetPasswordRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Restablece la contraseña usando el token recibido por email."""
+    check_origin(request)
+    check_rate_limit(request)
+
     import re
     from app.models.password_reset import PasswordResetToken
 
@@ -346,16 +438,9 @@ async def reset_password(
         raise HTTPException(status_code=400, detail="El enlace ha expirado. Solicita uno nuevo")
 
     pwd = payload.new_password
-    if (len(pwd) < 8
-            or not re.search(r"[A-Z]", pwd)
-            or not re.search(r"[a-z]", pwd)
-            or not re.search(r"\d", pwd)
-            or not re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd)):
-        raise HTTPException(
-            status_code=400,
-            detail="La contraseña debe tener mínimo 8 caracteres, "
-                   "una mayúscula, una minúscula, un número y un carácter especial",
-        )
+    strength_error = validate_password_strength(pwd)
+    if strength_error:
+        raise HTTPException(status_code=400, detail=strength_error)
 
     user = db.query(UserModel).filter(UserModel.id == reset.user_id).first()
     if not user:

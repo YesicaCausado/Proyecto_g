@@ -22,13 +22,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.api.auth import get_current_user, get_password_hash, verify_password
+from app.api.auth import get_current_user, get_password_hash
 from app.models.user import User, UserRole
 from app.models.institution import Institution, AuditLog, LICENSE_LIMITS
 from app.schemas.schemas import (
-    InstitutionCreate, InstitutionResponse, InstitutionListItem,
+    InstitutionCreate, InstitutionResponse,
     TeacherCreate, TeacherListItem, StudentCreate, BulkCreateResponse,
-    CredentialItem, LicenseUsage, ChangePasswordRequest, AdminStats,
+    CredentialItem, LicenseUsage, AdminStats,
 )
 
 from app.services.email_service import send_credentials_email
@@ -242,25 +242,14 @@ async def get_admin_stats(
     )
 
 
-@router.get("/admin/institutions", response_model=List[InstitutionListItem])
-async def list_institutions(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    _require_role(current_user, UserRole.ADMIN.value)
-    institutions = db.query(Institution).order_by(Institution.created_at.desc()).all()
-    result = []
-    for inst in institutions:
-        t_count = db.query(User).filter(
-            User.institution_id == inst.id, User.role == UserRole.PROFESOR.value).count()
-        s_count = db.query(User).filter(
-            User.institution_id == inst.id, User.role == UserRole.ESTUDIANTE.value).count()
-        result.append(InstitutionListItem(
-            id=inst.id, name=inst.name, dane_code=inst.dane_code,
-            license_type=inst.license_type, is_active=inst.is_active,
-            created_at=inst.created_at, teacher_count=t_count, student_count=s_count,
-        ))
-    return result
+# NOTE: La ruta GET /admin/institutions (listado de instituciones con paginación,
+# uso de licencia, límites y estados) se define de forma canónica en
+# app/api/admin_users.py (admin_list_institutions). ESTE módulo NO la redefine:
+# definirla aquí duplicaba el path y, al montar credentials antes que admin_users
+# en main.py, la versión simple de este archivo sombreaba la rica de admin_users,
+# rompiendo páginas que esperan el contrato {total, page, page_size, institutions}
+# (p.ej. LicenseManagement.tsx). La creación (POST /admin/institutions) sí vive
+# aquí porque es parte del flujo B2B de registro de institución + super profesor.
 
 
 # ─── Super Profesor: Profesores ───────────────────────────────────────────────
@@ -510,6 +499,89 @@ async def bulk_create_teachers(
     )
 
 
+@router.post("/super/teachers/preview")
+async def preview_bulk_create_teachers(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    PRE-CARGA masiva de profesores: valida el CSV y devuelve un resumen de
+    registros válidos e inválidos SIN crear ningún usuario.
+
+    Uso (flujo en dos pasos):
+      1) POST /super/teachers/preview  → valida y muestra el resumen
+      2) POST /super/teachers/bulk     → solo si el usuario confirma
+
+    Retorna el mismo contrato que /bulk en cuanto a validación, pero
+    `created=[]` en la preview (nada se persiste todavía). Cada error incluye
+    la fila exacta del CSV para que la UI pueda mostrarlos antes de confirmar.
+    """
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+
+    content = await file.read()
+    if not content.strip():
+        raise HTTPException(400, "El archivo CSV está vacío")
+
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+    if not reader.fieldnames:
+        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
+
+    required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
+
+    errors = []
+    valid_count = 0
+
+    for i, raw_row in enumerate(reader, start=2):
+        row = _normalize_csv_row(raw_row)
+        if not row or not any((value or "").strip() for value in row.values()):
+            continue
+        missing = required_cols - set(row.keys())
+        if missing:
+            errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
+            continue
+
+        err = None
+        if not row.get("nombre_completo"):
+            err = "Nombre vacío"
+        elif not row.get("numero_documento"):
+            err = "Documento vacío"
+        elif not _validate_email(row.get("correo", "")):
+            err = "Correo inválido"
+        elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
+            err = "Documento duplicado en el sistema"
+        elif db.query(User).filter(User.email == row["correo"]).first():
+            err = "Correo duplicado en el sistema"
+        else:
+            # Verificar límite de licencia sobre la proyección del plan
+            limits = LICENSE_LIMITS.get(institution.license_type, LICENSE_LIMITS["basica"])
+            t_count = db.query(User).filter(
+                User.institution_id == institution.id,
+                User.role == UserRole.PROFESOR.value,
+            ).count()
+            if t_count + valid_count >= limits["teachers"]:
+                err = "Límite de licencia alcanzado"
+
+        if err:
+            errors.append({"row": i, "error": err, "data": row})
+        else:
+            valid_count += 1
+
+    return {
+        "preview": True,
+        "total_valid": valid_count,
+        "total_errors": len(errors),
+        "errors": errors,
+        "message": (
+            f"{valid_count} profesor(es) listos para crear, {len(errors)} con errores. "
+            "Confirma para proceder." if valid_count > 0 else
+            "Ningún registro válido. Corrige el archivo antes de continuar."
+        ),
+    }
+
+
 # ─── Super Profesor: Estudiantes ──────────────────────────────────────────────
 
 @router.get("/super/students")
@@ -741,6 +813,80 @@ async def bulk_create_students(
     )
 
 
+@router.post("/super/students/preview")
+async def preview_bulk_create_students(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    PRE-CARGA masiva de estudiantes: valida el CSV y devuelve un resumen de
+    registros válidos e inválidos SIN crear ningún usuario.
+
+    Uso (flujo en dos pasos):
+      1) POST /super/students/preview → valida y muestra el resumen
+      2) POST /super/students/bulk    → solo si el usuario confirma
+    """
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+
+    content = await file.read()
+    if not content.strip():
+        raise HTTPException(400, "El archivo CSV está vacío")
+
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+    if not reader.fieldnames:
+        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
+
+    required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
+
+    errors = []
+    valid_count = 0
+
+    for i, raw_row in enumerate(reader, start=2):
+        row = _normalize_csv_row(raw_row)
+        if not row or not any((value or "").strip() for value in row.values()):
+            continue
+        missing = required_cols - set(row.keys())
+        if missing:
+            errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
+            continue
+
+        err = None
+        if not row.get("nombre_completo"):
+            err = "Nombre vacío"
+        elif not row.get("numero_documento"):
+            err = "Documento vacío"
+        elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
+            err = "Documento duplicado en el sistema"
+        else:
+            limits = LICENSE_LIMITS.get(institution.license_type, LICENSE_LIMITS["basica"])
+            s_count = db.query(User).filter(
+                User.institution_id == institution.id,
+                User.role == UserRole.ESTUDIANTE.value,
+            ).count()
+            if s_count + valid_count >= limits["students"]:
+                err = "Límite de licencia alcanzado"
+
+        if err:
+            errors.append({"row": i, "error": err, "data": row})
+        else:
+            valid_count += 1
+
+    return {
+        "preview": True,
+        "total_valid": valid_count,
+        "total_errors": len(errors),
+        "errors": errors,
+        "message": (
+            f"{valid_count} estudiante(s) listos para crear, {len(errors)} con errores. "
+            "Confirma para proceder." if valid_count > 0 else
+            "Ningún registro válido. Corrige el archivo antes de continuar."
+        ),
+    }
+
+
 # ─── Uso de licencia ──────────────────────────────────────────────────────────
 
 @router.get("/super/license-usage", response_model=LicenseUsage)
@@ -795,29 +941,7 @@ async def get_license_usage(
     )
 
 
-# ─── Cambio de contraseña ─────────────────────────────────────────────────────
-
-@router.post("/auth/change-password", status_code=200)
-async def change_password(
-    payload: ChangePasswordRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if not verify_password(payload.current_password, current_user.hashed_password):
-        raise HTTPException(400, "La contraseña actual es incorrecta")
-
-    # Validar contraseña nueva
-    pwd = payload.new_password
-    if (len(pwd) < 8 or not re.search(r"[A-Z]", pwd) or
-            not re.search(r"[a-z]", pwd) or not re.search(r"\d", pwd) or
-            not re.search(r"[!@#$%^&*(),.?\":{}|<>]", pwd)):
-        raise HTTPException(
-            400,
-            "La contraseña debe tener al menos 8 caracteres, "
-            "una mayúscula, una minúscula, un número y un carácter especial",
-        )
-
-    current_user.hashed_password = get_password_hash(pwd)
-    current_user.must_change_password = False
-    db.commit()
-    return {"message": "Contraseña actualizada correctamente"}
+# NOTE: El cambio de contraseña (incluido el forzado en primer login) se
+# resuelve en `auth.py` → POST /api/v1/auth/change-password, que es la ruta
+# registrada y usada por el frontend (ForceChangePassword.tsx). Este módulo
+# NO debe redefinir esa ruta, pues quedaría sombreada y duplicaría la lógica.

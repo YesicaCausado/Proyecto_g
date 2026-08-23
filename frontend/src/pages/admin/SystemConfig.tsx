@@ -1,17 +1,16 @@
 /**
  * NeuroLearn AI — Admin: Configuración del Sistema
- * Secciones: Sistema, Seguridad, IA, Límites de Licencia, Cuentas Demo
+ * Secciones: Sistema, Seguridad, IA, Límites de Licencia
  */
 import { useEffect, useState, useRef } from 'react';
 import {
   Settings, RefreshCw, CheckCircle2, AlertTriangle,
-  Server, Shield, Brain, Layers, Users,
-  Eye, EyeOff, Info, Save,
+  Server, Shield, Brain, Layers,
+  Info, Save,
 } from 'lucide-react';
 import api from '../../services/api';
 
 interface AIProvider { name: string; model: string; active: boolean }
-interface DemoAccount { username: string; role: string; password: string }
 interface LicenseLimits {
   basica:  { teachers: number; students: number };
   premium: { teachers: number; students: number };
@@ -34,22 +33,7 @@ interface Config {
   total_users: number;
   active_users: number;
   total_institutions: number;
-  demo_accounts: DemoAccount[];
 }
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'Administrador',
-  super_profesor: 'Super Profesor',
-  profesor: 'Profesor',
-  estudiante: 'Estudiante',
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  admin:          'bg-[#37352F] text-white',
-  super_profesor: 'bg-[#6940A5] text-white',
-  profesor:       'bg-[#0B6E99] text-white',
-  estudiante:     'bg-[#0F7B6C] text-white',
-};
 
 // ── Componente: fila de info ─────────────────────────────────────────────────
 function InfoRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
@@ -99,9 +83,6 @@ export default function SystemConfig() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Visibilidad contraseñas demo
-  const [showPwd, setShowPwd] = useState<Record<string, boolean>>({});
 
   const showNotice = (type: 'ok' | 'err', msg: string) => {
     setNotice({ type, msg });
@@ -363,51 +344,6 @@ export default function SystemConfig() {
           </div>
         </div>
 
-      </div>
-
-      {/* ── Sección: Cuentas Demo ──────────────── */}
-      <div className="bg-white rounded-md border border-[#E9E9E7] shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#E9E9E7] flex items-center gap-2">
-          <Users className="w-4 h-4 text-[#37352F]" />
-          <h2 className="font-semibold text-[#191919] text-sm">Cuentas de Acceso Demo</h2>
-          <span className="text-xs text-[#9B9A97] ml-1">— creadas automáticamente al iniciar el servidor</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
-                <th className="text-left px-5 py-3 font-semibold text-[#37352F]">Usuario</th>
-                <th className="text-left px-5 py-3 font-semibold text-[#37352F]">Rol</th>
-                <th className="text-left px-5 py-3 font-semibold text-[#37352F]">Contraseña</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F3F3F1]">
-              {config?.demo_accounts.map(acc => (
-                <tr key={acc.username} className="hover:bg-[#FAFAFA]">
-                  <td className="px-5 py-3 font-mono font-medium text-[#191919]">{acc.username}</td>
-                  <td className="px-5 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[acc.role] ?? 'bg-[#F7F6F3] text-[#37352F]'}`}>
-                      {ROLE_LABELS[acc.role] ?? acc.role}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm">
-                        {showPwd[acc.username] ? acc.password : '••••••••'}
-                      </span>
-                      <button
-                        onClick={() => setShowPwd(p => ({ ...p, [acc.username]: !p[acc.username] }))}
-                        className="p-1 hover:bg-[#F7F6F3] rounded text-[#9B9A97]"
-                      >
-                        {showPwd[acc.username] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {/* ── Botón Guardar ──────────────────────── */}

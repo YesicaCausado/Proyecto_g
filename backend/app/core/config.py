@@ -43,12 +43,25 @@ class Settings(BaseSettings):
     DOUBT_THRESHOLD: float = 0.6
     MASTERY_THRESHOLD: float = 0.85
 
+    # ── Seguridad ────────────────────────────────────────────────────────────
+    # Orígenes permitidos para CORS. NUNCA incluyas "*" cuando
+    # allow_credentials=True (los navegadores lo rechazan y expone endpoints).
     ALLOWED_ORIGINS: list = [
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:3000",
-        "*",
+        "http://localhost:8000",
     ]
+
+    # Rate limiting (anti fuerza bruta) en endpoints de autenticación.
+    RATE_LIMIT_MAX_REQUESTS: int = 20        # intentos permitidos en la ventana
+    RATE_LIMIT_WINDOW_SECONDS: int = 300     # ventana de tiempo (300 s = 5 min)
+    RATE_LIMIT_LOCKOUT_SECONDS: int = 900    # bloqueo extra tras alcanzar el máximo (15 min)
+
+    # CSRF: como la API usa JWT Bearer (no cookies de sesión), no hay cookie
+    # que secuestrar; este flag activa una validación extra del encabezado
+    # Origin/Referer solo en peticiones de autenticación por seguridad.
+    CSRF_ORIGIN_ENFORCEMENT: bool = os.getenv("CSRF_ORIGIN_ENFORCEMENT", "true").lower() == "true"
 
     class Config:
         env_file = str(_ENV_FILE)

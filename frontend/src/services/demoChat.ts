@@ -1,16 +1,15 @@
 /**
  * demoChat.ts
- * Modo demo: cuando DEMO_MODE = true en AuthContext,
- * el frontend intenta login con demo/demo para obtener JWT real
- * y usar la IA del backend. Solo si eso falla, se usan estas
- * respuestas simuladas locales como último recurso.
+ * Fallback local de respuestas del chatbot para cuando el backend/la IA no
+ * están disponibles. NO contiene credenciales ni autenticación: el login
+ * siempre usa el backend real.
  */
 
 import type { ChatMessageResponse } from "../types";
 
-// DEMO_MODE: true = auto-login como demo, con fallback a mock si no hay backend
-const DEMO_MODE = true;
-export { DEMO_MODE };
+// Nota: el modo demo fue eliminado. Este archivo se conserva únicamente como
+// fallback local de respuestas del chatbot para desarrollo/despliegue sin IA
+// disponible; el login SIEMPRE usa el backend (AuthContext no tiene modo demo).
 
 // ── Respuestas de bienvenida por tema ─────────────────────────────────────────
 const WELCOME: Record<string, string> = {

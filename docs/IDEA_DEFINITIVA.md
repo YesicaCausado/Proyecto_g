@@ -14,7 +14,7 @@
 
 ### 1.1 Subtítulo técnico
 
-> *NeuroLearn AI: Plataforma adaptativa con inferencia neuroconductual digital para las 5 competencias evaluadas en las pruebas Saber 11 (ICFES)*
+> *NeuroLearn AI: Plataforma adaptativa con inferencia neuroconductual digital para las 5 competencias*
 
 ---
 

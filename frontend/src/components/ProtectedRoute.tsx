@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -12,6 +12,7 @@ interface Props {
 
 export default function ProtectedRoute({ children, role, roles }: Props) {
   const { user, loading, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -25,7 +26,20 @@ export default function ProtectedRoute({ children, role, roles }: Props) {
     return <Navigate to="/login" replace />;
   }
 
-  // Admin tiene acceso total
+  // Cualquier usuario con contraseña temporal pendiente DEBE cambiar su
+  // contraseña antes de acceder a los paneles. Este guard se aplica en TODAS
+  // las rutas protegidas (evita que un /super, /teacher o /admin escriba en la
+  // URL para saltarse el primer-login). Se excluye la propia /change-password
+  // para no generar un bucle de redirección.
+  if (
+    user?.must_change_password &&
+    location.pathname !== '/change-password'
+  ) {
+    return <Navigate to="/change-password" replace />;
+  }
+
+  // Admin tiene acceso total a cualquier panel (pero igual pasa por el
+  // cambio de contraseña forzado de arriba si su cuenta lo requiere).
   if (user?.role === 'admin') {
     return <>{children}</>;
   }

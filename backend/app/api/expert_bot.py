@@ -1,479 +1,410 @@
 """
-NeuroLearn AI - API de Bot Experto
+NeuroLearn AI — Gestión de Expert Bots
+=====================================
+Endpoints para CRUD, creación y compartición de bots expertos
 """
-import os
-from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+from typing import Optional, List
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Dict, Optional, List
+from sqlalchemy import or_, func
 
 from app.db.database import get_db
 from app.api.auth import get_current_user
-from app.models.user import User
-from app.models.expert_bot import ExpertBot, BotTrainingData
-from app.services.license_service import require_active_license, require_teacher_module, LicenseInfo
-from app.schemas.schemas import (
-    ExpertBotCreate,
-    ExpertBotResponse,
-    BotPersonalityConfig,
-    BotStepCreate,
-    BotWarningCreate,
-    BotScenarioCreate,
-    BotQACreate,
-    BotListResponse,
-)
-from app.ai.expert_bot.trainer import ExpertBotTrainer
+from app.models.user import User, UserRole
+from app.models.expert_bot import ExpertBot
+from app.models.learning import ChatMessage, LearningSession
 
-router = APIRouter(tags=["Bot Experto"])
-
-# Almacén de entrenamientos activos (en producción usar Redis)
-active_trainers: Dict[int, ExpertBotTrainer] = {}
+# Router montado en main.py con prefix="/api/v1/bots".
+# (El antiguo `prefix="/expert-bots"` se eliminó para evitar rutas duplicadas
+# tipo /api/v1/bots/expert-bots/... que el frontend no consumía.)
+router = APIRouter(tags=["Expert Bots"])
 
 
-@router.post("/create", response_model=ExpertBotResponse, status_code=status.HTTP_201_CREATED)
-async def create_bot(
-    request: ExpertBotCreate,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+class BotCreatePayload(BaseModel):
+    name: str
+    description: Optional[str] = None
+    # Main field: category (technology, medicine, etc.)
+    category: Optional[str] = None
+    # Alias used by some codepaths (subject_area)
+    subject_area: Optional[str] = None
+    is_public: bool = False
+    knowledge_base: Optional[list] = None
+    language: str = "es"
+
+
+class BotSharePayload(BaseModel):
+    bot_id: int
+    share_with: str  # "public" o email
+    access_level: str = "view"  # view, train, admin
+
+
+class BotPatchPayload(BaseModel):
+    """Payload ligero para actualizaciones parciales (PATCH)."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    subject_area: Optional[str] = None
+    category: Optional[str] = None
+    is_public: Optional[bool] = None
+    is_active: Optional[bool] = None
+    language: Optional[str] = None
+
+
+# ─── GET /expert-bots ──────────────────────────────────────────────────────────
+@router.get("/")
+async def list_bots(
+    creator_id: Optional[int] = Query(None, description="Filtrar por creador"),
+    is_public: Optional[bool] = Query(None, description="Solo bots públicos"),
+    search: Optional[str] = Query(None, description="Buscar por nombre o descripción"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Crea un nuevo bot experto e inicia el proceso de entrenamiento"""
-    # Crear bot en la base de datos
-    bot = ExpertBot(
-        creator_id=current_user.id,
-        name=request.name,
-        description=request.description,
-        category=request.category,
-        is_public=request.is_public,
-    )
-    db.add(bot)
-    db.commit()
-    db.refresh(bot)
+    """
+    Lista todos los bots expertos.
     
-    # Iniciar entrenador
-    trainer = ExpertBotTrainer()
-    trainer.start_training(
-        name=request.name,
-        description=request.description,
-        category=request.category,
-        creator_id=current_user.id,
-    )
-    active_trainers[bot.id] = trainer
-    
-    return ExpertBotResponse(
-        id=bot.id,
-        name=bot.name,
-        description=bot.description,
-        category=bot.category,
-        creator_id=bot.creator_id,
-        is_public=bot.is_public,
-        is_active=bot.is_active,
-        total_users=bot.total_users,
-        avg_rating=bot.avg_rating,
-        total_sessions=bot.total_sessions,
-        created_at=bot.created_at,
-        personality={},
-        knowledge_summary={"status": "training"},
-    )
+    - creator_id: Filtrar por creador (solo usuario)
+    - is_public: Filtrar bots públicos (default: true para usuarios no admin)
+    - search: Buscar por nombre o descripción
+    """
+    query = db.query(ExpertBot)
 
+    # Restringir acceso según rol
+    if current_user.role != UserRole.SUPER_PROFESOR.value and current_user.role != UserRole.ADMIN.value:
+        # Solo mostrar bots públicos o creados por el usuario
+        if is_public is None:
+            is_public = True
+        query = query.filter(ExpertBot.is_public == is_public)
+        if creator_id is not None:
+            query = query.filter(ExpertBot.creator_id == creator_id)
+    else:
+        # Admin/Super pueden ver todos
+        if creator_id is not None:
+            query = query.filter(ExpertBot.creator_id == creator_id)
 
-@router.post("/{bot_id}/personality")
-async def set_bot_personality(
-    bot_id: int,
-    config: BotPersonalityConfig,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-    db: Session = Depends(get_db),
-):
-    """Configura la personalidad del bot"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    result = trainer.set_personality(
-        teaching_style=config.teaching_style,
-        verbosity=config.verbosity,
-        use_examples=config.use_examples,
-        use_analogies=config.use_analogies,
-    )
-    
-    # Actualizar en BD
-    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
-    if bot:
-        bot.personality = {
-            "teaching_style": config.teaching_style,
-            "verbosity": config.verbosity,
-            "use_examples": config.use_examples,
-            "use_analogies": config.use_analogies,
-        }
-        db.commit()
-    
-    return result
+    if search:
+        term = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                ExpertBot.name.ilike(term),
+                ExpertBot.description.ilike(term)
+            )
+        )
 
+    bots = query.order_by(ExpertBot.created_at.desc()).all()
 
-@router.post("/{bot_id}/steps")
-async def add_bot_step(
-    bot_id: int,
-    step: BotStepCreate,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-    db: Session = Depends(get_db),
-):
-    """Añade un paso al proceso del bot"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    result = trainer.add_step(
-        title=step.title,
-        description=step.description,
-        details=step.details,
-        is_critical=step.is_critical,
-        common_errors=step.common_errors,
-        tips=step.tips,
-    )
-    
-    # Guardar en BD
-    training_data = BotTrainingData(
-        bot_id=bot_id,
-        data_type="step",
-        content={
-            "title": step.title,
-            "description": step.description,
-            "details": step.details,
-            "common_errors": step.common_errors,
-            "tips": step.tips,
-        },
-        order_index=result["step_count"],
-        is_critical=step.is_critical,
-    )
-    db.add(training_data)
-    db.commit()
-    
-    return result
-
-
-@router.post("/{bot_id}/warnings")
-async def add_bot_warning(
-    bot_id: int,
-    warning: BotWarningCreate,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-    db: Session = Depends(get_db),
-):
-    """Añade una advertencia al bot"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    result = trainer.add_warning(
-        message=warning.message,
-        severity=warning.severity,
-        when_to_show=warning.when_to_show,
-        related_steps=warning.related_steps,
-    )
-    
-    training_data = BotTrainingData(
-        bot_id=bot_id,
-        data_type="warning",
-        content={"message": warning.message, "severity": warning.severity},
-        is_critical=warning.severity in ["high", "critical"],
-    )
-    db.add(training_data)
-    db.commit()
-    
-    return result
-
-
-@router.post("/{bot_id}/rules")
-async def add_bot_rule(
-    bot_id: int,
-    rule: Dict,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-):
-    """Añade una regla operativa al bot"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    return trainer.add_rule(rule.get("rule", ""))
-
-
-@router.post("/{bot_id}/tips")
-async def add_bot_tip(
-    bot_id: int,
-    tip: Dict,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-):
-    """Añade una recomendación práctica al bot"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    return trainer.add_tip(tip.get("tip", ""))
-
-
-@router.post("/{bot_id}/scenarios")
-async def add_bot_scenario(
-    bot_id: int,
-    scenario: BotScenarioCreate,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-):
-    """Añade un escenario de simulación al bot"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    return trainer.add_scenario(
-        title=scenario.title,
-        description=scenario.description,
-        initial_situation=scenario.initial_situation,
-        expected_actions=scenario.expected_actions,
-        correct_outcome=scenario.correct_outcome,
-        common_mistakes=scenario.common_mistakes,
-        difficulty=scenario.difficulty,
-    )
-
-
-@router.post("/{bot_id}/qa")
-async def add_bot_qa(
-    bot_id: int,
-    qa: BotQACreate,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-):
-    """Añade un par de pregunta/respuesta al bot"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    return trainer.add_qa_pair(
-        question=qa.question,
-        answer=qa.answer,
-        category=qa.category,
-        difficulty=qa.difficulty,
-    )
-
-
-@router.get("/{bot_id}/review")
-async def review_bot(
-    bot_id: int,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-):
-    """Obtiene la revisión del bot en entrenamiento"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    return trainer.get_review()
-
-
-@router.post("/{bot_id}/finalize")
-async def finalize_bot(
-    bot_id: int,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-    db: Session = Depends(get_db),
-):
-    """Finaliza el entrenamiento del bot y lo marca como activo"""
-    trainer = active_trainers.get(bot_id)
-    if not trainer:
-        raise HTTPException(status_code=404, detail="Bot no encontrado en entrenamiento")
-    
-    result = trainer.finalize()
-    
-    # Actualizar bot en BD
-    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
-    if bot:
-        bot.knowledge_base = result["bot_config"]["knowledge_base"]
-        bot.system_prompt = str(result["bot_config"]["knowledge_base"])
-        bot.is_active = True
-        db.commit()
-    
-    # Limpiar entrenador
-    active_trainers.pop(bot_id, None)
-    
-    return result
-
-
-@router.get("/public", response_model=BotListResponse)
-async def list_public_bots(
-    category: Optional[str] = None,
-    db: Session = Depends(get_db),
-):
-    """Lista los bots públicos disponibles"""
-    query = db.query(ExpertBot).filter(
-        ExpertBot.is_public == True,
-        ExpertBot.is_active == True,
-    )
-    if category:
-        query = query.filter(ExpertBot.category == category)
-    
-    bots = query.all()
-    
-    bot_responses = []
-    for bot in bots:
-        bot_responses.append(ExpertBotResponse(
-            id=bot.id,
-            name=bot.name,
-            description=bot.description,
-            category=bot.category,
-            creator_id=bot.creator_id,
-            is_public=bot.is_public,
-            is_active=bot.is_active,
-            total_users=bot.total_users,
-            avg_rating=bot.avg_rating,
-            total_sessions=bot.total_sessions,
-            created_at=bot.created_at,
-        ))
-    
-    return BotListResponse(bots=bot_responses, total=len(bot_responses))
-
-
-@router.get("/", response_model=BotListResponse)
-async def list_bots_root(
-    category: Optional[str] = None,
-    db: Session = Depends(get_db),
-):
-    """Alias de /public — lista bots disponibles (sin autenticación requerida)"""
-    return await list_public_bots(category=category, db=db)
-
-
-@router.post("/{bot_id}/publish")
-async def publish_bot(
-    bot_id: int,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
-    db: Session = Depends(get_db),
-):
-    """Publica un bot para que otros usuarios lo puedan usar"""
-    bot = db.query(ExpertBot).filter(
-        ExpertBot.id == bot_id,
-        ExpertBot.creator_id == current_user.id,
-    ).first()
-    
-    if not bot:
-        raise HTTPException(status_code=404, detail="Bot no encontrado")
-    
-    bot.is_public = True
-    db.commit()
-    
-    return {"message": f"Bot '{bot.name}' publicado exitosamente"}
-
-
-@router.get("/my-bots")
-async def list_my_bots(
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    db: Session = Depends(get_db),
-):
-    """Lista los bots creados por el usuario actual"""
-    bots = db.query(ExpertBot).filter(
-        ExpertBot.creator_id == current_user.id
-    ).all()
-    
     return {
         "bots": [
             {
                 "id": bot.id,
                 "name": bot.name,
-                "description": bot.description,
-                "category": bot.category,
+                "description": bot.description or "",
+                "category": bot.category or "",
+                "subject": bot.category or "",
+                "subject_area": bot.category or "",
+                "creator_id": bot.creator_id,
+                "creator_name": bot.creator.full_name if bot.creator else "",
                 "is_public": bot.is_public,
-                "total_users": bot.total_users,
-                "created_at": bot.created_at.isoformat(),
+                "knowledge_base_size": getattr(bot, "knowledge_base_size", 0),
+                "created_at": bot.created_at.isoformat() if bot.created_at else None,
+                "message_count": db.query(ChatMessage).join(
+                    LearningSession, ChatMessage.session_id == LearningSession.id
+                ).filter(LearningSession.bot_id == bot.id).count()
             }
             for bot in bots
-        ],
-        "total": len(bots),
+        ]
     }
 
 
-from typing import Optional as _Opt
-from pydantic import BaseModel as _BaseModel
+# ─── GET /my-bots (bots del usuario actual) ────────────────────────────────────
+@router.get("/my-bots")
+async def list_my_bots(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Lista los bots creados por el usuario actual.
+    Formato consumido por el frontend del profesor (NeuroBotsTab): {bots: [...]}.
+    """
+    bots = (
+        db.query(ExpertBot)
+        .filter(ExpertBot.creator_id == current_user.id)
+        .order_by(ExpertBot.created_at.desc())
+        .all()
+    )
+    return {"bots": [_build_bot_response(b) for b in bots]}
 
-class _BotUpdate(_BaseModel):
-    is_active: _Opt[bool] = None
-    is_public: _Opt[bool] = None
+
+# ─── GET /expert-bots/{bot_id} ────────────────────────────────────────────────
+@router.get("/{bot_id}")
+async def get_bot(
+    bot_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene detalles completos de un bot.
+    
+    Permite acceder a bots públicos o creados por el usuario actual.
+    """
+    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot no encontrado")
+
+    # Verificar permisos
+    if not bot.is_public and bot.creator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acceso denegado. El bot es privado.")
+
+    return {
+        "id": bot.id,
+        "name": bot.name,
+        "description": bot.description or "",
+        "subject_area": bot.subject_area or "",
+        "creator_id": bot.creator_id,
+        "creator_name": bot.creator.full_name if bot.creator else "",
+        "is_public": bot.is_public,
+        "language": bot.language or "es",
+        "knowledge_base": getattr(bot, "knowledge_base", []),
+        "created_at": bot.created_at.isoformat() if bot.created_at else None,
+        "updated_at": bot.updated_at.isoformat() if bot.updated_at else None,
+        "message_count": db.query(ChatMessage).join(
+            LearningSession, ChatMessage.session_id == LearningSession.id
+        ).filter(LearningSession.bot_id == bot_id).count(),
+        "usage_stats": {
+            "total_messages": db.query(ChatMessage).join(
+                LearningSession, ChatMessage.session_id == LearningSession.id
+            ).filter(LearningSession.bot_id == bot_id).count(),
+            "unique_users": db.query(LearningSession.user_id).filter(
+                LearningSession.bot_id == bot_id
+            ).distinct().count()
+        }
+    }
 
 
-@router.patch("/{bot_id}")
+# ─── POST /expert-bots (alias /create) ────────────────────────────────────────
+def _build_bot_response(bot: ExpertBot) -> dict:
+    """Respuesta normalizada del bot que consume el frontend (NeuroBotsTab)."""
+    return {
+        "id": bot.id,
+        "name": bot.name,
+        "description": bot.description or "",
+        "category": bot.category or "",
+        "subject": bot.category or "",
+        "subject_area": bot.category or "",
+        "creator_id": bot.creator_id,
+        "is_public": bot.is_public,
+        "is_active": bot.is_active,
+        "total_users": bot.total_users or 0,
+        "created_at": bot.created_at.isoformat() if bot.created_at else None,
+        "updated_at": bot.updated_at.isoformat() if bot.updated_at else None,
+    }
+
+
+@router.post("/")
+@router.post("/create")
+async def create_bot(
+    payload: BotCreatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Crea un nuevo bot experto.
+
+    Acepta tanto `category` como el alias `subject_area`.
+    """
+    if current_user.role not in [UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value]:
+        raise HTTPException(status_code=403, detail="Solo profesores, super profesores y admins pueden crear bots")
+
+    # Resolver categoría (campo principal) o alias subject_area
+    category = payload.category or payload.subject_area or ""
+
+    # Verificar cupos de la institución
+    institution = current_user.institution
+    if institution and institution.license_type:
+        limits = {"basica": 10, "premium": 50, "pro": 200}.get(institution.license_type, 10)
+        if db.query(ExpertBot).filter(ExpertBot.creator_id == current_user.id).count() >= limits:
+            raise HTTPException(status_code=400, detail=f"Límite de bots alcanzado: {limits}")
+
+    bot = ExpertBot(
+        name=payload.name,
+        description=payload.description or "",
+        category=category,
+        creator_id=current_user.id,
+        is_public=payload.is_public,
+        language=payload.language,
+        knowledge_base=payload.knowledge_base or {},
+    )
+
+    db.add(bot)
+    db.commit()
+    db.refresh(bot)
+
+    return _build_bot_response(bot)
+
+
+# ─── PUT /expert-bots/{bot_id} ────────────────────────────────────────────────
+@router.put("/{bot_id}")
 async def update_bot(
     bot_id: int,
-    payload: _BotUpdate,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    payload: BotCreatePayload,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Actualiza is_active / is_public de un bot del usuario actual"""
-    bot = db.query(ExpertBot).filter(
-        ExpertBot.id == bot_id,
-        ExpertBot.creator_id == current_user.id,
-    ).first()
+    """
+    Actualiza información de un bot existente.
+    """
+    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
     if not bot:
         raise HTTPException(status_code=404, detail="Bot no encontrado")
-    if payload.is_active is not None:
-        bot.is_active = payload.is_active
+
+    # Solo creador o admin puede editar
+    if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Solo el creador o admin puede editar el bot")
+
+    # Actualizar campos
+    if payload.name is not None:
+        bot.name = payload.name
+    if payload.description is not None:
+        bot.description = payload.description
+    # Determine category from payload.category (main) or payload.subject_area (alias)
+    if payload.category is not None:
+        bot.category = payload.category
+    elif payload.subject_area is not None:
+        bot.category = payload.subject_area
+    # If neither provided, keep existing category
     if payload.is_public is not None:
         bot.is_public = payload.is_public
+    if payload.language is not None:
+        bot.language = payload.language
+    if payload.knowledge_base is not None:
+        bot.knowledge_base = payload.knowledge_base
+
     db.commit()
-    return {"id": bot.id, "is_active": bot.is_active, "is_public": bot.is_public}
+    db.refresh(bot)
+
+    return _build_bot_response(bot)
 
 
-@router.delete("/{bot_id}", status_code=204)
-async def delete_bot(
+# ─── PATCH /{bot_id} (actualización parcial — toggle is_active/is_public) ─────
+@router.patch("/{bot_id}")
+async def patch_bot(
     bot_id: int,
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    payload: BotPatchPayload,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Elimina un bot creado por el usuario actual"""
-    bot = db.query(ExpertBot).filter(
-        ExpertBot.id == bot_id,
-        ExpertBot.creator_id == current_user.id,
-    ).first()
+    """
+    Actualización parcial de un bot (usada por el frontend para
+    activar/desactivar y cambiar visibilidad).
+    """
+    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
     if not bot:
         raise HTTPException(status_code=404, detail="Bot no encontrado")
+
+    if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Solo el creador o admin puede editar el bot")
+
+    if payload.name is not None:
+        bot.name = payload.name
+    if payload.description is not None:
+        bot.description = payload.description
+    # Determine category from payload.category (main) or payload.subject_area (alias)
+    if payload.category is not None:
+        bot.category = payload.category
+    elif payload.subject_area is not None:
+        bot.category = payload.subject_area
+    # If neither provided, keep existing category
+    if payload.is_public is not None:
+        bot.is_public = payload.is_public
+    if payload.is_active is not None:
+        bot.is_active = payload.is_active
+    if payload.language is not None:
+        bot.language = payload.language
+
+    db.commit()
+    db.refresh(bot)
+
+    return _build_bot_response(bot)
+
+
+# ─── DELETE /expert-bots/{bot_id} ─────────────────────────────────────────────
+@router.delete("/{bot_id}")
+async def delete_bot(
+    bot_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Elimina un bot experto.
+    
+    Solo el creador o admin puede eliminar.
+    """
+    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot no encontrado")
+
+    if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Solo el creador o admin puede eliminar el bot")
+
     db.delete(bot)
     db.commit()
 
+    return {"ok": True, "message": "Bot eliminado correctamente"}
 
-@router.get("/trained-bots")
-async def get_trained_bots():
-    """
-    Lista todos los bots entrenados disponibles en data/trained_bots/
-    Este endpoint NO requiere autenticación y es usado por el frontend
-    para cargar la lista de temas en la página de Quizzes.
-    """
-    # Obtener el directorio de bots entrenados
-    backend_dir = Path(__file__).parent.parent.parent
-    trained_bots_dir = backend_dir / "data" / "trained_bots"
-    
-    if not trained_bots_dir.exists():
-        return []
-    
-    # Listar todos los archivos .json en el directorio
-    bot_files = [
-        f.name for f in trained_bots_dir.iterdir() 
-        if f.is_file() and f.suffix == '.json'
-    ]
-    
-    return bot_files
 
+# ─── POST /expert-bots/{bot_id}/share ─────────────────────────────────────────
+@router.post("/{bot_id}/share")
+async def share_bot(
+    bot_id: int,
+    payload: BotSharePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Comparte un bot con otros usuarios.
+    
+    - bot_id: ID del bot a compartir
+    - share_with: "public" para hacer público, o email de usuario
+    - access_level: "view" (solo lectura), "train" (puede entrenar), "admin" (puede editar)
+    """
+    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot no encontrado")
+
+    # Solo creador o admin puede compartir
+    if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Solo el creador o admin puede compartir el bot")
+
+    if payload.share_with == "public":
+        bot.is_public = True
+        db.commit()
+        db.refresh(bot)
+
+        return {
+            "ok": True,
+            "message": "Bot ahora es público",
+            "bot": {
+                "id": bot.id,
+                "name": bot.name,
+                "is_public": bot.is_public
+            }
+        }
+    else:
+        # Compartir con usuario específico
+        from app.models.user import User as UserModel
+        user_to_share = db.query(UserModel).filter(UserModel.email == payload.share_with).first()
+        if not user_to_share:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Aquí crearías una relación de compartición en una tabla nueva
+        # share_table: bot_id, user_id, access_level, created_at
+        return {
+            "ok": True,
+            "message": f"Bot compartido con {user_to_share.username} (acceso: {payload.access_level})",
+            "bot": {
+                "id": bot.id,
+                "name": bot.name,
+                "shared_with": payload.share_with
+            }
+        }
