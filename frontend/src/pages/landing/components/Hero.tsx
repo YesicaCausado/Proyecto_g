@@ -30,6 +30,7 @@ import HeroRobot, { type HeroRobotHandle } from './HeroRobot';
 import NeuronField    from './NeuronField';
 import { useHeroMouseParallax } from '../hooks/useHeroMouseParallax';
 import {
+  HERO_AESTHETIC,
   HERO_BRAND,
   HERO_COPY,
   HERO_ROBOT,
@@ -55,6 +56,7 @@ export default function Hero() {
   const sectionRef    = useRef<HTMLElement>(null);
   const bgLightRef    = useRef<HTMLDivElement>(null);
   const bgDarkRef     = useRef<HTMLDivElement>(null);
+  const gridRef       = useRef<HTMLDivElement>(null);
   const glowRef       = useRef<HTMLDivElement>(null);
   const fadeRef       = useRef<HTMLDivElement>(null);
   const robotWrapRef  = useRef<HeroRobotHandle>(null);
@@ -85,6 +87,7 @@ export default function Hero() {
     const scrollHint = scrollHintRef.current;
     const bgLight  = bgLightRef.current;
     const bgDark   = bgDarkRef.current;
+    const grid     = gridRef.current;
     const glow     = glowRef.current;
     const fade     = fadeRef.current;
 
@@ -114,6 +117,7 @@ export default function Hero() {
         opacity: 1,
       });
       gsap.set(contentTargets, { opacity: 1 });
+      gsap.set(nodes?.querySelectorAll('.hero-node') ?? [], { opacity: 1 });
     } else {
       // Punto de partida de la animación de entrada
       gsap.set(contentTargets, { opacity: 0 });
@@ -220,6 +224,12 @@ export default function Hero() {
         scrollTl.to(glow,    { opacity: 0.9, duration: 1.2 }, 0.1);
       }
 
+      // La rejilla técnica se desvanece con el fondo claro (no queda
+      // ningún rastro sobre la zona oscura).
+      if (grid) {
+        scrollTl.to(grid, { opacity: 0, duration: 1 }, 0);
+      }
+
       // El fade inferior inferior se retira conforme oscurece el fondo
       // (evita una mancha blanca sobre la zona oscura).
       if (fade) {
@@ -271,6 +281,27 @@ export default function Hero() {
         className="absolute inset-0 bg-white"
         data-hero="bg-light"
       />
+      {/* Rejilla técnica sutil sobre el fondo claro — textura
+          "blueprint" que evoca instrumentación neurodigital. Se
+          desvanece junto con el fondo en el scroll. */}
+      <div
+        ref={gridRef}
+        className="absolute inset-0 pointer-events-none"
+        aria-hidden="true"
+        data-hero="bg-grid"
+        style={{
+          backgroundImage: [
+            `linear-gradient(to bottom, ${HERO_AESTHETIC.grid.lineH} 1px, transparent 1px)`,
+            `linear-gradient(to right, ${HERO_AESTHETIC.grid.lineV} 1px, transparent 1px)`,
+          ].join(', '),
+          backgroundSize: `${HERO_AESTHETIC.grid.cell}px ${HERO_AESTHETIC.grid.cell}px`,
+          backgroundPosition: 'center top',
+          maskImage: `${HERO_AESTHETIC.gridFadeTop}, ${HERO_AESTHETIC.gridFadeBottom}`,
+          maskComposite: 'intersect',
+          WebkitMaskImage: `${HERO_AESTHETIC.gridFadeTop}, ${HERO_AESTHETIC.gridFadeBottom}`,
+          WebkitMaskComposite: 'source-in',
+        }}
+      />
       <div
         ref={bgDarkRef}
         className="absolute inset-0 text-neutral-100"
@@ -281,13 +312,12 @@ export default function Hero() {
         }}
         data-hero="bg-dark"
       />
-      {/* Glow técnico sobre el fondo oscuro */}
+      {/* Glow técnico sobre el fondo oscuro — neutro, sin tinte */}
       <div
         ref={glowRef}
         className="absolute inset-0 pointer-events-none"
         style={{
-          background:
-            'radial-gradient(40% 40% at 50% 40%, rgba(155,150,247,0.14) 0%, transparent 70%)',
+          background: `radial-gradient(42% 42% at 50% 40%, ${HERO_AESTHETIC.glowDark.center} 0%, ${HERO_AESTHETIC.glowDark.edge} 70%)`,
           opacity: 0,
         }}
         aria-hidden="true"
@@ -311,38 +341,56 @@ export default function Hero() {
       />
 
       {/* ── Campo de nodos sutiles ───────────────────────────── */}
-      <NeuronField />
+      {/* Wrapper que recibe el ref de GSAP (stagger de entrada +
+          dispersión al hacer scroll). NeuronField se mantiene
+          reutilizable y no conoce a GSAP. */}
+      <div
+        ref={nodesRef}
+        className="absolute inset-0"
+        data-hero="nodes"
+        aria-hidden="true"
+      >
+        <NeuronField />
+      </div>
 
       {/* ── Contenido del hero ───────────────────────────────── */}
       <div className="absolute inset-x-0 top-0 z-20 flex flex-col items-center px-6 pt-20 sm:pt-24 text-center"
         style={{ pointerEvents: 'none' }}>
-        {/* Marca */}
-        <div className="flex items-center gap-2 mb-4">
+        {/* Marca — etiqueta técnica editorial con línea lateral */}
+        <div className="mb-5 flex items-center gap-3">
+          <span aria-hidden="true" className="block h-px w-8 sm:w-12"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(10,11,16,0.35))' }} />
           <span
-            className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em]"
-            style={{
-              borderColor: 'rgba(55,53,47,0.18)',
-              color: '#2b2a27',
-              backgroundColor: 'rgba(255,255,255,0.7)',
-            }}
+            className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.32em]"
+            style={{ color: '#3f3e3a' }}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-neutral-900" />
-            NeuroLearn
+            <span className="h-1.5 w-1.5 rounded-full bg-neutral-900" aria-hidden="true" />
+            {HERO_COPY.eyebrow}
           </span>
+          <span aria-hidden="true" className="block h-px w-8 sm:w-12"
+            style={{ background: 'linear-gradient(270deg, transparent, rgba(10,11,16,0.35))' }} />
         </div>
 
         {/* Título principal */}
         <h1
           ref={brandRef}
-          className="font-black uppercase tracking-[0.12em] text-[#0c0d10]"
+          className="font-black uppercase text-[#0c0d10]"
+          data-hero="brand"
           style={{
             fontSize: 'clamp(34px, 6.5vw, 72px)',
             lineHeight: 1,
+            letterSpacing: '0.16em',
             textShadow: '0 2px 24px rgba(255,255,255,0.55)',
           }}
         >
           {HERO_BRAND}
         </h1>
+        {/* Filete fino bajo la marca — detalle técnico premium */}
+        <span
+          aria-hidden="true"
+          className="mt-4 block h-px w-16 sm:w-24"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(10,11,16,0.5), transparent)' }}
+        />
 
         <div className="mt-8 max-w-3xl">
           <h2
@@ -370,18 +418,19 @@ export default function Hero() {
           style={{ pointerEvents: 'auto' }}>
           <a
             href="#patrones"
-            className="hero-cta hero-cta-primary inline-flex items-center gap-2 rounded-full px-7 py-3 text-[15px] font-semibold text-white transition-none"
+            className="hero-cta hero-cta-primary group inline-flex items-center gap-2.5 rounded-full px-7 py-3 text-[15px] font-semibold text-white transition-none"
             style={{ background: '#0c0d10' }}
           >
             {HERO_COPY.ctaPrimary}
-            <span aria-hidden="true">→</span>
+            <span aria-hidden="true" className="hero-cta-arrow">→</span>
           </a>
           <a
             href="#patrones"
-            className="hero-cta hero-cta-secondary inline-flex items-center gap-2 rounded-full border px-7 py-3 text-[15px] font-semibold transition-none"
+            className="hero-cta hero-cta-secondary group inline-flex items-center gap-2.5 rounded-full border px-7 py-3 text-[15px] font-semibold transition-none"
             style={{ borderColor: '#0c0d10', color: '#0c0d10', backgroundColor: 'rgba(255,255,255,0.6)' }}
           >
             {HERO_COPY.ctaSecondary}
+            <span aria-hidden="true" className="hero-cta-arrow opacity-60">↗</span>
           </a>
         </div>
 

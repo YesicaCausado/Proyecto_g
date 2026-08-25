@@ -128,10 +128,21 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   box-shadow: 0 14px 28px rgba(12, 13, 16, 0.22);
 }
 .hero-cta-primary:active { transform: translateY(0); }
+.hero-cta-secondary {
+  border-color: rgba(12, 13, 16, 0.85);
+}
 .hero-cta-secondary:hover {
   transform: translateY(-2px);
   border-color: #000;
+  background-color: rgba(10, 11, 16, 0.04);
 }
+/* La flecha se desplaza y el texto "respira" en hover — detalle vivo */
+.hero-cta-arrow {
+  display: inline-block;
+  transition: transform .35s cubic-bezier(.22, 1, .36, 1);
+}
+.hero-cta:hover .hero-cta-arrow { transform: translateX(4px); }
+.hero-cta-secondary:hover .hero-cta-arrow { transform: translate(3px, -2px); }
 .hero-cta:focus-visible {
   outline: 2px solid #0c0d10;
   outline-offset: 3px;

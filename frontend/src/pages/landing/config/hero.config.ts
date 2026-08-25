@@ -35,10 +35,35 @@ export const HERO_COPY: HeroCopy = {
 // ── Logo / marca ──────────────────────────────────────────────
 export const HERO_BRAND = 'NEUROLEARN';
 
+// ── Estética decorativa del Hero (monocroma) ─────────────────
+// Centraliza las capas visuales no robóticas: la textura de grilla
+// técnica del fondo claro y el glow neutro del fondo oscuro.
+// Mantener aquí los valores estéticos permite afinar sin tocar JSX.
+export const HERO_AESTHETIC = {
+  /** Textura "blueprint" del fondo claro — rejilla fina y muy tenue */
+  grid: {
+    /** Tamaño de celda de la cuadrícula (px) */
+    cell:            76,
+    /** Color de las líneas horizontales */
+    lineH:           'rgba(10,11,16,0.05)',
+    /** Color de las líneas verticales */
+    lineV:           'rgba(10,11,16,0.04)',
+  },
+  /** Resplandor técnico del fondo oscuro (neutro, sin tinte) */
+  glowDark: {
+    center:          'rgba(214,217,224,0.10)',
+    edge:            'rgba(214,217,224,0.00)',
+  },
+  /** Máscara que oculta la grilla bajo el contenido central */
+  gridFadeTop:      'linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,0) 26%)',
+  /** Máscara que oculta la grilla en la base (se funde al hero) */
+  gridFadeBottom:   'linear-gradient(0deg, #ffffff 0%, rgba(255,255,255,0) 30%)',
+} as const;
+
 // ── Neurón (posición / escala / velocidad) ────────────────────
 //
 // El robot real es el `/robot.glb` que ya renderiza `RobotCanvas`.
-// Mujer mover el wrapper DOM (HeroRobot) con GSAP produce el
+// Mover el wrapper DOM (HeroRobot) con GSAP produce el
 // efecto cinematográfico sin tocar el motor 3D existente.
 //
 //   · floatAmplitude  → cuánto sube/baja Neurón en la flotación continua (px)
@@ -308,4 +333,47 @@ export const HERO_RESPONSIVE: HeroResponsive = {
   mobileBreakpoint: 768,
   mobileRobotScale: 0.9,
   mobileTop:        42,
+};
+
+// ── Iluminación MONOCROMÁTICA de Neurón (Hero) ───────────────
+//
+// La escena 3D compartida (RobotLights) ilumina Neurón por defecto
+// con luces azul (#4f8ef7) y violeta (#a78bfa) — heredadas del login.
+// La Landing exige una paleta ESTRICTAMENTE blanca/negra/gris, así que
+// aquí sobrescribimos el preset de iluminación con luces NEUTRAS
+// (blanco/gris), dejando intacta la escena del login.
+//
+// Estructura: LightingPresetMap de RobotLights, indexada por RobotState
+// ("idle" es el estado que usa el Hero).
+// ─────────────────────────────────────────────────────────────
+import type { LightingPreset } from '../../auth/components/robot/RobotLights';
+
+export interface MonochromeLighting {
+  /** Intensidad global aplicada a todas las luces (ajusta brillo) */
+  intensityScale: number;
+  /** Mediante qué presets de post-procesado se suaviza/baja el bloom */
+  enableBloom:    boolean;
+  /**
+   * Preset de iluminación listo para inyectar en RobotCanvas
+   * (lightingPresets). Monocromo: punto-luces blancas/grises.
+   */
+  preset:         { idle: LightingPreset };
+}
+
+export const HERO_LIGHTING: MonochromeLighting = {
+  intensityScale: 1,
+  enableBloom:    true,
+  preset: {
+    idle: {
+      ambient:     { color: '#ffffff', intensity: 0.55 },
+      directional: { color: '#ffffff', intensity: 1.1, position: [3, 5, 3], castShadow: true },
+      pointLights: [
+        // Relleno neutro cálido-frío → luz blanca pura, sin tinte
+        { color: '#ffffff', intensity: 0.9,  position: [-3, 2, 2], distance: 12, decay: 2 },
+        { color: '#d9d9d9', intensity: 0.7,  position: [3, 1, 1],  distance: 12, decay: 2 },
+        // Una luz gris central para modelar el volumen del robot
+        { color: '#f2f2f2', intensity: 0.5,  position: [0, -1, 3], distance: 12, decay: 2 },
+      ],
+    },
+  },
 };

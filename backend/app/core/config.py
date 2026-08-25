@@ -54,6 +54,7 @@ class Settings(BaseSettings):
         "http://localhost:5174",
         "http://localhost:3000",
         "http://localhost:8000",
+        "https://neurolearnym.vercel.app",
     ]
 
     # Rate limiting (anti fuerza bruta) en endpoints de autenticación.

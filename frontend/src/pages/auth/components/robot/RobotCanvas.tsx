@@ -16,7 +16,9 @@ import type { AnimationClip } from 'three';
 import { CAMERA_CONFIG, CANVAS_CONFIG, ROBOT_TRANSFORM } from './RobotConfig';
 import type { RobotState }  from './RobotStates';
 import RobotLights          from './RobotLights';
+import type { LightingPresetMap } from './RobotLights';
 import RobotEffects         from './RobotEffects';
+import type { EffectsPresetMap } from './RobotEffects';
 import RobotGeometric       from './RobotGeometric';
 import RobotAnimatedScene   from './RobotAnimatedScene';
 import { useRobotContextSafe } from '../../../../context/RobotContext';
@@ -30,16 +32,32 @@ export interface RobotCanvasProps {
   /** Si true, el canvas renderiza con fondo transparente (útil en banners con gradiente) */
   transparent?:  boolean;
   onSceneReady?: () => void;
+  /**
+   * Presets de iluminación para sobrescribir el DEFAULT de RobotConfig,
+   * indexados por RobotState. Opcional y 100% compatible hacia atrás:
+   * si se omite, las escenas existentes (login, welcome) conservan su
+   * iluminación azul/violeta actual.
+   */
+  lightingPresets?: LightingPresetMap;
+  /** Presets de post-procesado (Bloom/Vignette/Noise), indexados por estado. */
+  effectsPresets?:  EffectsPresetMap;
 }
 
 // ── Componente interno de la escena ──────────────────────────
 
 interface SceneContentProps {
-  robotState:    RobotState;
-  onModelLoaded: (clips: AnimationClip[]) => void;
+  robotState:        RobotState;
+  onModelLoaded:     (clips: AnimationClip[]) => void;
+  lightingPresets?:  LightingPresetMap;
+  effectsPresets?:   EffectsPresetMap;
 }
 
-function SceneContent({ robotState, onModelLoaded }: SceneContentProps) {
+function SceneContent({
+  robotState,
+  onModelLoaded,
+  lightingPresets,
+  effectsPresets,
+}: SceneContentProps) {
   return (
     <>
       <PerspectiveCamera
@@ -51,7 +69,7 @@ function SceneContent({ robotState, onModelLoaded }: SceneContentProps) {
         lookAt={CAMERA_CONFIG.lookAt as unknown as [number, number, number]}
       />
 
-      <RobotLights robotState={robotState} />
+      <RobotLights robotState={robotState} presetOverrides={lightingPresets} />
 
       <Environment
         preset="city"
@@ -76,7 +94,7 @@ function SceneContent({ robotState, onModelLoaded }: SceneContentProps) {
         />
       </Suspense>
 
-      <RobotEffects robotState={robotState} />
+      <RobotEffects robotState={robotState} presets={effectsPresets} />
     </>
   );
 }
@@ -85,10 +103,12 @@ function SceneContent({ robotState, onModelLoaded }: SceneContentProps) {
 
 export default function RobotCanvas({
   robotState: robotStateProp,
-  className    = '',
-  enabled      = true,
-  transparent  = false,
+  className     = '',
+  enabled       = true,
+  transparent   = false,
   onSceneReady,
+  lightingPresets,
+  effectsPresets,
 }: RobotCanvasProps) {
   const robotCtx   = useRobotContextSafe();
   const robotState: RobotState = robotStateProp ?? robotCtx?.state ?? 'idle';
@@ -129,6 +149,8 @@ export default function RobotCanvas({
         <SceneContent
           robotState={robotState}
           onModelLoaded={handleModelLoaded}
+          lightingPresets={lightingPresets}
+          effectsPresets={effectsPresets}
         />
       </Canvas>
     </div>

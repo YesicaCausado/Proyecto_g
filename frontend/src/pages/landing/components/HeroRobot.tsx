@@ -17,10 +17,15 @@
  * Neurón se reutiliza por completo: RobotCanvas (robotState="idle")
  * renderiza el /robot.glb real con su motor de respiración,
  * parpadeo y mirada al usuario — seguimos sin tocar ese motor.
+ *
+ * Palette: se inyecta HERO_LIGHTING.preset (luces blancas/grises)
+ * para que Neurón mantenga la estética estrictamente monocroma del
+ * Hero, sin alterar la escena azul/violeta del login.
  * ─────────────────────────────────────────────────────────────
  */
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import RobotCanvas from '../../auth/components/robot/RobotCanvas';
+import { HERO_LIGHTING } from '../config/hero.config';
 
 export interface HeroRobotHandle {
   /** Contenedor externo — lo anima GSAP en entrada / scroll / mouse */
@@ -70,6 +75,7 @@ const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
             robotState="idle"
             transparent
             className="w-full h-full"
+            lightingPresets={HERO_LIGHTING.preset}
           />
         </div>
       </div>
