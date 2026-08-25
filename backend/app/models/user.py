@@ -1,7 +1,7 @@
 """
 NeuroLearn AI - Modelo de Usuario
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, JSON, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.database import Base
@@ -26,6 +26,7 @@ class User(Base):
     role = Column(String(20), default=UserRole.ESTUDIANTE.value, nullable=False)
     is_active = Column(Boolean, default=True)
     is_expert = Column(Boolean, default=False)
+    photo = Column(Text, nullable=True)  # avatar del usuario (data URL base64)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)

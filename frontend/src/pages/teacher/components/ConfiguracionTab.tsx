@@ -17,11 +17,12 @@ export default function ConfiguracionTab({ user }: Props) {
   const { updateUser } = useAuth();
   const { licenseInfo } = useLicense();
   const [tab,         setTab]         = useState<'perfil' | 'seguridad' | 'notificaciones'>('perfil');
-  const [avatarPrev,  setAvatarPrev]  = useState<string | null>(null);
+  const [avatarPrev,  setAvatarPrev]  = useState<string | null>(user?.photo ?? null);
   const [profileForm, setProfileForm] = useState({ name: user?.full_name || '', email: user?.email || '', lang: LANGUAGES[0] });
   const [passwords,   setPasswords]   = useState({ current:'', next:'', confirm:'' });
   const [showPwd,     setShowPwd]     = useState(false);
   const [saved,       setSaved]       = useState(false);
+  const [saveError,   setSaveError]   = useState('');
   type NotificationPrefs = {
     nuevaTarea: boolean;
     nuevaAlerta: boolean;
@@ -50,32 +51,93 @@ export default function ConfiguracionTab({ user }: Props) {
     const nextName = user?.full_name || '';
     const nextEmail = user?.email || '';
     setProfileForm(prev => ({ ...prev, name: nextName || prev.name, email: nextEmail || prev.email }));
-  }, [user?.full_name, user?.email]);
+    // Sincroniza la foto guardada con el usuario global (persistencia al recargar)
+    if (user?.photo) setAvatarPrev(user.photo);
+  }, [user?.full_name, user?.email, user?.photo]);
 
-  const handleAvatarChange = (files: FileList | null) => {
+  /**
+   * Redimensiona y comprime una imagen a data URL para mantener el tamaño
+   * por debajo del límite del backend (3 MB). Sin esto, una foto normal de
+   * cámara supera el límite y el guardado falla silenciosamente.
+   */
+  const compressImage = (file: File, maxDim = 512, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          URL.revokeObjectURL(url);
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('No se pudo procesar la imagen')); return; }
+          ctx.fillStyle = '#ffffff'; // fondo blanco para PNG transparentes
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          let out = canvas.toDataURL('image/jpeg', quality);
+          // Si aún excede el límite, baja más la calidad/redimensión
+          if (out.length > 3_000_000 && scale > 0.6) {
+            out = canvas.toDataURL('image/jpeg', 0.6);
+          }
+          if (out.length > 3_000_000) {
+            const s2 = Math.min(480, w, h);
+            canvas.width = s2;
+            canvas.height = s2;
+            const ctx2 = canvas.getContext('2d');
+            if (ctx2) {
+              ctx2.drawImage(img, 0, 0, s2, s2);
+              out = canvas.toDataURL('image/jpeg', 0.6);
+            }
+          }
+          resolve(out);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
+      img.src = url;
+    });
+  };
+
+  const handleAvatarChange = async (files: FileList | null) => {
     const f = files?.[0];
     if (!f) return;
-    const r = new FileReader();
-    r.onload = ev => setAvatarPrev(ev.target?.result as string);
-    r.readAsDataURL(f);
+    try {
+      const dataUrl = await compressImage(f);
+      setAvatarPrev(dataUrl);
+    } catch {
+      setAvatarPrev(null);
+    }
   };
 
   const handleSaveProfile = async () => {
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         full_name: profileForm.name.trim(),
         email: profileForm.email.trim(),
       };
-      await api.patch('/auth/me', payload);
+      // Solo envía la foto si el usuario seleccionó/cambió una imagen
+      if (avatarPrev && avatarPrev !== user?.photo) {
+        payload.photo = avatarPrev;
+      }
+      const { data: savedUser } = await api.patch('/auth/me', payload);
       updateUser({
         ...user,
         full_name: payload.full_name || user?.full_name || '',
         email: payload.email || user?.email || '',
+        photo: savedUser?.photo ?? user?.photo ?? avatarPrev,
       });
       setSaved(true);
+      setSaveError('');
       setTimeout(() => setSaved(false), 2500);
-    } catch {
+    } catch (e: any) {
       setSaved(false);
+      // Muestra el motivo por el que no se guardó (p.ej. imagen demasiado grande)
+      setSaveError(e?.response?.data?.detail || 'No se pudo guardar. Inténtalo de nuevo.');
     }
   };
 
@@ -181,6 +243,9 @@ export default function ConfiguracionTab({ user }: Props) {
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm ${saved ? 'bg-[#0F7B6C] text-white' : 'bg-[#2E6FDB] text-white hover:bg-[#255DC0]'}`}>
             {saved ? <><CheckCircle className="w-4 h-4" /> Guardado</> : 'Guardar cambios'}
           </button>
+          {saveError && (
+            <p className="text-xs text-[#E03E3E]">⚠ {saveError}</p>
+          )}
         </div>
       )}
 

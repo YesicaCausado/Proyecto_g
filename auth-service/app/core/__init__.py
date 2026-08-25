@@ -1,1 +1,0 @@
-"""Core - Auth Service"""

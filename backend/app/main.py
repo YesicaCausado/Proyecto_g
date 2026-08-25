@@ -33,10 +33,12 @@ from app.api import teacher_stats            # Teacher dashboard stats
 from app.api import teacher_materials        # Teacher materials (carpetas + archivos)
 from app.api import teacher_evaluations      # Teacher evaluations (evaluaciones)
 from app.api import teacher_reports          # Teacher reports (export PDF/CSV)
+from app.api import teacher_ai               # Teacher IA Generativa (contenido)
 from app.api import license                  # License system
 from app.api import admin_users              # Admin: gestión de usuarios
 from app.api import notifications            # Sistema de notificaciones
 from app.api import admin_bots               # Admin: moderación de bots
+from app.api import integrations            # Integraciones y Automatizaciones (Docente Pro)
 
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
@@ -48,6 +50,7 @@ import app.models.posts         # noqa: F401
 import app.models.events        # noqa: F401
 import app.models.messages      # noqa: F401
 import app.models.password_reset            # noqa: F401 — PasswordResetToken
+import app.models.integration               # noqa: F401 — Integrations/Automations tables
 import app.api.teacher_materials            # noqa: F401 — registers TeacherFolder + TeacherMaterial
 import app.api.teacher_evaluations          # noqa: F401 — registers TeacherEvaluation
 
@@ -69,135 +72,6 @@ try:
 except Exception as e:
     import logging
     logging.getLogger(__name__).error(f"⚠️ Error en migraciones B2B: {e}")
-
-# ─── Usuario demo (DEMO_MODE del frontend) ────────────────────────────────────
-def _ensure_demo_user():
-    """Crea los usuarios demo (estudiante y admin) si no existen."""
-    from app.db.database import SessionLocal
-    from app.models.user import User, UserRole
-    from passlib.context import CryptContext
-    try:
-        db = SessionLocal()
-        try:
-            pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-            
-            # 1. Usuario Demo Estudiante
-            if not db.query(User).filter(User.username == "demo").first():
-                user_std = User(
-                    username="demo",
-                    email="demo@neurolearn.app",
-                    full_name="Usuario Demo",
-                    hashed_password=pwd.hash("demo"),
-                    role=UserRole.ESTUDIANTE,
-                    is_active=True,
-                )
-                db.add(user_std)
-                import logging
-                logging.getLogger(__name__).info("✅ Usuario demo creado: demo / demo1234")
-            
-            # 2. Usuario Admin (para el nuevo panel administrativo)
-            if not db.query(User).filter(User.username == "admin").first():
-                user_adm = User(
-                    username="admin",
-                    email="admin@neurolearn.app",
-                    full_name="Administrador Sistema",
-                    hashed_password=pwd.hash("admin1234"),
-                    role=UserRole.ADMIN,
-                    is_active=True,
-                )
-                db.add(user_adm)
-                import logging
-                logging.getLogger(__name__).info("✅ Usuario admin creado: admin / admin1234")
-
-            # 3. Usuario Profesor demo
-            if not db.query(User).filter(User.username == "profesor").first():
-                user_prof = User(
-                    username="profesor",
-                    email="profesor@neurolearn.app",
-                    full_name="Profesor Demo",
-                    hashed_password=pwd.hash("profesor"),
-                    role=UserRole.PROFESOR,
-                    is_active=True,
-                )
-                db.add(user_prof)
-                import logging
-                logging.getLogger(__name__).info("✅ Usuario profesor creado: profesor / profesor")
-
-            # 4. Usuario Super Profesor demo
-            if not db.query(User).filter(User.username == "superprofesor").first():
-                user_sp = User(
-                    username="superprofesor",
-                    email="superprofesor@neurolearn.app",
-                    full_name="Super Profesor Demo",
-                    hashed_password=pwd.hash("superprofesor"),
-                    role=UserRole.SUPER_PROFESOR,
-                    is_active=True,
-                )
-                db.add(user_sp)
-                import logging
-                logging.getLogger(__name__).info("✅ Usuario superprofesor creado: superprofesor / superprofesor")
-            
-            db.commit()
-        finally:
-            db.close()
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"⚠️ No se pudo crear usuarios demo (sin DB o error): {e}")
-
-def _ensure_demo_institution():
-    """
-    Crea la institución demo y asigna institution_id a los usuarios
-    super_profesor / profesor que no tengan ninguna institución asignada.
-    Idempotente: se puede ejecutar múltiples veces sin efectos secundarios.
-    """
-    from app.db.database import SessionLocal
-    from app.models.user import User, UserRole
-    from app.models.institution import Institution
-    import logging
-    log = logging.getLogger(__name__)
-    try:
-        db = SessionLocal()
-        try:
-            # 1. Crear institución demo si no existe
-            inst = db.query(Institution).filter(Institution.dane_code == "DEMO0001").first()
-            if not inst:
-                inst = Institution(
-                    name="Institución Demo NeuroLearn",
-                    dane_code="DEMO0001",
-                    license_type="basica",
-                    is_active=True,
-                )
-                db.add(inst)
-                db.flush()
-                log.info(f"✅ Institución demo creada: id={inst.id}")
-            else:
-                if inst.license_type != "basica":
-                    inst.license_type = "basica"
-                    log.info(f"ℹ️ Institución demo actualizada a licencia basica: id={inst.id}")
-
-            # 2. Asignar a todos los super_profesor / profesor sin institución
-            for username in ("superprofesor", "profesor"):
-                u = db.query(User).filter(User.username == username).first()
-                if u and not u.institution_id:
-                    u.institution_id = inst.id
-                    log.info(f"✅ {username}.institution_id = {inst.id}")
-
-            db.commit()
-        finally:
-            db.close()
-    except Exception as e:
-        import logging as _log
-        _log.getLogger(__name__).warning(f"⚠️ No se pudo crear institución demo: {e}")
-
-try:
-    _ensure_demo_user()
-except Exception:
-    pass
-
-try:
-    _ensure_demo_institution()
-except Exception:
-    pass
 
 # Crear aplicación
 app = FastAPI(
@@ -241,11 +115,13 @@ app.include_router(super_stats.router,         prefix="/api/v1")
 app.include_router(teacher_stats.router,       prefix="/api/v1")
 app.include_router(teacher_materials.router,   prefix="/api/v1")
 app.include_router(teacher_evaluations.router, prefix="/api/v1")
+app.include_router(teacher_ai.router,          prefix="/api/v1")
 app.include_router(teacher_reports.router,     prefix="/api/v1")
 app.include_router(license.router,             prefix="/api/v1")
 app.include_router(admin_users.router,         prefix="/api/v1")
 app.include_router(notifications.router,       prefix="/api/v1")
 app.include_router(admin_bots.router,          prefix="/api/v1")
+app.include_router(integrations.router,        prefix="/api/v1")
 
 
 @app.get("/")

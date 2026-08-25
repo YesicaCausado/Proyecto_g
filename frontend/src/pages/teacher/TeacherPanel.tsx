@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLicense } from '../../context/LicenseContext';
 import api from '../../services/api';
@@ -14,13 +14,17 @@ import MaterialesTab     from './components/MaterialesTab';
 import MensajesTab       from './components/MensajesTab';
 import CalendarioTab     from './components/CalendarioTab';
 import ConfiguracionTab  from './components/ConfiguracionTab';
+import AnaliticaTab      from './components/AnaliticaTab';
+import IAGenerativaTab   from './components/IAGenerativaTab';
+import IntegracionesTab     from './components/IntegracionesTab';
+import AutomatizacionesTab  from './components/AutomatizacionesTab';
 import LicenseBanner     from '../../components/LicenseBanner';
 import SuspendedScreen   from '../../components/SuspendedScreen';
 
 import {
   LayoutDashboard, BookOpen, Bot, BrainCircuit, LayoutList,
   ClipboardList, FolderOpen, MessageSquare, Calendar,
-  Settings, LogOut, Bell, ChevronRight, Brain, Zap, Menu, X,
+  Settings, LogOut, Bell, ChevronRight, Zap, Menu, X,
   BarChart2, FlaskConical, Link2, Cpu,
 } from 'lucide-react';
 
@@ -138,6 +142,7 @@ export default function TeacherPanel() {
   const { user, logout } = useAuth();
   const { licenseInfo, licenseStatus, licenseType, hasTeacherModule } = useLicense();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('dashboard');
   const info = licenseInfo ?? {
     license_type: 'basica' as const,
@@ -186,6 +191,18 @@ export default function TeacherPanel() {
       .catch(() => {});
   }, []);
 
+  // Tras el callback de OAuth de Google el backend redirige a /teacher?integration=...&integration_ok=1
+  // → abrir directamente la pestaña Integraciones para mostrar el estado "Conectado".
+  useEffect(() => {
+    const ok = searchParams.get('integration_ok');
+    const provider = searchParams.get('integration');
+    if (ok === '1' && provider) {
+      setActiveTab('integraciones');
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogout = () => { logout(); navigate('/login'); };
   const meta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
   const planStyle = PLAN_COLORS[(licenseType as LicensePlan)] ?? PLAN_COLORS['basica'];
@@ -232,17 +249,17 @@ export default function TeacherPanel() {
       {/* Logo + usuario */}
       <div className="px-3 pt-4 pb-3 border-b border-[#E9E9E7]">
         <div className="flex items-center gap-2 mb-4 px-1">
-          <div className="w-6 h-6 bg-[#2E6FDB] rounded-md flex items-center justify-center flex-shrink-0">
-            <Brain className="w-3.5 h-3.5 text-white" />
-          </div>
+          <img src="/2d.png" alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white flex-shrink-0" />
           <div>
             <p className="text-[13px] font-bold text-[#191919] leading-tight">NeuroLearn</p>
             <p className="text-[10px] text-[#787774]">Panel Docente</p>
           </div>
         </div>
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-[#EBEBEA] cursor-pointer transition-colors">
-          <div className="w-7 h-7 rounded-md bg-[#2E6FDB] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
-            {(user?.full_name || 'P').charAt(0).toUpperCase()}
+          <div className="w-7 h-7 rounded-md bg-[#2E6FDB] text-white flex items-center justify-center font-bold text-xs flex-shrink-0 overflow-hidden">
+            {user?.photo
+              ? <img src={user.photo} alt="foto de perfil" className="w-full h-full object-cover" />
+              : (user?.full_name || 'P').charAt(0).toUpperCase()}
           </div>
           <div className="overflow-hidden flex-1">
             <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">
@@ -301,9 +318,7 @@ export default function TeacherPanel() {
       {/* ══ MOBILE HEADER ════════════════════════════════════════════════════ */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-12 bg-[#F7F6F3] border-b border-[#E9E9E7] flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-[#2E6FDB] rounded-md flex items-center justify-center">
-            <Brain className="w-3.5 h-3.5 text-white" />
-          </div>
+          <img src="/2d.png" alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white" />
           <span className="text-[13px] font-bold text-[#191919]">NeuroLearn</span>
           <span className="text-[10px] text-[#787774] ml-1">Docente</span>
         </div>
@@ -370,6 +385,10 @@ export default function TeacherPanel() {
             {activeTab === 'mensajes'     && <MensajesTab />}
             {activeTab === 'calendario'   && <CalendarioTab />}
             {activeTab === 'configuracion'&& <ConfiguracionTab user={user} />}
+            {activeTab === 'analitica'   && <AnaliticaTab onNavigate={setActiveTab} />}
+            {activeTab === 'ia'          && <IAGenerativaTab />}
+            {activeTab === 'integraciones'    && <IntegracionesTab onNavigate={setActiveTab} />}
+            {activeTab === 'automatizaciones' && <AutomatizacionesTab onNavigate={setActiveTab} />}
 
           </div>
         </main>

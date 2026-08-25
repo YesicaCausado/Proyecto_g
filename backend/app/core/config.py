@@ -33,9 +33,12 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
-    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    # openai/gpt-oss-120b en Groq NO razona: genera JSON estructurado completo
+    # y válido sin truncar (los modelos "qwen3" razonadores agotan los tokens
+    # de salida en su bloque "thinking" y devuelven JSON incompleto → vacío).
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
     COGNITIVE_ANALYSIS_WINDOW: int = 30
     FATIGUE_THRESHOLD: float = 0.7
@@ -62,6 +65,26 @@ class Settings(BaseSettings):
     # que secuestrar; este flag activa una validación extra del encabezado
     # Origin/Referer solo en peticiones de autenticación por seguridad.
     CSRF_ORIGIN_ENFORCEMENT: bool = os.getenv("CSRF_ORIGIN_ENFORCEMENT", "true").lower() == "true"
+
+    # ── Google OAuth 2.0 (Integraciones) ──────────────────────────────────
+    # Credenciales de la app OAuth (Google Cloud Console). Nunca en frontend.
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    # URL de callback registrada en Google (apunta al backend).
+    GOOGLE_REDIRECT_URI: str = os.getenv(
+        "GOOGLE_REDIRECT_URI",
+        "http://localhost:8000/api/v1/integrations/google/callback",
+    )
+    # Alcances mínimos para Drive + Calendar.
+    GOOGLE_SCOPES: str = os.getenv(
+        "GOOGLE_SCOPES",
+        "https://www.googleapis.com/auth/drive.readonly "
+        "https://www.googleapis.com/auth/calendar.events "
+        "https://www.googleapis.com/auth/calendar.readonly "
+        "openid",
+    )
+    # Origen del frontend al que se redirige tras terminar el flujo OAuth.
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
     class Config:
         env_file = str(_ENV_FILE)

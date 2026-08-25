@@ -14,13 +14,14 @@ interface LoginEntry {
 export default function SeguridadTab() {
   const [sessions, setSessions]           = useState<ActiveSession[]>([]);
   const [loginHistory, setLoginHistory]   = useState<LoginEntry[]>([]);
-  const [twoFAEnabled, setTwoFAEnabled]   = useState(false);
+  const twoFAEnabled                      = false;
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [pwForm, setPwForm]               = useState({ current: '', newPw: '', confirm: '' });
   const [showCurrent, setShowCurrent]     = useState(false);
   const [showNew, setShowNew]             = useState(false);
   const [pwSuccess, setPwSuccess]         = useState('');
   const [pwError, setPwError]             = useState('');
+  const [pwLoading, setPwLoading]         = useState(false);
 
   useEffect(() => {
     api.get('/super/stats/security')
@@ -52,27 +53,37 @@ export default function SeguridadTab() {
       .catch(() => { setSessions([]); setLoginHistory([]); });
   }, []);
 
-  const revokeSession = (id: number) => {
-    if (window.confirm('¿Cerrar esta sesión en el dispositivo remoto?')) {
-      setSessions(prev => prev.filter(s => s.id !== id));
-    }
+  const revokeSession = (_id: number) => {
+    // No existe endpoint que revoque una sesión remota; se notifica en vez de
+    // fingir un cierre que no se persiste en el servidor.
+    window.alert('No se puede cerrar la sesión de forma remota: esta acción aún no está disponible en el servidor.');
   };
 
   const revokeAllSessions = () => {
-    if (window.confirm('¿Cerrar TODAS las sesiones excepto la actual? Todos los dispositivos deberán iniciar sesión nuevamente.')) {
-      setSessions(prev => prev.filter(s => s.current));
-    }
+    window.alert('No se pueden cerrar las demás sesiones: esta acción aún no está disponible en el servidor.');
   };
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (!pwForm.current || !pwForm.newPw || !pwForm.confirm) { setPwError('Completa todos los campos.'); return; }
     if (pwForm.newPw.length < 8) { setPwError('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
     if (pwForm.newPw !== pwForm.confirm) { setPwError('Las contraseñas no coinciden.'); return; }
     setPwError('');
-    setPwSuccess('¡Contraseña actualizada exitosamente!');
-    setPwForm({ current: '', newPw: '', confirm: '' });
-    setShowPasswordForm(false);
-    setTimeout(() => setPwSuccess(''), 4000);
+    setPwLoading(true);
+    try {
+      await api.post('/auth/change-password', {
+        current_password: pwForm.current,
+        new_password: pwForm.newPw,
+      });
+      setPwSuccess('¡Contraseña actualizada exitosamente!');
+      setPwForm({ current: '', newPw: '', confirm: '' });
+      setShowPasswordForm(false);
+      setTimeout(() => setPwSuccess(''), 4000);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'No se pudo actualizar la contraseña.';
+      setPwError(msg);
+    } finally {
+      setPwLoading(false);
+    }
   };
 
   const passwordStrength = (pw: string) => {
@@ -147,7 +158,7 @@ export default function SeguridadTab() {
           </button>
         </div>
         {!showPasswordForm ? (
-          <p className="text-sm text-[#787774]">Última actualización: <span className="text-[#37352F] font-medium">hace 45 días</span></p>
+          <p className="text-sm text-[#787774]">Última actualización: <span className="text-[#37352F] font-medium">—</span></p>
         ) : (
           <div className="space-y-4 max-w-sm">
             {pwError && (
@@ -186,9 +197,9 @@ export default function SeguridadTab() {
                 <p className="text-xs text-[#787774]">{strengthLabels[strength-1] ?? 'Ingresa una contraseña'}</p>
               </div>
             )}
-            <button onClick={handleChangePassword}
-              className="w-full py-2.5 bg-[#6940A5] text-white text-sm font-medium rounded-md hover:bg-[#5A358F] transition-colors">
-              Guardar nueva contraseña
+            <button onClick={handleChangePassword} disabled={pwLoading}
+              className={`w-full py-2.5 bg-[#6940A5] text-white text-sm font-medium rounded-md hover:bg-[#5A358F] transition-colors ${pwLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
+              {pwLoading ? 'Guardando…' : 'Guardar nueva contraseña'}
             </button>
           </div>
         )}
@@ -204,12 +215,14 @@ export default function SeguridadTab() {
             <div>
               <h3 className="font-semibold text-[#191919]">Autenticación en dos pasos (2FA)</h3>
               <p className="text-xs text-[#787774] mt-0.5">Agrega una capa adicional de seguridad con una app como Google Authenticator.</p>
-              {twoFAEnabled && <p className="text-xs text-[#0F7B6C] font-medium mt-1 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Activo y configurado</p>}
+              <p className="text-xs text-[#787774] mt-1 flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Aún no disponible en esta versión.
+              </p>
             </div>
           </div>
           <button
-            onClick={() => setTwoFAEnabled(v => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${twoFAEnabled ? 'bg-[#0F7B6C]' : 'bg-[#E9E9E7]'}`}
+            disabled
+            className={`relative inline-flex h-6 w-11 items-center rounded-full opacity-40 cursor-not-allowed ${twoFAEnabled ? 'bg-[#0F7B6C]' : 'bg-[#E9E9E7]'}`}
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${twoFAEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>

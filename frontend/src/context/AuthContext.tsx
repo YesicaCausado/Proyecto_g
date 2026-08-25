@@ -65,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role:                 (tokenData.role ?? 'estudiante') as User['role'],
       is_active:            tokenData.is_active ?? true,
       is_expert:            tokenData.is_expert ?? false,
+      photo:                tokenData.photo ?? null,
       created_at:           tokenData.created_at ?? new Date().toISOString(),
       cognitive_profile:    tokenData.cognitive_profile ?? null,
       must_change_password: tokenData.must_change_password ?? false,

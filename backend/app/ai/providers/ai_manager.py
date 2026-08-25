@@ -1,11 +1,10 @@
 """
 NeuroLearn AI - Gestor de Proveedores de IA
 
-Cadena de fallback ($0 de costo):
-1. Groq qwen/qwen3-32b       →  6,000 TPM  (mejor calidad)
-2. Groq llama-3.1-8b-instant → 20,000 TPM  (respaldo rápido, misma key)
-3. Google Gemini              →  1,500 req/día gratis
-4. Local                      → Templates + JSON curado (siempre funciona)
+Cadena de fallback (sin costo):
+1. Groq openai/gpt-oss-120b  →  modelo chat principal de Groq Cloud (JSON estable)
+2. Google Gemini gemini-3.6-flash →  respaldo gratuito
+3. Local                      → Templates + JSON curado (siempre funciona)
 
 El conocimiento curado (JSON de los bots) se inyecta como contexto
 en el system prompt, y la IA genera respuestas naturales basadas
@@ -29,38 +28,28 @@ class AIManager:
     def __init__(
         self,
         groq_api_key: Optional[str] = None,
-        groq_model: str = "llama-3.1-8b-instant",
+        groq_model: str = "openai/gpt-oss-120b",
         gemini_api_key: Optional[str] = None,
-        gemini_model: str = "gemini-2.0-flash",
+        gemini_model: str = "gemini-3.6-flash",
     ):
         self.providers = []
         self.active_provider: Optional[str] = None
 
-        # Proveedor 1: Groq modelo principal (qwen3-32b — mayor calidad)
+        # Proveedor 1: Groq (modelo chat principal — openai/gpt-oss-120b)
         if groq_api_key:
             self.providers.append({
                 "name": "groq",
                 "provider": GroqProvider(api_key=groq_api_key, model=groq_model),
             })
-            logger.info(f"✅ Proveedor Groq principal registrado: {groq_model}")
+            logger.info(f"✅ Proveedor Groq registrado: {groq_model}")
 
-            # Proveedor 2: Groq modelo de respaldo (llama-3.1-8b-instant — 20K TPM)
-            # Solo se agrega si el modelo principal NO es ya el de respaldo
-            fallback_model = "llama-3.1-8b-instant"
-            if groq_model != fallback_model:
-                self.providers.append({
-                    "name": "groq-fallback",
-                    "provider": GroqProvider(api_key=groq_api_key, model=fallback_model),
-                })
-                logger.info(f"✅ Proveedor Groq respaldo registrado: {fallback_model} (20K TPM)")
-
-        # Proveedor 3: Google Gemini (1,500 req/día gratis)
+        # Proveedor 2: Google Gemini (respaldo gratuito)
         if gemini_api_key:
             self.providers.append({
                 "name": "gemini",
                 "provider": GeminiProvider(api_key=gemini_api_key, model=gemini_model),
             })
-            logger.info("✅ Proveedor Gemini registrado")
+            logger.info(f"✅ Proveedor Gemini registrado: {gemini_model}")
 
         if not self.providers:
             logger.warning("⚠️ Sin proveedores de IA. Se usará modo local únicamente.")

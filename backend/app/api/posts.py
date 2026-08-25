@@ -172,6 +172,26 @@ async def create_post(
     db.add(post)
     db.commit()
     db.refresh(post)
+
+    # ── Automatizaciones: "Nueva actividad" ────────────────────────────────
+    # Cada publicación en el tablero (anuncio, tarea, recordatorio, material,
+    # enlace) se considera una "actividad"; dispara las automatizaciones de la
+    # institución que estén configuradas para este evento (ej. crear evento en
+    # Google Calendar, ejecutar webhook).
+    try:
+        from app.services import integration_service as _isvc
+        _isvc.dispatch_trigger(db, current_user, "nueva_actividad", {
+            "event_desc": "Nueva actividad en el tablero",
+            "title": post.title,
+            "content": post.content or "",
+            "post_type": post.post_type or "anuncio",
+            "date": post.due_date,
+            "classroom_id": post.classroom_id,
+        })
+    except Exception:
+        # Una automatización que falla no debe romper la publicación.
+        db.rollback()
+
     return _post_to_dict(post, current_user.id, db)
 
 

@@ -565,13 +565,6 @@ async def admin_get_config(
         "total_users":        total_users,
         "active_users":       active_users,
         "total_institutions": total_institutions,
-        # ── Usuarios demo ────────────────────────────────────────
-        "demo_accounts": [
-            {"username": "admin",        "role": "admin",          "password": "admin1234"},
-            {"username": "superprofesor","role": "super_profesor",  "password": "superprofesor"},
-            {"username": "profesor",     "role": "profesor",        "password": "profesor"},
-            {"username": "demo",         "role": "estudiante",      "password": "demo"},
-        ],
     }
 
 

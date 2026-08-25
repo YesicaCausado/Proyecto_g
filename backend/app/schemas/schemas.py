@@ -32,6 +32,7 @@ class UserResponse(BaseModel):
     role: str = "estudiante"
     is_active: bool
     is_expert: bool
+    photo: Optional[str] = None
     created_at: datetime
     cognitive_profile: Optional[Dict] = None
     must_change_password: Optional[bool] = False
@@ -54,6 +55,7 @@ class Token(BaseModel):
     username: Optional[str] = None
     is_active: Optional[bool] = True
     is_expert: Optional[bool] = False
+    photo: Optional[str] = None
     institution_id: Optional[int] = None
     document_number: Optional[str] = None
     cognitive_profile: Optional[Dict] = None
@@ -434,6 +436,8 @@ class LicenseUsage(BaseModel):
     expiry_date: Optional[str] = None
     days_left: Optional[int] = None
     institution_name: str = ""
+    # Módulos del panel de Súper Profesor habilitados por licencia.
+    super_modules: List[str] = []
 
 class AdminStats(BaseModel):
     """Estadísticas globales del sistema para el panel del administrador"""
@@ -499,6 +503,40 @@ class StudentCreate(BaseModel):
     email: Optional[str] = None
     grade: Optional[str] = None
     birth_date: Optional[str] = None
+
+
+class TeacherUpdate(BaseModel):
+    """Edición parcial de un docente (solo envía los campos que cambian)."""
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    document_type: Optional[str] = Field(None, pattern="^(CC|TI|CE|PA)$")
+    email: Optional[str] = Field(None, max_length=100)
+    subject_area: Optional[str] = Field(None, max_length=100)
+    is_active: Optional[bool] = None
+
+
+class StudentUpdate(BaseModel):
+    """Edición parcial de un estudiante (solo envía los campos que cambian)."""
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    document_type: Optional[str] = Field(None, pattern="^(CC|TI|CE|PA)$")
+    email: Optional[str] = Field(None, max_length=100)
+    grade: Optional[str] = Field(None, max_length=20)
+    birth_date: Optional[str] = Field(None, max_length=20)
+    is_active: Optional[bool] = None
+
+
+class StudentListItem(BaseModel):
+    id: int
+    full_name: str
+    username: str
+    email: str
+    document_type: Optional[str] = None
+    document_number: Optional[str] = None
+    grade: Optional[str] = None
+    birth_date: Optional[str] = None
+    is_active: bool = True
+
+    class Config:
+        from_attributes = True
 
 
 

@@ -4,9 +4,8 @@ API Gratuita: 14,400 peticiones/día
 https://console.groq.com/
 
 Límites de tokens por minuto (TPM) según modelo:
-  qwen/qwen3-32b         →  6,000 TPM
-  llama-3.3-70b-versatile→ 12,000 TPM
-  llama-3.1-8b-instant   → 20,000 TPM  ← modelo de respaldo
+  openai/gpt-oss-120b       →  modelo chat principal de Groq Cloud (JSON estable)
+  (los modelos llama-3.1-8b-instant y qwen3-32b fueron retirados de Groq)
 
 La clase reintenta automáticamente 1 vez si recibe 429,
 esperando el tiempo indicado por Retry-After (máx. 8 s).
@@ -25,7 +24,7 @@ class GroqProvider:
 
     BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-    def __init__(self, api_key: str, model: str = "llama-3.1-8b-instant"):
+    def __init__(self, api_key: str, model: str = "openai/gpt-oss-120b"):
         self.api_key = api_key
         self.model = model
         self.headers = {
@@ -42,7 +41,7 @@ class GroqProvider:
         context_messages: Optional[List[Dict]] = None,
     ) -> Optional[str]:
         """
-        Genera una respuesta usando Groq (Llama 3).
+        Genera una respuesta usando Groq (Llama 3 / GPT-OSS).
         
         Args:
             prompt: Mensaje del usuario
@@ -105,10 +104,19 @@ class GroqProvider:
                 response.raise_for_status()
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
-                # Qwen3 y modelos de razonamiento incluyen <think>...</think>
-                # antes de la respuesta real → extraer solo la parte final
-                if content and "<think>" in content:
-                    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                # Los modelos de razonamiento (p.ej. qwen3) anteponen un bloque
+                # grande de "thinking" al contenido real. Ese bloque no es JSON
+                # utilizable y además roba los tokens de salida, así que lo
+                # descartamos y nos quedamos con la parte final del texto, que
+                # es la respuesta real (el JSON estructurado).
+                if content and " thinking" in content:
+                    _parts = content.split(" thinking", 1)[1] if content.startswith(" thinking") else content
+                    # Si el modelo cierra su pensamiento con la marca "response",
+                    # nos quedamos con lo que aparece a partir de ese cierre.
+                    _after_response = re.split(r"\bresponse\b", _parts, flags=re.I)
+                    if len(_after_response) > 1:
+                        _parts = _after_response[-1]
+                    content = _parts.strip()
                 return content or None
 
         except httpx.TimeoutException:

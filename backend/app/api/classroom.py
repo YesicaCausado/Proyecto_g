@@ -315,6 +315,19 @@ async def join_classroom(
     db.commit()
     db.refresh(enrollment)
 
+    # ── Automatizaciones: "Nuevo estudiante" ────────────────────────────────
+    try:
+        from app.services import integration_service as _isvc
+        _isvc.dispatch_trigger(db, current_user, "nuevo_estudiante", {
+            "event_desc": "Nuevo estudiante inscrito",
+            "student_id": current_user.id,
+            "name": current_user.full_name or current_user.username,
+            "classroom_id": classroom.id,
+            "classroom_name": classroom.name,
+        })
+    except Exception:
+        db.rollback()
+
     return _enrollment_to_response(enrollment, current_user)
 
 

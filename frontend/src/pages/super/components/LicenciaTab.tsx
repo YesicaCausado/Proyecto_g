@@ -1,9 +1,12 @@
 import { CreditCard, ShieldCheck, Users, GraduationCap, ExternalLink, AlertTriangle, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
 
 function UsageBar({ label, current, max, color, icon: Icon }: { label: string; current: number; max: number; color: string; icon: any }) {
-  const pct = max > 90000 ? 30 : Math.round((current / max) * 100);
-  const isNearLimit = pct >= 80;
-  const isOverLimit = pct >= 100;
+  const unlimited = max > 90000;
+  // Solo se muestra un porcentaje si hay un límite real. Sin límite → no se
+  // fabrica un consumo (antes se pintaba un 30% fijo en los planes ilimitados).
+  const pct = (!unlimited && max > 0) ? Math.round((current / max) * 100) : null;
+  const isNearLimit = pct !== null && pct >= 80;
+  const isOverLimit = pct !== null && pct >= 100;
 
   return (
     <div>
@@ -12,16 +15,16 @@ function UsageBar({ label, current, max, color, icon: Icon }: { label: string; c
           <Icon className="w-3.5 h-3.5 text-[#787774]" /> {label}
         </span>
         <span className={`text-xs font-semibold ${isOverLimit ? 'text-[#E03E3E]' : isNearLimit ? 'text-[#D9730D]' : 'text-[#787774]'}`}>
-          {current} / {max > 90000 ? 'Ilimitado' : max}
+          {current || '—'}{unlimited ? ' / Ilimitado' : max > 0 ? ` / ${max}` : ''}
         </span>
       </div>
       <div className="h-2.5 bg-[#F7F6F3] rounded-full overflow-hidden border border-[#E9E9E7]">
         <div
           className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: color }}
+          style={{ width: pct !== null ? `${Math.min(pct, 100)}%` : '0%', backgroundColor: color }}
         />
       </div>
-      <p className="text-[10px] text-[#AEADAB] mt-0.5 text-right">{max > 90000 ? '—' : `${pct}% utilizado`}</p>
+      <p className="text-[10px] text-[#AEADAB] mt-0.5 text-right">{pct !== null ? `${pct}% utilizado` : unlimited ? 'sin límite' : '—'}</p>
     </div>
   );
 }

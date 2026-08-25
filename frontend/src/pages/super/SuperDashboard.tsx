@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -19,7 +19,7 @@ import {
   ShieldCheck, LogOut, Users, GraduationCap, LayoutDashboard,
   BrainCircuit, Settings, Bell, BookOpen, Bot, FileText,
   MessageSquare, Calendar, Shield, CreditCard, Lock, ChevronRight,
-  Brain, Menu, X
+  Menu, X
 } from 'lucide-react';
 
 const NAV_SECTIONS = [
@@ -76,6 +76,7 @@ export default function SuperDashboard() {
   const [license, setLicense] = useState<any>(null);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [accessNotice, setAccessNotice] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -89,35 +90,60 @@ export default function SuperDashboard() {
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
+  // ── Habilitación de módulos según licencia (1.2.1.6 / 1.2.1.10 / 1.2.1.11) ──
+  const ALL_TAB_IDS = NAV_SECTIONS.flatMap(s => s.items.map(i => i.id));
+  // Si el backend no entrega super_modules (versión antigua), dejamos todo habilitado.
+  const enabledTabIds = new Set<string>(license?.super_modules?.length
+    ? license.super_modules
+    : ALL_TAB_IDS);
+  const isModuleLocked = (id: string) => !enabledTabIds.has(id);
+  const enabledCount = ALL_TAB_IDS.filter(id => enabledTabIds.has(id)).length;
+  const lockedCount = ALL_TAB_IDS.length - enabledCount;
+
+  // Muestra del listado de módulos habilitados por licencia (1.2.1.6).
   const currentMeta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
 
-  const handleNav = (id: string) => { setActiveTab(id); setSidebarOpen(false); };
+  const handleNav = (id: string) => {
+    if (isModuleLocked(id)) {
+      setAccessNotice(`«${TAB_TITLES[id]?.title ?? id}» no está disponible en tu licencia ${license?.license_type ? `«${license.license_type}»` : 'actual'}. Actualiza tu plan para desbloquearlo.`);
+      return;
+    }
+    setAccessNotice(null);
+    setActiveTab(id);
+    setSidebarOpen(false);
+  };
 
-  const NavButton = ({ id, label, icon: Icon, badge }: any) => (
-    <button
-      key={id}
-      onClick={() => handleNav(id)}
-      className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${
-        activeTab === id
-          ? 'bg-white font-semibold text-[#191919] shadow-sm border border-[#E9E9E7]'
-          : 'text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] border border-transparent'
-      }`}
-    >
-      <Icon className={`w-4 h-4 flex-shrink-0 ${activeTab === id ? 'text-[#6940A5]' : 'text-[#9B9A97] group-hover:text-[#37352F]'}`} />
-      <span className="flex-1 text-left truncate">{label}</span>
-      {badge === 'red' && <span className="w-2 h-2 rounded-full bg-[#E03E3E] animate-pulse flex-shrink-0" />}
-      {activeTab === id && <ChevronRight className="w-3 h-3 text-[#9B9A97] flex-shrink-0" />}
-    </button>
-  );
+  const NavButton = ({ id, label, icon: Icon, badge }: any) => {
+    const locked = isModuleLocked(id);
+    return (
+      <button
+        key={id}
+        title={locked ? `No disponible en tu licencia ${license?.license_type ? `«${license.license_type}»` : ''}` : label}
+        onClick={() => handleNav(id)}
+        disabled={locked}
+        className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${
+          locked
+            ? 'text-[#AEADAB] cursor-not-allowed border border-transparent'
+            : activeTab === id
+              ? 'bg-white font-semibold text-[#191919] shadow-sm border border-[#E9E9E7]'
+              : 'text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] border border-transparent'
+        }`}
+      >
+        <Icon className={`w-4 h-4 flex-shrink-0 ${locked ? 'text-[#D5D4D2]' : activeTab === id ? 'text-[#6940A5]' : 'text-[#9B9A97] group-hover:text-[#37352F]'}`} />
+        <span className="flex-1 text-left truncate">{label}</span>
+        {locked && <Lock className="w-3.5 h-3.5 text-[#D5D4D2] flex-shrink-0" />}
+        {!locked && badge === 'red' && <span className="w-2 h-2 rounded-full bg-[#E03E3E] animate-pulse flex-shrink-0" />}
+        {!locked && activeTab === id && <ChevronRight className="w-3 h-3 text-[#9B9A97] flex-shrink-0" />}
+      </button>
+    );
+  };
 
   const SidebarContent = () => (
     <>
       {/* Logo + usuario */}
       <div className="px-3 pt-4 pb-3 border-b border-[#E9E9E7]">
         <div className="flex items-center gap-2 mb-4 px-1">
-          <div className="w-6 h-6 bg-[#6940A5] rounded-md flex items-center justify-center flex-shrink-0">
-            <Brain className="w-3.5 h-3.5 text-white" />
-          </div>
+          <img src="/2d.png" alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white flex-shrink-0" />
           <div>
             <p className="text-[13px] font-bold text-[#191919] leading-tight">NeuroLearn</p>
             <p className="text-[10px] text-[#787774]">Panel Institucional</p>
@@ -125,8 +151,10 @@ export default function SuperDashboard() {
         </div>
 
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-[#EBEBEA] cursor-pointer transition-colors">
-          <div className="w-7 h-7 rounded-md bg-[#6940A5] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
-            {(user?.full_name || 'R').charAt(0)}
+          <div className="w-7 h-7 rounded-md bg-[#6940A5] text-white flex items-center justify-center font-bold text-xs flex-shrink-0 overflow-hidden">
+            {user?.photo
+              ? <img src={user.photo} alt="foto de perfil" className="w-full h-full object-cover" />
+              : (user?.full_name || 'R').charAt(0)}
           </div>
           <div className="overflow-hidden flex-1">
             <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">{user?.full_name}</p>
@@ -181,9 +209,7 @@ export default function SuperDashboard() {
       {/* ══ MOBILE HEADER ════ */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-12 bg-[#F7F6F3] border-b border-[#E9E9E7] flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-[#6940A5] rounded-md flex items-center justify-center">
-            <Brain className="w-3.5 h-3.5 text-white" />
-          </div>
+          <img src="/2d.png" alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white" />
           <span className="text-[13px] font-bold text-[#191919]">NeuroLearn</span>
           <span className="text-[10px] text-[#787774] ml-1 hidden sm:inline">Institucional</span>
         </div>
@@ -231,6 +257,38 @@ export default function SuperDashboard() {
         {/* Scrollable content */}
         <main className="flex-1 overflow-y-auto">
           <div className="pt-12 lg:pt-0 p-4 sm:p-6 xl:p-8 max-w-7xl mx-auto">
+
+            {/* Aviso de acceso a módulo no disponible (1.2.1.10) */}
+            {accessNotice && (
+              <div className="mb-4 bg-[#FDEEEE] border border-[#F4BDBD] rounded-lg p-4 flex items-start gap-3">
+                <Lock className="w-5 h-5 text-[#E03E3E] flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-[#E03E3E]">Módulo no disponible en tu licencia</p>
+                  <p className="text-sm text-[#E03E3E]/80 mt-0.5">{accessNotice}</p>
+                </div>
+                <button onClick={() => setAccessNotice(null)} className="text-[#787774] hover:text-[#37352F] text-sm">Cerrar</button>
+              </div>
+            )}
+
+            {/* Módulos habilitados según licencia (1.2.1.6) */}
+            {license?.super_modules?.length > 0 && enabledCount > 0 && lockedCount > 0 && (
+              <div className="mb-4 bg-white border border-[#E9E9E7] rounded-lg px-4 py-3 flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-semibold text-[#191919] flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-[#6940A5]" />
+                  Módulos de tu licencia {license.license_type}:
+                </span>
+                {ALL_TAB_IDS.filter(id => enabledTabIds.has(id)).map(id => (
+                  <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium capitalize">
+                    {id}
+                  </span>
+                ))}
+                {ALL_TAB_IDS.filter(id => !enabledTabIds.has(id)).map(id => (
+                  <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F7F6F3] text-[#AEADAB] font-medium capitalize" title="No disponible en tu plan">
+                    <Lock className="w-3 h-3" /> {id}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {activeTab === 'dashboard'    && <DashboardGeneral license={license} onNavigate={setActiveTab} />}
             {activeTab === 'profesores'   && <TeachersTab license={license} />}

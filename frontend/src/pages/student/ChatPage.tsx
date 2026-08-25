@@ -1,7 +1,6 @@
-﻿import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../../services/api";
-import { demoStartSession, demoSendMessage } from "../../services/demoChat";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
 import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
@@ -192,9 +191,17 @@ export default function ChatPage() {
         inputRef.current?.focus();
         return;
       }
-      console.warn("Backend/IA no disponible, usando demo:", err?.response?.status ?? err?.message);
-      await new Promise((r) => setTimeout(r, 600));
-      data = demoStartSession(skillKey || topic);
+      console.error("Backend/IA no disponible:", err?.response?.status ?? err?.message);
+      setSessionActive(true);
+      setMessages([{
+        id: Date.now().toString(),
+        role: "bot",
+        content: "⚠️ El servicio de tutoría no está disponible en este momento y no se puede iniciar una sesión real. Inténtalo de nuevo más tarde.",
+        timestamp: new Date(),
+      }]);
+      setSending(false);
+      inputRef.current?.focus();
+      return;
     }
 
     // ── Paso 2: blindaje de forma de la respuesta.
@@ -335,10 +342,20 @@ export default function ChatPage() {
         inputRef.current?.focus();
         return;
       }
-      // 5xx o sin respuesta (IA no configurada, backend caído) → demo silencioso
-      console.warn("Backend/IA no disponible, usando demo:", err?.response?.status ?? err?.message);
-      await new Promise((r) => setTimeout(r, 800));
-      data = demoSendMessage(msgContent);
+      // 5xx o sin respuesta → mostrar error real, no fabricar respuesta demo
+      console.error("Backend/IA no disponible:", err?.response?.status ?? err?.message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "bot",
+          content: "⚠️ El servicio de tutoría no está disponible en este momento. No se pudo registrar tu mensaje ni enviar una respuesta real. Inténtalo de nuevo más tarde.",
+          timestamp: new Date(),
+        },
+      ]);
+      setSending(false);
+      inputRef.current?.focus();
+      return;
     }
 
     // ── Paso 2: blindaje de forma de la respuesta ──

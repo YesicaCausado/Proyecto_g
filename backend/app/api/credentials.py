@@ -27,13 +27,37 @@ from app.models.user import User, UserRole
 from app.models.institution import Institution, AuditLog, LICENSE_LIMITS
 from app.schemas.schemas import (
     InstitutionCreate, InstitutionResponse,
-    TeacherCreate, TeacherListItem, StudentCreate, BulkCreateResponse,
-    CredentialItem, LicenseUsage, AdminStats,
+    TeacherCreate, TeacherUpdate, TeacherListItem,
+    StudentCreate, StudentUpdate, StudentListItem,
+    BulkCreateResponse, CredentialItem, LicenseUsage, AdminStats,
 )
 
 from app.services.email_service import send_credentials_email
 
 router = APIRouter(tags=["Credenciales B2B"])
+
+# ─── Módulos permitidos del panel Súper Profesor según licencia ──────────────
+# Refleja la misma política de TEACHER_MODULES de license_service.py:
+# los módulos de IA/avanzados (neurobots, alertas, reportes) exigen Premium+.
+SUPER_MODULES: dict[str, list[str]] = {
+    "basica": [
+        "dashboard", "profesores", "estudiantes", "grupos",
+        "mensajeria", "calendario", "auditoria",
+        "configuracion", "licencia", "seguridad",
+    ],
+    "premium": [
+        "dashboard", "profesores", "estudiantes", "grupos",
+        "neurobots", "alertas", "reportes",
+        "mensajeria", "calendario", "auditoria",
+        "configuracion", "licencia", "seguridad",
+    ],
+    "pro": [
+        "dashboard", "profesores", "estudiantes", "grupos",
+        "neurobots", "alertas", "reportes",
+        "mensajeria", "calendario", "auditoria",
+        "configuracion", "licencia", "seguridad",
+    ],
+}
 
 
 # ─── Utilidades ──────────────────────────────────────────────────────────────
@@ -392,6 +416,66 @@ async def create_teacher(
     )
 
 
+@router.put("/super/teachers/{user_id}", response_model=TeacherListItem)
+async def update_teacher(
+    user_id: int,
+    payload: TeacherUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edita un docente de la institución (solo campos enviados). No cambia documento."""
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    teacher = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.PROFESOR.value,
+    ).first()
+    if not teacher:
+        raise HTTPException(404, "Profesor no encontrado en tu institución")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(400, "No hay campos para actualizar")
+
+    new_email = updates.get("email")
+    if new_email is not None:
+        if not _validate_email(new_email):
+            raise HTTPException(400, "Formato de correo inválido")
+        conflict = db.query(User).filter(
+            User.email == new_email,
+            User.id != user_id,
+        ).first()
+        if conflict:
+            raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
+    if updates.get("full_name"):
+        teacher.full_name = updates["full_name"]
+    if "document_type" in updates and updates["document_type"]:
+        teacher.document_type = updates["document_type"]
+    if "subject_area" in updates:
+        teacher.subject_area = updates["subject_area"]
+    if "email" in updates:
+        teacher.email = updates["email"]
+    if "is_active" in updates:
+        teacher.is_active = updates["is_active"]
+
+    db.commit()
+    _log(db, "update_teacher", current_user, institution.id,
+         teacher.id, "profesor", _client_ip(request), notes="Edición de docente")
+    db.refresh(teacher)
+    return TeacherListItem(
+        id=teacher.id,
+        full_name=teacher.full_name,
+        username=teacher.username,
+        email=teacher.email or "",
+        document_type=teacher.document_type or "",
+        document_number=teacher.document_number or "",
+        subject_area=teacher.subject_area or "",
+        is_active=teacher.is_active,
+    )
+
+
 @router.post("/super/teachers/bulk", response_model=BulkCreateResponse, status_code=201)
 async def bulk_create_teachers(
     request: Request,
@@ -714,6 +798,71 @@ async def create_student(
     )
 
 
+@router.put("/super/students/{user_id}", response_model=StudentListItem)
+async def update_student(
+    user_id: int,
+    payload: StudentUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edita un estudiante de la institución (solo campos enviados). No cambia documento."""
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    student = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).first()
+    if not student:
+        raise HTTPException(404, "Estudiante no encontrado en tu institución")
+    if student.id == current_user.id:
+        raise HTTPException(400, "No puedes editar tu propia cuenta de estudiante")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(400, "No hay campos para actualizar")
+
+    new_email = updates.get("email")
+    if new_email is not None:
+        if not _validate_email(new_email):
+            raise HTTPException(400, "Formato de correo inválido")
+        conflict = db.query(User).filter(
+            User.email == new_email,
+            User.id != user_id,
+        ).first()
+        if conflict:
+            raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
+    if updates.get("full_name"):
+        student.full_name = updates["full_name"]
+    if "document_type" in updates and updates["document_type"]:
+        student.document_type = updates["document_type"]
+    if "grade" in updates:
+        student.grade = updates["grade"]
+    if "birth_date" in updates:
+        student.birth_date = updates["birth_date"]
+    if "email" in updates:
+        student.email = updates["email"]
+    if "is_active" in updates:
+        student.is_active = updates["is_active"]
+
+    db.commit()
+    _log(db, "update_student", current_user, institution.id,
+         student.id, "estudiante", _client_ip(request), notes="Edición de estudiante")
+    db.refresh(student)
+    return StudentListItem(
+        id=student.id,
+        full_name=student.full_name,
+        username=student.username,
+        email=student.email or "",
+        document_type=student.document_type or "",
+        document_number=student.document_number or "",
+        grade=student.grade or "",
+        birth_date=student.birth_date or "",
+        is_active=student.is_active,
+    )
+
+
 @router.post("/super/students/bulk", response_model=BulkCreateResponse, status_code=201)
 async def bulk_create_students(
     request: Request,
@@ -938,6 +1087,7 @@ async def get_license_usage(
         expiry_date=institution.expiry_date.isoformat() if institution.expiry_date else None,
         days_left=days_left,
         institution_name=institution.name,
+        super_modules=SUPER_MODULES.get(institution.license_type, SUPER_MODULES["basica"]),
     )
 
 

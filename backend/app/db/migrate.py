@@ -44,6 +44,8 @@ def run_migrations(engine) -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS subject_area         VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS grade                VARCHAR(20)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date           VARCHAR(20)",
+        # avatar del usuario (data URL base64 de la foto de perfil)
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT",
         # columnas base que pueden faltar si la tabla se creó antes del modelo actual
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active   BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_expert   BOOLEAN NOT NULL DEFAULT FALSE",

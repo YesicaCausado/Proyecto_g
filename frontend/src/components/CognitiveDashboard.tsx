@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CognitiveDashboard
  * Visualización en tiempo real de los 5 Patrones Neuroconductuales Digitales
  */
@@ -125,10 +125,13 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
   const state = response.cognitive_state || 'normal';
   const stateInfo = STATE_CONFIG[state] || { label: state, color: 'bg-[#F7F6F3] text-[#37352F] border-[#E9E9E7]', emoji: '🧠' };
   const activeModalities: string[] = response.active_modalities || [];
-  const engagement = response.engagement_score ?? 0.5;
-  const attention = response.attention_level ?? 1.0;
-  const errorRisk = (response.metadata?.error_risk as number) ?? response.error_risk ?? 0.0;
-  const confidence = response.confidence ?? 0;
+  // Métricas globales: se muestran SOLO si el backend las provee. Si no llegan
+  // no se inventa un porcentaje, se muestra "—".
+  const engagement = typeof response.engagement_score === 'number' ? response.engagement_score : null;
+  const attention  = typeof response.attention_level === 'number' ? response.attention_level : null;
+  const errorRisk  = typeof response.error_risk === 'number' ? response.error_risk
+    : (typeof response.metadata?.error_risk === 'number' ? (response.metadata.error_risk as number) : null);
+  const confidence = typeof response.confidence === 'number' ? response.confidence : null;
 
   // ── Datos reales de los 5 patrones desde metadata.patterns ──
   const patterns = (response.metadata?.patterns ?? {}) as Record<string, Record<string, unknown>>;
@@ -138,36 +141,37 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
   const sessionStats = (response.metadata?.session_stats ?? {}) as Record<string, number>;
   const _unusedSession = sessionStats; void _unusedSession; // disponible para future use
 
-  // Normalizar valores de patrón 1 a 0-1
-  const rtMs = (p1.response_time_ms as number) || 0;
-  const typingCpm = (p1.typing_speed_cpm as number) || 0;
-  // RT score: 0=muy lento, 1=muy rápido (baseline 3200ms → 0.5)
-  const rtScore = rtMs > 0 ? Math.min(1, 3200 / Math.max(rtMs, 500)) : 0.5;
-  const typingScore = typingCpm > 0 ? Math.min(1, typingCpm / 200) : 0.5;
-  const p1Score = (rtScore + typingScore) / 2;
+  // Normalizar valores de patrón 1 a 0-1. Si no hay dato real, el patrón queda
+  // en "Datos insuficientes" (no se inventa un 50% por defecto).
+  const rtMs = typeof p1.response_time_ms === 'number' ? (p1.response_time_ms as number) : 0;
+  const typingCpm = typeof p1.typing_speed_cpm === 'number' ? (p1.typing_speed_cpm as number) : 0;
+  const hasP1 = rtMs > 0 || typingCpm > 0;
+  const p1Score = hasP1
+    ? (Math.min(1, 3200 / Math.max(rtMs, 500)) + Math.min(1, typingCpm / 200)) / 2
+    : null;
 
   // Patrón 2: decisión — menos correcciones y más bursts = mayor confianza
-  const corrections = (p2.corrections as number) || 0;
-  const bursts = (p2.typing_bursts as number) || 1;
-  const correctionPenalty = Math.min(1, corrections / 10); // 10 correcciones = máx penalidad
-  const burstBonus = bursts >= 3 ? 0.1 : 0; // ráfagas múltiples = exploración = duda
-  const p2Score = Math.max(0, Math.min(1, 1 - correctionPenalty - burstBonus));
+  const hasCorrections = typeof p2.corrections === 'number';
+  const bursts = typeof p2.typing_bursts === 'number' ? (p2.typing_bursts as number) : 0;
+  const corrections = hasCorrections ? (p2.corrections as number) : 0;
+  const hasP2 = hasCorrections || bursts >= 1;
+  const p2Score = hasP2
+    ? Math.max(0, Math.min(1, 1 - Math.min(1, corrections / 10) - (bursts >= 3 ? 0.1 : 0)))
+    : null;
 
   // Patrón 5: predicción de error histórica
-  const quizErrRate = (p5.quiz_error_rate as number) || 0;
+  const quizErrRate = typeof p5.quiz_error_rate === 'number' ? (p5.quiz_error_rate as number) : 0;
   const weakConcepts = ((p5.weak_concepts as string[]) || []).slice(0, 3);
-  const p5Score = Math.max(0, 1 - quizErrRate);  // 1 = bajo riesgo
+  const hasP5 = quizErrRate > 0 || weakConcepts.length > 0;
+  const p5Score = hasP5 ? Math.max(0, 1 - quizErrRate) : null;
 
-  // Facial/voz en vivo
-  const facialAttention = facialActive && facialSnapshot?.is_active
-    ? facialSnapshot.attention_score
-    : (activeModalities.includes('facial_microexpression') ? attention : 0);
+  // Facial/voz en vivo: solo se muestra un valor si hay un sensor real activo;
+  // en caso contrario el patrón queda "Datos insuficientes".
+  const facialAttention = facialActive && facialSnapshot?.is_active ? facialSnapshot.attention_score : null;
 
-  const voiceEnergy = voiceActive && voiceSnapshot
-    ? voiceSnapshot.energy_level
-    : (activeModalities.includes('voice_prosody') ? 0.6 : 0);
+  const voiceEnergy = voiceActive && voiceSnapshot ? voiceSnapshot.energy_level : null;
 
-  const patternValues: Record<string, number> = {
+  const patternValues: Record<string, number | null> = {
     interaction_rhythm:     p1Score,
     decision_sequence:      p2Score,
     facial_microexpression: facialAttention,
@@ -190,7 +194,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
           <span className="text-2xl">{stateInfo.emoji}</span>
           <div>
             <p className="font-semibold text-sm">{stateInfo.label}</p>
-            <p className="text-xs opacity-70">Confianza: {Math.round(confidence * 100)}%</p>
+            <p className="text-xs opacity-70">Confianza: {confidence != null ? `${Math.round(confidence * 100)}%` : '—'}</p>
           </div>
         </div>
         {response.emotional_state && (
@@ -200,21 +204,27 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
 
       {/* Métricas Globales */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="text-center bg-[#E5F3FF] rounded-md p-2">
-          <CircleGauge value={engagement} color="blue" size={44} />
-          <p className="text-xs text-[#0B6E99] font-medium mt-1">Engagement</p>
-          <p className="text-xs text-[#0B6E99]">{Math.round(engagement * 100)}%</p>
-        </div>
-        <div className="text-center bg-[#EEF7F4] rounded-md p-2">
-          <CircleGauge value={attention} color="green" size={44} />
-          <p className="text-xs text-[#0F7B6C] font-medium mt-1">Atención</p>
-          <p className="text-xs text-[#0F7B6C]">{Math.round(attention * 100)}%</p>
-        </div>
-        <div className="text-center bg-[#FDEEEE] rounded-md p-2">
-          <CircleGauge value={errorRisk} color="red" size={44} />
-          <p className="text-xs text-[#E03E3E] font-medium mt-1">Riesgo</p>
-          <p className="text-xs text-[#E03E3E]">{Math.round(errorRisk * 100)}%</p>
-        </div>
+        {[
+          { label: 'Engagement', val: engagement, color: 'blue' as const, tint: 'bg-[#E5F3FF]', text: 'text-[#0B6E99]' },
+          { label: 'Atención', val: attention, color: 'green' as const, tint: 'bg-[#EEF7F4]', text: 'text-[#0F7B6C]' },
+          { label: 'Riesgo', val: errorRisk, color: 'red' as const, tint: 'bg-[#FDEEEE]', text: 'text-[#E03E3E]' },
+        ].map(m => (
+          <div key={m.label} className={`text-center ${m.tint} rounded-md p-2`}>
+            {m.val != null ? (
+              <>
+                <CircleGauge value={m.val} color={m.color} size={44} />
+                <p className={`text-xs ${m.text} font-medium mt-1`}>{m.label}</p>
+                <p className={`text-xs ${m.text}`}>{Math.round(m.val * 100)}%</p>
+              </>
+            ) : (
+              <>
+                <div className="h-11 flex items-center justify-center text-[#9B9A97] text-xs">—</div>
+                <p className={`text-xs ${m.text} font-medium mt-1`}>{m.label}</p>
+                <p className={`text-xs ${m.text}`}>sin datos</p>
+              </>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* 5 Patrones Neuroconductuales */}
@@ -225,8 +235,8 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
         <div className="space-y-2.5">
           {PATTERN_CONFIG.map((p, i) => {
             const Icon = p.icon;
-            const val = patternValues[p.id] ?? 0;
-            const isBackendActive = activeModalities.includes(p.id) || ['interaction_rhythm', 'decision_sequence', 'error_prediction'].includes(p.id);
+            const val = patternValues[p.id] ?? null;
+            const isBackendActive = patternValues[p.id] != null;
             const isSensorLive = (p.id === 'facial_microexpression' && isFacialLive)
                                || (p.id === 'voice_prosody' && isVoiceLive);
             const isActive = isBackendActive || isSensorLive;
@@ -247,12 +257,12 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
                       ? `${colors.bg} ${colors.text} ring-1 ${colors.ring}`
                       : 'bg-[#F7F6F3] text-[#9B9A97]'
                   }`}>
-                    {isSensorLive ? `🔴 ${Math.round(val * 100)}%` : isActive ? `${Math.round(val * 100)}%` : '—'}
+                    {isSensorLive ? `🔴 ${Math.round((val ?? 0) * 100)}%` : isActive ? `${Math.round((val ?? 0) * 100)}%` : '—'}
                   </span>
                 </div>
                 {isActive && (
                   <>
-                    <MetricBar value={val} color={p.color} />
+                    <MetricBar value={val ?? 0} color={p.color} />
                     {/* Patrón 1: mostrar RT y velocidad real */}
                     {p.id === 'interaction_rhythm' && rtMs > 0 && (
                       <p className="text-xs text-[#9B9A97] mt-1">

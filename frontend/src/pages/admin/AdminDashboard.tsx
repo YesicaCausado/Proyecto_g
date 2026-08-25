@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -98,9 +98,11 @@ export default function AdminDashboard() {
       {/* Logo */}
       <div className="px-6 py-5 border-b border-[#37352F]/60">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-[#37352F] rounded-md flex items-center justify-center shrink-0">
-            <Brain className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/2d.png"
+            alt="NeuroLearn"
+            className="w-9 h-9 object-contain rounded-md bg-white shrink-0"
+          />
           <div className="min-w-0">
             <p className="font-bold text-sm leading-tight">NeuroLearn IA</p>
             <p className="text-xs text-[#0B6E99] leading-tight">Panel Administrador</p>
@@ -138,8 +140,10 @@ export default function AdminDashboard() {
       {/* Perfil y logout */}
       <div className="px-3 py-4 border-t border-[#37352F]/60 space-y-2">
         <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-8 h-8 bg-[#37352F] rounded-full flex items-center justify-center text-xs font-bold shrink-0">
-            {inicial}
+          <div className="w-8 h-8 bg-[#37352F] rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden">
+            {user?.photo
+              ? <img src={user.photo} alt="foto de perfil" className="w-full h-full object-cover" />
+              : inicial}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-white truncate">
@@ -170,9 +174,7 @@ export default function AdminDashboard() {
       {/* ── MOBILE HEADER ────────────────────────────────────────── */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-12 bg-[#191919] text-white flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#37352F] rounded-md flex items-center justify-center shrink-0">
-            <Brain className="w-4 h-4 text-white" />
-          </div>
+          <img src="/2d.png" alt="NeuroLearn" className="w-7 h-7 object-contain rounded-md bg-white shrink-0" />
           <span className="font-bold text-sm">NeuroLearn IA</span>
           <span className="text-xs text-[#0B6E99] ml-1 hidden sm:inline">Admin</span>
         </div>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User, Trash2 } from 'lucide-react';
+import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User, Trash2, Pencil, X } from 'lucide-react';
 import api from '../../../services/api';
 
 // ── Utilidad: imprime solo las credenciales en una ventana nueva ─────────────
@@ -165,6 +165,100 @@ function CredentialsTable({
   );
 }
 
+// ── Modal de edición reutilizable (docentes / estudiantes) ───────────────────
+interface EditField {
+  key: string;
+  label: string;
+  type?: 'text' | 'select' | 'date' | 'email';
+  required?: boolean;
+  options?: { value: string | number | boolean; label: string }[];
+}
+
+interface EditUserModalProps {
+  title: string;
+  fields: EditField[];
+  initial: Record<string, any>;
+  saving: boolean;
+  onSave: (values: Record<string, any>) => void;
+  onCancel: () => void;
+}
+
+function EditUserModal({ title, fields, initial, saving, onSave, onCancel }: EditUserModalProps) {
+  const [values, setValues] = useState<Record<string, any>>(() => {
+    const v: Record<string, any> = {};
+    fields.forEach(f => { v[f.key] = initial[f.key] ?? ''; });
+    return v;
+  });
+
+  const setValue = (key: string, val: any) => setValues(prev => ({ ...prev, [key]: val }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(values);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E9E9E7]">
+          <h3 className="text-lg font-semibold text-[#191919]">{title}</h3>
+          <button onClick={onCancel} className="p-1.5 rounded-md text-[#787774] hover:bg-[#F7F6F3] hover:text-[#37352F] transition-colors" title="Cancelar">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-5 space-y-4">
+            {fields.map(f => (
+              <div key={f.key}>
+                <label className="block text-sm font-medium text-[#787774] mb-1">
+                  {f.label}{f.required && <span className="text-[#E03E3E]"> *</span>}
+                </label>
+                {f.type === 'select' ? (
+                  <select
+                    value={String(values[f.key] ?? '')}
+                    onChange={(e) => setValue(f.key, e.target.value)}
+                    className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
+                  >
+                    {f.options?.map(o => <option key={String(o.value)} value={String(o.value)}>{o.label}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type={f.type || 'text'}
+                    value={values[f.key] ?? ''}
+                    onChange={(e) => setValue(f.key, e.target.value)}
+                    required={f.required}
+                    className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#E9E9E7] bg-[#F7F6F3]/40">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 border border-[#E9E9E7] rounded-md text-sm text-[#787774] hover:bg-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774] disabled:shadow-none"
+            >
+              {saving ? (
+                <><span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span> Guardando...</>
+              ) : (
+                <>Guardar cambios</>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function TeachersTab({ license }: { license: any }) {
   const [activeTab, setActiveTab] = useState<'individual' | 'batch'>('individual');
   const [message, setMessage] = useState('');
@@ -178,6 +272,44 @@ export function TeachersTab({ license }: { license: any }) {
   const [copiedTeacherId, setCopiedTeacherId] = useState<number | null>(null);
   const [deleteTeacherId, setDeleteTeacherId] = useState<number | null>(null);
   const [deletingTeacher, setDeletingTeacher] = useState(false);
+  const [editingTeacher, setEditingTeacher] = useState<any | null>(null);
+  const [savingTeacher, setSavingTeacher] = useState(false);
+
+  const updateTeacher = async (values: Record<string, any>) => {
+    if (!editingTeacher) return;
+    setSavingTeacher(true);
+    setMessage('');
+    setError('');
+    try {
+      const payload: Record<string, any> = {};
+      if (typeof values.full_name === 'string' && values.full_name.trim() && values.full_name !== editingTeacher.full_name) {
+        payload.full_name = values.full_name.trim();
+      }
+      if (values.email !== editingTeacher.email) {
+        payload.email = values.email?.trim() || '';
+      }
+      if (values.subject_area !== (editingTeacher.subject_area || '')) {
+        payload.subject_area = values.subject_area || '';
+      }
+      if (values.document_type !== (editingTeacher.document_type || '')) {
+        payload.document_type = values.document_type;
+      }
+      if (values.is_active !== editingTeacher.is_active) {
+        payload.is_active = values.is_active === true || values.is_active === 'true';
+      }
+      if (Object.keys(payload).length === 0) {
+        throw new Error('No hay cambios para guardar.');
+      }
+      await api.put(`/super/teachers/${editingTeacher.id}`, payload);
+      setMessage('Profesor actualizado correctamente.');
+      setEditingTeacher(null);
+      await loadTeachers();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'No se pudo actualizar el profesor.');
+    } finally {
+      setSavingTeacher(false);
+    }
+  };
   // ── Flujo de carga masiva en dos pasos (preview → confirmar) ──────────────
   const [previewPendingFile, setPreviewPendingFile] = useState<File | null>(null);
   const [previewResult, setPreviewResult] = useState<any | null>(null);
@@ -717,6 +849,9 @@ export function TeachersTab({ license }: { license: any }) {
                           <button onClick={() => copyTeacherCredentials(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Copiar credencial">
                             {copiedTeacherId === t.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
                           </button>
+                          <button onClick={() => setEditingTeacher(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Editar profesor">
+                            <Pencil className="w-4 h-4" />
+                          </button>
                           <button onClick={() => setDeleteTeacherId(t.id)} className="p-2 hover:bg-[#FEF3F2] rounded text-[#787774] hover:text-[#B42318]" title="Eliminar profesor">
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -745,6 +880,43 @@ export function TeachersTab({ license }: { license: any }) {
           </div>
         </div>
       )}
+
+      {editingTeacher && (
+        <EditUserModal
+          title={`Editar Profesor — ${editingTeacher.full_name || editingTeacher.username}`}
+          saving={savingTeacher}
+          onSave={updateTeacher}
+          onCancel={() => setEditingTeacher(null)}
+          initial={{
+            full_name: editingTeacher.full_name || '',
+            email: editingTeacher.email || '',
+            subject_area: editingTeacher.subject_area || '',
+            document_type: editingTeacher.document_type || 'CC',
+            is_active: editingTeacher.is_active,
+          }}
+          fields={[
+            { key: 'full_name', label: 'Nombre completo', required: true },
+            { key: 'email', label: 'Correo electrónico', type: 'email', required: true },
+            { key: 'subject_area', label: 'Área de enseñanza' },
+            {
+              key: 'document_type', label: 'Tipo de documento', type: 'select',
+              options: [
+                { value: 'CC', label: 'CC — Cédula de Ciudadanía' },
+                { value: 'TI', label: 'TI — Tarjeta de Identidad' },
+                { value: 'CE', label: 'CE — Cédula de Extranjería' },
+                { value: 'PA', label: 'PA — Pasaporte' },
+              ],
+            },
+            {
+              key: 'is_active', label: 'Estado', type: 'select',
+              options: [
+                { value: true, label: 'Activo' },
+                { value: false, label: 'Inactivo' },
+              ],
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -762,6 +934,47 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
   const [copiedStudentId, setCopiedStudentId] = useState<number | null>(null);
   const [deleteStudentId, setDeleteStudentId] = useState<number | null>(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<any | null>(null);
+  const [savingStudent, setSavingStudent] = useState(false);
+
+  const updateStudent = async (values: Record<string, any>) => {
+    if (!editingStudent) return;
+    setSavingStudent(true);
+    setMessage('');
+    setError('');
+    try {
+      const payload: Record<string, any> = {};
+      if (typeof values.full_name === 'string' && values.full_name.trim() && values.full_name !== editingStudent.full_name) {
+        payload.full_name = values.full_name.trim();
+      }
+      if (values.email !== (editingStudent.email || '')) {
+        payload.email = values.email?.trim() || '';
+      }
+      if (values.grade !== (editingStudent.grade || '')) {
+        payload.grade = values.grade || '';
+      }
+      if (values.birth_date !== (editingStudent.birth_date || '')) {
+        payload.birth_date = values.birth_date || '';
+      }
+      if (values.document_type !== (editingStudent.document_type || '')) {
+        payload.document_type = values.document_type;
+      }
+      if (values.is_active !== editingStudent.is_active) {
+        payload.is_active = values.is_active === true || values.is_active === 'true';
+      }
+      if (Object.keys(payload).length === 0) {
+        throw new Error('No hay cambios para guardar.');
+      }
+      await api.put(`/super/students/${editingStudent.id}`, payload);
+      setMessage('Estudiante actualizado correctamente.');
+      setEditingStudent(null);
+      await loadStudents();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'No se pudo actualizar el estudiante.');
+    } finally {
+      setSavingStudent(false);
+    }
+  };
   // ── Flujo de carga masiva en dos pasos (preview → confirmar) ──────────────
   const [previewPendingFile, setPreviewPendingFile] = useState<File | null>(null);
   const [previewResult, setPreviewResult] = useState<any | null>(null);
@@ -1319,6 +1532,9 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
                           <button onClick={() => copyStudentCredentials(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Copiar credencial">
                             {copiedStudentId === s.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
                           </button>
+                          <button onClick={() => setEditingStudent(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Editar estudiante">
+                            <Pencil className="w-4 h-4" />
+                          </button>
                           <button onClick={() => setDeleteStudentId(s.id)} className="p-2 hover:bg-[#FEF3F2] rounded text-[#787774] hover:text-[#B42318]" title="Eliminar estudiante">
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1346,6 +1562,45 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
             </div>
           </div>
         </div>
+      )}
+
+      {editingStudent && (
+        <EditUserModal
+          title={`Editar Estudiante — ${editingStudent.full_name || editingStudent.username}`}
+          saving={savingStudent}
+          onSave={updateStudent}
+          onCancel={() => setEditingStudent(null)}
+          initial={{
+            full_name: editingStudent.full_name || '',
+            email: editingStudent.email || '',
+            grade: editingStudent.grade || '',
+            birth_date: editingStudent.birth_date || '',
+            document_type: editingStudent.document_type || 'TI',
+            is_active: editingStudent.is_active,
+          }}
+          fields={[
+            { key: 'full_name', label: 'Nombre completo', required: true },
+            { key: 'email', label: 'Correo electrónico', type: 'email' },
+            { key: 'grade', label: 'Grado' },
+            { key: 'birth_date', label: 'Fecha de nacimiento', type: 'date' },
+            {
+              key: 'document_type', label: 'Tipo de documento', type: 'select',
+              options: [
+                { value: 'TI', label: 'TI — Tarjeta de Identidad' },
+                { value: 'CC', label: 'CC — Cédula de Ciudadanía' },
+                { value: 'CE', label: 'CE — Cédula de Extranjería' },
+                { value: 'PA', label: 'PA — Pasaporte' },
+              ],
+            },
+            {
+              key: 'is_active', label: 'Estado', type: 'select',
+              options: [
+                { value: true, label: 'Activo' },
+                { value: false, label: 'Inactivo' },
+              ],
+            },
+          ]}
+        />
       )}
     </div>
   );

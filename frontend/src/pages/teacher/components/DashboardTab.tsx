@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  BookOpen, Users, TrendingUp, ClipboardList, Bot, AlertTriangle,
+  BookOpen, Users, TrendingUp, Bot, AlertTriangle,
   ChevronRight, Star, Clock, Calendar, Zap,
 } from 'lucide-react';
 import api from '../../../services/api';
@@ -17,17 +17,19 @@ interface TeacherStats {
   avg_global: number;
   active_bots: number;
   alert_count: number;
-  groups_perf: { name: string; avg: number; color: string }[];
-  top_students: { name: string; group: string; avg: number; trend: string }[];
+  has_data: boolean;
+  groups_perf: { name: string; avg: number; count: number; color: string }[];
+  top_students: { name: string; group: string; avg: number; trend: string | null }[];
   upcoming: { type: string; label: string; date: string; color: string }[];
   ai_usage: { name: string; pct: number; color: string }[];
+  topics_perf: { topic: string; avg: number; attempts: number; color: string }[];
+  weekly_activity: { label: string; count: number; pct: number }[];
 }
 
-const WEEK_DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb'];
 const today = new Date();
 
 // ── Mini calendario ───────────────────────────────────────────────────────────
-function MiniCalendar() {
+function MiniCalendar({ eventDays }: { eventDays: number[] }) {
   const [month, setMonth] = useState(today.getMonth());
   const [year,  setYear]  = useState(today.getFullYear());
   const firstDay   = new Date(year, month, 1).getDay();
@@ -38,7 +40,6 @@ function MiniCalendar() {
   ];
   const monthName = new Date(year, month).toLocaleString('es-CO', { month: 'long' });
   const DAYS = ['D','L','M','M','J','V','S'];
-  const eventDays = [3, 8, 12, 15, 22, 28];
   const todayDay  = today.getDate();
   const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
 
@@ -75,37 +76,43 @@ function MiniCalendar() {
 export default function DashboardTab({ onNavigate }: Props) {
   useAuth(); // provides context; user not needed directly here
   const [stats, setStats] = useState<TeacherStats | null>(null);
+  const [loading, setLoading] = useState(true);
   const hour = today.getHours();
   const greeting = hour < 12 ? 'Buenos días' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
 
   useEffect(() => {
     api.get('/teacher/stats')
       .then(r => setStats(r.data))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  // KPI cards derived from real stats
+  const hasData = stats?.has_data ?? false;
+
+  // KPI cards — todos derivados de datos reales del endpoint
   const KPI = [
     { id:'grupos',      label:'Mis Grupos',            value: String(stats?.total_groups ?? '…'),    sub: `${stats?.total_groups ?? 0} activos`,       icon:BookOpen,     color:'text-[#2E6FDB]', bg:'bg-[#EEF3FD]', nav:'grupos'      },
     { id:'estudiantes', label:'Estudiantes',            value: String(stats?.total_students ?? '…'),  sub: 'inscritos en mis grupos',                    icon:Users,        color:'text-[#0F7B6C]', bg:'bg-emerald-50', nav:'grupos'     },
-    { id:'promedio',    label:'Promedio General',       value: stats ? `${stats.avg_global}` : '…',  sub: 'sobre 10 puntos',                            icon:TrendingUp,   color:'text-[#D9730D]', bg:'bg-orange-50',  nav:'alertas'    },
+    { id:'promedio',    label:'Promedio General',       value: stats?.avg_global != null ? `${stats.avg_global}` : '…',  sub: 'sobre 10 puntos',  icon:TrendingUp,   color:'text-[#D9730D]', bg:'bg-orange-50',  nav:'alertas'    },
     { id:'bots',        label:'NeuroBots Activos',      value: String(stats?.active_bots ?? '…'),     sub: 'creados por ti',                             icon:Bot,          color:'text-[#6940A5]', bg:'bg-purple-50',  nav:'neurobots'  },
-    { id:'alertas',     label:'Alertas Académicas',     value: String(stats?.alert_count ?? '…'),     sub: 'estudiantes en riesgo',                      icon:AlertTriangle,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'alertas'    },
-    { id:'pendientes',  label:'Seguimiento',           value: stats ? String(Math.max(0, stats.total_students - Math.max(1, stats.total_groups))) : '—', sub: 'por revisar',                               icon:ClipboardList,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'evaluaciones'},
+    { id:'alertas',     label:'Alertas Académicas',     value: String(stats?.alert_count ?? '…'),     sub: 'en riesgo medio/alto',                       icon:AlertTriangle,color:'text-[#E03E3E]', bg:'bg-red-50',     nav:'alertas'    },
   ];
 
-  const baseWeek = stats ? Math.max(40, Math.min(96, Math.round((stats.avg_global ?? 7.5) * 8 + 20))) : 72;
-  const WEEK_DATA = stats
-    ? [
-        Math.max(35, baseWeek - 12),
-        Math.max(40, baseWeek - 8),
-        Math.max(45, baseWeek - 18),
-        Math.max(50, baseWeek),
-        Math.max(42, baseWeek - 10),
-        Math.max(39, baseWeek - 24),
-      ]
-    : [52, 64, 58, 76, 69, 48];
-  const maxWeek = Math.max(...WEEK_DATA);
+  // Participación semanal real (conteos del backend)
+  const WEEK_DATA = stats?.weekly_activity ?? [];
+  const maxWeek = Math.max(1, ...WEEK_DATA.map(d => d.count));
+
+  // Total de intentos de evaluación del mes (real, sumado de topics_perf)
+  const totalQuizzes = (stats?.topics_perf ?? []).reduce((acc, t) => acc + (t.attempts || 0), 0);
+
+  // Eventos reales del mes corriente (proximos) → marcar en el mini calendario
+  const realEventDays = (stats?.upcoming ?? [])
+    .map(ev => {
+      if (ev.date === 'Hoy') return today.getDate();
+      if (ev.date === 'Mañana') return today.getDate() + 1;
+      return null;
+    })
+    .filter((d): d is number => d != null && d <= 31);
 
   return (
     <div className="space-y-6">
@@ -115,7 +122,7 @@ export default function DashboardTab({ onNavigate }: Props) {
         <div>
           <h2 className="text-lg font-bold text-[#191919]">{greeting} 👋</h2>
           <p className="text-sm text-[#787774]">
-          {stats
+          {!loading && stats
             ? <>Tienes <span className="font-semibold text-[#E03E3E]">{stats.alert_count} alertas</span> activas y <span className="font-semibold text-[#2E6FDB]">{stats.total_groups} grupos</span>.</>
             : 'Cargando estadísticas…'
           }
@@ -156,23 +163,27 @@ export default function DashboardTab({ onNavigate }: Props) {
         {/* ── Columna Izquierda: Gráficos (2/3) ─────────────────── */}
         <div className="xl:col-span-2 space-y-4">
 
-          {/* Progreso semanal */}
+          {/* Participación semanal (real) */}
           <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-[#191919] text-sm">Progreso semanal — participación (%)</h3>
-              <span className="text-xs text-[#787774]">Semana actual</span>
+              <h3 className="font-semibold text-[#191919] text-sm">Participación semanal — evaluaciones por día</h3>
+              <span className="text-xs text-[#787774]">últimos 6 días</span>
             </div>
-            <div className="flex items-end gap-3 h-28">
-              {WEEK_DAYS.map((d, i) => (
-                <div key={d} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-medium text-[#787774]">{WEEK_DATA[i]}%</span>
-                  <div className="w-full rounded-t-sm transition-all"
-                    style={{ height: `${(WEEK_DATA[i] / maxWeek) * 80}px`, background: WEEK_DATA[i] >= 80 ? '#2E6FDB' : WEEK_DATA[i] >= 65 ? '#0F7B6C' : '#D9730D' }}
-                  />
-                  <span className="text-[10px] text-[#AEADAB]">{d}</span>
-                </div>
-              ))}
-            </div>
+            {WEEK_DATA.length > 0 && maxWeek > 0 ? (
+              <div className="flex items-end gap-3 h-28">
+                {WEEK_DATA.map((d, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[10px] font-medium text-[#787774]">{d.count}</span>
+                    <div className="w-full rounded-t-sm transition-all"
+                      style={{ height: `${(d.count / maxWeek) * 80}px`, background: d.count >= 70 ? '#2E6FDB' : '#0F7B6C' }}
+                    />
+                    <span className="text-[10px] text-[#AEADAB]">{d.label}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-[#AEADAB] py-6 text-center">Sin actividad de aprendizaje registrada en los últimos días.</p>
+            )}
           </div>
 
           {/* 2 columnas dentro */}
@@ -182,18 +193,19 @@ export default function DashboardTab({ onNavigate }: Props) {
             <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
               <h3 className="font-semibold text-[#191919] text-sm mb-4">Desempeño por grupo</h3>
               <div className="space-y-3">
-                {(stats?.groups_perf ?? []).map(g => (
+                {(stats?.groups_perf ?? []).length > 0 ? (stats?.groups_perf ?? []).map(g => (
                   <div key={g.name}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-[#37352F] truncate max-w-[70%]">{g.name}</span>
-                      <span className="text-xs font-semibold text-[#191919]">{g.avg}</span>
+                      <span className="text-xs font-semibold text-[#191919]">{g.count} evaluaciones · {g.avg}</span>
                     </div>
                     <div className="h-1.5 bg-[#F7F6F3] rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${g.color}`} style={{ width: `${(g.avg / 10) * 100}%` }} />
                     </div>
                   </div>
-                ))}
-                {!stats && <p className="text-xs text-[#AEADAB]">Cargando…</p>}
+                )) : (
+                  <p className="text-xs text-[#AEADAB]">{loading ? 'Cargando…' : 'Los grupos aún no tienen evaluaciones.'}</p>
+                )}
               </div>
             </div>
 
@@ -201,7 +213,7 @@ export default function DashboardTab({ onNavigate }: Props) {
             <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
               <h3 className="font-semibold text-[#191919] text-sm mb-4">Uso de NeuroBots</h3>
               <div className="space-y-3">
-                {(stats?.ai_usage ?? []).map(a => (
+                {(stats?.ai_usage ?? []).length > 0 ? (stats?.ai_usage ?? []).map(a => (
                   <div key={a.name}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-[#37352F]">{a.name}</span>
@@ -211,10 +223,14 @@ export default function DashboardTab({ onNavigate }: Props) {
                       <div className={`h-full rounded-full ${a.color}`} style={{ width: `${a.pct}%` }} />
                     </div>
                   </div>
-                ))}
-                <div className="pt-2 border-t border-[#E9E9E7]">
-                  <p className="text-xs text-[#787774]">Total: <span className="font-semibold text-[#6940A5]">1,439 consultas</span> este mes</p>
-                </div>
+                )) : (
+                  <p className="text-xs text-[#AEADAB]">Sin bots creados o sin uso registrado.</p>
+                )}
+                {stats?.topics_perf && stats.topics_perf.length > 0 && (
+                  <div className="pt-2 border-t border-[#E9E9E7]">
+                    <p className="text-xs text-[#787774]">Total de evaluaciones: <span className="font-semibold text-[#6940A5]">{totalQuizzes}</span></p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -226,30 +242,37 @@ export default function DashboardTab({ onNavigate }: Props) {
               <button onClick={() => onNavigate('alertas')} className="text-xs text-[#2E6FDB] hover:underline">Ver todos</button>
             </div>
             <div className="space-y-2">
-              {(stats?.top_students ?? []).map((s, i) => (
-                <div key={s.name} className="flex items-center gap-3 py-2 border-b border-[#F7F6F3] last:border-0">
-                  <span className="text-xs font-bold text-[#AEADAB] w-4">{i+1}</span>
-                  <div className="w-7 h-7 rounded-full bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    {s.name.charAt(0)}
+              {hasData && (stats?.top_students ?? []).length > 0 ? (stats?.top_students ?? []).map((s, i) => {
+                const trendClass = s.trend == null
+                  ? 'text-[#AEADAB]'
+                  : (s.trend.startsWith('-') ? 'text-[#E03E3E]' : 'text-[#0F7B6C]');
+                return (
+                  <div key={s.name} className="flex items-center gap-3 py-2 border-b border-[#F7F6F3] last:border-0">
+                    <span className="text-xs font-bold text-[#AEADAB] w-4">{i+1}</span>
+                    <div className="w-7 h-7 rounded-full bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {s.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-[#37352F] truncate">{s.name}</p>
+                      <p className="text-[10px] text-[#AEADAB]">Grupo {s.group}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-[#191919]">{s.avg}</p>
+                      <p className={`text-[10px] font-medium ${trendClass}`}>{s.trend ?? '—'}</p>
+                    </div>
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-[#37352F] truncate">{s.name}</p>
-                    <p className="text-[10px] text-[#AEADAB]">Grupo {s.group}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-[#191919]">{s.avg}</p>
-                    <p className={`text-[10px] font-medium ${s.trend.startsWith('+') ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>{s.trend}</p>
-                  </div>
-                  <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />
-                </div>
-              ))}
+                );
+              }) : (
+                <p className="text-xs text-[#AEADAB] py-4 text-center">{loading ? 'Cargando…' : 'Sin datos suficientes aún.'}</p>
+              )}
             </div>
           </div>
         </div>
 
         {/* ── Columna Derecha: Calendario + Próximos (1/3) ──────── */}
         <div className="space-y-4">
-          <MiniCalendar />
+          <MiniCalendar eventDays={realEventDays} />
 
           {/* Próximas fechas */}
           <div className="bg-white border border-[#E9E9E7] rounded-lg p-4">
@@ -257,7 +280,7 @@ export default function DashboardTab({ onNavigate }: Props) {
               <Calendar className="w-4 h-4 text-[#787774]" /> Próximamente
             </h3>
             <div className="space-y-2">
-              {(stats?.upcoming ?? []).map((ev, i) => (
+              {(stats?.upcoming ?? []).length > 0 ? (stats?.upcoming ?? []).map((ev, i) => (
                 <div key={i} className="flex items-center gap-2.5 py-1.5 border-b border-[#F7F6F3] last:border-0">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ev.color}`} />
                   <div className="flex-1 min-w-0">
@@ -268,7 +291,9 @@ export default function DashboardTab({ onNavigate }: Props) {
                     <Clock className="w-3 h-3" />{ev.date}
                   </span>
                 </div>
-              ))}
+              )) : (
+                <p className="text-xs text-[#AEADAB] py-2">No hay eventos próximos.</p>
+              )}
             </div>
           </div>
 
@@ -279,9 +304,11 @@ export default function DashboardTab({ onNavigate }: Props) {
               <p className="text-xs font-semibold text-[#2E6FDB]">NeuroInsight del día</p>
             </div>
             <p className="text-xs text-[#37352F] leading-relaxed">
-              {stats && stats.alert_count > 0
-                ? `Hay ${stats.alert_count} alertas activas en tus grupos; revisa primero a los estudiantes con mayor riesgo y fortalece los temas con menor rendimiento.`
-                : 'Tu actividad está estable. Sigue reforzando prácticas breves y revisa la evolución semanal para detectar cambios tempranos.'}
+              {hasData && (stats?.alert_count ?? 0) > 0
+                ? `Hay ${stats?.alert_count ?? 0} alertas activas en tus grupos; revisa primero a los estudiantes con mayor riesgo y fortalece los temas con menor rendimiento.`
+                : hasData
+                  ? 'Tu actividad está estable. Sigue reforzando prácticas breves y revisa la evolución semanal para detectar cambios tempranos.'
+                  : 'Aún no hay suficientes datos de aprendizaje registrados para generar un análisis.'}
             </p>
             <button
               onClick={() => onNavigate('alertas')}

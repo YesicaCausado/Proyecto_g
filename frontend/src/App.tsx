@@ -24,6 +24,7 @@ import CreateClassroomPage from './pages/teacher/CreateClassroomPage';
 import ClassroomDetailPage from './pages/teacher/ClassroomDetailPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import SuperDashboard from './pages/super/SuperDashboard';
+import LandingPage from './pages/landing/LandingPage';
 
 function DashboardRouter() {
   const { user } = useAuth();
@@ -38,7 +39,11 @@ function DashboardRouter() {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Públicas */}
+      {/* Landing en construcción: accesible en /landing mientras tanto.
+      La raíz / apunta al login (página principal actual). */}
+      <Route path="/landing" element={<LandingPage />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      {/* Rutas públicas */}
       <Route path="/login"           element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password"  element={<ResetPasswordPage />} />

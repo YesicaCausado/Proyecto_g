@@ -38,16 +38,13 @@ function mapChatConv(raw: any): ChatConv {
 }
 
 
-const RECIPIENT_OPTIONS: { value: Recipient; label: string; icon: any; desc: string }[] = [
-  { value: 'institucional', label: 'Toda la institución', icon: Users,         desc: 'Profesores + estudiantes' },
-  { value: 'profesores',    label: 'Solo profesores',     icon: User,           desc: '18 docentes activos' },
-  { value: 'estudiantes',   label: 'Solo estudiantes',    icon: GraduationCap,  desc: '745 estudiantes activos' },
-  { value: 'grado',         label: 'Por grado',           icon: BookOpen,       desc: 'Selecciona el grado' },
-  { value: 'grupo',         label: 'Por grupo',           icon: BookOpen,       desc: 'Selecciona el grupo' },
+const RECIPIENT_OPTIONS: { value: Recipient; label: string; icon: any }[] = [
+  { value: 'institucional', label: 'Toda la institución', icon: Users },
+  { value: 'profesores',    label: 'Solo profesores',     icon: User },
+  { value: 'estudiantes',   label: 'Solo estudiantes',    icon: GraduationCap },
+  { value: 'grado',         label: 'Por grado',           icon: BookOpen },
+  { value: 'grupo',         label: 'Por grupo',           icon: BookOpen },
 ];
-
-const GRADES = ['6°','7°','8°','9°','10°','11°'];
-const GROUPS = ['Matemáticas 8A','Ciencias 9B','Lenguaje 7C','Historia 10A','Física 11B','Tecnología 8B'];
 
 export default function MensajeriaTab() {
   const { user } = useAuth();
@@ -57,13 +54,16 @@ export default function MensajeriaTab() {
   const [view, setView]           = useState<View>('compose');
   const [recipient, setRecipient] = useState<Recipient>('institucional');
   const [grade, setGrade]         = useState('');
-  const [group, setGroup]         = useState('');
   const [subject, setSubject]     = useState('');
   const [body, setBody]           = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [sent, setSent]           = useState<SentMsg[]>([]);
   const [sending, setSending]     = useState(false);
   const [success, setSuccess]     = useState('');
+  // ── Datos reales para destinatarios ─────────────────────────
+  const [teacherCount, setTeacherCount] = useState<number | null>(null);
+  const [studentCount, setStudentCount] = useState<number | null>(null);
+  const [grades, setGrades]             = useState<string[]>([]);
 
   // ── Chat state ───────────────────────────────────────────────
   const [convs,         setConvs]         = useState<ChatConv[]>([]);
@@ -81,6 +81,16 @@ export default function MensajeriaTab() {
     api.get('/super/broadcasts')
       .then(r => setSent(r.data.broadcasts ?? []))
       .catch(() => setSent([]));
+  }, []);
+
+  // ── Cargar datos reales para los destinatarios ───────────────────
+  useEffect(() => {
+    api.get('/super/teachers').then(r => setTeacherCount(Array.isArray(r.data) ? r.data.length : null)).catch(() => {});
+    api.get('/super/students').then(r => {
+      const arr = Array.isArray(r.data) ? r.data : [];
+      setStudentCount(arr.length);
+      setGrades([...new Set(arr.map((s: any) => (s.grade || '').trim()).filter(Boolean))].sort());
+    }).catch(() => {});
   }, []);
 
   // Load chat conversations when switching to chat tab
@@ -170,7 +180,6 @@ export default function MensajeriaTab() {
         body,
         recipient_type: recipient,
         grade: recipient === 'grado' ? grade : undefined,
-        group_id: recipient === 'grupo' ? group : undefined,
         scheduled_at: scheduleDate || undefined,
       });
       setSent(prev => [res.data, ...prev]);
@@ -214,30 +223,32 @@ export default function MensajeriaTab() {
           <div>
             <label className="block text-xs font-semibold text-[#787774] mb-2 uppercase tracking-wide">Destinatarios</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-              {RECIPIENT_OPTIONS.map(opt => (
+              {RECIPIENT_OPTIONS.filter(o => o.value !== 'grupo').map(opt => {
+                const desc = opt.value === 'institucional' ? 'Profesores + estudiantes'
+                  : opt.value === 'profesores' ? (teacherCount != null ? `${teacherCount} docentes activos` : '—')
+                  : opt.value === 'estudiantes' ? (studentCount != null ? `${studentCount} estudiantes activos` : '—')
+                  : grades.length > 0 ? `${grades.length} grados` : 'Sin grados registrados';
+                return (
                 <button key={opt.value} onClick={() => setRecipient(opt.value)}
                   className={`flex items-center gap-2 p-3 rounded-lg border text-left transition-all ${recipient===opt.value ? 'border-[#6940A5] bg-purple-50 text-[#6940A5]' : 'border-[#E9E9E7] hover:border-[#AEADAB] text-[#787774]'}`}>
                   <opt.icon className="w-4 h-4 flex-shrink-0" />
                   <div>
                     <p className="text-xs font-semibold leading-tight">{opt.label}</p>
-                    <p className="text-[10px] opacity-70">{opt.desc}</p>
+                    <p className="text-[10px] opacity-70">{desc}</p>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
             {recipient === 'grado' && (
               <select value={grade} onChange={e => setGrade(e.target.value)}
                 className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm outline-none bg-white focus:ring-1 focus:ring-[#6940A5]">
                 <option value="">Selecciona el grado</option>
-                {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                {grades.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             )}
-            {recipient === 'grupo' && (
-              <select value={group} onChange={e => setGroup(e.target.value)}
-                className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm outline-none bg-white focus:ring-1 focus:ring-[#6940A5]">
-                <option value="">Selecciona el grupo</option>
-                {GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
+            {grades.length === 0 && (
+              <p className="text-[11px] text-[#AEADAB]">Aún no hay grados registrados en la plataforma.</p>
             )}
           </div>
 

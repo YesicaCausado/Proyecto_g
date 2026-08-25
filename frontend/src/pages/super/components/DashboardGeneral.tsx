@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Users, GraduationCap, BookOpen, Bot, TrendingUp, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2, LineChart,
-  PieChart, Trophy, Activity
+  PieChart, Trophy
 } from 'lucide-react';
 import api from '../../../services/api';
 import NeuronAvatar from '../../../components/NeuronAvatar';
@@ -48,12 +48,12 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
   const institutionName = institution?.name ?? license?.institution_name ?? '—';
 
   const metrics = [
-    { label: 'Profesores activos', value: stats?.total_teachers ?? license?.current_teachers ?? 0, trend: '', status: 'good', icon: Users, tab: 'profesores' },
-    { label: 'Estudiantes', value: stats?.total_students ?? license?.current_students ?? 0, trend: '', status: 'good', icon: GraduationCap, tab: 'estudiantes' },
-    { label: 'Grupos', value: stats?.total_groups ?? 0, trend: '', status: 'neutral', icon: BookOpen, tab: 'grupos' },
-    { label: 'NeuroBots', value: '—', trend: '', status: 'good', icon: Bot, tab: 'neurobots' },
-    { label: 'Promedio general', value: stats ? `${stats.avg_score}/10` : '—', trend: '', status: stats && stats.avg_score >= 7 ? 'good' : 'warning', icon: TrendingUp, tab: null },
-    { label: 'En riesgo', value: stats?.at_risk_count ?? 0, trend: '', status: 'danger', icon: AlertTriangle, tab: 'alertas' },
+    { label: 'Profesores activos', value: stats?.total_teachers != null ? String(stats.total_teachers) : (license?.current_teachers != null ? String(license.current_teachers) : '—'), status: 'good', icon: Users, tab: 'profesores' },
+    { label: 'Estudiantes', value: stats?.total_students != null ? String(stats.total_students) : (license?.current_students != null ? String(license.current_students) : '—'), status: 'good', icon: GraduationCap, tab: 'estudiantes' },
+    { label: 'Grupos', value: stats?.total_groups != null ? String(stats.total_groups) : '—', status: 'neutral', icon: BookOpen, tab: 'grupos' },
+    { label: 'NeuroBots', value: '—', status: 'neutral', icon: Bot, tab: 'neurobots' },
+    { label: 'Promedio general', value: stats?.avg_score != null ? `${stats.avg_score}/10` : '—', status: stats && stats.avg_score >= 7 ? 'good' : 'neutral', icon: TrendingUp, tab: null },
+    { label: 'En riesgo', value: stats?.at_risk_count != null ? String(stats.at_risk_count) : '—', status: 'danger', icon: AlertTriangle, tab: 'alertas' },
   ];
 
   const daysLeft   = license?.days_left ?? null;
@@ -143,8 +143,6 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
       {/* ── KPIs ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {metrics.map((m, i) => {
-          const isNeg = m.trend.startsWith('-');
-          const isNeutral = m.trend === '0';
           const Icon = m.icon;
           return (
             <button
@@ -157,14 +155,6 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
                 <Icon className="w-3.5 h-3.5 text-[#AEADAB]" />
               </div>
               <p className="text-2xl font-bold text-[#191919]">{m.value}</p>
-              <div className={`text-xs font-semibold flex items-center gap-1 ${
-                m.status === 'good' ? 'text-[#0F7B6C]' :
-                m.status === 'warning' ? 'text-[#D9730D]' :
-                m.status === 'danger' ? 'text-[#E03E3E]' : 'text-[#787774]'
-              }`}>
-                {isNeutral ? <Activity className="w-3 h-3" /> : isNeg ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
-                {m.trend} este mes
-              </div>
             </button>
           );
         })}

@@ -261,6 +261,7 @@ async def login(
         username=user.username,
         is_active=user.is_active,
         is_expert=getattr(user, 'is_expert', False) or False,
+        photo=getattr(user, 'photo', None),
         institution_id=getattr(user, 'institution_id', None),
         document_number=getattr(user, 'document_number', None),
         cognitive_profile=getattr(user, 'cognitive_profile', None),
@@ -280,7 +281,7 @@ async def update_me(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
-    """Actualizar nombre y/o email del usuario autenticado."""
+    """Actualizar nombre, email y/o foto de perfil del usuario autenticado."""
     if "full_name" in data and data["full_name"]:
         current_user.full_name = data["full_name"]
     if "email" in data and data["email"]:
@@ -291,6 +292,11 @@ async def update_me(
         if existing:
             raise HTTPException(status_code=400, detail="El email ya está en uso por otra cuenta.")
         current_user.email = data["email"]
+    if "photo" in data:
+        photo_err = validate_profile_photo(data["photo"])
+        if photo_err:
+            raise HTTPException(status_code=400, detail=photo_err)
+        current_user.photo = (data["photo"] or "").strip() or None
     try:
         db.commit()
         db.refresh(current_user)
@@ -298,6 +304,32 @@ async def update_me(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al guardar: {str(e)}")
     return current_user
+
+
+def validate_profile_photo(photo: Optional[str]) -> Optional[str]:
+    """
+    Valida la foto de perfil enviada como data URL (data:image/...;base64,...).
+    Retorna un mensaje de error si no es válida, o None si es aceptable.
+    Limita el tamaño para no abusar del almacenamiento en DB.
+    """
+    if not photo or not isinstance(photo, str):
+        return None  # vacío = borrar foto
+    import base64
+    if not photo.startswith("data:"):
+        # seguridad: solo aceptamos data URLs de imagen, no URLs remotas arbitrarias
+        return "La foto debe enviarse como data URL de imagen."
+    if not photo.startswith("data:image/"):
+        return "La foto debe ser una imagen."
+    # header: data:image/<type>;base64,
+    try:
+        header, _, payload = photo.partition(",")
+        # Validar que sea base64 decodificable
+        base64.b64decode(payload, validate=False)
+    except Exception:
+        return "La foto no es una imagen base64 válida."
+    if len(photo) > 3_000_000:  # ~2.25 MB en bytes crudos
+        return "La foto supera el tamaño máximo permitido (3 MB)."
+    return None
 
 
 @router.post("/change-password", status_code=204)

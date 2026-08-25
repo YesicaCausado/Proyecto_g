@@ -8,6 +8,7 @@ export interface User {
   role: 'estudiante' | 'profesor' | 'super_profesor' | 'admin';
   is_active: boolean;
   is_expert: boolean;
+  photo?: string | null;
   created_at: string;
   cognitive_profile: Record<string, unknown> | null;
   // B2B fields
@@ -28,6 +29,7 @@ export interface Token {
   email?: string | null;
   is_active?: boolean;
   is_expert?: boolean;
+  photo?: string | null;
   institution_id?: number | null;
   document_number?: string | null;
   cognitive_profile?: Record<string, unknown> | null;

@@ -1,7 +1,7 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Brain, Eye, EyeOff, Loader2, GraduationCap, BookOpenCheck } from 'lucide-react';
+import { Eye, EyeOff, Loader2, GraduationCap, BookOpenCheck } from 'lucide-react';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -43,9 +43,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-[#37352F] rounded-md flex items-center justify-center mx-auto mb-4">
-            <Brain className="w-6 h-6 text-white" />
-          </div>
+          <img src="/2d.png" alt="NeuroLearn" className="w-16 h-16 object-contain rounded-md bg-white mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-[#37352F]">Crear Cuenta</h1>
           <p className="text-[#787774] text-sm mt-1">Únete a NeuroLearn AI</p>
         </div>

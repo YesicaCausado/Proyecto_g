@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
-  BrainCircuit, AlertTriangle, TrendingDown, UserX, Users, BookOpen,
-  Clock, Filter, RefreshCw, ChevronRight, CheckCircle, Info, Zap, Loader2
+  BrainCircuit, AlertTriangle, TrendingDown,
+  Clock, Filter, RefreshCw, ChevronRight, CheckCircle, Info, Loader2
 } from 'lucide-react';
 import api from '../../../services/api';
 
@@ -25,13 +25,6 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: stri
   media: { label: 'Media',  color: 'text-[#D9730D]', bg: 'bg-[#FCF6E5]',  border: 'border-[#EDD88A]', dot: 'bg-[#D9730D]', icon: TrendingDown },
   baja:  { label: 'Baja',   color: 'text-[#0F7B6C]', bg: 'bg-[#EEF8F6]',  border: 'border-[#A6DDD6]', dot: 'bg-[#0F7B6C]', icon: Info },
 };
-
-const PREDICTIVE_INSIGHTS = [
-  { icon: Zap, color: 'text-[#6940A5]', bg: 'bg-purple-50', text: 'El grado 8° presenta un descenso del 12% en Matemáticas durante las últimas cuatro semanas.' },
-  { icon: UserX, color: 'text-[#E03E3E]', bg: 'bg-red-50', text: 'Existe un 83% de probabilidad de que 18 estudiantes requieran acompañamiento académico este período.' },
-  { icon: Users, color: 'text-[#D9730D]', bg: 'bg-orange-50', text: 'El profesor Carlos Martínez tiene un nivel de participación 35% inferior al promedio institucional.' },
-  { icon: BookOpen, color: 'text-[#0B6E99]', bg: 'bg-blue-50', text: '3 grupos muestran una tendencia de mejora sostenida del 8% en los últimos 30 días.' },
-];
 
 export default function NeuroAlertasTab() {
   const [filterPriority, setFilterPriority] = useState<Priority | 'todas'>('todas');
@@ -64,23 +57,6 @@ export default function NeuroAlertasTab() {
           <Loader2 className="w-4 h-4 animate-spin" /> Cargando alertas…
         </div>
       )}
-
-      {/* ── Analítica Predictiva ── */}
-      <div className="bg-gradient-to-r from-[#6940A5]/5 to-[#0B6E99]/5 border border-[#E9E9E7] rounded-lg p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <BrainCircuit className="w-5 h-5 text-[#6940A5]" />
-          <h3 className="font-semibold text-[#191919] text-sm">Analítica Predictiva — IA Institucional</h3>
-          <span className="ml-auto text-[10px] bg-[#6940A5] text-white px-2 py-0.5 rounded-full font-medium">Premium</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {PREDICTIVE_INSIGHTS.map((insight, i) => (
-            <div key={i} className={`flex items-start gap-3 p-3 rounded-md ${insight.bg} border border-white/60`}>
-              <insight.icon className={`w-4 h-4 ${insight.color} mt-0.5 flex-shrink-0`} />
-              <p className="text-xs text-[#37352F] leading-relaxed">"{insight.text}"</p>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* ── Resumen de Alertas ── */}
       <div className="grid grid-cols-3 gap-4">
