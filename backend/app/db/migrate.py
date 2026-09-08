@@ -199,6 +199,19 @@ def run_migrations(engine) -> None:
 
         # ── 11. classroom_id en quiz_history — vínculo quiz ↔ clase para seguimiento ──
     "ALTER TABLE quiz_history ADD COLUMN IF NOT EXISTS classroom_id INTEGER REFERENCES classrooms(id)",
+
+        # ── 12. teacher_materials: contenido binario real de los archivos ──────
+    "ALTER TABLE teacher_materials ADD COLUMN IF NOT EXISTS mime_type     VARCHAR(80)",
+    "ALTER TABLE teacher_materials ADD COLUMN IF NOT EXISTS original_name VARCHAR(255)",
+    "ALTER TABLE teacher_materials ADD COLUMN IF NOT EXISTS has_file      BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE teacher_materials ADD COLUMN IF NOT EXISTS content BYTEA",
+
+        # ── 13. chat_answers en cognitive_session_state — ventana móvil de
+        #      veredictos del chat (Patrón 5 en tiempo real). El modelo
+        #      `CognitiveSessionState.chat_answers` ya lo espera; sin esta
+        #      columna, _load_session_stats() falla y deja la transacción en
+        #      estado aborted, rompiendo /chat/message con 500. ──────────
+    "ALTER TABLE cognitive_session_state ADD COLUMN IF NOT EXISTS chat_answers JSONB DEFAULT '[]'::jsonb",
     ]
 
     applied = 0

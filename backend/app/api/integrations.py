@@ -117,12 +117,18 @@ async def list_integrations(
 ):
     """Lista las integraciones de la institución del usuario (sin tokens)."""
     inst_id = _require_institution(current_user)
-    rows = (
-        db.query(Integration)
-        .filter(Integration.institution_id == inst_id)
-        .order_by(Integration.provider)
-        .all()
-    )
+    try:
+        rows = (
+            db.query(Integration)
+            .filter(Integration.institution_id == inst_id)
+            .order_by(Integration.provider)
+            .all()
+        )
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudieron listar las integraciones (base de datos). {str(e)[:160]}",
+        ) from e
     return {"integrations": [_serialize_integration(r) for r in rows]}
 
 

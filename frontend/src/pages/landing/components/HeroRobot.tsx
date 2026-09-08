@@ -38,10 +38,13 @@ interface HeroRobotProps {
   /** Posicionamiento del robot dentro del hero */
   top:    number;
   scale:  number;
+  /** Para desactivar efectos en modo reducido o móvil */
+  reduceMotion: boolean;
+  isMobile: boolean;
 }
 
 const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
-  function HeroRobot({ top, scale }, ref) {
+  function HeroRobot({ top, scale, reduceMotion, isMobile }, ref) {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const floatRef   = useRef<HTMLDivElement>(null);
 
@@ -77,6 +80,19 @@ const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
             className="w-full h-full"
             lightingPresets={HERO_LIGHTING.preset}
           />
+          
+          {/* Ojos brillantes - efecto de brillo progresivo */}
+          {!reduceMotion && !isMobile && (
+            <div className="absolute inset-0 pointer-events-none"
+              style={{
+                backgroundImage: `
+                  radial-gradient(circle at 30% 35%, rgba(0,255,100,0.15) 0%, transparent 40%),
+                  radial-gradient(circle at 70% 35%, rgba(0,255,100,0.15) 0%, transparent 40%)
+                `,
+                pointerEvents: 'none'
+              }}
+            />
+          )}
         </div>
       </div>
     );

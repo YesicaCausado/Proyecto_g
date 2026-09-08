@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LiveModeView — Experiencia inmersiva de clase en vivo
  *
  * - Avatar VRM animado centrado (habla + gesticula)
@@ -117,8 +117,8 @@ export default function LiveModeView({
     if (r.cognitive_state === 'confusion' || r.cognitive_state === 'doubt') return { icon: '🤔', text: 'El tutor detectó confusión y está usando ejemplos más concretos.' };
     if (r.cognitive_state === 'mastery' || r.cognitive_state === 'mastering') return { icon: '🏆', text: '¡Excelente dominio! Aumentando la dificultad para seguir progresando.' };
     if (r.cognitive_state === 'flow') return { icon: '🌊', text: 'Estás en estado de flujo. ¡Rendimiento óptimo de aprendizaje!' };
-    if ((r.engagement_score ?? 0.5) < 0.4) return { icon: '💡', text: 'El tutor está adaptando el contenido para mantener tu interés.' };
-    if ((r.error_risk ?? 0) > 0.65) return { icon: '⚠️', text: 'Alto riesgo de error detectado. Reforzando con ejemplos adicionales.' };
+    if (r.engagement_score != null && r.engagement_score < 0.4) return { icon: '💡', text: 'El tutor está adaptando el contenido para mantener tu interés.' };
+    if (r.error_risk != null && r.error_risk > 0.65) return { icon: '⚠️', text: 'Alto riesgo de error detectado. Reforzando con ejemplos adicionales.' };
     if (r.should_pause) return { icon: '⏸️', text: 'Recomendamos una pausa corta para consolidar el aprendizaje.' };
     return null;
   };
@@ -245,31 +245,39 @@ export default function LiveModeView({
                 <div className="flex justify-between items-center mb-1">
                   <p className="text-[#9B9A97] text-xs">Engagement</p>
                   <span className="text-[#0B6E99] text-xs font-semibold">
-                    {Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%
+                    {lastResponse.engagement_score != null ? `${Math.round(lastResponse.engagement_score * 100)}%` : '—'}
                   </span>
                 </div>
-                <div className="h-1.5 bg-[#37352F] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#0B6E99] rounded-full transition-all duration-700"
-                    style={{ width: `${Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%` }} />
-                </div>
+                {lastResponse.engagement_score != null ? (
+                  <div className="h-1.5 bg-[#37352F] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#0B6E99] rounded-full transition-all duration-700"
+                      style={{ width: `${Math.round(lastResponse.engagement_score * 100)}%` }} />
+                  </div>
+                ) : (
+                  <p className="text-[#5f5d59] text-[10px]">Sin datos suficientes</p>
+                )}
               </div>
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <p className="text-[#9B9A97] text-xs">Atención</p>
                   <span className="text-[#0F7B6C] text-xs font-semibold">
-                    {Math.round((lastResponse.attention_level ?? 0.5) * 100)}%
+                    {lastResponse.attention_level != null ? `${Math.round(lastResponse.attention_level * 100)}%` : '—'}
                   </span>
                 </div>
-                <div className="h-1.5 bg-[#37352F] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#0F7B6C] rounded-full transition-all duration-700"
-                    style={{ width: `${Math.round((lastResponse.attention_level ?? 0.5) * 100)}%` }} />
-                </div>
+                {lastResponse.attention_level != null ? (
+                  <div className="h-1.5 bg-[#37352F] rounded-full overflow-hidden">
+                    <div className="h-full bg-[#0F7B6C] rounded-full transition-all duration-700"
+                      style={{ width: `${Math.round(lastResponse.attention_level * 100)}%` }} />
+                  </div>
+                ) : (
+                  <p className="text-[#5f5d59] text-[10px]">Sin datos suficientes</p>
+                )}
               </div>
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <p className="text-[#9B9A97] text-xs">Riesgo de error</p>
                   <span className={`text-xs font-semibold ${(lastResponse.error_risk ?? 0) > 0.5 ? 'text-[#E03E3E]' : 'text-[#0F7B6C]'}`}>
-                    {Math.round((lastResponse.error_risk ?? 0) * 100)}%
+                    {lastResponse.error_risk != null ? `${Math.round(lastResponse.error_risk * 100)}%` : '—'}
                   </span>
                 </div>
                 <div className="h-1.5 bg-[#37352F] rounded-full overflow-hidden">

@@ -27,6 +27,7 @@ from app.models.classroom import Classroom, Enrollment
 from app.models.institution import AuditLog, Institution
 from app.models.learning import LearningSession, QuizHistory
 from app.models.expert_bot import ExpertBot
+from app.models.messages import DirectMessage
 
 router = APIRouter(prefix="/super", tags=["Super Profesor - Stats"])
 
@@ -572,6 +573,27 @@ class BroadcastSend(BaseModel):
     group_id: Optional[int] = None
 
 
+def _broadcast_recipients(body: "BroadcastSend", sender: "User", db: Session):
+    """Devuelve los usuarios a los que va dirigido el broadcast (excluyendo al propio rector)."""
+    inst_id = sender.institution_id
+    base = db.query(User).filter(
+        User.institution_id == inst_id,
+        User.is_active == True,
+        User.id != sender.id,
+    )
+
+    if body.recipient_type == "profesores":
+        return base.filter(User.role == UserRole.PROFESOR.value).all()
+    if body.recipient_type == "estudiantes":
+        return base.filter(User.role == UserRole.ESTUDIANTE.value).all()
+    if body.recipient_type == "grado" and body.grade:
+        return base.filter(User.grade == body.grade).all()
+    # institucional (default): profesores + estudiantes de la institución
+    return base.filter(
+        User.role.in_([UserRole.PROFESOR.value, UserRole.ESTUDIANTE.value])
+    ).all()
+
+
 @router.get("/broadcasts")
 async def list_broadcasts(
     current_user: User = Depends(get_current_user),
@@ -592,13 +614,29 @@ async def list_broadcasts(
             notes = _json.loads(lg.notes or "{}")
         except Exception:
             notes = {}
+
+        # Conteo real de lecturas: destinatarios que leyeron el mensaje entregado
+        recipient_ids = notes.get("recipient_ids") or []
+        total = len(recipient_ids) if recipient_ids else notes.get("total", 0)
+        reads = 0
+        if recipient_ids:
+            reads = (
+                db.query(func.count(DirectMessage.id))
+                .filter(
+                    DirectMessage.sender_id == lg.performed_by_id,
+                    DirectMessage.receiver_id.in_(recipient_ids),
+                    DirectMessage.is_read == True,
+                )
+                .scalar()
+            ) or 0
+
         result.append({
             "id":       lg.id,
             "subject":  notes.get("subject", "(sin asunto)"),
             "to":       notes.get("to", "Institución"),
             "date":     lg.created_at.strftime("%Y-%m-%d %H:%M"),
-            "reads":    0,
-            "total":    notes.get("total", 0),
+            "reads":    int(reads),
+            "total":    total,
             "sender":   (db.query(User).filter(User.id == lg.performed_by_id).first() or current_user).full_name or "Rector",
         })
 
@@ -614,24 +652,42 @@ async def send_broadcast(
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
 
-    # Calcular total de destinatarios
-    to_label = body.recipient_type
-    total = 0
-    if body.recipient_type == "institucional":
-        total = db.query(User).filter(User.institution_id == inst_id, User.is_active == True).count()
-        to_label = "Toda la institución"
-    elif body.recipient_type == "profesores":
-        total = db.query(User).filter(User.institution_id == inst_id, User.role == UserRole.PROFESOR.value, User.is_active == True).count()
-        to_label = "Solo profesores"
-    elif body.recipient_type == "estudiantes":
-        total = db.query(User).filter(User.institution_id == inst_id, User.role == UserRole.ESTUDIANTE.value, User.is_active == True).count()
-        to_label = "Solo estudiantes"
-    elif body.recipient_type == "grado" and body.grade:
-        total = db.query(User).filter(User.institution_id == inst_id, User.grade == body.grade, User.is_active == True).count()
-        to_label = f"Grado {body.grade}"
+    # Destinatarios reales (se excluye al propio rector)
+    recipients = _broadcast_recipients(body, current_user, db)
+
+    to_label = {
+        "institucional": "Toda la institución",
+        "profesores":    "Solo profesores",
+        "estudiantes":   "Solo estudiantes",
+        "grado":         f"Grado {body.grade}" if body.grade else "Por grado",
+    }.get(body.recipient_type, body.recipient_type)
+
+    total = len(recipients)
+    recipient_ids = [u.id for u in recipients]
+
+    # ── Entregar un mensaje real en el buzón de cada destinatario ─────────────
+    # Además del registro de auditoría, se crea un DirectMessage del rector hacia
+    # cada destinatario para que aparezca en el módulo "Mensajes" (con indicador
+    # de no leídos y seguimiento real de lectura / respuesta).
+    if recipients:
+        db.add_all([
+            DirectMessage(
+                sender_id=current_user.id,
+                receiver_id=uid,
+                content=f"📢 {body.subject}\n\n{body.body}",
+            )
+            for uid in recipient_ids
+        ])
+        db.flush()
 
     import json as _json
-    notes = _json.dumps({"subject": body.subject, "body": body.body, "to": to_label, "total": total})
+    notes = _json.dumps({
+        "subject":       body.subject,
+        "body":          body.body,
+        "to":            to_label,
+        "total":         total,
+        "recipient_ids": recipient_ids,
+    })
 
     log = AuditLog(
         action="broadcast",

@@ -184,6 +184,21 @@ def get_license_for_user(user: User, db: Session) -> LicenseInfo:
     Si el usuario no pertenece a ninguna institución, se devuelve
     licencia básica activa (ej: admin o usuarios sin institución).
     """
+    try:
+        return _get_license_for_user_inner(user, db)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        # Fallo de base de datos (Supabase lento/caído en serverless) se
+        # traduce en 503 controlado en lugar del 500 crudo que rompía
+        # /license/my-license, /messages/* e /integrations.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"No se pudo consultar la licencia (base de datos). {str(e)[:160]}",
+        ) from e
+
+
+def _get_license_for_user_inner(user: User, db: Session) -> LicenseInfo:
     institution: Optional[Institution] = None
     if user.institution_id:
         institution = db.query(Institution).filter(
@@ -201,6 +216,8 @@ def get_license_for_user(user: User, db: Session) -> LicenseInfo:
             teacher_dashboard_kpis=TEACHER_DASHBOARD_KPIS["basica"],
             neurobot_limit=NEUROBOT_LIMITS["basica"],
             export_formats=EXPORT_FORMATS["basica"],
+            groups_limit=GROUP_LIMITS["basica"],
+            students_limit=STUDENT_LIMITS["basica"],
             institution_name="Sin institución",
         )
 

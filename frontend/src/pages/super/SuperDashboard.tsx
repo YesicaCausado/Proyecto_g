@@ -14,12 +14,13 @@ import MensajeriaTab from './components/MensajeriaTab';
 import CalendarioTab from './components/CalendarioTab';
 import AuditoriaTab from './components/AuditoriaTab';
 import SeguridadTab from './components/SeguridadTab';
+import ProfileSettings from '../../components/ProfileSettings';
 import NeuronWelcome from '../../components/NeuronWelcome';
 import {
   ShieldCheck, LogOut, Users, GraduationCap, LayoutDashboard,
   BrainCircuit, Settings, Bell, BookOpen, Bot, FileText,
   MessageSquare, Calendar, Shield, CreditCard, Lock, ChevronRight,
-  Menu, X
+  Menu, X, UserRound
 } from 'lucide-react';
 
 const NAV_SECTIONS = [
@@ -51,6 +52,12 @@ const NAV_SECTIONS = [
       { id: 'seguridad',     label: 'Seguridad',     icon: Lock },
     ],
   },
+  {
+    label: 'MI CUENTA',
+    items: [
+      { id: 'perfil',        label: 'Mi Perfil',     icon: UserRound },
+    ],
+  },
 ];
 
 const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
@@ -67,6 +74,7 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   configuracion: { title: 'Configuración',         subtitle: 'Datos y personalización de la institución' },
   licencia:      { title: 'Gestión de Licencia',   subtitle: 'Plan, uso y renovación de licencia' },
   seguridad:     { title: 'Seguridad',             subtitle: 'Sesiones, 2FA e historial de accesos' },
+  perfil:        { title: 'Mi Perfil',             subtitle: 'Tu información personal y preferencias' },
 };
 
 export default function SuperDashboard() {
@@ -97,8 +105,14 @@ export default function SuperDashboard() {
     ? license.super_modules
     : ALL_TAB_IDS);
   const isModuleLocked = (id: string) => !enabledTabIds.has(id);
-  const enabledCount = ALL_TAB_IDS.filter(id => enabledTabIds.has(id)).length;
-  const lockedCount = ALL_TAB_IDS.length - enabledCount;
+
+  // Listado de módulos habilitados/bloqueados por licencia — solo se muestra
+  // al final del Dashboard (no en todas las páginas) para no molestar al usuario.
+  const dashboardModules = {
+    licenseType:  license?.license_type ?? null,
+    enabled:      ALL_TAB_IDS.filter(id => enabledTabIds.has(id)),
+    locked:       ALL_TAB_IDS.filter(id => !enabledTabIds.has(id)),
+  };
 
   // Muestra del listado de módulos habilitados por licencia (1.2.1.6).
   const currentMeta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
@@ -118,9 +132,9 @@ export default function SuperDashboard() {
     return (
       <button
         key={id}
+        aria-disabled={locked}
         title={locked ? `No disponible en tu licencia ${license?.license_type ? `«${license.license_type}»` : ''}` : label}
         onClick={() => handleNav(id)}
-        disabled={locked}
         className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${
           locked
             ? 'text-[#AEADAB] cursor-not-allowed border border-transparent'
@@ -270,27 +284,7 @@ export default function SuperDashboard() {
               </div>
             )}
 
-            {/* Módulos habilitados según licencia (1.2.1.6) */}
-            {license?.super_modules?.length > 0 && enabledCount > 0 && lockedCount > 0 && (
-              <div className="mb-4 bg-white border border-[#E9E9E7] rounded-lg px-4 py-3 flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-semibold text-[#191919] flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-[#6940A5]" />
-                  Módulos de tu licencia {license.license_type}:
-                </span>
-                {ALL_TAB_IDS.filter(id => enabledTabIds.has(id)).map(id => (
-                  <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium capitalize">
-                    {id}
-                  </span>
-                ))}
-                {ALL_TAB_IDS.filter(id => !enabledTabIds.has(id)).map(id => (
-                  <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F7F6F3] text-[#AEADAB] font-medium capitalize" title="No disponible en tu plan">
-                    <Lock className="w-3 h-3" /> {id}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {activeTab === 'dashboard'    && <DashboardGeneral license={license} onNavigate={setActiveTab} />}
+            {activeTab === 'dashboard'    && <DashboardGeneral license={license} onNavigate={setActiveTab} modules={dashboardModules} />}
             {activeTab === 'profesores'   && <TeachersTab license={license} />}
             {activeTab === 'estudiantes'  && <StudentsTab license={license} teachers={teachers} />}
             {activeTab === 'grupos'       && <GruposTab />}
@@ -303,6 +297,7 @@ export default function SuperDashboard() {
             {activeTab === 'configuracion' && <ConfiguracionTab />}
             {activeTab === 'licencia'     && <LicenciaTab license={license} />}
             {activeTab === 'seguridad'    && <SeguridadTab />}
+            {activeTab === 'perfil'       && <ProfileSettings role="super_profesor" prefsStorageKey="super_notifications" />}
 
           </div>
         </main>

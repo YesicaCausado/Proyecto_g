@@ -10,8 +10,28 @@
  */
 import { useMemo } from 'react';
 import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing';
+import { useThree } from '@react-three/fiber';
 import { BlendFunction } from 'postprocessing';
+import type { WebGLRenderer } from 'three';
 import type { RobotState } from './RobotStates';
+
+/**
+ * Comprueba si el renderer tiene un contexto WebGL usable.
+ * postprocessing lee `renderer.getContext().getContextAttributes().alpha`
+ * dentro de `EffectComposer.addPass`. Si el contexto se perdió o aún no está
+ * disponible, `getContextAttributes()` devuelve `null` y addPass revienta con
+ * "Cannot read properties of null (reading 'alpha')".
+ * Esta pérdida de contexto es típica en dev con React <StrictMode>,
+ * que monta/desmonta/monta el Canvas dos veces.
+ */
+function hasUsableContext(gl: WebGLRenderer | undefined): boolean {
+  try {
+    const ctx: WebGLRenderingContext | WebGL2RenderingContext | void = gl?.getContext?.();
+    return !!ctx && !!ctx.getContextAttributes?.();
+  } catch {
+    return false;
+  }
+}
 // ── Tipos de configuración ────────────────────────────────────
 
 export interface BloomConfig {
@@ -78,7 +98,19 @@ export default function RobotEffects({
     [robotState, presets],
   );
 
+  const gl = useThree((state) => state.gl) as WebGLRenderer | undefined;
+  const contextAvailable = useMemo(() => hasUsableContext(gl), [gl]);
+
   if (disabled) return null;
+
+  // Contexto WebGL perdido/no disponible → omitimos el post-proceso
+  // (evita el crash de EffectComposer.addPass y deja la escena base renderizando).
+  if (!contextAvailable) {
+    if (import.meta.env.DEV) {
+      console.warn('[RobotEffects] Contexto WebGL no disponible; se omiten los efectos de post-proceso.');
+    }
+    return null;
+  }
 
   // Los efectos siempre se renderizan; la intensidad controla la visibilidad.
   // EffectComposer requiere hijos de tipo Effect — no acepta short-circuit (&&).

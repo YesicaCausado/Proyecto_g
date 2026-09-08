@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Users, GraduationCap, BookOpen, Bot, TrendingUp, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2, LineChart,
-  PieChart, Trophy
+  PieChart, Trophy, Lock
 } from 'lucide-react';
 import api from '../../../services/api';
 import NeuronAvatar from '../../../components/NeuronAvatar';
@@ -20,7 +20,13 @@ interface DashStats {
 
 const AREA_COLORS = ['#0B6E99','#0F7B6C','#6940A5','#D9730D','#E03E3E','#AEADAB','#2E6FDB','#37352F'];
 
-export default function DashboardGeneral({ license, onNavigate }: { license: any; onNavigate?: (tab: string) => void }) {
+export default function DashboardGeneral({
+  license, onNavigate, modules,
+}: {
+  license: any;
+  onNavigate?: (tab: string) => void;
+  modules?: { licenseType: string | null; enabled: string[]; locked: string[] };
+}) {
   const [stats, setStats] = useState<DashStats | null>(null);
   const [institution, setInstitution] = useState<{ name: string } | null>(null);
 
@@ -307,6 +313,26 @@ export default function DashboardGeneral({ license, onNavigate }: { license: any
           <NeuronAvatar size={80} online variant="gradient" />
         </div>
       </div>
+
+      {/* ── Módulos disponibles por licencia (solo al final del dashboard) ── */}
+      {modules?.enabled?.length ? (
+        <div className="bg-white border border-[#E9E9E7] rounded-lg px-4 py-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-[#191919] flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-[#6940A5]" />
+            Módulos de tu licencia {modules.licenseType ?? 'actual'}:
+          </span>
+          {modules.enabled.map(id => (
+            <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium capitalize">
+              {id}
+            </span>
+          ))}
+          {modules.locked.map(id => (
+            <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F7F6F3] text-[#AEADAB] font-medium capitalize" title="No disponible en tu plan">
+              <Lock className="w-3 h-3" /> {id}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
     </div>
   );

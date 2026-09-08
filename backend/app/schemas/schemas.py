@@ -68,6 +68,7 @@ class StartSessionRequest(BaseModel):
     topic: str = Field(..., min_length=1, max_length=200)
     difficulty: str = Field(default="medium")
     bot_id: Optional[int] = None
+    conversation_id: Optional[int] = None
 
 
 class ChatMessageRequest(BaseModel):
@@ -75,6 +76,8 @@ class ChatMessageRequest(BaseModel):
     topic: Optional[str] = None
     history: Optional[List[Dict[str, Any]]] = None
     cognitive_state: Optional[str] = None
+    # Conversación (memoria entre chats tipo ChatGPT)
+    conversation_id: Optional[int] = None
     # Patrón 1 — Ritmo de Interacción
     response_time_ms: Optional[float] = Field(default=None, ge=0)
     typing_speed_cpm: Optional[float] = Field(default=None, ge=0)
@@ -87,6 +90,36 @@ class ChatMessageRequest(BaseModel):
     # Patrones 3 y 4 — datos multimodales opcionales
     facial_data: Optional[Dict[str, Any]] = None
     voice_data: Optional[Dict[str, Any]] = None
+
+
+class ConversationCreate(BaseModel):
+    subject: str = Field(default="")
+    skill: str = Field(default="")
+    topic: str = Field(default="")
+    bot_id: Optional[int] = None
+
+
+class ConversationRename(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+
+
+class ConversationMeta(BaseModel):
+    """Metadatos de una conversación para listado."""
+    id: int
+    student_id: int
+    title: str
+    subject: str
+    skill: str
+    topic: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    last_interaction: datetime
+
+
+class ConversationListResponse(BaseModel):
+    conversations: List[ConversationMeta]
+    total: int
 
 
 class ChatMessageResponse(BaseModel):
@@ -383,6 +416,39 @@ class ClassroomStatsResponse(BaseModel):
     students_at_risk: int
     top_performers: List[Dict] = []
     struggling_students: List[Dict] = []
+
+
+class ClassroomBotResponse(BaseModel):
+    bot_id: int
+    name: str
+    description: str = ""
+    category: Optional[str] = None
+    is_required: bool = False
+    order_index: int = 0
+
+
+class ClassroomStudentDetailResponse(BaseModel):
+    """Detalle de una clase para el estudiante inscrito (vista estilo classroom)"""
+    id: int
+    name: str
+    description: str = ""
+    subject: str
+    grade: str = ""
+    color: str = "#2E6FDB"
+    max_students: int = 40
+    student_count: int = 0
+    created_at: datetime
+    teacher_name: str = ""
+    invite_code: str = ""
+    # Progreso del estudiante en esta clase
+    overall_progress: float = 0.0
+    total_sessions: int = 0
+    total_time_minutes: float = 0.0
+    average_score: float = 0.0
+    risk_level: str = "none"
+    last_activity: Optional[datetime] = None
+    # Bots asignados a la clase (tutores)
+    bots: List[ClassroomBotResponse] = []
 
 
 # ===== SISTEMA B2B — INSTITUCIONES Y CREDENCIALES =====

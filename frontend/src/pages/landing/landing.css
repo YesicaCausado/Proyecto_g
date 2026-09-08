@@ -1,0 +1,198 @@
+/* ═════════════════════════════════════════════════════════════
+   LANDING NeuroLearn — Design system
+   × Estrictamente negro / blanco / grises / azul (70/20/10)
+   × Disposición automática de los componentes.
+   × Se importa desde LandingPage.tsx.
+   ═════════════════════════════════════════════════════════════ */
+
+/* ── Paleta (variables) ─────────────────────────────────────
+   Fuente única: config/landing.config.ts (NL). Se mantienen
+   duplicadas aquí como variables CSS para los estilos. */
+:root {
+  --nl-black:      #050505;
+  --nl-black-2:    #0A0A0A;
+  --nl-gray-dark:  #171717;
+  --nl-gray-mid:   #525252;
+  --nl-gray-light: #A3A3A3;
+  --nl-gray-pale:  #E5E5E5;
+  --nl-white:      #FFFFFF;
+  --nl-blue:       #2563EB;
+  --nl-blue-bright:#3B82F6;
+  --nl-blue-soft:  #60A5FA;
+
+  --nl-font-ui:     'Inter', 'Segoe UI', system-ui, sans-serif;
+  --nl-font-display:'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --nl-font-mono:   'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+/* ── Escala/app «raíz» de la landing ─────────────────────────
+   Aísla los estilos para no chocar con el resto del producto. */
+.nl-app {
+  font-family: var(--nl-font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background: var(--nl-black);
+}
+.nl-app img { display: block; max-width: 100%; }
+.nl-app a { text-decoration: none; }
+.nl-app *, .nl-app *::before, .nl-app *::after { box-sizing: border-box; }
+
+/* ── Scrollbar mínimo ────────────────────────────────────── */
+.nl-app ::-webkit-scrollbar { width: 9px; height: 9px; }
+.nl-app ::-webkit-scrollbar-track { background: var(--nl-black-2); }
+.nl-app ::-webkit-scrollbar-thumb { background: var(--nl-gray-dark); border-radius: 99px; }
+.nl-app ::-webkit-scrollbar-thumb:hover { background: var(--nl-gray-mid); }
+
+/* ── Tipografía base ─────────────────────────────────────── */
+.nl-h { font-family: var(--nl-font-display); font-weight: 600; letter-spacing: -0.02em; }
+.nl-mono { font-family: var(--nl-font-mono); }
+
+/* ── Eyebrow / kicker técnico ────────────────────────────── */
+.nl-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--nl-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+.nl-dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--nl-blue-bright); box-shadow: 0 0 12px var(--nl-blue-bright); }
+
+/* ── Contenedor base de sección ──────────────────────────── */
+.nl-section { position: relative; padding: clamp(72px, 11vh, 150px) clamp(20px, 6vw, 72px); }
+.nl-container { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; }
+.nl-narrow { max-width: 800px; }
+
+/* ── Surfaces (fondos) ───────────────────────────────────── */
+.nl-bg-black   { background: var(--nl-black); }
+.nl-bg-black-2 { background: var(--nl-black-2); }
+.nl-bg-dark    { background: var(--nl-gray-dark); }
+.nl-bg-light   { background: var(--nl-white); }
+.nl-bg-pale    { background: #F5F5F5; }
+
+/* ── Texto de ayuda (contrast) ───────────────────────────── */
+.nl-on-dark-light { color: var(--nl-white); }
+.nl-on-dark-dim   { color: #cfcfcf; }
+
+/* ── Grid tecnológico sutil ─────────────────────────────── */
+.nl-grid-bg {
+  background-image:
+    linear-gradient(to bottom, rgba(255,255,255,0.045) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255,255,255,0.045) 1px, transparent 1px);
+  background-size: 72px 72px;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 82%);
+  mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 82%);
+}
+
+/* ── Button base ─────────────────────────────────────────── */
+.nl-btn { cursor: pointer; border: 0; position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 10px; font-family: var(--nl-font-ui); font-weight: 600; border-radius: 999px; transition: transform .35s cubic-bezier(.22,1,.36,1), box-shadow .35s ease, background-color .35s ease, border-color .35s ease, color .35s ease; will-change: transform; }
+.nl-btn .nl-btn-arrow { transition: transform .35s cubic-bezier(.22,1,.36,1); display: inline-block; }
+.nl-btn:hover .nl-btn-arrow { transform: translateX(4px); }
+.nl-btn:active { transform: scale(0.975); }
+.nl-btn:focus-visible { outline: 2px solid var(--nl-blue-bright); outline-offset: 3px; }
+
+/* Primario — azul glow */
+.nl-btn-primary { background: var(--nl-blue); color: #fff; padding: 15px 30px; font-size: 15px; box-shadow: 0 0 0 rgba(37,99,235,0); }
+.nl-btn-primary:hover { transform: translateY(-2px) scale(1.015); background: var(--nl-blue-bright); box-shadow: 0 12px 34px -6px rgba(59,130,246,0.55); }
+.nl-btn-primary::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.35) 50%, transparent 60%); background-size: 220% 100%; background-position: 120% 0; opacity: 0; transition: opacity .35s ease; }
+.nl-btn-primary:hover::after { opacity: 1; animation: nl-shine .9s cubic-bezier(.22,1,.36,1) forwards; }
+
+/* Secundario — outline */
+.nl-btn-secondary { background: transparent; color: var(--nl-white); padding: 15px 30px; font-size: 15px; border: 1px solid rgba(255,255,255,0.22); }
+.nl-btn-secondary:hover { transform: translateY(-2px) scale(1.02); border-color: rgba(255,255,255,0.5); box-shadow: 0 0 0 1px rgba(255,255,255,0.08); }
+
+/* Oscuro sobre light */
+.nl-btn-dark { background: var(--nl-black); color: #fff; padding: 15px 30px; font-size: 15px; }
+.nl-btn-dark:hover { transform: translateY(-2px) scale(1.015); box-shadow: 0 16px 40px -8px rgba(0,0,0,0.45); }
+
+/* Outline oscuro */
+.nl-btn-outline-dark { background: transparent; color: var(--nl-black); padding: 15px 30px; font-size: 15px; border: 1px solid rgba(5,5,5,0.35); }
+.nl-btn-outline-dark:hover { transform: translateY(-2px) scale(1.02); border-color: rgba(5,5,5,0.75); box-shadow: 0 0 0 1px rgba(5,5,5,0.06); }
+
+/* Trío de brillo (shine) */
+@keyframes nl-shine { from { background-position: 120% 0; } to { background-position: -60% 0; } }
+
+/* ── Card interactiva ────────────────────────────────────── */
+.nl-card {
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 18px;
+  background: rgba(23,23,23,0.6);
+  box-shadow: 0 10px 40px -18px rgba(0,0,0,0.6);
+  transition: transform .5s cubic-bezier(.22,1,.36,1), box-shadow .5s ease, border-color .5s ease, background-color .5s ease;
+  will-change: transform;
+  overflow: hidden;
+}
+.nl-card:hover { transform: translateY(-6px); border-color: rgba(96,165,250,0.35); box-shadow: 0 30px 70px -24px rgba(37,99,235,0.35); }
+.nl-card-light { border-color: rgba(5,5,5,0.10); background: #fff; box-shadow: 0 14px 40px -20px rgba(0,0,0,0.14); }
+.nl-card-light:hover { border-color: rgba(37,99,235,0.35); box-shadow: 0 30px 70px -28px rgba(37,99,235,0.3); transform: translateY(-6px); }
+
+/* ── Orbes / node ────────────────────────────────────────── */
+.nl-node { position: absolute; border-radius: 50%; pointer-events: none; }
+.nl-orbit { position: absolute; border: 1px solid rgba(96,165,250,0.22); border-radius: 50%; pointer-events: none; }
+
+/* ── Connector line (verde → azul segun contexto) ────────── */
+.nl-connector { position: absolute; height: 1px; transform-origin: left center; background: linear-gradient(90deg, rgba(96,165,250,0.0), rgba(96,165,250,0.6)); }
+
+/* ── Cursor custom (desktop only) ────────────────────────── */
+/* Se monta el DOM con el hook useCustomCursor; este CSS da la capa. */
+.nl-cursor-dot, .nl-cursor-ring { position: fixed; left: 0; top: 0; pointer-events: none; border-radius: 50%; z-index: 9999; will-change: transform; }
+.nl-cursor-dot { width: 6px; height: 6px; margin: -3px 0 0 -3px; background: var(--nl-blue-bright); box-shadow: 0 0 10px var(--nl-blue); }
+.nl-cursor-ring { width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 1px solid rgba(96,165,250,0.5); transition: width .25s ease, height .25s ease, margin .25s ease, border-color .25s ease, background-color .25s ease, opacity .25s ease; }
+.nl-cursor-ring.is-hover { width: 52px; height: 52px; margin: -26px 0 0 -26px; background: rgba(37,99,235,0.10); border-color: var(--nl-blue-bright); }
+
+/* ── Typing indicator ────────────────────────────────────── */
+.nl-tb-typing { display: inline-flex; gap: 4px; align-items: center; }
+.nl-tb-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--nl-blue-soft); animation: nl-blink 1.3s infinite ease-in-out both; }
+.nl-tb-typing span:nth-child(2) { animation-delay: .2s; }
+.nl-tb-typing span:nth-child(3) { animation-delay: .4s; }
+@keyframes nl-blink { 0%,80%,100% { opacity: .25; transform: scale(.8);} 40% { opacity: 1; transform: scale(1); } }
+
+/* ── Fade-in helper (GSAP reveal) ────────────────────────── */
+.nl-reveal { opacity: 0; will-change: transform, opacity; }
+
+/* ── Navbar ──────────────────────────────────────────────── */
+.nl-nav {
+  position: fixed; inset-inline: 0; top: 0; z-index: 60;
+  transition: background-color .4s ease, backdrop-filter .4s ease, box-shadow .4s ease;
+}
+.nl-nav.scrolled {
+  background: rgba(5,5,5,0.74);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 10px 40px -20px rgba(0,0,0,0.8);
+}
+.nl-nav-inner { max-width: 1180px; margin: 0 auto; padding: 16px clamp(20px,5vw,40px); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.nl-nav a { color: #D6D6D6; transition: color .25s ease; }
+.nl-nav a:hover { color: #fff; }
+.nl-link-underline { position: relative; }
+.nl-link-underline::after { content: ''; position: absolute; left: 0; bottom: -3px; width: 100%; height: 1px; background: var(--nl-blue-bright); transform: scaleX(0); transform-origin: right; transition: transform .4s cubic-bezier(.22,1,.36,1); }
+.nl-link-underline:hover::after { transform: scaleX(1); transform-origin: left; }
+
+/* ── Pipeline stage ──────────────────────────────────────── */
+.nl-stage {
+  text-align: center; padding: 22px 14px; border: 1px solid rgba(255,255,255,0.10); border-radius: 16px;
+  background: linear-gradient(160deg, rgba(23,23,23,0.7), rgba(10,10,10,0.4));
+  transition: border-color .4s ease, transform .4s cubic-bezier(.22,1,.36,1), box-shadow .4s ease;
+}
+.nl-stage:hover { border-color: rgba(96,165,250,0.4); transform: translateY(-4px); box-shadow: 0 20px 40px -26px rgba(37,99,235,0.5); }
+
+/* ── Chat simulation ─────────────────────────────────────── */
+.nl-chat-window { border: 1px solid rgba(255,255,255,0.10); border-radius: 20px; background: linear-gradient(180deg, rgba(10,10,10,0.6), rgba(5,5,5,0.85)); box-shadow: 0 40px 120px -40px rgba(0,0,0,0.9); overflow: hidden; }
+.nl-msg { max-width: 78%; padding: 11px 15px; border-radius: 16px; font-size: 14.5px; line-height: 1.5; }
+.nl-msg-bot { background: rgba(23,23,23,0.9); color: #E5E5E5; border: 1px solid rgba(255,255,255,0.08); border-bottom-left-radius: 5px; }
+.nl-msg-user { background: var(--nl-blue); color: #fff; border-bottom-right-radius: 5px; margin-left: auto; }
+
+/* ── Estatus "online" de Neuron (punto azul) ─────────────── */
+
+/* ── prefers-reduced-motion: apagar animaciones CSS infinitas ─ */
+@media (prefers-reduced-motion: reduce) {
+  .nl-btn-primary::after, .nl-tb-typing span, .nl-btn-arrow { animation: none !important; }
+}
+
+/* ── Focus visible global de la landing ──────────────────── */
+.nl-app :focus-visible { outline: 2px solid var(--nl-blue-bright); outline-offset: 3px; }

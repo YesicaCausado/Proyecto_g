@@ -41,7 +41,7 @@ def _admin_bot_out(bot: ExpertBot, db: Session) -> dict:
         "id": bot.id,
         "name": bot.name,
         "description": bot.description or "",
-        "category": bot.subject_area or bot.category or "",
+        "category": bot.category or "",
         "creator_id": bot.creator_id,
         "creator_name": bot.creator.full_name if bot.creator else "",
         "is_public": bot.is_public,

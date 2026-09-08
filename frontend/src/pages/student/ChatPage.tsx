@@ -91,6 +91,9 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [prevInput, setPrevInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [showConvList, setShowConvList] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState(skillParam || "");
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
@@ -170,12 +173,33 @@ export default function ChatPage() {
 
     let data: ChatMessageResponse;
 
-    // ── Paso 1: llamada al backend ──
+    // ── Paso 1: crear/reutilizar conversación (memoria de chats) ──
+    // Si aún no hay conversation_id, se crea una para que el historial persista.
+    let convId = conversationId;
+    try {
+      if (!convId) {
+        const skillObj = SKILLS.find((s) => s.key === skillKey);
+        const cv = await api.post<any>("/chat/conversations", {
+          subject: skillObj?.name ?? "",
+          skill: skillObj?.topic ? skillObj.name : "",
+          topic: topic,
+          bot_id: botIdParam ? Number(botIdParam) : undefined,
+        });
+        convId = cv.data?.id ?? null;
+        setConversationId(convId);
+      }
+    } catch (e) {
+      // Si falla, seguimos sin conversation_id (el chat funciona igual).
+      console.warn("No se pudo crear conversación persistente:", e);
+    }
+
     try {
       const payload: any = { topic, difficulty: "medium" };
       if (botIdParam) payload.bot_id = Number(botIdParam);
+      if (convId) payload.conversation_id = convId;
       const res = await api.post<ChatMessageResponse>("/chat/start", payload);
       data = res.data;
+      if (convId) loadConversations();
     } catch (err: any) {
       if (err?.response && err.response.status < 500) {
         const detail = err.response.data?.detail || `Error ${err.response.status}`;
@@ -286,6 +310,7 @@ export default function ChatPage() {
       const res = await api.post<ChatMessageResponse>("/chat/message", {
         message: msgContent,
         topic: skill?.topic ?? "Tema general",
+        conversation_id: conversationId ?? undefined,
         cognitive_state: lastResponse?.cognitive_state || "normal",
         history: messages.slice(-10).map((m) => ({
           role: m.role === "bot" ? "assistant" : "user",
@@ -301,7 +326,14 @@ export default function ChatPage() {
         message_length:    behavioralMetrics.message_length,
         ...(facial.isStreaming && facial.snapshot.is_active ? {
           facial_data: {
-            emotion: facial.snapshot.valence > 0.2 ? "happy" : facial.snapshot.valence < -0.2 ? "worried" : "neutral",
+            // Emociones VÁLIDAS para el backend (happy/sad/neutral/confused/focused).
+            emotion: facial.snapshot.valence > 0.2
+              ? "happy"
+              : facial.snapshot.valence < -0.2
+                ? "sad"
+                : facial.snapshot.brow_furrow > 0.45
+                  ? "confused"
+                  : "neutral",
             valence: facial.snapshot.valence,
             arousal: facial.snapshot.arousal,
             attention_score: facial.snapshot.attention_score,
@@ -424,6 +456,56 @@ export default function ChatPage() {
     setSelectedSkill("");
     metrics.reset();
   };
+
+  // ─── Gestión de conversaciones (memoria de chats) ─────────────────────────
+  const loadConversations = async () => {
+    try {
+      const res = await api.get<any>("/chat/conversations");
+      setConversations(res.data?.conversations ?? []);
+    } catch (e) { /* destruye silenciosamente */ }
+  };
+
+  const loadConversation = async (id: number) => {
+    try {
+      const res = await api.get<any>(`/chat/conversations/${id}`);
+      const conv = res.data?.conversation;
+      const msgs = (res.data?.messages ?? []).map((m: any) => ({
+        id: String(m.id),
+        role: m.role === "user" ? "user" : "bot",
+        content: m.content,
+        timestamp: new Date(m.timestamp),
+      }));
+      setConversationId(id);
+      setMessages(msgs);
+      setSessionActive(true);
+      if (conv?.skill) {
+        setSelectedSkill(conv.skill);
+      }
+      setShowConvList(false);
+      metrics.reset();
+      if (msgs.length) metrics.onBotMessageReceived();
+    } catch (e) { /* ignore */ }
+  };
+
+  const newConversation = () => {
+    setConversationId(null);
+    setSessionActive(false);
+    setMessages([]);
+    setLastResponse(null);
+    setShowConvList(false);
+    metrics.reset();
+  };
+
+  const deleteConversation = async (id: number) => {
+    try {
+      await api.delete(`/chat/conversations/${id}`);
+      if (conversationId === id) newConversation();
+      else loadConversations();
+    } catch (e) { /* ignore */ }
+  };
+
+  // Cargar lista de conversaciones al montar
+  useEffect(() => { loadConversations(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const stateKey = lastResponse?.cognitive_state || "";
   const stateInfo = STATE_LABELS[stateKey] || { label: stateKey, color: "bg-[#F7F6F3] text-[#787774]" };
@@ -705,6 +787,13 @@ export default function ChatPage() {
               <BarChart2 className="w-4 h-4" />
             </button>
             <button
+              onClick={() => { loadConversations(); setShowConvList(!showConvList); }}
+              className={`p-2 rounded-lg transition-colors ${showConvList ? "bg-[#E5F3FF] text-[#0B6E99]" : "text-[#9B9A97] hover:text-[#0B6E99] hover:bg-[#E5F3FF]"}`}
+              title="Historial de conversaciones"
+            >
+              📚
+            </button>
+            <button
               onClick={endSession}
               className="p-2 text-[#9B9A97] hover:text-danger-500 hover:bg-[#FDEEEE] rounded-lg transition-colors"
               title="Terminar sesión"
@@ -736,6 +825,54 @@ export default function ChatPage() {
               </button>
             </div>
             <p className="text-center text-[10px] text-[#9B9A97] mt-1">Análisis facial activo</p>
+          </div>
+        )}
+
+        {/* Panel de conversaciones (historial de chats) */}
+        {showConvList && (
+          <div className="px-4 py-3 border-b border-[#E9E9E7] bg-white">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-[#9B9A97] uppercase tracking-wide">
+                Conversaciones
+              </p>
+              <button
+                onClick={newConversation}
+                className="text-[11px] font-semibold text-[#0B6E99] hover:underline"
+              >
+                + Nueva
+              </button>
+            </div>
+            <div className="space-y-1.5 max-h-56 overflow-y-auto">
+              {conversations.length === 0 && (
+                <p className="text-xs text-[#9B9A97]">Aún no hay conversaciones guardadas.</p>
+              )}
+              {conversations.map((c: any) => (
+                <div
+                  key={c.id}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer border transition-colors ${
+                    conversationId === c.id
+                      ? "bg-[#E5F3FF] border-[#BFDFF0]"
+                      : "bg-[#F7F6F3] border-transparent hover:bg-[#EEF4F0]"
+                  }`}
+                  onClick={() => loadConversation(c.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#37352F] truncate">{c.title || "Conversación"}</p>
+                    <p className="text-[10px] text-[#9B9A97]">
+                      {c.subject || c.skill || c.topic || ""} ·{" "}
+                      {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : ""}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
+                    className="text-[10px] text-[#9B9A97] hover:text-[#E03E3E] px-1.5 flex-shrink-0"
+                    title="Eliminar conversación"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -882,17 +1019,27 @@ export default function ChatPage() {
             <div className="flex items-center gap-3 mt-2 max-w-4xl mx-auto">
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Engagement:</span>
-                <div className="w-16 h-1 bg-[#F7F6F3] rounded-full overflow-hidden">
-                  <div className="h-full bg-[#0B6E99] rounded-full transition-all duration-700"
-                    style={{ width: `${Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%` }} />
-                </div>
-                <span>{Math.round((lastResponse.engagement_score ?? 0.5) * 100)}%</span>
+                {lastResponse.engagement_score != null ? (
+                  <>
+                    <div className="w-16 h-1 bg-[#F7F6F3] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0B6E99] rounded-full transition-all duration-700"
+                        style={{ width: `${Math.round(lastResponse.engagement_score * 100)}%` }} />
+                    </div>
+                    <span>{Math.round(lastResponse.engagement_score * 100)}%</span>
+                  </>
+                ) : (
+                  <span className="text-[#E9E9E7]">—</span>
+                )}
               </div>
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Riesgo error:</span>
-                <span className={`font-medium ${(lastResponse.error_risk ?? 0) > 0.5 ? "text-[#E03E3E]" : "text-[#0F7B6C]"}`}>
-                  {Math.round((lastResponse.error_risk ?? 0) * 100)}%
-                </span>
+                {lastResponse.error_risk != null ? (
+                  <span className={`font-medium ${lastResponse.error_risk > 0.5 ? "text-[#E03E3E]" : "text-[#0F7B6C]"}`}>
+                    {Math.round(lastResponse.error_risk * 100)}%
+                  </span>
+                ) : (
+                  <span className="text-[#E9E9E7]">—</span>
+                )}
               </div>
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span className="text-[#9B9A97]">|</span>

@@ -9,11 +9,19 @@
  *
  * Robot panel (izq/arriba) + Card panel (der/abajo).
  * Fully responsive: columna en mobile, fila en ≥768px.
+ *
+ * CARGA DIFERIDA + GATE:
+ *   El formulario (children) NO se muestra hasta que Neuron
+ *   (robot 3D) termine de renderizar la escena. Mientras tanto
+ *   se muestra un splash de bienvenida con el logo.
+ *   Si el 3D falla o tarda demasiado, se muestra un fallback
+ *   estático de Neuron y el login siempre queda accesible.
  * ─────────────────────────────────────────────────────────────
  */
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { RobotProvider } from '../../../context/RobotContext';
 import RobotCanvas       from './robot/RobotCanvas';
+import { RobotErrorBoundary } from './robot/RobotErrorBoundary';
 
 interface AuthPageLayoutProps {
   /** Contenido de la tarjeta derecha (formulario) */
@@ -29,6 +37,8 @@ const CSS = `
     justify-content: center;
     font-family: 'Inter', sans-serif;
     padding: 16px;
+    position: relative;
+    overflow: hidden;
   }
   .auth-container {
     display: flex;
@@ -56,6 +66,12 @@ const CSS = `
     align-items: center;
     justify-content: center;
     padding: 40px 32px;
+    transition: opacity 420ms ease, transform 420ms ease;
+  }
+  .auth-card-panel.is-hidden {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
   }
   @media (min-width: 768px) {
     .auth-container {
@@ -73,9 +89,72 @@ const CSS = `
       padding: 48px 40px;
     }
   }
+
+  /* ── Splash de carga: Neuron inicializándose ─────────────── */
+  .auth-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: #EDECEA;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    transition: opacity 500ms ease, visibility 500ms ease;
+  }
+  .auth-splash.is-gone {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .auth-splash-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #0B6E99;
+    animation: authSplashPulse 1.1s ease-in-out infinite;
+  }
+  .auth-splash-p {
+    margin: 0;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(55,53,47,0.55);
+    font-weight: 500;
+    animation: authSplashBlink 1.4s ease-in-out infinite;
+  }
+  @keyframes authSplashPulse {
+    0%,100% { opacity: 0.35; transform: scale(0.9); }
+    50%      { opacity: 1;   transform: scale(1.15); }
+  }
+  @keyframes authSplashBlink {
+    0%,100% { opacity: 0.5; }
+    50%      { opacity: 1;   }
+  }
 `;
 
+// Tiempo de espera máximo antes de mostrar el login aunque Neuron
+// aún no haya terminado de renderizar (evita que el acceso se bloquee).
+const SCENE_READY_TIMEOUT_MS = 10_000;
+
 export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
+  // 'pending' → muestra splash y oculta el formulario
+  // 'ready'   → Neuron renderizado → muestra formulario
+  const [sceneReady, setSceneReady] = useState(false);
+  const [sceneError, setSceneError] = useState(false);
+
+  // Timeout de seguridad: nunca bloquear el acceso para siempre.
+  useEffect(() => {
+    const t = window.setTimeout(() => setSceneReady(true), SCENE_READY_TIMEOUT_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  const onReady = () => setSceneReady(true);
+  // Si el 3D falla, no mostramos ningún robot falso: solo revelamos el
+  // formulario y dejamos el panel vacío (solo la marca en la esquina).
+  const onError  = () => setSceneError(true);
+
+  const revealForm = sceneReady || sceneError;
+
   return (
     <RobotProvider>
       <style>{CSS}</style>
@@ -91,7 +170,19 @@ export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
                 boxShadow: 'inset 0 0 32px rgba(55,53,47,0.04)',
               }}
             />
-            <RobotCanvas enabled className="absolute inset-0" />
+            <RobotErrorBoundary onError={onError} fallback={null}>
+              <RobotCanvas
+                enabled
+                className="absolute inset-0"
+                onSceneReady={onReady}
+                /* Optimización del login: no descargar HDR desde CDN,
+                   no post-proceso pesado, no sombras. */
+                environment={false}
+                effects={false}
+                shadows={false}
+              />
+            </RobotErrorBoundary>
+
             <p
               style={{
                 position: 'absolute', bottom: '16px', left: '20px',
@@ -104,12 +195,19 @@ export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
             </p>
           </div>
 
-          {/* ── Slot de contenido ─────────────────── */}
-          <div className="auth-card-panel">
+          {/* ── Slot de contenido (formulario) ─────────── */}
+          <div className={`auth-card-panel ${revealForm ? '' : 'is-hidden'}`}>
             {children}
           </div>
 
         </div>
+      </div>
+
+      {/* ── Splash mientras Neuron (robot.glb) se inicializa ── */}
+      {/* Se usa un spinner neutro — ningún robot falso. */}
+      <div className={`auth-splash ${revealForm ? 'is-gone' : ''}`} aria-hidden={revealForm}>
+        <div className="auth-splash-dot" />
+        <p className="auth-splash-p">Inicializando Neuron…</p>
       </div>
     </RobotProvider>
   );

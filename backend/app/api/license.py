@@ -113,7 +113,17 @@ async def get_my_license(
 
     Este es el endpoint canónico que la UI debe usar (ver LicenseContext.tsx).
     """
-    license_info = get_license_for_user(current_user, db)
+    try:
+        license_info = get_license_for_user(current_user, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        # La base de datos puede fallar/colgarse en serverless (causa del 500
+        # en producción). Devolvemos un 503 controlado en lugar del 500 crudo.
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudo obtener la licencia (base de datos). {str(e)[:160]}",
+        )
     return license_info.to_dict()
 
 

@@ -16,6 +16,7 @@ import {
   ChevronRight,
   LayoutList,
   Calendar,
+  Settings,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -78,6 +79,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           items: [
             { to: '/messages',    icon: MessageSquare, label: 'Mensajes',    module: 'mensajes' },
           ].filter(i => !i.module || hasStudentModule(i.module)),
+        },
+        {
+          label: 'CUENTA',
+          items: [
+            { to: '/settings',    icon: Settings, label: 'Mi Perfil' },
+          ],
         },
       ].filter(sec => sec.items.length > 0);
 

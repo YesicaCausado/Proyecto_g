@@ -1,10 +1,12 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   School, Users, BookOpen, ShieldCheck,
   Plus, ArrowRight, Loader2,
 } from 'lucide-react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import NeuronWelcome from '../../components/NeuronWelcome';
 
 interface AdminStats {
   total_institutions:     number;
@@ -34,6 +36,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function AdminHome() {
+  const { user } = useAuth();
   const [stats, setStats]     = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,15 +82,11 @@ export default function AdminHome() {
   return (
     <div className="p-8 max-w-6xl">
 
-      {/* ── Encabezado ─────────────────────────────────────── */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-[#191919]">
-          Bienvenido al panel de administración
-        </h1>
-        <p className="text-[#787774] mt-1 text-sm">
-          Gestión global de instituciones, licencias y usuarios de NeuroLearn IA.
-        </p>
-      </div>
+      {/* ── Encabezado con Neuron (igual que estudiante) ─────── */}
+      <NeuronWelcome
+        name={user?.full_name || user?.username || ''}
+        subtitle="Gestión global de instituciones, licencias y usuarios de NeuroLearn IA"
+      />
 
       {/* ── Flujo de roles ─────────────────────────────────── */}
       <div className="bg-[#E5F3FF] border border-[#BFDFF0] rounded-md p-5 mb-8 flex flex-wrap items-center gap-2 text-sm">

@@ -27,6 +27,7 @@ const BASE_NODE_COUNT     = 26;
 const MAX_LINKS_PER_NODE  = 3;   // evita un grafo denso / ruidoso
 const LINK_LIMIT          = 120; // tope absoluto de segmentos SVG
 const LINK_MAX_DIST       = 14;  // % del viewport: umbral de "cercanía"
+const MAX_PARALLAX        = 26;  // px máx. de desplazamiento por el ratón
 
 type NodeKind = 'dot' | 'ring' | 'square';
 
@@ -38,6 +39,7 @@ interface PNode {
   kind:  NodeKind;
   delay: number;   // s — fase de aparición
   dur:   number;   // s — duración del idling
+  depth: number;   // 0..1 — peso de respuesta al ratón (centro = más)
 }
 
 interface PLink {
@@ -65,14 +67,27 @@ function makeNodes(count: number): PNode[] {
   const kinds: NodeKind[] = ['dot', 'dot', 'dot', 'ring', 'square', 'dot'];
   const nodes: PNode[] = [];
   for (let i = 0; i < count; i++) {
+    // Base position (determinista)
+    const baseX = 4 + rnd() * 92; // 4-96%
+    const baseY = 8 + rnd() * 84; // 8-92%
+
+    // Profundidad por nodo: los que están más cerca del centro del campo
+    // responden más al ratón (parallax de profundidad). Guardamos un peso
+    // [0..1] y la influencia del mouse se aplica como transform CSS a cada
+    // nodo en tiempo de render —no dentro de estas coordenadas estáticas—,
+    // de modo que el useMemo sigue siendo determinista y de coste cero.
+    const centerDist = Math.hypot(0.5 - baseX / 100, 0.5 - baseY / 100);
+    const depth = Math.max(0, 1 - centerDist / Math.SQRT2); // 0 borde → 1 centro
+
     nodes.push({
       id:    i,
-      x:     4 + rnd() * 92,                                 // 4–96%
-      y:     8 + rnd() * 84,                                 // 8–92%
-      size:  2 + rnd() * 3.5,                                // 2–5.5px
+      x:     baseX,
+      y:     baseY,
+      size:  2 + rnd() * 3.5, // 2-5.5px
       kind:  kinds[Math.floor(rnd() * kinds.length)],
       delay: +(rnd() * 1.6).toFixed(2),
       dur:   +(3 + rnd() * 3).toFixed(2),
+      depth,               // peso de respuesta al ratón
     });
   }
   return nodes;
@@ -113,7 +128,7 @@ function makeLinks(nodes: PNode[]): PLink[] {
   return links;
 }
 
-export default function NeuronField() {
+export default function NeuronField({ mouseX = 0, mouseY = 0 }: { mouseX?: number; mouseY?: number } = {}) {
   const { nodes, links } = useMemo(() => {
     const q = typeof window !== 'undefined' && window.innerWidth < 768
       ? Math.round(BASE_NODE_COUNT * 0.45)
@@ -121,6 +136,15 @@ export default function NeuronField() {
     const ns = makeNodes(q);
     return { nodes: ns, links: makeLinks(ns) };
   }, []);
+
+  // Influyen del ratón en píxeles: el desplazamiento máximo es
+  // MAX_PARALLAX px y se modula por la profundidad de cada nodo (más
+  // cerca del centro → más recorrido = parallax de profundidad). Se
+  // inyecta como variables CSS (--px/--py) que los keyframes de
+  // `nodeFloat` suman a su propia flotación, de modo que ningún
+  // transform pisa al otro y el coste por frame es mínimo.
+  const mox = (mouseX || 0) * MAX_PARALLAX;
+  const moy = (mouseY || 0) * MAX_PARALLAX;
 
   return (
     <div
@@ -171,6 +195,11 @@ export default function NeuronField() {
             borderRadius: n.kind === 'square' ? '1px' : '50%',
             background: n.kind === 'ring' ? 'transparent' : 'currentColor',
             boxShadow: n.kind === 'ring' ? 'inset 0 0 0 1px currentColor' : 'none',
+            // Desplazamiento paraláctico por el ratón vía variables CSS:
+            // los keyframes de `nodeFloat` las consumen, sin romper el
+            // determinismo de las posiciones base ni pisar la flotación.
+            ['--px' as string]: `${(mox * n.depth).toFixed(1)}px`,
+            ['--py' as string]: `${(moy * n.depth).toFixed(1)}px`,
             opacity: 0,
             animation: `nodeFloat ${n.dur}s ease-in-out ${n.delay}s infinite`,
           }}

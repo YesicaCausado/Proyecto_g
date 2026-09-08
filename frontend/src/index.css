@@ -107,10 +107,13 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 
 /* ── Nodo del campo: respira suavemente (solo transform, para no
    pisar la opacidad que controla GSAP) ─────────────────────── */
+/* El parallax del ratón (NeuronField.tsx) se inyecta por nodo como
+   variables --px/--py; los keyframes las suman a la flotación base
+   para que ambos efectos coexistan sin pisarse. */
 @keyframes nodeFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  30%      { transform: translate(1.5px, -4px) scale(1.12); }
-  70%      { transform: translate(-1.5px, 3px) scale(0.9); }
+  0%, 100% { transform: translate(calc(var(--px, 0px)), calc(var(--py, 0px))) scale(1); }
+  30%      { transform: translate(calc(var(--px, 0px) + 1.5px), calc(var(--py, 0px) - 4px)) scale(1.12); }
+  70%      { transform: translate(calc(var(--px, 0px) - 1.5px), calc(var(--py, 0px) + 3px)) scale(0.9); }
 }
 
 /* ── CTA del hero: micro-interacción premium al hover ──────── */
@@ -156,10 +159,116 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 .hero-scroll-dot { animation: heroScrollDot 1.8s ease-in-out infinite; }
 
+/* ── Punto "en vivo" del eyebrow — pulso sutil ─────────────── */
+@keyframes heroLivePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+.hero-live-dot { animation: heroLivePulse 2.6s ease-in-out infinite; }
+
+/* ── Filete bajo la marca — destello de extremo a extremo ──── */
+@keyframes heroRuleShimmer {
+  0%   { transform: scaleX(0.35); opacity: 0.4; }
+  50%  { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(0.35); opacity: 0.4; }
+}
+.hero-brand-rule {
+  transform-origin: center;
+  animation: heroRuleShimmer 4s ease-in-out infinite;
+}
+
+/* ── "Shine" de barrido al hacer hover sobre el CTA principal ─ */
+.hero-cta-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 60%
+  );
+  background-size: 220% 100%;
+  background-position: 120% 0;
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+.hero-cta-primary:hover .hero-cta-shine {
+  opacity: 1;
+  animation: heroShineSweep .9s cubic-bezier(.22, 1, .36, 1) forwards;
+}
+@keyframes heroShineSweep {
+  from { background-position: 120% 0; }
+  to   { background-position: -60% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LANDING · Dirección editorial NeuroLearn
+   Tipografía con personalidad (serif display + grotesk técnica +
+   mono para etiquetas/numeraciones) y acentos de la paleta.
+   Rompe la monocromía genérica sin perder elegancia.
+   ═══════════════════════════════════════════════════════════ */
+
+.landing-serif {
+  font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+  font-optical-sizing: auto;
+}
+.landing-sans {
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+}
+.landing-mono {
+  font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', monospace;
+}
+
+/* Numeración editorial asígnica (huecos rellenos, sin trazo tosco) */
+.landing-num {
+  font-family: 'Fraunces', Georgia, serif;
+  font-variant-numeric: lining-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Cabecera de sección: etiqueta mono + punto vivo de la paleta */
+.landing-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+}
+
+/* Enlace editorial: subrayado que "camina" de izquierda a derecha */
+.landing-link {
+  position: relative;
+}
+.landing-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  height: 1px;
+  width: 100%;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform .4s cubic-bezier(.22, 1, .36, 1);
+}
+.landing-link:hover::after,
+.landing-link:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
 /* ── prefers-reduced-motion: desactivar animaciones CSS infinitas ─ */
 @media (prefers-reduced-motion: reduce) {
   .hero-node,
-  .hero-scroll-dot {
+  .hero-scroll-dot,
+  .hero-live-dot,
+  .hero-brand-rule,
+  .hero-cta-shine,
+  .hero-cta-primary:hover .hero-cta-shine {
     animation: none !important;
   }
 }

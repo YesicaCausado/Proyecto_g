@@ -1,4 +1,4 @@
-﻿import * as THREE from "three";
+import * as THREE from "three";
 import { useRef, useEffect } from "react";
 import { useGLTF } from "@react-three/drei";
 import type { Group, AnimationClip } from "three";
@@ -15,15 +15,6 @@ export interface RobotModelProps {
   groupRef?:      React.RefObject<Group | null>;
   onLoaded?:      (clips: AnimationClip[], scene: THREE.Object3D) => void;
   onError?:       (error: Error) => void;
-}
-
-export function RobotFallback({ position, scale }: { position: Vector3Tuple; scale: Vector3Tuple }) {
-  return (
-    <mesh position={position} scale={scale}>
-      <capsuleGeometry args={[0.3, 0.8, 4, 8]} />
-      <meshStandardMaterial color="#4f8ef7" transparent opacity={0.18} wireframe />
-    </mesh>
-  );
 }
 
 export default function RobotModel({

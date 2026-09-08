@@ -22,7 +22,7 @@
  * sin animación y evita parallax/flotación.
  * ─────────────────────────────────────────────────────────────
  */
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import gsap    from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -67,11 +67,39 @@ export default function Hero() {
   const ctaRef        = useRef<HTMLDivElement>(null);
   const scrollHintRef = useRef<HTMLDivElement>(null);
 
+  // Mouse position for neuronal field interaction. Estado React (no un
+  // ref) para que NeuronField re-renderice y aplique el parallax a cada
+  // nodo vía transform; normalizado a [-1, 1].
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const isMouseTrackingEnabled = useRef<boolean>(true);
+
   const isMobile = typeof window !== 'undefined' && window.innerWidth < HERO_RESPONSIVE.mobileBreakpoint;
 
   // Parallax de mouse → inclinación 3D sutil de Neurón (autodesactivable
   // en touch / prefers-reduced-motion).
   useHeroMouseParallax(() => robotWrapRef.current?.wrapper ?? null, !reduceMotion && !isMobile);
+
+  // Track mouse position for neuronal field. Throttled por rAF.
+  useLayoutEffect(() => {
+    if (!isMouseTrackingEnabled.current) return;
+    let raf = 0;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        setMouse({
+          x: (e.clientX / window.innerWidth) * 2 - 1,
+          y: (e.clientY / window.innerHeight) * 2 - 1,
+        });
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const section   = sectionRef.current;
@@ -91,15 +119,6 @@ export default function Hero() {
     const glow     = glowRef.current;
     const fade     = fadeRef.current;
 
-    // ── ESTADO INICIAL ─────────────────────────────────────
-    // Bajo reduced-motion no ocultamos nada: mostramos el estado final
-    // y saltamos la animación de entrada (accesibilidad).
-    //
-    // Defensa StrictMode/refs: GSAP 3.15 lanza "Cannot read properties
-    // of null (reading '_gsap')" si un arreglo de targets contiene un
-    // elemento null. Bajo React 19 (StrictMode reinvoca useLayoutEffect
-    // y puede haber re-appear de effects con refs momentáneamente null),
-    // filtramos los targets antes de pasárselos a GSAP.
     const contentTargets = [brand, headline, sub, cta, scrollHint].filter(
       Boolean,
     ) as Element[];
@@ -109,7 +128,6 @@ export default function Hero() {
     if (glow) gsap.set(glow, { opacity: 0 });
 
     if (reduceMotion) {
-      // Estado final visible sin animación
       if (robot) gsap.set(robot, {
         y: 0,
         scale: isMobile ? HERO_RESPONSIVE.mobileRobotScale : HERO_ROBOT.scale,
@@ -119,7 +137,6 @@ export default function Hero() {
       gsap.set(contentTargets, { opacity: 1 });
       gsap.set(nodes?.querySelectorAll('.hero-node') ?? [], { opacity: 1 });
     } else {
-      // Punto de partida de la animación de entrada
       gsap.set(contentTargets, { opacity: 0 });
       if (robot) gsap.set(robot, {
         y: HERO_ROBOT.entranceY,
@@ -129,17 +146,14 @@ export default function Hero() {
       });
     }
 
-    // ── Colector de limpieza — se mata en unmount / StrictMode ─
     let entranceTl: gsap.core.Timeline | undefined;
     let scrollTl:   gsap.core.Timeline | undefined;
     let floatTween: gsap.core.Tween | null = null;
 
     if (!reduceMotion) {
-      // ── ENTRADA — timeline por pasos ───────────────────────
       entranceTl = gsap.timeline({ defaults: { ease: 'power3.out' } });
       const tl    = entranceTl;
 
-      // Paso 2 — Neurón entra en escena (crece + sube + rota)
       if (robot) {
         tl.to(robot, {
           y: 0,
@@ -151,7 +165,6 @@ export default function Hero() {
         }, HERO_TIMING.step2Robot);
       }
 
-      // Paso 3 — nodos del campo aparecen con stagger
       if (nodes) {
         tl.to(nodes.querySelectorAll('.hero-node'), {
           opacity: 1,
@@ -161,14 +174,12 @@ export default function Hero() {
         }, HERO_TIMING.step3Nodes);
       }
 
-      // Paso 4 — NEUROLEARN
       if (brand) {
         tl.fromTo(brand, { y: 24, opacity: 0 }, {
           y: 0, opacity: 1, duration: 0.9,
         }, HERO_TIMING.step4Brand);
       }
 
-      // Paso 5 — mensaje + sublínea + CTA (stagger)
       if (headline) {
         tl.fromTo(headline, { y: 28, opacity: 0 }, {
           y: 0, opacity: 1, duration: 0.9,
@@ -185,13 +196,11 @@ export default function Hero() {
         }, HERO_TIMING.step5Copy + HERO_TIMING.stagger * 2);
       }
 
-      // Glow sutil + scroll hint al final
       if (scrollHint) {
         tl.fromTo(scrollHint, { opacity: 0 }, { opacity: 1, duration: 0.6 },
           HERO_TIMING.step5Copy + HERO_TIMING.stagger * 3);
       }
 
-      // ── FLOTACIÓN continua (solo desktop, no reduced-motion) ─
       if (robotFloat && !isMobile) {
         floatTween = gsap.to(robotFloat, {
           y: `+=${HERO_ROBOT.floatAmplitude}`,
@@ -202,9 +211,6 @@ export default function Hero() {
         });
       }
 
-      // ── SCROLL TRIGGER — transición cinematográfica ────────
-      // El trigger es el mismo hero; el scrub recorre la zona
-      // hero + parte de la sección de patrones.
       scrollTl = gsap.timeline({
         defaults: { ease: 'none' },
         scrollTrigger: {
@@ -212,32 +218,24 @@ export default function Hero() {
           start: HERO_SCROLL.start,
           end: HERO_SCROLL.end,
           scrub: 0.6,
-          // invalidateOnRefresh para recomputar en responsive
           invalidateOnRefresh: true,
         },
       });
 
-      // Blanco → oscuro (cambio gradual, no instantáneo)
       if (bgLight && bgDark) {
         scrollTl.to(bgLight, { opacity: 0, duration: 1 }, 0);
         scrollTl.to(bgDark,  { opacity: 1, duration: 1 }, 0);
         scrollTl.to(glow,    { opacity: 0.9, duration: 1.2 }, 0.1);
       }
 
-      // La rejilla técnica se desvanece con el fondo claro (no queda
-      // ningún rastro sobre la zona oscura).
       if (grid) {
         scrollTl.to(grid, { opacity: 0, duration: 1 }, 0);
       }
 
-      // El fade inferior inferior se retira conforme oscurece el fondo
-      // (evita una mancha blanca sobre la zona oscura).
       if (fade) {
         scrollTl.to(fade, { opacity: 0, duration: 1 }, 0.05);
       }
 
-      // Neurón se desplaza hacia arriba, se achica levemente y
-      // rota — como si entrara "hacia dentro del mundo".
       if (robot) {
         scrollTl.to(robot, {
           y: HERO_SCROLL.robotUpTravel,
@@ -247,17 +245,14 @@ export default function Hero() {
         }, 0);
       }
 
-      // Texto sale MÁS rápido que Neurón → parallax de profundidad
       const copyOut = { duration: 0.8, opacity: 0, y: HERO_SCROLL.textTravel * 0.35, scale: 0.96 };
       scrollTl.to(contentTargets, copyOut, 0.05);
 
-      // Nodos se dispersan hacia afuera y se desvanecen
       if (nodes) {
         scrollTl.to(nodes, { opacity: 0, x: 30, scale: 1.05, duration: 1 }, 0);
       }
     }
 
-    // ── Limpieza — evita memory leaks / ScrollTriggers huérfanos ─
     return () => {
       entranceTl?.kill();
       floatTween?.kill();
@@ -273,6 +268,7 @@ export default function Hero() {
       className="relative w-full overflow-hidden"
       style={{ height: '100vh', minHeight: '640px' }}
       aria-label="NeuroLearn — hero"
+      id="hero"
       data-hero="section"
     >
       {/* ── Capas de fondo (white → dark por scroll) ─────────── */}
@@ -281,9 +277,6 @@ export default function Hero() {
         className="absolute inset-0 bg-white"
         data-hero="bg-light"
       />
-      {/* Rejilla técnica sutil sobre el fondo claro — textura
-          "blueprint" que evoca instrumentación neurodigital. Se
-          desvanece junto con el fondo en el scroll. */}
       <div
         ref={gridRef}
         className="absolute inset-0 pointer-events-none"
@@ -312,7 +305,6 @@ export default function Hero() {
         }}
         data-hero="bg-dark"
       />
-      {/* Glow técnico sobre el fondo oscuro — neutro, sin tinte */}
       <div
         ref={glowRef}
         className="absolute inset-0 pointer-events-none"
@@ -323,15 +315,43 @@ export default function Hero() {
         aria-hidden="true"
       />
 
+      {/* ── Capa azul casi transparente que abarca TODO el hero ── */}
+      <div
+        className="absolute inset-0 pointer-events-none z-[3]"
+        data-hero="blue-veil"
+        aria-hidden="true"
+        style={{
+          background: [
+            'radial-gradient(95% 75% at 50% 0%, rgba(17,108,146,0.14) 0%, rgba(17,108,146,0.03) 46%, transparent 72%)',
+            'linear-gradient(180deg, rgba(158,207,231,0.10) 0%, rgba(23,117,157,0.05) 48%, rgba(7,50,74,0.12) 100%)',
+          ].join(', '),
+        }}
+      />
+
       {/* ── Neurón real (wrapper animado por GSAP) ───────────── */}
       <HeroRobot
         ref={robotWrapRef}
         top={isMobile ? HERO_RESPONSIVE.mobileTop : HERO_ROBOT.top}
         scale={isMobile ? HERO_RESPONSIVE.mobileRobotScale : HERO_ROBOT.scale}
+        reduceMotion={reduceMotion}
+        isMobile={isMobile}
       />
 
-      {/* Fade inferior: integra al robot con la zona oscura y evita
-          un corte seco (menos ruido visual). Se funde según fondo. */}
+      {/* Halo monocromo sutil tras Neurón */}
+      <div
+        className="hero-robot-halo pointer-events-none absolute left-1/2 z-[5]"
+        style={{
+          top: `${isMobile ? HERO_RESPONSIVE.mobileTop : HERO_ROBOT.top}%`,
+          width: 'min(78vw, 720px)',
+          height: 'min(78vw, 720px)',
+          transform: 'translate(-50%, -50%)',
+          background: 'radial-gradient(circle, rgba(214,217,224,0.22) 0%, rgba(214,217,224,0.06) 46%, rgba(214,217,224,0) 70%)',
+          filter: 'blur(8px)',
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Fade inferior */}
       <div
         ref={fadeRef}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-[6]"
@@ -341,37 +361,38 @@ export default function Hero() {
       />
 
       {/* ── Campo de nodos sutiles ───────────────────────────── */}
-      {/* Wrapper que recibe el ref de GSAP (stagger de entrada +
-          dispersión al hacer scroll). NeuronField se mantiene
-          reutilizable y no conoce a GSAP. */}
       <div
         ref={nodesRef}
         className="absolute inset-0"
         data-hero="nodes"
         aria-hidden="true"
       >
-        <NeuronField />
+        <NeuronField mouseX={mouse.x} mouseY={mouse.y} />
       </div>
 
       {/* ── Contenido del hero ───────────────────────────────── */}
-      <div className="absolute inset-x-0 top-0 z-20 flex flex-col items-center px-6 pt-20 sm:pt-24 text-center"
+      <div className="absolute inset-x-0 top-0 z-20 flex flex-col items-center px-6 pt-10 sm:pt-12 text-center"
         style={{ pointerEvents: 'none' }}>
-        {/* Marca — etiqueta técnica editorial con línea lateral */}
-        <div className="mb-5 flex items-center gap-3">
+        <div className="mb-4 flex items-center gap-3">
           <span aria-hidden="true" className="block h-px w-8 sm:w-12"
             style={{ background: 'linear-gradient(90deg, transparent, rgba(10,11,16,0.35))' }} />
           <span
-            className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.32em]"
-            style={{ color: '#3f3e3a' }}
+            className="hero-eyebrow inline-flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.32em]"
+            style={{
+              color: '#2a2a2a',
+              borderColor: 'rgba(10,11,16,0.16)',
+              background: 'rgba(255,255,255,0.5)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+            }}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-neutral-900" aria-hidden="true" />
+            <span className="hero-live-dot h-1.5 w-1.5 rounded-full bg-neutral-900" aria-hidden="true" />
             {HERO_COPY.eyebrow}
           </span>
           <span aria-hidden="true" className="block h-px w-8 sm:w-12"
             style={{ background: 'linear-gradient(270deg, transparent, rgba(10,11,16,0.35))' }} />
         </div>
 
-        {/* Título principal */}
         <h1
           ref={brandRef}
           className="font-black uppercase text-[#0c0d10]"
@@ -385,14 +406,13 @@ export default function Hero() {
         >
           {HERO_BRAND}
         </h1>
-        {/* Filete fino bajo la marca — detalle técnico premium */}
         <span
           aria-hidden="true"
-          className="mt-4 block h-px w-16 sm:w-24"
+          className="hero-brand-rule mt-2 block h-px w-16 sm:w-24"
           style={{ background: 'linear-gradient(90deg, transparent, rgba(10,11,16,0.5), transparent)' }}
         />
 
-        <div className="mt-8 max-w-3xl">
+        <div className="mt-4 max-w-3xl">
           <h2
             ref={headlineRef}
             className="font-bold text-[#111] leading-tight tracking-tight"
@@ -402,7 +422,18 @@ export default function Hero() {
             }}
           >
             {HERO_COPY.headlineA}<br />
-            <span className="font-extrabold">{HERO_COPY.headlineB}</span>
+            <span
+              className="hero-headline-em font-extrabold"
+              style={{
+                backgroundImage: 'linear-gradient(92deg, #3b3b3f 0%, #0c0d10 60%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              {HERO_COPY.headlineB}
+            </span>
           </h2>
           <p
             ref={subRef}
@@ -414,18 +445,19 @@ export default function Hero() {
         </div>
 
         {/* CTAs con microinteracción */}
-        <div ref={ctaRef} className="mt-10 flex flex-wrap items-center justify-center gap-4"
+        <div ref={ctaRef} className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:gap-4"
           style={{ pointerEvents: 'auto' }}>
           <a
-            href="#patrones"
-            className="hero-cta hero-cta-primary group inline-flex items-center gap-2.5 rounded-full px-7 py-3 text-[15px] font-semibold text-white transition-none"
+            href="#capacidades"
+            className="hero-cta hero-cta-primary group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full px-7 py-3 text-[15px] font-semibold text-white transition-none"
             style={{ background: '#0c0d10' }}
           >
+            <span className="hero-cta-shine" aria-hidden="true" />
             {HERO_COPY.ctaPrimary}
             <span aria-hidden="true" className="hero-cta-arrow">→</span>
           </a>
           <a
-            href="#patrones"
+            href="#analisis"
             className="hero-cta hero-cta-secondary group inline-flex items-center gap-2.5 rounded-full border px-7 py-3 text-[15px] font-semibold transition-none"
             style={{ borderColor: '#0c0d10', color: '#0c0d10', backgroundColor: 'rgba(255,255,255,0.6)' }}
           >
@@ -437,13 +469,16 @@ export default function Hero() {
         {/* Indicador de scroll */}
         <div
           ref={scrollHintRef}
-          className="mt-14 flex flex-col items-center gap-2"
+          className="mt-8 flex flex-col items-center gap-2.5"
           data-hero="scroll-hint"
         >
           <span className="text-[11px] uppercase tracking-[0.2em] text-[#8b8a86]">
             Desliza para entrar
           </span>
-          <span className="flex h-8 w-5 items-start justify-center rounded-full border border-[#bdbcB8] p-1">
+          <span
+            className="flex h-8 w-5 items-start justify-center rounded-full border p-1"
+            style={{ borderColor: 'rgba(10,11,16,0.35)', background: 'rgba(255,255,255,0.35)' }}
+          >
             <span className="hero-scroll-dot h-1.5 w-1.5 rounded-full bg-neutral-900" />
           </span>
         </div>

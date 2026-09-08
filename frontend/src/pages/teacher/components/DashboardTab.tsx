@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import api from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import NeuronWelcome from '../../../components/NeuronWelcome';
 
 interface Props {
   license: any;
@@ -74,11 +75,9 @@ function MiniCalendar({ eventDays }: { eventDays: number[] }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function DashboardTab({ onNavigate }: Props) {
-  useAuth(); // provides context; user not needed directly here
+  const { user } = useAuth();
   const [stats, setStats] = useState<TeacherStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const hour = today.getHours();
-  const greeting = hour < 12 ? 'Buenos días' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
 
   useEffect(() => {
     api.get('/teacher/stats')
@@ -117,17 +116,24 @@ export default function DashboardTab({ onNavigate }: Props) {
   return (
     <div className="space-y-6">
 
-      {/* Saludo */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-[#191919]">{greeting} 👋</h2>
-          <p className="text-sm text-[#787774]">
+      {/* Banner de bienvenida con Neuron (igual que estudiante) */}
+      <NeuronWelcome
+        name={user?.full_name || user?.username || ''}
+        subtitle={
+          !loading && stats
+            ? `Gestiona tus ${stats.total_groups} grupos y acompaña a tus ${stats.total_students} estudiantes`
+            : 'Gestiona tus clases y monitorea el progreso de tus estudiantes'
+        }
+      />
+
+      {/* Barra de acciones */}
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-xs text-[#787774]">
           {!loading && stats
-            ? <>Tienes <span className="font-semibold text-[#E03E3E]">{stats.alert_count} alertas</span> activas y <span className="font-semibold text-[#2E6FDB]">{stats.total_groups} grupos</span>.</>
+            ? <>Tienes <span className="font-semibold text-[#E03E3E]">{stats.alert_count} alertas</span> activas.</>
             : 'Cargando estadísticas…'
           }
         </p>
-        </div>
         <button
           onClick={() => onNavigate('alertas')}
           className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm"

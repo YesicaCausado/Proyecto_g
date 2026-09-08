@@ -1,0 +1,1 @@
+"""Capa adaptativa de NeuroLearn — Student Model + Motor de Adaptación Pedagógica."""

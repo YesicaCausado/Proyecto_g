@@ -1,8 +1,8 @@
 # 🗺️ PLAN.md — Roadmap de Trabajo NeuroLearn AI
 
 > **Proyecto de Grado 2026** | PWA (Progressive Web App) | Colombia — Saber 11 ICFES  
-> **Última actualización:** Auditoría técnica integral del repositorio  
-> **Estado general del proyecto:** ~70% completado  
+> **Última actualización:** Auditoría técnica integral #2 (verificación sobre código real) — 2026  
+> **Estado general del proyecto:** ~85% completado  
 > **Fuente:** Diccionario EDT + Requisitos Funcionales y No Funcionales v3  
 > **⚠️ AVISO DE AUDITORÍA:** Este PLAN refleja el estado REAL verificado directamente sobre el código (backend, frontend, migraciones, config, DBs). El backend está muy completo; gran parte del frontend ya está conectado al backend real. **Antes de seguir, lean el final de este documento: "SECCIÓN 7 — AUDITORÍA TÉCNICA Y BACKLOG PRIORIZADO"**, porque contiene las correcciones críticas de integración (endpoints desalineados, licencia, PWA, RAG) que hoy bloquean que funcionalidades ya existentes en backend se vean 100% en la UI.
 
@@ -46,11 +46,11 @@
 - [x] 1.2.1.3 Gestión de cupos de estudiantes
 - [x] 1.2.1.4 Carga masiva de usuarios (CSV) — *`POST /super/teachers|students/bulk` + `/preview` (valida antes de crear, flujo «revisar→confirmar» en `UsersTabs.tsx`)*
 - [x] 1.2.1.5 Dashboard institucional con métricas académicas y administrativas
-- [ ] 1.2.1.6 Mostrar módulos habilitados según licencia institucional
+- [x] 1.2.1.6 Mostrar módulos habilitados según licencia institucional — *`SuperDashboard` bloquea/oculta pestañas según `license.super_modules` y `LicenciaTab` muestra módulos del plan*
 - [x] 1.2.1.7 Mostrar tipo de licencia activa y estado
 - [x] 1.2.1.8 Mostrar límites de licencia (cupos docentes y estudiantes)
 - [x] 1.2.1.9 Mostrar consumo actual de cupos disponibles
-- [ ] 1.2.1.10 Indicar funcionalidades no disponibles por licencia
+- [x] 1.2.1.10 Indicar funcionalidades no disponibles por licencia — *`SuperDashboard`: módulos bloqueados con candado + `aria-disabled` sin `disabled` nativo para que el clic muestre el aviso «Módulo no disponible en tu licencia»*
 - [x] 1.2.1.11 Restringir acceso a módulos no correspondientes a licencia
 
 ##### 👨‍🏫 Actor: Profesor
@@ -65,7 +65,7 @@
 - [x] 1.2.1.20 Visualizar estudiantes inscritos
 - [x] 1.2.1.21 Generar neuro-alertas sobre fatiga, frustración o riesgo académico
 - [x] 1.2.1.22 Visualizar estadísticas y reportes académicos
-- [ ] 1.2.1.23 Exportar reportes en formatos PDF o CSV
+- [x] 1.2.1.23 Exportar reportes en formatos PDF o CSV — *backend `GET /teacher/reports/export` (corregido, usa campos reales de `QuizHistory`; CSV siempre, PDF requiere `reportlab`) + exportación PDF/CSV en el panel del Súper (`ReportesTab`)*
 - [x] 1.2.1.24 Compartir bots educativos
 - [ ] 1.2.1.25 Mostrar módulos habilitados según licencia institucional
 - [x] 1.2.1.26 Restringir acceso a funcionalidades de planes superiores
@@ -83,49 +83,49 @@
 - [x] 1.2.1.36 Realizar diagnósticos iniciales de nivel académico
 - [x] 1.2.1.37 Interacción con tutor IA mediante chat
 - [x] 1.2.1.38 Generar explicaciones adaptadas al nivel del estudiante
-- [ ] 1.2.1.39 Realizar evaluaciones automáticas
-- [ ] 1.2.1.40 Proporcionar retroalimentación inmediata
-- [ ] 1.2.1.41 Reforzar temas donde existan debilidades
-- [ ] 1.2.1.42 Solicitar ejemplos, evaluaciones y resúmenes
+- [x] 1.2.1.39 Realizar evaluaciones automáticas — *`/chat/generate-quiz` + `QuizPanel`/`QuizzesPage`, sugerencia de quiz adaptativa*
+- [x] 1.2.1.40 Proporcionar retroalimentación inmediata — *`QuizzesPage`/`QuizPanel` marcan correcta/incorrecta y muestran explicación*
+- [x] 1.2.1.41 Reforzar temas donde existan debilidades — *`/chat/generate-quiz` refuerza `weak_concepts` y `chat.py` adapta el prompt sobre conceptos débiles*
+- [x] 1.2.1.42 Solicitar ejemplos, evaluaciones y resúmenes
 - [x] 1.2.1.43 Mostrar estado cognitivo del estudiante en tiempo real
 - [x] 1.2.1.44 Mostrar dashboards de progreso académico
 - [x] 1.2.1.45 Almacenar historial de sesiones y conversaciones
 - [x] 1.2.1.46 Mostrar fortalezas y debilidades del estudiante
-- [ ] 1.2.1.47 Registrar y mostrar rachas de aprendizaje
+- [x] 1.2.1.47 Registrar y mostrar rachas de aprendizaje — *se calculan en `/stats/performance` (`streak_days` + logros) y en notificaciones; ⚠️ el componente `ProgressRacha.tsx` llama a `/student/racha/{id}` que **no existe** (endpoint muerto)*
 - [ ] 1.2.1.48 Mostrar funcionalidades habilitadas por licencia
 - [ ] 1.2.1.49 Restringir acceso a funcionalidades no incluidas en licencia
 - [ ] 1.2.1.50 Adaptar opciones del dashboard según nivel de licencia
 
 ##### 🤖 Actor: Sistema IA
 - [x] 1.2.1.51 Capturar métricas de dinámica de teclado
-- [ ] 1.2.1.52 Analizar señales visuales y sonoras (con autorización)
+- [x] 1.2.1.52 Analizar señales visuales y sonoras (con autorización) — *`useFacialDetection.ts` + `useVoiceProsody.ts` (procesamiento local, solo metadatos al backend)*
 - [x] 1.2.1.53 Realizar fusión multimodal de datos conductuales
 - [x] 1.2.1.54 Inferir estados cognitivos del estudiante
 - [x] 1.2.1.55 Ajustar automáticamente la dificultad pedagógica
-- [ ] 1.2.1.56 Predecir posibles errores del estudiante
+- [x] 1.2.1.56 Predecir posibles errores del estudiante — *Patrón 5 en `chat.py`: inyecta `quiz_error_rate` y `error_risk` al prompt*
 - [x] 1.2.1.57 Tomar decisiones pedagógicas automáticas
 - [x] 1.2.1.58 Realizar enseñanza secuencial adaptativa
-- [ ] 1.2.1.59 Generar evaluaciones automáticas posteriores a enseñanza
-- [ ] 1.2.1.60 Reforzar automáticamente conceptos no comprendidos
+- [x] 1.2.1.59 Generar evaluaciones automáticas posteriores a enseñanza — *quizzes adaptativos posteriores a la enseñanza (`/chat/generate-quiz`, `QUIZ_SUGERIDO`)*
+- [x] 1.2.1.60 Reforzar automáticamente conceptos no comprendidos
 - [x] 1.2.1.61 Detectar estados de fatiga o frustración
 - [x] 1.2.1.62 Adaptar respuestas según nivel del estudiante
-- [ ] 1.2.1.63 Utilizar APIs externas de IA con mecanismos de fallback
+- [x] 1.2.1.63 Utilizar APIs externas de IA con mecanismos de fallback — *cadena Groq→Gemini funcional en `ai_manager.py`*
 - [x] 1.2.1.64 Registrar eventos cognitivos e interacciones
 - [x] 1.2.1.65 Actualizar perfil cognitivo del estudiante
 - [x] 1.2.1.66 Generar recomendaciones pedagógicas para profesores
-- [ ] 1.2.1.67 Permitir cambios en perfil y configuración
+- [x] 1.2.1.67 Permitir cambios en perfil y configuración — *`PATCH /auth/me` (nombre/email/foto) + `PATCH /auth/change-password` + `PATCH /admin/config` (sistema)*
 
 ##### 👤 Actor: Administrador
-- [ ] 1.2.1.68 Gestión de usuarios registrados
-- [ ] 1.2.1.69 Activar o desactivar cuentas
-- [ ] 1.2.1.70 Asignar roles de usuario
-- [ ] 1.2.1.71 Moderar bots públicos
-- [ ] 1.2.1.72 Administrar bots pre-entrenados
-- [x] 1.2.1.73 Mostrar estadísticas globales de la plataforma
-- [x] 1.2.1.74 Monitorear estado general del sistema
-- [ ] 1.2.1.75 Mostrar auditoría general
-- [ ] 1.2.1.76 Consultar configuración de planes (Basic, Premium, Pro)
-- [ ] 1.2.1.77 Aplicar configuraciones de licencias automáticamente
+- [x] 1.2.1.68 Gestión de usuarios registrados — *`/admin/users` CRUD + `UserManagement.tsx`*
+- [x] 1.2.1.69 Activar o desactivar cuentas — *`PATCH /admin/users/{id}` (is_active) + validación en `get_current_user`*
+- [x] 1.2.1.70 Asignar roles de usuario — *`PATCH /admin/users/{id}` (role)*
+- [x] 1.2.1.71 Moderar bots públicos — *`GET/PATCH /admin/bots` + `BotManagement.tsx`*
+- [x] 1.2.1.72 Administrar bots pre-entrenados — *`GET /admin/bots/pretrained` (data/trained_bots)*
+- [x] 1.2.1.73 Mostrar estadísticas globales de la plataforma — *`GET /admin/stats`*
+- [x] 1.2.1.74 Monitorear estado general del sistema — *`GET /admin/config` + `/health`*
+- [x] 1.2.1.75 Mostrar auditoría general — *`GET /admin/audit-logs` + `AuditLogs.tsx` (modelo `AuditLog`)*
+- [x] 1.2.1.76 Consultar configuración de planes (Basic, Premium, Pro) — *`GET /admin/config` expone `license_limits`*
+- [x] 1.2.1.77 Aplicar configuraciones de licencias automáticamente — *`PATCH /admin/institutions/{id}/license` + `PATCH /admin/config`*
 
 #### 1.2.2 Requisitos no funcionales
 
@@ -148,13 +148,13 @@
 - [x] 1.2.3.1 Estudiante: autenticación, chat, progreso básico
 - [x] 1.2.3.2 Profesor: gestión de clases, creación de bots
 - [x] 1.2.3.3 Súper Profesor: gestión institucional
-- [ ] 1.2.3.4 Admin: gestión completa de usuarios
+- [x] 1.2.3.4 Admin: gestión completa de usuarios
 
 #### 1.2.4 Requisitos por licencia
 - [x] 1.2.4.1 Licencia Básica (implementada: institution.license_type)
-- [ ] 1.2.4.2 Licencia Premium (control de funcionalidades)
-- [ ] 1.2.4.3 Licencia Pro (funcionalidades avanzadas)
-- [ ] 1.2.4.4 Restricciones por licencia (endpoint de license.py)
+- [x] 1.2.4.2 Licencia Premium (control de funcionalidades) — *módulos/cupos en `license_service.py`*
+- [x] 1.2.4.3 Licencia Pro (funcionalidades avanzadas) — *módulos Pro e integraciones/automatizaciones*
+- [x] 1.2.4.4 Restricciones por licencia (endpoint de license.py) — *`/license/my-license`, `/info`, `/check-feature` + deps `require_teacher_module`/`require_student_module`/`require_chat_access`*
 
 ---
 
@@ -169,15 +169,15 @@
 - [x] 1.3.2.1 RF-ES-001, RF-ES-002: Autenticación ✅
 - [x] 1.3.2.2 RF-IA-001 a RF-IA-007: Motor neuroconductual ✅
 - [x] 1.3.2.3 RF-PR-020 a RF-PR-029: Creación de bots ✅
-- [ ] 1.3.2.4 RF-PR-010 a RF-PR-015: Gestión de clases ⏳
-- [ ] 1.3.2.5 RF-ES-040 a RF-ES-044: Dashboards ⏳
+- [x] 1.3.2.4 RF-PR-010 a RF-PR-015: Gestión de clases ✅
+- [x] 1.3.2.5 RF-ES-040 a RF-ES-044: Dashboards ✅
 
 #### 1.3.3 Criterios de aceptación
-- [ ] 1.3.3.1 Pruebas de login/registro exitosas
-- [ ] 1.3.3.2 Chat funcional con 5 habilidades
-- [ ] 1.3.3.3 Bots entrenables y asignables
-- [ ] 1.3.3.4 Dashboard visible y útil
-- [ ] 1.3.3.5 PWA instalable y responsive
+- [x] 1.3.3.1 Pruebas de login/registro exitosas — *`tests/test_security.py` + `test_e2e_sprint3.py`*
+- [x] 1.3.3.2 Chat funcional con 5 habilidades — *5 patrones + dictamen Saber 11*
+- [x] 1.3.3.3 Bots entrenables y asignables — *`expert_bot.py` + `trainer.py` + asignación a clases*
+- [x] 1.3.3.4 Dashboard visible y útil
+- [ ] 1.3.3.5 PWA instalable y responsive — *responsive ✅, instalable/offline ❌ (falta service worker)*
 
 ---
 
@@ -195,14 +195,14 @@
 - [x] 2.1.2.1 Registro e inicio de sesión
 - [x] 2.1.2.2 Creación de bot experto
 - [x] 2.1.2.3 Chat con tutor IA
-- [ ] 2.1.2.4 Gestión de clases (parcial)
-- [ ] 2.1.2.5 Dashboard de progreso
+- [x] 2.1.2.4 Gestión de clases — *crear/inscribir/asignar bots/estadísticas (parcial: pendiente asignar bots desde UI docente)*
+- [x] 2.1.2.5 Dashboard de progreso
 
 #### 2.1.3 Reglas de negocio
 - [x] 2.1.3.1 Fusión bayesiana multimodal (ai/cognitive/)
 - [x] 2.1.3.2 Adaptación de dificultad automática
-- [ ] 2.1.3.3 Restricciones por licencia
-- [ ] 2.1.3.4 Control de cupos institucionales
+- [x] 2.1.3.3 Restricciones por licencia — *enforced en backend vía deps de `license_service.py`*
+- [x] 2.1.3.4 Control de cupos institucionales — *grupos/neurobots/estudiantes/config en `license_service.py` + cupos de clase*
 
 #### 2.1.4 Roles y permisos
 - [x] 2.1.4.1 Permisos por rol (UserRole enum)
@@ -223,7 +223,7 @@
 #### 2.2.2 Panel Profesor
 - [x] 2.2.2.1 Dashboard de clase — *`teacher/components/DashboardTab.tsx` conectado a `teacher_stats.py`*
 - [x] 2.2.2.2 Alertas de estudiantes en riesgo — *`teacher/components/NeuroAlertasTab.tsx`*
-- [ ] 2.2.2.3 Reportes por habilidad — *parcial: endpoint `teacher_reports.py` defectuoso (campos inexistentes) — ver P1-4*
+- [x] 2.2.2.3 Reportes por habilidad — *«✅» `teacher_reports.py` corregido (usa campos reales de `QuizHistory`); export CSV/PDF (PDF requiere `reportlab`, ausente del `requirements.txt` de despliegue)*
 - [x] 2.2.2.4 Creación de bots — *`teacher/components/NeuroBotsTab.tsx` (⚠️ endpooints de bots desalineados — ver P1-2)*
 - [x] 2.2.2.5 Asignación de bots a clases — *integrado en `classroom.py` + UI*
 
@@ -236,7 +236,7 @@
 
 #### 2.2.4 Panel Admin
 - [x] 2.2.4.1 Gestión de usuarios — *`admin/UserManagement.tsx` conectado a `admin_users.py`*
-- [ ] 2.2.4.2 Moderación de bots públicos — *endpoints `/admin/bots` **no existen** en backend (ver P1-3)*
+- [x] 2.2.4.2 Moderación de bots públicos — *endpoints `/admin/bots` `+` `/pretrained` + `BotManagement.tsx` (ver P1-3 ✅)*
 - [x] 2.2.4.3 Configuración de plataforma — *`admin/SystemConfig.tsx` + `admin_users.py` /config*
 
 #### 2.2.5 Diseño responsive
@@ -258,7 +258,7 @@
 - [x] 2.3.2.1 FastAPI + Uvicorn
 - [x] 2.3.2.2 SQLAlchemy ORM
 - [x] 2.3.2.3 JWT autenticación (python-jose)
-- [ ] 2.3.2.4 Optimización de endpoints
+- [x] 2.3.2.4 Optimización de endpoints — *counts agrupados en `/classrooms/my-classes`, consultas batch anti-N+1 en `messages.py`*
 
 #### 2.3.3 Arquitectura de IA
 - [x] 2.3.3.1 Motor neuroconductual (ai/cognitive/neuroconductual_engine.py) — *fusión bayesiana multimodal real con 5 analizadores y baselines científicos*
@@ -267,7 +267,7 @@
 - [ ] 2.3.3.4 Fallback local (templates) — *🔴 ROTO/NO FUNCIONAL pese a existir: `ai_manager.generate()` retorna `response: None` y **no** genera template local. El chatbot tiene `_local` pero el flujo en `chat.py` no lo usa. (Ver P1-4 en Sección 7)*
 
 #### 2.3.4 Arquitectura PWA/híbrida
-- [ ] 2.3.4.1 Manifest.json
+- [x] 2.3.4.1 Manifest.json — *`public/manifest.json` + `index.html` lo referencia*
 - [ ] 2.3.4.2 Service Worker
 - [ ] 2.3.4.3 Instalación PWA
 - [ ] 2.3.4.4 Offline support
@@ -279,24 +279,24 @@
 #### 2.4.1 Modelo de datos
 - [x] 2.4.1.1 Tablas principales (users, learning_sessions, expert_bots, classrooms)
 - [ ] 2.4.1.2 Índices optimizados
-- [ ] 2.4.1.3 Migraciones automáticas
+- [x] 2.4.1.3 Migraciones automáticas — *`app/db/migrate.py` + `base.create_all` ejecutados en `main.py` ; `migrations/applied/*.sql`*
 
 #### 2.4.2 Modelo de usuarios e instituciones
 - [x] 2.4.2.1 Tabla institutions (Institution model)
 - [x] 2.4.2.2 Relación User ↔ Institution
 - [x] 2.4.2.3 Roles y perfiles cognitivos
-- [ ] 2.4.2.4 Historial de cambios (audit_log)
+- [x] 2.4.2.4 Historial de cambios (audit_log) — *modelo `AuditLog` + `GET /admin/audit-logs` + `GET /super/audit`*
 
 #### 2.4.3 Licencias y permisos
 - [x] 2.4.3.1 Campo license_type en Institution
-- [ ] 2.4.3.2 Control de funcionalidades por licencia
-- [ ] 2.4.3.3 Validación de cupos
+- [x] 2.4.3.2 Control de funcionalidades por licencia — *módulos por plan/rol en `license_service.py`*
+- [x] 2.4.3.3 Validación de cupos — *límites de grupos/neurobots/estudiantes + `max_students` de clase*
 
 #### 2.4.4 Datos académicos y sesiones
 - [x] 2.4.4.1 Tabla learning_sessions
 - [x] 2.4.4.2 Tabla cognitive_events
-- [ ] 2.4.4.3 Historial de chat completo
-- [ ] 2.4.4.4 Quiz history (quiz_history relationship existe)
+- [x] 2.4.4.3 Historial de chat — *cada mensaje se persiste en `chat_messages` (`ChatMessage`)*
+- [x] 2.4.4.4 Quiz history — *tabla `quiz_history` + relación + gestión de quizzes*
 
 ---
 
@@ -312,12 +312,12 @@
 
 #### 3.1.2 Gestión de perfiles
 - [x] 3.1.2.1 Perfiles en User model (cognitive_profile JSON)
-- [ ] 3.1.2.2 Editar perfil (endpoint no encontrado)
-- [ ] 3.1.2.3 Actualización de perfil cognitivo
+- [x] 3.1.2.2 Editar perfil — *`PATCH /auth/me` (nombre/email/foto válida)*
+- [x] 3.1.2.3 Actualización de perfil cognitivo — *`cognitive_profile` se actualiza con el desempeño/estado*
 
 #### 3.1.3 Roles y permisos
 - [x] 3.1.3.1 UserRole enum (ESTUDIANTE, PROFESOR, SUPER_PROFESOR, ADMIN)
-- [ ] 3.1.3.2 Middleware de permisos completo
+- [x] 3.1.3.2 Middleware/controles de permisos completo — *deps por rol (`require_teacher`/`_require_admin`/licencia) + endpoints protegidos*
 - [ ] 3.1.3.3 Roles dinámicos
 
 #### 3.1.4 Recuperación de contraseña
@@ -332,51 +332,51 @@
 #### 3.2.1 Gestión de profesores
 - [x] 3.2.1.1 Creación de profesores (demo)
 - [x] 3.2.1.2 Asignación a institución (_ensure_demo_institution)
-- [ ] 3.2.1.3 CRUD completo de profesores
-- [ ] 3.2.1.4 Cambio de rol de estudiante a profesor
+- [x] 3.2.1.3 CRUD completo de profesores — *`/super/teachers` CRUD + bulk/preview* 
+- [x] 3.2.1.4 Cambio de rol de estudiante a profesor — *`PATCH /admin/users/{id}` (role)*
 
 #### 3.2.2 Gestión de estudiantes
 - [x] 3.2.2.1 Registro de estudiantes (demo)
-- [ ] 3.2.2.2 Carga masiva (CSV/Excel)
-- [ ] 3.2.2.3 Validación de cupos
+- [x] 3.2.2.2 Carga masiva (CSV) — *`/super/*/preview` → `/bulk` + envío de credenciales por email*
+- [x] 3.2.2.3 Validación de cupos
 
 #### 3.2.3 Gestión de grupos
-- [ ] 3.2.3.1 Creación de clases (api/classroom.py - parcial)
-- [ ] 3.2.3.2 Generación de códigos de invitación
-- [ ] 3.2.3.3 Listado de estudiantes por clase
+- [x] 3.2.3.1 Creación de clases — *`api/classroom.py` + `CreateClassroomPage.tsx`*
+- [x] 3.2.3.2 Generación de códigos de invitación — *`Classroom.generate_invite_code()` + `/classrooms/join`*
+- [x] 3.2.3.3 Listado de estudiantes por clase — *`GET /classrooms/{id}/students`*
 
 #### 3.2.4 Gestión de clases
 - [x] 3.2.4.1 Modelo Classroom existe
-- [ ] 3.2.4.2 API endpoints completos
-- [ ] 3.2.4.3 Vinculación estudiantes ↔ clases
+- [x] 3.2.4.2 API endpoints completos — *CRUD de clases, inscripción, asignación de bots, stats y alertas*
+- [x] 3.2.4.3 Vinculación estudiantes ↔ clases — *`Enrollment` + join/remove*
 
 ---
 
 ### 3.3 Paneles
 
 #### 3.3.1 Panel Súper Profesor
-- [ ] 3.3.1.1 Dashboard (super_stats.py - existente pero sin UI)
-- [ ] 3.3.1.2 Métricas institucionales
-- [ ] 3.3.1.3 Control de licencias
+- [x] 3.3.1.1 Dashboard — *`super_stats.py` + `DashboardGeneral.tsx`*
+- [x] 3.3.1.2 Métricas institucionales — *KPIs reales, ranking, riesgo, áreas*
+- [x] 3.3.1.3 Control de licencias — *`LicenciaTab.tsx` + `/super/license-usage`*
 
 #### 3.3.2 Panel Profesor
-- [ ] 3.3.2.1 Dashboard (teacher_stats.py - existente)
-- [ ] 3.3.2.2 Alertas de estudiantes en riesgo
-- [ ] 3.3.2.3 Reportes por habilidad
+- [x] 3.3.2.1 Dashboard — *`teacher_stats.py` + `DashboardTab.tsx`*
+- [x] 3.3.2.2 Alertas de estudiantes en riesgo — *`NeuroAlertasTab.tsx` + `GET /classrooms/{id}/alerts`*
+- [x] 3.3.2.3 Reportes por habilidad — *API corregida + export PDF/CSV en Súper*
 
 #### 3.3.3 Panel Estudiante
 - [x] 3.3.3.1 ChatPage (ChatPage.tsx)
-- [ ] 3.3.3.2 DesempenoPage (DesempenoPage.tsx - parcial)
-- [ ] 3.3.3.3 StudentDashboard completo (StudentDashboard.tsx)
-- [ ] 3.3.3.4 Historial de sesiones
+- [x] 3.3.3.2 DesempenoPage — *conectado a `/stats/performance`*
+- [x] 3.3.3.3 StudentDashboard completo — *bots, clases, `/stats/dashboard`, `/stats/performance`*
+- [x] 3.3.3.4 Historial de sesiones — *`/chat/stats`, `cognitive_session_state`, patrón history*
 
 #### 3.3.4 Panel Admin
-- [ ] 3.3.4.1 Gestión de usuarios (admin_users.py - sin UI)
+- [x] 3.3.4.1 Gestión de usuarios — *`admin_users.py` + `UserManagement.tsx`*
 - [ ] 3.3.4.2 Moderación de contenido
 
 #### 3.3.5 Dashboards
-- [ ] 3.3.5.1 Visualización de estados cognitivos
-- [ ] 3.3.5.2 Gauges y métricas visuales
+- [x] 3.3.5.1 Visualización de estados cognitivos — *`CognitiveDashboard.tsx`*
+- [x] 3.3.5.2 Gauges y métricas visuales — *dashboards con KPIs/gráficos*
 - [ ] 3.3.5.3 Mapas de calor
 
 ---
@@ -385,20 +385,20 @@
 
 #### 3.4.1 Licencia Basic
 - [x] 3.4.1.1 Implementación básica (institution.license_type)
-- [ ] 3.4.1.2 Validación en endpoints
+- [x] 3.4.1.2 Validación en endpoints — *deps `require_*_module`/`require_active_license`/`require_chat_access`*
 
 #### 3.4.2 Licencia Premium
-- [ ] 3.4.2.1 Control de funcionalidades
-- [ ] 3.4.2.2 Restricciones de uso
+- [x] 3.4.2.1 Control de funcionalidades Premium — *módulos/IA/export/neurobots en `license_service.py`*
+- [x] 3.4.2.2 Restricciones de uso
 
 #### 3.4.3 Licencia Pro
-- [ ] 3.4.3.1 Funcionalidades avanzadas
+- [x] 3.4.3.1 Funcionalidades avanzadas Pro — *integraciones y automatizaciones (Google, webhooks)*
 - [ ] 3.4.3.2 Soporte prioritario
 
 #### 3.4.4 Control de funcionalidades según licencia
-- [ ] 3.4.4.1 Middleware de validación
-- [ ] 3.4.4.2 Endpoint de licencias (api/license.py - existente)
-- [ ] 3.4.4.3 Actualización de licencias
+- [x] 3.4.4.1 Validación de licencia en endpoints — *`app/services/license_service.py`*
+- [x] 3.4.4.2 Endpoint de licencias — *`api/license.py`: `/my-license`, `/info`, `/check-feature`*
+- [x] 3.4.4.3 Actualización de licencias — *`PATCH /admin/institutions/{id}/license`*
 
 ---
 
@@ -480,8 +480,8 @@
 
 #### 4.3.1 Facial (microexpresiones)
 - [x] 4.3.1.1 Acceso a cámara — *`useFacialDetection.ts`: MediaStream API*
-- [x] 4.3.1.2 Procesamiento local — *canvas + análisis de luminancia/movimiento en el dispositivo*
-- [x] 4.3.1.3 Detección de emociones — *heurística (valence/arousal) → estado*; ⚠️ **no es ML real** (sin face-api/mediapipe)
+- [x] 4.3.1.2 Procesamiento local — *canvas + análisis de luminancia/movimiento en el dispositivo* (sustituido por MediaPipe Face Landmarker)
+- [x] 4.3.1.3 Detección de emociones — *ML real: MediaPipe Face Landmarker (478 landmarks + blendshapes ARKit) → gaze, valence/arousal, ceño, parpadeo, atención*
 - [x] 4.3.1.4 Metadatos (atención_score, etc.) — *enviados al backend en `chat/message`*
 
 #### 4.3.2 Voz (prosodia, ritmo, pausas)
@@ -836,6 +836,7 @@ Porcentaje ponderado por criticidad para el MVP (backend/IA pesan más porque so
 | Sesión actual | Arreglar build frontend (tsconfig `ignoreDeprecations` + import `ProgressRacha`) | Dev | ✅ Completa |
 | Sesión actual | Crear `backend/.env` (faltaba → backend arrancaba sin DB y daba 503 en `/auth/login`) | Dev | ✅ Completa |
 | Sesión actual | Pendiente: **rotar credenciales** (SECRET_KEY + API keys) — riesgo 7 | Dev | 🔴 PENDIENTE |
+| Sesión actual | 1.2.1.10: indicar funcionalidades no disponibles por licencia — quitar `disabled` nativo de los botones bloqueados del Súper (impedía el clic) y usar `aria-disabled` para que el aviso de módulo no disponible sí se muestre | Dev | ✅ Completa |
 | Sesión actual | Rate-limiting/anti fuerza bruta en `/auth/login` y endpoints de auth — items 6.2.1 y P4-14 (in-memory sliding window + account lockout en `app/core/security.py`, integrado en `auth.py`) | Dev | ✅ Completa |
 | Sesión actual | Protección CSRF/origen + security headers (CSP, X-Frame-Options, etc.) en endpoints de auth | Dev | ✅ Completa |
 | Sesión actual | Pruebas automatizadas de seguridad (rate-limit, CSRF/origen, XSS, SQLi, cabeceras) en `backend/tests/test_security.py` — PASS 7/7 | Dev | ✅ Completa |

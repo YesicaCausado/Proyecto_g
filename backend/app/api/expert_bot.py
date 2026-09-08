@@ -52,7 +52,7 @@ class BotPatchPayload(BaseModel):
     language: Optional[str] = None
 
 
-# ─── GET /expert-bots ──────────────────────────────────────────────────────────
+# ─── GET /bots (montado en main.py con prefix="/api/v1/bots") ─────────────────
 @router.get("/")
 async def list_bots(
     creator_id: Optional[int] = Query(None, description="Filtrar por creador"),
@@ -136,7 +136,7 @@ async def list_my_bots(
     return {"bots": [_build_bot_response(b) for b in bots]}
 
 
-# ─── GET /expert-bots/{bot_id} ────────────────────────────────────────────────
+# ─── GET /bots/{bot_id} ────────────────────────────────────────────────────────
 @router.get("/{bot_id}")
 async def get_bot(
     bot_id: int,
@@ -160,11 +160,11 @@ async def get_bot(
         "id": bot.id,
         "name": bot.name,
         "description": bot.description or "",
-        "subject_area": bot.subject_area or "",
+        "subject_area": bot.category or "",
         "creator_id": bot.creator_id,
         "creator_name": bot.creator.full_name if bot.creator else "",
         "is_public": bot.is_public,
-        "language": bot.language or "es",
+        "language": "es",
         "knowledge_base": getattr(bot, "knowledge_base", []),
         "created_at": bot.created_at.isoformat() if bot.created_at else None,
         "updated_at": bot.updated_at.isoformat() if bot.updated_at else None,
@@ -182,7 +182,7 @@ async def get_bot(
     }
 
 
-# ─── POST /expert-bots (alias /create) ────────────────────────────────────────
+# ─── POST /bots + /bots/create ────────────────────────────────────────────────
 def _build_bot_response(bot: ExpertBot) -> dict:
     """Respuesta normalizada del bot que consume el frontend (NeuroBotsTab)."""
     return {
@@ -243,7 +243,7 @@ async def create_bot(
     return _build_bot_response(bot)
 
 
-# ─── PUT /expert-bots/{bot_id} ────────────────────────────────────────────────
+# ─── PUT /bots/{bot_id} ────────────────────────────────────────────────────────
 @router.put("/{bot_id}")
 async def update_bot(
     bot_id: int,
@@ -328,7 +328,7 @@ async def patch_bot(
     return _build_bot_response(bot)
 
 
-# ─── DELETE /expert-bots/{bot_id} ─────────────────────────────────────────────
+# ─── DELETE /bots/{bot_id} ─────────────────────────────────────────────────────
 @router.delete("/{bot_id}")
 async def delete_bot(
     bot_id: int,
@@ -353,7 +353,7 @@ async def delete_bot(
     return {"ok": True, "message": "Bot eliminado correctamente"}
 
 
-# ─── POST /expert-bots/{bot_id}/share ─────────────────────────────────────────
+# ─── POST /bots/{bot_id}/share ─────────────────────────────────────────────────
 @router.post("/{bot_id}/share")
 async def share_bot(
     bot_id: int,

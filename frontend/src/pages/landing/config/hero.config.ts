@@ -96,13 +96,13 @@ export interface HeroRobotConfig {
 }
 
 export const HERO_ROBOT: HeroRobotConfig = {
-  top:          40,            // Neurón más centrado en la pantalla (no arriba)
-  scale:        1.15,          // Robot protagonista: un poco más grande
-  floatAmplitude: 10,
-  floatDuration:  5.2,
-  entranceY:     40,
-  entranceScale: 0.92,
-  entranceRotation: 1.5,
+  top:          58,            // Neurón más centrado en la pantalla (no arriba) - movido abajo para dejar espacio al contenido
+  scale:        1.25,          // Robot protagonista: más grande y visible
+  floatAmplitude: 12,
+  floatDuration:  5.0,
+  entranceY:     50,
+  entranceScale: 0.9,
+  entranceRotation: 1,
   maxMouseRotX:  3,
   maxMouseRotY:  5,
   maxMouseTilt:  4,
@@ -119,12 +119,12 @@ export interface HeroTiming {
 }
 
 export const HERO_TIMING: HeroTiming = {
-  step1Bg:     0.0,
-  step2Robot:  0.35,
-  step3Nodes:  0.7,
-  step4Brand:  0.6,
-  step5Copy:   0.95,
-  stagger:     0.11,
+  step1Bg:     0.0,  // fondo blanco limpio
+  step2Robot:  0.8,  // Neurón aparece progresivamente (después del contenido)
+  step3Nodes:  1.2,  // partículas/nodos alrededor
+  step4Brand:  0.0,  // aparece NEUROLEARN (primero)
+  step5Copy:   0.3,  // mensaje principal + CTA (después de la marca)
+  stagger:     0.12, // desfase entre sub-elementos
 };
 
 // ── Scroll (transición cinematográfica) ───────────────────────
@@ -150,10 +150,10 @@ export interface HeroScroll {
 export const HERO_SCROLL: HeroScroll = {
   start:            'top top',
   end:              '+=120%',
-  robotUpTravel:    -140,
-  robotScrollScale: 0.86,
-  robotScrollRotation: 2,
-  textTravel:       -260,
+  robotUpTravel:    -60,          // Menos movimiento hacia arriba para mantener presencia
+  robotScrollScale: 0.94,         // Escala ligeramente menor pero manteniendo más tamaño
+  robotScrollRotation: 0,         // Sin rotación para mantener estabilidad
+  textTravel:       -200,         // El texto sale menos rápido pero aún visible
 };
 
 // ── Patterns (transición hacia los 5 patrones neurodigitales) ─
@@ -182,6 +182,7 @@ export interface PatternDetail {
   title:       string;
   icon:        string;      // clave del icono lucide-react
   description: string;
+  accent:      string;      // color de la paleta (hex) como acento editorial
 }
 
 export const PATTERN_DETAILS: PatternDetail[] = [
@@ -189,30 +190,35 @@ export const PATTERN_DETAILS: PatternDetail[] = [
     id:          'facial',
     title:       'Facial',
     icon:        'Eye',
+    accent:      '#A78BFA',
     description: 'Expresiones, micromovimientos y contacto visual delatan el estado emocional y la atención real, incluso cuando lo que se dice es distinto.',
   },
   {
     id:          'voz',
     title:       'Voz',
     icon:        'Mic',
+    accent:      '#5DC8B4',
     description: 'Tono, ritmo, pausas y volumen del habla revelan confianza, dudas y comprensión. La IA detecta señales que van más allá de las palabras.',
   },
   {
     id:          'teclado',
     title:       'Teclado',
     icon:        'Keyboard',
+    accent:      '#3FA9DB',
     description: 'Velocidad de escritura, errores típicos y hábitos sobre el teclado permiten anticipar dificultades antes de que se traduzcan en un mal resultado.',
   },
   {
     id:          'interaccion',
     title:       'Interacción',
     icon:        'Users',
+    accent:      '#F2C84B',
     description: 'Cómo la persona navega, decide y colabora con la interfaz y con otros usuarios construye un mapa único de su forma de aprender.',
   },
   {
     id:          'rendimiento',
     title:       'Rendimiento',
     icon:        'TrendingUp',
+    accent:      '#35B98B',
     description: 'Resultados y progreso se convierten en una curva viva que la IA ajusta en cada paso para que el aprendizaje sea cada vez más adaptativo.',
   },
 ];

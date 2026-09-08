@@ -17,7 +17,7 @@ Endpoints:
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func, case
 from pydantic import BaseModel
 
 from app.db.database import get_db
@@ -194,43 +194,113 @@ async def list_conversations(
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
     uid = current_user.id
 
-    all_msgs = db.query(DirectMessage).filter(
-        or_(DirectMessage.sender_id == uid, DirectMessage.receiver_id == uid)
-    ).order_by(DirectMessage.created_at.desc()).all()
+    # ── Optimización (504 en producción): ─────────────────────────────────
+    # Antes se cargaban TODOS los mensajes y se hacían ~2 queries por mensaje
+    # (usuario + conde de no leídos) → N+1 que agotaba el tiempo de Vercel.
+    # Ahora se resuelve en pocas consultas por lotes:
+    #   1) ids de interlocutores distintos + batch de usuarios
+    #   2) último mensaje por interlocutor (una query agregada)
+    #   3) no leídos por interlocutor (una query agregada)
+    seg = or_(DirectMessage.sender_id == uid, DirectMessage.receiver_id == uid)
+
+    # 1) Interlocutores distintos.
+    partner_col = case(
+        (DirectMessage.sender_id == uid, DirectMessage.receiver_id),
+        else_=DirectMessage.sender_id,
+    ).label("partner_id")
+    partner_rows = (
+        db.query(partner_col)
+        .filter(seg)
+        .group_by(partner_col)
+        .all()
+    )
+    partner_ids = [r[0] for r in partner_rows if r[0] is not None]
+
+    # Batch de usuarios (una query, no una por interlocutor).
+    users = {}
+    if partner_ids:
+        users = {
+            u.id: u for u in db.query(User).filter(User.id.in_(partner_ids)).all()
+        }
+
+    # 2) Último mensaje por interlocutor (una query agregada).
+    last_msg_map: dict[int, tuple] = {}
+    if partner_ids:
+        msg_sub = db.query(
+            DirectMessage.id,
+            DirectMessage.content,
+            DirectMessage.created_at,
+            partner_col,
+        ).filter(seg).subquery()
+        max_sub = (
+            db.query(msg_sub.c.partner_id, func.max(msg_sub.c.id).label("mid"))
+            .group_by(msg_sub.c.partner_id)
+            .subquery()
+        )
+        latest_rows = (
+            db.query(
+                msg_sub.c.partner_id,
+                msg_sub.c.content,
+                msg_sub.c.created_at,
+            )
+            .join(
+                max_sub,
+                and_(max_sub.c.partner_id == msg_sub.c.partner_id, max_sub.c.mid == msg_sub.c.id),
+            )
+            .all()
+        )
+        last_msg_map = {pid: (content, created) for pid, content, created in latest_rows}
+
+    # 3) No leídos por interlocutor (una query agregada).
+    unread_map: dict[int, int] = {}
+    if partner_ids:
+        unread_rows = (
+            db.query(DirectMessage.sender_id, func.count(DirectMessage.id))
+            .filter(
+                DirectMessage.receiver_id == uid,
+                DirectMessage.sender_id.in_(partner_ids),
+                DirectMessage.is_read == False,
+            )
+            .group_by(DirectMessage.sender_id)
+            .all()
+        )
+        unread_map = {sid: cnt for sid, cnt in unread_rows}
 
     seen: dict[int, dict] = {}
-    for msg in all_msgs:
-        other_id = msg.receiver_id if msg.sender_id == uid else msg.sender_id
-        if other_id not in seen:
-            other = db.query(User).filter(User.id == other_id).first()
-            if not other:
-                continue
-            unread = db.query(DirectMessage).filter(
-                DirectMessage.sender_id == other_id,
-                DirectMessage.receiver_id == uid,
-                DirectMessage.is_read == False,
-            ).count()
-            seen[other_id] = {
-                "other_user_id":   other_id,
-                "other_user_name": other.full_name or other.username,
-                "other_user_role": other.role,
-                "last_message":    msg.content,
-                "last_message_at": msg.created_at.isoformat(),
-                "unread_count":    unread,
-            }
+    for other_id in partner_ids:
+        other = users.get(other_id)
+        if not other:
+            continue
+        last = last_msg_map.get(other_id)
+        seen[other_id] = {
+            "other_user_id":   other_id,
+            "other_user_name": other.full_name or other.username,
+            "other_user_role": other.role,
+            "last_message":    last[0] if last else None,
+            "last_message_at": last[1].isoformat() if last else None,
+            "unread_count":    int(unread_map.get(other_id, 0)),
+        }
 
     # Para estudiantes: añadir profesores de sus clases sin mensajes aún
     if current_user.role == UserRole.ESTUDIANTE.value:
         enrollments = db.query(Enrollment).filter(
             Enrollment.student_id == uid, Enrollment.is_active == True,
         ).all()
+        cids = [e.classroom_id for e in enrollments]
+        classrooms = {
+            c.id: c for c in db.query(Classroom).filter(Classroom.id.in_(cids)).all()
+        } if cids else {}
+        tids = {c.teacher_id for c in classrooms.values() if c.teacher_id}
+        teachers = {}
+        if tids:
+            teachers = {u.id: u for u in db.query(User).filter(User.id.in_(tids)).all()}
         for e in enrollments:
-            classroom = db.query(Classroom).filter(Classroom.id == e.classroom_id).first()
+            classroom = classrooms.get(e.classroom_id)
             if not classroom:
                 continue
             tid = classroom.teacher_id
             if tid not in seen:
-                teacher = db.query(User).filter(User.id == tid).first()
+                teacher = teachers.get(tid)
                 if teacher:
                     seen[tid] = {
                         "other_user_id":   tid,
@@ -248,9 +318,15 @@ async def list_conversations(
             enrollments = db.query(Enrollment).filter(
                 Enrollment.classroom_id.in_(cids), Enrollment.is_active == True,
             ).all()
+            add_stu_ids = [e.student_id for e in enrollments if e.student_id not in seen]
+            students = {}
+            if add_stu_ids:
+                students = {
+                    u.id: u for u in db.query(User).filter(User.id.in_(add_stu_ids)).all()
+                }
             for e in enrollments:
                 if e.student_id not in seen:
-                    student = db.query(User).filter(User.id == e.student_id).first()
+                    student = students.get(e.student_id)
                     if student:
                         seen[e.student_id] = {
                             "other_user_id":   e.student_id,

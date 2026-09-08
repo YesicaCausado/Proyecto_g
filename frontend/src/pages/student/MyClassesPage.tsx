@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import type { Classroom } from '../../types';
-import { Users, KeyRound, Loader2, CheckCircle } from 'lucide-react';
+import { Users, KeyRound, Loader2, CheckCircle, ChevronRight } from 'lucide-react';
 
 export default function MyClassesPage() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
@@ -94,19 +95,33 @@ export default function MyClassesPage() {
       ) : (
         <div className="space-y-3">
           {classrooms.map((c) => (
-            <div key={c.id} className="bg-white border border-[#E9E9E7] rounded-md p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-medium text-[#37352F] text-sm">{c.name}</h3>
-                  <p className="text-xs text-[#787774] mt-0.5">{c.subject} • {c.grade || 'Sin grado'}</p>
-                  {c.description && <p className="text-xs text-[#9B9A97] mt-1">{c.description}</p>}
-                </div>
-                <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
-                  <Users className="w-3.5 h-3.5" />
-                  {c.student_count}
+            <Link
+              key={c.id}
+              to={`/my-classes/${c.id}`}
+              className="block bg-white border border-[#E9E9E7] rounded-md overflow-hidden hover:border-[#C9C7C4] hover:shadow-sm transition-all group"
+            >
+              <div
+                className="h-12 px-5 flex items-center"
+                style={{ backgroundColor: c.color || '#2E6FDB' }}
+              >
+                <span className="text-white font-medium text-sm">{c.name}</span>
+              </div>
+              <div className="p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-[#787774]">{c.subject} • {c.grade || 'Sin grado'}</p>
+                    {c.description && <p className="text-xs text-[#9B9A97] mt-1">{c.description}</p>}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="flex items-center gap-1 text-xs text-[#9B9A97]">
+                      <Users className="w-3.5 h-3.5" />
+                      {c.student_count}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-[#C9C7C4] group-hover:text-[#37352F] group-hover:translate-x-0.5 transition-all" />
+                  </div>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

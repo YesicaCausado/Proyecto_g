@@ -18,6 +18,7 @@ def run_migration():
     migration_files = [
         Path(__file__).parent / "applied" / "002_add_adaptive_quiz_columns.sql",
         Path(__file__).parent / "applied" / "003_add_chat_patterns_tables.sql",
+        Path(__file__).parent / "applied" / "004_add_chat_answers.sql",
     ]
 
     for migration_file in migration_files:

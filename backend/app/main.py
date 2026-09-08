@@ -26,6 +26,7 @@ from app.core.security import (
 )
 from app.db.database import engine, Base
 from app.api import auth, chat, expert_bot, classroom, stats
+from app.api import conversations  # Conversaciones del tutor IA (memoria de chats)
 from app.api import credentials  # B2B credential system
 from app.api import posts, events, messages  # Tablero, Calendario, Mensajes
 from app.api import super_stats               # Super Profesor stats institucionales
@@ -43,6 +44,7 @@ from app.api import integrations            # Integraciones y Automatizaciones (
 # Importar modelos para que SQLAlchemy los registre
 import app.models.user          # noqa: F401
 import app.models.learning      # noqa: F401
+import app.models.adaptive      # noqa: F401  — Student Model / memoria / conversaciones
 import app.models.expert_bot    # noqa: F401
 import app.models.classroom     # noqa: F401
 import app.models.institution   # noqa: F401
@@ -104,8 +106,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Rutas — prefijo /api/v1 tanto en local como en Vercel
 app.include_router(auth.router,          prefix="/api/v1")
 app.include_router(chat.router,          prefix="/api/v1")
+app.include_router(conversations.router, prefix="/api/v1")
 app.include_router(expert_bot.router,    prefix="/api/v1/bots")
-app.include_router(classroom.router,     prefix="/api/v1/classrooms")
+app.include_router(classroom.router,     prefix="/api/v1")
 app.include_router(stats.router,         prefix="/api/v1/stats")
 app.include_router(credentials.router,   prefix="/api/v1")
 app.include_router(posts.router,         prefix="/api/v1")

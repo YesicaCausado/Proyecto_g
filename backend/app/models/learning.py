@@ -25,6 +25,10 @@ class CognitiveSessionState(Base):
         quiz_error_rate = Column(Float, default=0.0)
         weak_concepts = Column(JSON, default=list)
 
+        # Patrón 5 — veredictos de respuestas del chat en tiempo real.
+        # Ventana móvil de las últimas ~30 respuestas: [{c: 1|0|None, ts, len}]
+        chat_answers = Column(JSON, default=list)
+
         updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
         __table_args__ = (

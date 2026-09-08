@@ -72,11 +72,121 @@ from app.ai.cognitive.neuroconductual_engine import (
     FacialData,
     VoiceProsodyData,
 )
+from app.ai.cognitive.chat_grader import grade_user_answer, tutor_is_asking
+from app.ai.adaptive.adaptation_engine import PedagogicalAdaptationEngine
+from app.ai.adaptive.student_model import StudentModel
+from app.services.student_model_service import StudentModelService
+from app.services.llm_context import build_adaptation_context
 from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat Adaptativo"])
+
+# Motor de Adaptación Pedagógica (separado del LLM).
+_adaptation_engine = PedagogicalAdaptationEngine()
+_student_model_service = StudentModelService()
+
+
+def _infer_subject(topic: Optional[str]) -> str:
+    """Infers the subject (Materia) from the topic string (frontend topics)."""
+    if not topic:
+        return ""
+    t = topic.lower()
+    if "matemátic" in t or "razonamiento cuantitativ" in t or "ecuaci" in t:
+        return "Matemáticas"
+    if "lect" in t or "comprensión lectora" in t:
+        return "Lectura Crítica"
+    if "ingl" in t or "english" in t:
+        return "Inglés"
+    if "ciudadan" in t or "social" in t:
+        return "Competencias Ciudadanas"
+    if "científico" in t or "ciencias" in t or "natural" in t:
+        return "Pensamiento Científico"
+    return "General"
+
+
+def _available_signals(request) -> dict:
+    """Devuelve SOLO las señales neuro que llegan con valor real (no inventa)."""
+    out = {}
+
+    rt = request.response_time_ms
+    spd = request.typing_speed_cpm
+    if rt and rt > 0:
+        out["ritmo_interaccion"] = f"tiempo respuesta {rt}ms"
+    if spd and spd > 0:
+        out["ritmo_interaccion"] = (out.get("ritmo_interaccion") or "") + \
+            f", velocidad {spd} cpm"
+
+    if request.corrections and request.corrections > 0:
+        out["secuencia_decision"] = f"{request.corrections} correcciones"
+    if request.typing_bursts and request.typing_bursts >= 1:
+        out["secuencia_decision"] = (out.get("secuencia_decision") or "") + \
+            f", {request.typing_bursts} ráfagas"
+
+    facial = request.facial_data
+    if facial and any(v not in (None, 0, "") for v in facial.values()):
+        attn = facial.get("attention_score")
+        if attn:
+            out["facial"] = f"atención {attn}"
+    voice = request.voice_data
+    if voice and any(v not in (None, 0, "") for v in voice.values()):
+        if voice.get("speech_rate_wpm"):
+            out["voz"] = f"ritmo de habla {voice['speech_rate_wpm']} ppm"
+        elif voice.get("volume_db"):
+            out["voz"] = f"volumen {voice['volume_db']}dB"
+    return out
+
+
+def _persist_adaptive_state(
+    db, student_id, subject, skill, topic, verdict, strategy, message,
+) -> None:
+    """Actualiza mastery + estado de aprendizaje + memoria episódica/semántica.
+
+    Solo se usa el veredicto REAL del calificador del chat (o None si no hubo).
+    Si no hay veredicto, no se inventa corrección/error.
+    """
+    correct = None if verdict is None else (verdict == "correct")
+    weak = None
+    if verdict == "incorrect":
+        # Concepto débil débil señal: reutilizamos la dificultad detectada o
+        # un marcador prudente del tema (no se inventa contenido exacto).
+        weak = [topic[:80]]
+    _student_model_service.record_interaction(
+        db, student_id, subject, skill, topic,
+        correct=correct, difficulty=strategy.difficulty, weak_concepts=weak,
+    )
+    # Continuidad: guardar siguiente acción recomendada
+    try:
+        from app.models.adaptive import LearningState
+        state = db.query(LearningState).filter(
+            LearningState.student_id == student_id,
+            LearningState.skill == skill,
+        ).first()
+        if state is not None:
+            from app.services.student_model_service import StudentModelService
+            state.next_recommended_action = (
+                StudentModelService().generate_next_recommendation(
+                    _adaptation_engine,
+                    StudentModel(student_id=student_id),
+                    strategy,
+                )
+            )
+            db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+    # Memoria episódica: errores consecutivos u otros eventos importantes.
+    if verdict == "incorrect":
+        _student_model_service.save_episodic_memory(
+            db, student_id, subject, skill,
+            content=f"El estudiante respondió incorrectamente sobre {topic}.",
+            source="chat", importance=0.6, confidence=0.8,
+        )
+        db.commit()
 
 # AIManager global: Groq (principal) → Gemini (fallback). Sin modo local.
 ai_manager = AIManager(
@@ -118,6 +228,9 @@ def _default_stats_row() -> dict:
         "total_rt_ms": 0.0,
         "quiz_error_rate": 0.0,
         "weak_concepts": [],
+        "chat_answers": [],
+        "chat_error_rate": 0.0,
+        "chat_eval_count": 0,
     }
 
 
@@ -232,6 +345,46 @@ def _save_chat_message(db: Session, session_id: int, role: str, content: str,
     db.commit()
 
 
+def _save_conversation_message(db: Session, conversation_id: Optional[int],
+                               student_id: int, role: str, content: str,
+                               meta: Optional[dict] = None) -> None:
+    """Persiste un mensaje en la conversación (memoria de chats tipo ChatGPT).
+
+    Si no hay conversation_id, no se guarda (no se fabrica una conversación).
+    """
+    if not conversation_id:
+        return
+    try:
+        from app.models.adaptive import ConversationMessage
+        from app.models.adaptive import Conversation
+        conv = db.query(Conversation).filter(
+            Conversation.id == conversation_id,
+            Conversation.student_id == student_id,
+            Conversation.is_active == True,
+        ).first()
+        if conv is None:
+            return
+        db.add(ConversationMessage(
+            conversation_id=conversation_id,
+            student_id=student_id,
+            role=role,
+            content=content,
+            timestamp=datetime.utcnow(),
+            metadata=meta or {},
+        ))
+        conv.last_interaction = datetime.utcnow()
+        conv.updated_at = datetime.utcnow()
+        # Si la conversación no tiene tema, derivarlo del primer mensaje.
+        if not conv.topic:
+            conv.topic = (meta or {}).get("topic", "")[:200]
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 def _load_session_stats(db: Session, user_id: int, topic: str) -> dict:
     """Lee el estado de sesión REAL desde la base de datos.
 
@@ -259,6 +412,7 @@ def _load_session_stats(db: Session, user_id: int, topic: str) -> dict:
             "total_rt_ms": row.total_rt_ms or 0.0,
             "quiz_error_rate": row.quiz_error_rate or 0.0,
             "weak_concepts": row.weak_concepts or [],
+            "chat_answers": row.chat_answers or [],
         }
     except ImportError:
         logger.warning(
@@ -268,48 +422,86 @@ def _load_session_stats(db: Session, user_id: int, topic: str) -> dict:
         )
         return _default_stats_row()
     except Exception as e:
-        logger.warning(f"⚠️ No se pudo leer CognitiveSessionState: {e}")
+        # CRÍTICO: un error al consultar (p.ej. falta la columna `chat_answers`
+        # por no haberse aplicado la migración) deja la transacción de esta
+        # sesión SQLAlchemy en estado "aborted" en PostgreSQL. Si no hacemos
+        # rollback, TODA consulta posterior en el mismo request (p.ej.
+        # _get_or_create_learning_session) falla y /chat/message devuelve 500.
+        logger.warning(
+            f"⚠️ No se pudo leer CognitiveSessionState (se hace rollback "
+            f"para no dejar la transacción aborted): {e}"
+        )
+        try:
+            db.rollback()
+        except Exception:
+            pass
         return _default_stats_row()
 
 
 def _save_session_stats(db: Session, user_id: int, topic: str, stats: dict) -> None:
     """Persiste el estado de sesión actualizado en la base de datos."""
+    def _try_commit(include_chat_answers: bool) -> bool:
+        nonlocal db
+        try:
+            from app.models.learning import CognitiveSessionState
+
+            row = db.query(CognitiveSessionState).filter(
+                CognitiveSessionState.user_id == user_id,
+                CognitiveSessionState.topic == topic,
+            ).first()
+
+            if row is None:
+                row = CognitiveSessionState(user_id=user_id, topic=topic)
+                db.add(row)
+
+            row.msg_count = stats["msg_count"]
+            row.error_streak = stats["error_streak"]
+            row.fast_replies = stats["fast_replies"]
+            row.slow_replies = stats["slow_replies"]
+            row.total_rt_ms = stats["total_rt_ms"]
+            row.quiz_error_rate = stats["quiz_error_rate"]
+            row.weak_concepts = stats["weak_concepts"]
+            if include_chat_answers and hasattr(row, "chat_answers"):
+                row.chat_answers = stats.get("chat_answers", [])
+            row.updated_at = datetime.utcnow()
+
+            db.commit()
+            return True
+        except Exception as exc:
+            db.rollback()
+            raise exc
+
     try:
-        from app.models.learning import CognitiveSessionState
-
-        row = db.query(CognitiveSessionState).filter(
-            CognitiveSessionState.user_id == user_id,
-            CognitiveSessionState.topic == topic,
-        ).first()
-
-        if row is None:
-            row = CognitiveSessionState(user_id=user_id, topic=topic)
-            db.add(row)
-
-        row.msg_count = stats["msg_count"]
-        row.error_streak = stats["error_streak"]
-        row.fast_replies = stats["fast_replies"]
-        row.slow_replies = stats["slow_replies"]
-        row.total_rt_ms = stats["total_rt_ms"]
-        row.quiz_error_rate = stats["quiz_error_rate"]
-        row.weak_concepts = stats["weak_concepts"]
-        row.updated_at = datetime.utcnow()
-
-        db.commit()
+        _try_commit(include_chat_answers=True)
     except ImportError:
         # Ya se avisó en _load_session_stats; no volvemos a spamear logs.
         pass
     except Exception as e:
-        logger.warning(f"⚠️ No se pudo guardar CognitiveSessionState: {e}")
-        db.rollback()
+        # Si la columna chat_answers aún no existe (migración 004 pendiente),
+        # reintenta guardar el resto del estado sin perder rachas/tiempos.
+        if "chat_answers" in str(e).lower():
+            try:
+                _try_commit(include_chat_answers=False)
+            except Exception as e2:
+                logger.warning(f"⚠️ No se pudo guardar CognitiveSessionState (sin chat_answers): {e2}")
+                db.rollback()
+        else:
+            logger.warning(f"⚠️ No se pudo guardar CognitiveSessionState: {e}")
+            db.rollback()
 
 
 def _update_session_stats(stats: dict, response_time_ms: Optional[float], corrections: Optional[int],
-                           quiz_error_rate: float = 0.0, weak_concepts: Optional[list] = None) -> dict:
+                           quiz_error_rate: float = 0.0, weak_concepts: Optional[list] = None,
+                           correct: Optional[bool] = None) -> dict:
     """Actualiza las estadísticas acumuladas usando solo señales reales.
 
     Si el frontend no manda timing o correcciones, el mensaje cuenta pero no
     se inventan valores de referencia ni métricas artificiales.
+
+    `correct` es el veredicto real del calificador del chat (True/False/None).
+    Cuando hay veredicto real, la racha de errores se ajusta según lo que
+    realmente respondió el estudiante; si no (None), se usa la heurística de
+    correcciones (backspaces >= 5) como fallback.
     """
     response_time_ms = float(response_time_ms) if response_time_ms is not None else 0.0
     corrections = corrections if corrections is not None else 0
@@ -330,12 +522,76 @@ def _update_session_stats(stats: dict, response_time_ms: Optional[float], correc
         elif response_time_ms > avg_rt * 1.8:
             stats["slow_replies"] += 1
 
-    if corrections >= 5:
+    if correct is True:
+        stats["error_streak"] = max(0, stats["error_streak"] - 1)
+    elif correct is False:
+        stats["error_streak"] += 1
+    elif corrections >= 5:
         stats["error_streak"] += 1
     else:
         stats["error_streak"] = max(0, stats["error_streak"] - 1)
 
     return stats
+
+
+def _record_chat_answer(stats: dict, correct: Optional[bool]) -> dict:
+    """Guarda el veredicto real de una respuesta del chat (ventana móvil de 30)."""
+    answers = list(stats.get("chat_answers") or [])
+    answers.append({
+        "c": 1 if correct is True else (0 if correct is False else None),
+        "ts": datetime.utcnow().isoformat(),
+    })
+    stats["chat_answers"] = answers[-30:]
+    marked = [a["c"] for a in stats["chat_answers"] if a.get("c") is not None]
+    n = len(marked)
+    stats["chat_error_rate"] = (sum(1 for c in marked if c == 0) / n) if n else 0.0
+    stats["chat_eval_count"] = n
+    return stats
+
+
+def _seed_engine_from_answers(user_engine: MultimodalCognitiveEngine, stats: dict) -> None:
+    """Re-siembra el predictor de error con los veredictos recientes del chat.
+
+    El motor multimodal vive en memoria de proceso y se reinicia en cada cold
+    start de Vercel. Para que la predicción de error en tiempo real no se pierda,
+    se reinyectan las últimas respuestas evaluadas persistidas en la BD.
+    """
+    answers = stats.get("chat_answers") or []
+    predictor = user_engine.error_predictor
+    if not answers or predictor.interaction_history:
+        return
+    from app.ai.cognitive.neuroconductual_engine import ErrorPredictionAnalyzer
+    if type(predictor) is not ErrorPredictionAnalyzer:
+        return
+    for a in answers[-25:]:
+        if a.get("c") is not None:
+            predictor.record_interaction(
+                {}, had_error=(a["c"] == 0), context="respuesta_chat",
+            )
+
+
+def _get_last_assistant_message(db: Session, request, session) -> str:
+    """Devuelve el texto del último mensaje del tutor (para calificar la respuesta).
+
+    Prioriza el historial que envía el frontend (más barato); si está vacío,
+    cae a la base de datos.
+    """
+    for msg in (request.history or []):
+        if msg.get("role") == "assistant" and str(msg.get("content") or "").strip():
+            return str(msg.get("content"))
+    try:
+        from app.models.learning import ChatMessage
+        last_row = (
+            db.query(ChatMessage)
+            .filter(ChatMessage.session_id == session.id, ChatMessage.role == "assistant")
+            .order_by(ChatMessage.id.desc())
+            .first()
+        )
+        if last_row is not None:
+            return str(last_row.content or "")
+    except Exception as e:
+        logger.debug("No se pudo leer último mensaje del tutor: %s", e)
+    return ""
 
 
 _SYSTEM_PROMPT = """Eres NeuroLearn, un tutor educativo de IA para estudiantes de bachillerato en Colombia.
@@ -392,6 +648,8 @@ def _build_system_prompt(topic: str, cognitive_state: str = "normal",
     err_streak = stats.get("error_streak", 0)
     fast_r     = stats.get("fast_replies", 0)
     slow_r     = stats.get("slow_replies", 0)
+    chat_err   = stats.get("chat_error_rate", 0.0)
+    chat_n     = stats.get("chat_eval_count", 0)
 
     trend_ctx = ""
     if msg_n >= 3:
@@ -498,12 +756,29 @@ def _build_system_prompt(topic: str, cognitive_state: str = "normal",
             f"Refuerza la comprensión ANTES de avanzar al siguiente concepto."
         )
 
+    # Patrón 5 — rendimiento REAL reciente en el chat (en tiempo real).
+    chat_ctx = ""
+    if chat_n >= 2:
+        if chat_err >= 0.5:
+            chat_ctx = (
+                f"\n⚠️ RENDIMIENTO EN CHAT: {int(chat_err*100)}% de las últimas "
+                f"{min(chat_n, 30)} respuestas fueron incorrectas. "
+                f"Detén el avance y refuerza el concepto actual con ejemplos."
+            )
+        elif chat_err <= 0.2 and err_streak == 0:
+            chat_ctx = (
+                f"\n📈 RENDIMIENTO EN CHAT: responde bien últimamente. "
+                f"Puedes plantear una pregunta de análisis para verificar que "
+                f"realmente comprende (no solo recuerda)."
+            )
+
     neuro_block = "\n".join(filter(None, [
         f"\n{'='*50}",
         f"ADAPTACIÓN NEUROCONDUCTUAL ACTIVA:",
         f"{'='*50}",
         instruction,
         quiz_ctx if quiz_ctx else "",
+        chat_ctx if chat_ctx else "",
         error_risk_ctx if error_risk_ctx else "",
         f"\n{trend_ctx}" if trend_ctx else "",
     ]))
@@ -661,6 +936,10 @@ async def start_session(
         difficulty=request.difficulty,
         extra_data={"provider": result["provider"], "source": "start_session"},
     )
+    _save_conversation_message(
+        db, request.conversation_id, current_user.id, "assistant",
+        result["response"], {"topic": request.topic, "provider": result["provider"]},
+    )
 
     return ChatMessageResponse(
         message=result["response"],
@@ -719,12 +998,22 @@ async def send_message(
                 weak_concepts = list(set(weak_concepts))[:5]
         except Exception as eq:
             logger.debug(f"Quiz history fetch failed (non-critical): {eq}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
         # ═══ Cargar estado de sesión REAL desde la base de datos ═══
         session_stats = _load_session_stats(db, current_user.id, topic)
 
         # ═══ ANÁLISIS NEUROCONDUCTUAL — 5 PATRONES ═══
         analysis = None
+        # Inicializados FUERA del try para que, si el bloque de análisis
+        # neuroconductual falla antes de asignarlos (o no llega a ejecutarse),
+        # permanezcan definidos y no se dispare UnboundLocalError al leerse
+        # más abajo (p.ej. `corrected = bool(verdict == "correct")`).
+        verdict = None          # "correct" | "incorrect" | None
+        grade_conf = 0.0
         try:
             now = datetime.now()
 
@@ -755,8 +1044,22 @@ async def send_message(
             ):
                 from app.ai.cognitive.neuroconductual_engine import EmotionEnum
                 raw_emotion = request.facial_data.get("emotion", "neutral")
+                # Aliases del frontend → valores válidos del enum (evita que la
+                # emoción se pierda y caiga siempre en NEUTRAL).
+                _EMOTION_ALIASES = {
+                    "worried": "fearful",
+                    "stress": "fearful",
+                    "relajado": "neutral",
+                    "concentrado": "focused",
+                    "atento": "focused",
+                    "contento": "happy",
+                    "inquieto": "surprised",
+                    "aburrido": "bored",
+                    "confundido": "confused",
+                }
+                mapped = _EMOTION_ALIASES.get(raw_emotion, raw_emotion)
                 try:
-                    emotion_val = EmotionEnum(raw_emotion)
+                    emotion_val = EmotionEnum(mapped)
                 except (ValueError, KeyError):
                     emotion_val = EmotionEnum.NEUTRAL
                 facial_event = FacialData(
@@ -788,6 +1091,24 @@ async def send_message(
             session = _get_or_create_learning_session(db, current_user.id, topic)
 
             user_engine = _get_user_engine(current_user.id)
+            # Re-siembra la predicción de error con lo respondido en el chat
+            # (solo la primera vez que el motor se construye en este proceso;
+            # evita perder la ventana real en cold starts de Vercel).
+            _seed_engine_from_answers(user_engine, session_stats)
+
+            # ── Patrón 5 EN TIEMPO REAL: detectar la última pregunta del tutor
+            # y calificar la respuesta actual del estudiante con IA.
+            verdict = None          # "correct" | "incorrect" | None
+            grade_conf = 0.0
+            last_assistant = _get_last_assistant_message(db, request, session)
+            try:
+                if last_assistant and tutor_is_asking(last_assistant):
+                    verdict, grade_conf = await grade_user_answer(
+                        ai_manager, request.message, last_assistant, topic,
+                    )
+            except Exception as ec:
+                logger.warning("⚠️ Calificación de respuesta del chat falló: %s", ec)
+
             analysis = user_engine.add_multimodal_event(
                 behavioral=behavioral_event,
                 facial=facial_event,
@@ -798,6 +1119,28 @@ async def send_message(
                 cognitive_state = analysis.state.value
                 active_modalities = analysis.active_modalities
                 error_risk = analysis.error_risk
+
+            # Reconstruir el prior de error con el veredicto REAL del chat.
+            had_error_chat = (verdict == "incorrect")
+            if verdict is not None:
+                try:
+                    rm_metrics = user_engine._get_rhythm_metrics()
+                    analysis = user_engine.record_chat_answer(
+                        request.message, had_error_chat, rm_metrics or None,
+                        context="respuesta_chat",
+                    )
+                    if analysis:
+                        cognitive_state = analysis.state.value
+                        active_modalities = analysis.active_modalities
+                        error_risk = analysis.error_risk
+                except Exception as er:
+                    logger.warning("⚠️ No se pudo registrar veredicto del chat: %s", er)
+
+            grade_event = {
+                "chat_grade": verdict,
+                "chat_grade_confidence": grade_conf,
+                "had_error_chat": had_error_chat if verdict is not None else None,
+            }
 
             _save_cognitive_event(
                 db,
@@ -819,10 +1162,11 @@ async def send_message(
                     "cognitive_state": cognitive_state,
                     "quiz_error_rate": quiz_error_rate,
                     "weak_concepts": weak_concepts,
+                    **grade_event,
                 },
                 response_time_ms=request.response_time_ms,
                 typing_speed_cpm=request.typing_speed_cpm,
-                error_rate=quiz_error_rate,
+                error_rate=(1.0 if had_error_chat else 0.0) if verdict is not None else quiz_error_rate,
                 correction_count=request.corrections or 0,
                 pause_duration_ms=request.pause_before_ms,
                 inferred_state=cognitive_state,
@@ -846,6 +1190,10 @@ async def send_message(
                     "voice_data": request.voice_data,
                 },
             )
+            _save_conversation_message(
+                db, request.conversation_id, current_user.id, "user",
+                request.message, {"topic": topic},
+            )
 
             # Patrón 5 — Predicción de Error: inyectar tasa histórica de errores
             if quiz_error_rate > 0.4:
@@ -853,19 +1201,23 @@ async def send_message(
 
             # Actualizar estadísticas de sesión (en memoria de request) y
             # persistirlas en DB de inmediato.
+            correct_flag = None if verdict is None else (verdict == "correct")
             session_stats = _update_session_stats(
                 session_stats,
                 response_time_ms=request.response_time_ms,
                 corrections=request.corrections,
                 quiz_error_rate=quiz_error_rate,
                 weak_concepts=weak_concepts,
+                correct=correct_flag,
             )
+            session_stats = _record_chat_answer(session_stats, correct_flag)
             _save_session_stats(db, current_user.id, topic, session_stats)
 
             if analysis:
                 logger.info(
                     f"🧠 Estado: {cognitive_state} | P={analysis.probability:.2f} "
-                    f"error_risk={error_risk:.0%}  engagement={analysis.engagement:.2f} "
+                    f"error_risk={error_risk:.0%}  engagement={analysis.engagement_score:.2f} "
+                    f"chat_grade={verdict or '—'} "
                     f"[{', '.join(active_modalities)}]"
                 )
             else:
@@ -885,6 +1237,53 @@ async def send_message(
             session_stats=session_stats,
             error_risk=error_risk,
         )
+
+        # ═══════════════════════════════════════════════════════════════
+        # MOTOR DE ADAPTACIÓN PEDAGÓGICA (núcleo diferencial)
+        # StudentModel → PedagogicalAdaptationEngine → TeachingStrategy → LLM
+        # ═══════════════════════════════════════════════════════════════
+        strategy_meta = {}
+        try:
+            # skill ≈ topic normalizado (clave de mastery). subject se infiere
+            # desde el prefijo de la materia que llega en request.topic.
+            skill_key = topic.strip()[:120] or "general"
+            subject_key = _infer_subject(request.topic)
+
+            student_model: StudentModel = _student_model_service.load_model(
+                db, current_user.id, skill=skill_key)
+
+            # Señales neuro disponibles sólamente las que llegan reales.
+            neuro_digest = _available_signals(request)
+
+            strategy = _adaptation_engine.decide(student_model, neuro_digest)
+
+            if student_model.has_evidence() or neuro_digest:
+                system_prompt += build_adaptation_context(
+                    student_model, strategy, neuro_digest)
+
+            # Persistir episodio relevante según el veredicto REAL del chat.
+            _persist_adaptive_state(
+                db, current_user.id, subject_key, skill_key,
+                request.topic, verdict, strategy, request.message,
+            )
+            strategy_meta = {
+                "strategy": {
+                    "difficulty": strategy.difficulty,
+                    "guidance_level": strategy.guidance_level,
+                    "explanation": strategy.explanation_length,
+                    "examples": strategy.example_count,
+                    "repeat_explanation": strategy.repeat_explanation,
+                    "change_strategy": strategy.change_strategy,
+                    "prior_recovery": strategy.prior_recovery,
+                    "propose_exercise": strategy.propose_exercise,
+                    "decision_confidence": strategy.decision_confidence,
+                    "rationale": strategy.rationale,
+                },
+                "student_model_used": student_model.has_evidence(),
+            }
+        except Exception as adapt_err:
+            # Nunca debe romper el chat; degradar con tronco sin inventar datos.
+            logger.warning("⚠️ Motor de adaptación pedagógica falló: %s", adapt_err)
 
         # Reconstruir historial de conversación
         context_messages: List[Dict] = []
@@ -926,12 +1325,39 @@ async def send_message(
         # Limpiar el marcador QUIZ_SUGERIDO del mensaje
         clean_message = result["response"].replace("QUIZ_SUGERIDO", "").strip()
 
+        # Guardar la respuesta del tutor en la conversación (memoria de chats)
+        _save_conversation_message(
+            db, request.conversation_id, current_user.id, "assistant",
+            clean_message, {"topic": topic, "provider": result["provider"]},
+        )
+
+        # Conectar la recomendación del motor neuroconductual a la dificultad
+        # (antes quedaba fija en "medium" aunque el motor calculara should_adapt).
+        response_difficulty = "medium"
+        suggested_difficulty = None
+        if analysis and analysis.should_adapt and analysis.suggested_difficulty:
+            response_difficulty = analysis.suggested_difficulty
+            suggested_difficulty = analysis.suggested_difficulty
+        corrected = bool(verdict == "correct")
+        chat_error_rate = session_stats.get("chat_error_rate", 0.0)
+        chat_eval_count = session_stats.get("chat_eval_count", 0)
+
+        # Confianza REAL: del motor neuroconductual si hubo análisis válido;
+        # si no, de la estrategia pedagógica (que solo tiene confianza cuando
+        # hay evidencia). Nunca se inventa 0.8 fijo.
+        response_confidence = 0.0
+        if analysis is not None and analysis.probability:
+            response_confidence = round(float(analysis.probability), 3)
+        elif strategy_meta.get("strategy", {}).get("decision_confidence"):
+            response_confidence = round(
+                float(strategy_meta["strategy"]["decision_confidence"]), 3)
+
         return ChatMessageResponse(
             message=clean_message,
             action="teach",
-            difficulty="medium",
+            difficulty=response_difficulty,
             cognitive_state=cognitive_state,
-            confidence=0.8,
+            confidence=response_confidence,
             suggestions=[],
             should_pause=cognitive_state in ("fatigue", "overload", "frustration"),
             metadata={
@@ -940,6 +1366,9 @@ async def send_message(
                 "quiz_suggested": quiz_suggested,
                 "active_modalities": active_modalities,
                 "error_risk": round(error_risk, 3),
+                "suggested_difficulty": suggested_difficulty,
+                "should_adapt": bool(analysis.should_adapt) if analysis else False,
+                "adaptation": strategy_meta,
                 "patterns": {
                     "P1_interaction_rhythm": {
                         "response_time_ms": request.response_time_ms,
@@ -964,7 +1393,14 @@ async def send_message(
                     "P5_error_prediction": {
                         "quiz_error_rate": round(quiz_error_rate, 3),
                         "weak_concepts": weak_concepts,
-                        "active": quiz_error_rate > 0,
+                        "active": True,
+                        # ═══ P5 EN TIEMPO REAL desde el chat ═══
+                        "real_time": True,
+                        "last_answer_grade": verdict,
+                        "last_answer_correct": corrected if verdict is not None else None,
+                        "chat_error_rate": round(chat_error_rate, 3),
+                        "chat_eval_count": chat_eval_count,
+                        "error_risk_realtime": round(error_risk, 3),
                     },
                 },
                 "session_stats": {
@@ -972,6 +1408,8 @@ async def send_message(
                     "error_streak": session_stats.get("error_streak", 0),
                     "fast_replies": session_stats.get("fast_replies", 0),
                     "slow_replies": session_stats.get("slow_replies", 0),
+                    "chat_error_rate": round(chat_error_rate, 3),
+                    "chat_eval_count": chat_eval_count,
                 },
             },
         )

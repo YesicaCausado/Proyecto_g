@@ -74,7 +74,7 @@ const STATE_CONFIG: Record<string, { label: string; color: string; emoji: string
 const COLOR_CLASSES: Record<string, { bar: string; bg: string; text: string; ring: string }> = {
   blue:   { bar: 'bg-[#0B6E99]',   bg: 'bg-[#E5F3FF]',   text: 'text-[#0B6E99]',   ring: 'ring-blue-200' },
   purple: { bar: 'bg-[#6940A5]', bg: 'bg-[#F7F3FB]', text: 'text-[#6940A5]', ring: 'ring-purple-200' },
-  amber:  { bar: 'bg-[#FCF6E5]0',  bg: 'bg-[#FCF6E5]',  text: 'text-[#DFAB01]',  ring: 'ring-amber-200' },
+  amber:  { bar: 'bg-[#DFAB01]',  bg: 'bg-[#FCF6E5]',  text: 'text-[#DFAB01]',  ring: 'ring-amber-200' },
   green:  { bar: 'bg-[#0F7B6C]',  bg: 'bg-[#EEF7F4]',  text: 'text-[#0F7B6C]',  ring: 'ring-green-200' },
   red:    { bar: 'bg-[#E03E3E]',    bg: 'bg-[#FDEEEE]',    text: 'text-[#E03E3E]',    ring: 'ring-red-200' },
 };
@@ -159,11 +159,17 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
     ? Math.max(0, Math.min(1, 1 - Math.min(1, corrections / 10) - (bursts >= 3 ? 0.1 : 0)))
     : null;
 
-  // Patrón 5: predicción de error histórica
+  // Patrón 5: predicción de error en tiempo real (chat) + historial de quizzes.
   const quizErrRate = typeof p5.quiz_error_rate === 'number' ? (p5.quiz_error_rate as number) : 0;
   const weakConcepts = ((p5.weak_concepts as string[]) || []).slice(0, 3);
-  const hasP5 = quizErrRate > 0 || weakConcepts.length > 0;
-  const p5Score = hasP5 ? Math.max(0, 1 - quizErrRate) : null;
+  const errRiskRt = typeof p5.error_risk_realtime === 'number' ? (p5.error_risk_realtime as number) : null;
+  const chatErrRate = typeof p5.chat_error_rate === 'number' ? (p5.chat_error_rate as number) : null;
+  const evalCount = typeof p5.chat_eval_count === 'number' ? (p5.chat_eval_count as number) : 0;
+  const lastGrade = p5.last_answer_grade as string | null | undefined;
+  const hasP5 = errRiskRt != null || chatErrRate != null || quizErrRate > 0 || weakConcepts.length > 0;
+  const p5Score = hasP5
+    ? (errRiskRt != null ? Math.max(0, 1 - errRiskRt) : Math.max(0, 1 - quizErrRate))
+    : null;
 
   // Facial/voz en vivo: solo se muestra un valor si hay un sensor real activo;
   // en caso contrario el patrón queda "Datos insuficientes".
@@ -276,7 +282,15 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
                         {(p2.is_question as boolean) ? ' · ❓pregunta' : ''}
                       </p>
                     )}
-                    {/* Patrón 5: conceptos débiles del historial */}
+                    {/* Patrón 5: estado en tiempo real del chat + historial */}
+                    {p.id === 'error_prediction' && (
+                      <p className="text-xs text-[#E03E3E] mt-1">
+                        {lastGrade === 'incorrect' ? '❌ Última respuesta incorrecta en chat'
+                          : lastGrade === 'correct' ? '✅ Última respuesta correcta en chat'
+                          : chatErrRate != null ? `⚡ ${Math.round(chatErrRate * 100)}% de fallos en chat`
+                          : ''}
+                      </p>
+                    )}
                     {p.id === 'error_prediction' && weakConcepts.length > 0 && (
                       <p className="text-xs text-[#E03E3E] mt-1">
                         ⚠️ Débil en: {weakConcepts.join(', ')}
@@ -285,6 +299,11 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
                     {p.id === 'error_prediction' && quizErrRate > 0 && (
                       <p className="text-xs text-[#9B9A97] mt-0.5">
                         {Math.round(quizErrRate * 100)}% errores históricos
+                      </p>
+                    )}
+                    {p.id === 'error_prediction' && evalCount > 0 && (
+                      <p className="text-xs text-[#0F7B6C] mt-0.5 font-medium">
+                        ⏱ {evalCount} respuesta{evalCount !== 1 ? 's' : ''} evaluadas en tiempo real
                       </p>
                     )}
                   </>
@@ -325,7 +344,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
             </span>
           ))}
           {(activeModalities.includes('facial_microexpression') || isFacialLive) && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${isFacialLive ? 'bg-[#FCF6E5]0 text-white' : 'bg-[#FCF6E5] text-[#DFAB01]'}`}>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${isFacialLive ? 'bg-[#DFAB01] text-white' : 'bg-[#FCF6E5] text-[#DFAB01]'}`}>
               {isFacialLive ? '🔴 Facial' : 'Facial'}
             </span>
           )}

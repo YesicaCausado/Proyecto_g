@@ -29,6 +29,8 @@ from app.schemas.schemas import (
     AssignBotRequest,
     StudentProgressResponse,
     ClassroomStatsResponse,
+    ClassroomBotResponse,
+    ClassroomStudentDetailResponse,
 )
 
 router = APIRouter(prefix="/classrooms", tags=["Clases - Rol Profesor"])
@@ -240,6 +242,86 @@ async def get_classroom(
         max_students=classroom.max_students,
         student_count=student_count,
         created_at=classroom.created_at,
+    )
+
+
+@router.get("/{classroom_id}/student-detail", response_model=ClassroomStudentDetailResponse)
+async def get_student_classroom_detail(
+    classroom_id: int,
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    db: Session = Depends(get_db),
+):
+    """Detalle de una clase para el estudiante inscrito (vista estilo classroom).
+
+    Devuelve información de la clase, el profesor, los bots asignados (tutores)
+    y el progreso del propio estudiante en esa clase.
+    """
+    if current_user.role != UserRole.ESTUDIANTE.value:
+        raise HTTPException(status_code=403, detail="Solo los estudiantes pueden ver esta vista")
+
+    classroom = db.query(Classroom).filter(
+        Classroom.id == classroom_id,
+        Classroom.is_active == True,
+    ).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Clase no encontrada")
+
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.classroom_id == classroom_id,
+        Enrollment.student_id == current_user.id,
+        Enrollment.is_active == True,
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=403, detail="No estás inscrito en esta clase")
+
+    # Profesor
+    teacher = db.query(User).filter(User.id == classroom.teacher_id).first()
+    teacher_name = (teacher.full_name or teacher.username) if teacher else ""
+
+    # Número de estudiantes inscritos
+    student_count = db.query(Enrollment).filter(
+        Enrollment.classroom_id == classroom.id,
+        Enrollment.is_active == True,
+    ).count()
+
+    # Bots asignados como tutores
+    assignments = db.query(ClassroomBot).filter(
+        ClassroomBot.classroom_id == classroom_id,
+    ).order_by(ClassroomBot.order_index).all()
+
+    bots = []
+    for a in assignments:
+        bot = db.query(ExpertBot).filter(ExpertBot.id == a.bot_id).first()
+        if bot:
+            bots.append(ClassroomBotResponse(
+                bot_id=bot.id,
+                name=bot.name,
+                description=bot.description or "",
+                category=bot.category,
+                is_required=a.is_required,
+                order_index=a.order_index,
+            ))
+
+    return ClassroomStudentDetailResponse(
+        id=classroom.id,
+        name=classroom.name,
+        description=classroom.description,
+        subject=classroom.subject,
+        grade=classroom.grade,
+        color=classroom.color or "#2E6FDB",
+        max_students=classroom.max_students,
+        student_count=student_count,
+        created_at=classroom.created_at,
+        teacher_name=teacher_name,
+        invite_code=classroom.invite_code,
+        overall_progress=enrollment.overall_progress,
+        total_sessions=enrollment.total_sessions,
+        total_time_minutes=enrollment.total_time_minutes,
+        average_score=enrollment.average_score,
+        risk_level=enrollment.risk_level,
+        last_activity=enrollment.last_activity,
+        bots=bots,
     )
 
 

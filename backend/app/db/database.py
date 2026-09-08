@@ -15,6 +15,23 @@ logger = logging.getLogger(__name__)
 # Detectar entorno serverless (Vercel establece VERCEL_ENV automáticamente)
 IS_SERVERLESS = os.getenv("VERCEL_ENV") is not None
 
+# Tiempos límite para que las consultas fallen rápido en vez de colgarse:
+#  - connect_timeout (segundos): evita que la apertura de conexión se cuelgue
+#    cuando Supabase está lento o caído (causa típica de 504/500 en serverless).
+#  - options=-c statement_timeout=... : mata cualquier query individual que
+#    exceda el límite devolviendo un error controlado en vez de agotar el
+#    tiempo de la función de Vercel (Hobby ≈ 10s).
+CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "5"))       # segundos
+STATEMENT_TIMEOUT = int(os.getenv("DB_STATEMENT_TIMEOUT", "6000"))  # milisegundos
+
+
+def _build_connect_args() -> dict:
+    """Argumentos de conexión por defecto (psycopg2)."""
+    args = {"connect_timeout": CONNECT_TIMEOUT}
+    # statement_timeout aplica a nivel servidor en cada conexión PostgreSQL.
+    args["options"] = f"-c statement_timeout={STATEMENT_TIMEOUT}"
+    return args
+
 
 def _build_db_url(url: str) -> str:
     """Añade sslmode=require si falta (obligatorio en Supabase)."""
@@ -41,6 +58,7 @@ else:
             engine = create_engine(
                 _db_url,
                 poolclass=NullPool,
+                connect_args=_build_connect_args(),
                 echo=False,
             )
         else:
@@ -51,6 +69,7 @@ else:
                 max_overflow=10,
                 pool_pre_ping=True,
                 pool_recycle=300,
+                connect_args=_build_connect_args(),
                 echo=settings.DEBUG,
             )
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

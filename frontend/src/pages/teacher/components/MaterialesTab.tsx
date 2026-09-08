@@ -14,6 +14,9 @@ interface MaterialFile {
   size: string;
   date: string;
   sharedWith: string[];
+  hasFile?: boolean;
+  downloadUrl?: string | null;
+  originalName?: string;
 }
 
 interface MaterialFolder {
@@ -27,12 +30,21 @@ const GROUPS = ['Matemáticas 9A','Física 10B','Álgebra 8C','Cálculo 11A','Ge
 
 const INITIAL_FOLDERS: MaterialFolder[] = [];
 
-const FILE_TYPE_CONFIG: Record<FileType, { icon: any; color: string; bg: string }> = {
-  pdf:  { icon: FileText,      color:'text-[#E03E3E]', bg:'bg-red-50'    },
-  doc:  { icon: File,          color:'text-[#2E6FDB]', bg:'bg-[#EEF3FD]' },
-  ppt:  { icon: Presentation,  color:'text-[#D9730D]', bg:'bg-orange-50' },
-  link: { icon: Link2,         color:'text-[#0B6E99]', bg:'bg-sky-50'    },
-  img:  { icon: Eye,           color:'text-[#6940A5]', bg:'bg-purple-50' },
+const FILE_TYPE_CONFIG: Record<FileType, { color: string; bg: string }> = {
+  pdf:  { color:'text-[#E03E3E]', bg:'bg-red-50'    },
+  doc:  { color:'text-[#2E6FDB]', bg:'bg-[#EEF3FD]' },
+  ppt:  { color:'text-[#D9730D]', bg:'bg-orange-50' },
+  link: { color:'text-[#0B6E99]', bg:'bg-sky-50'    },
+  img:  { color:'text-[#6940A5]', bg:'bg-purple-50' },
+};
+
+// Íconos por tipo
+const FILE_ICONS: Record<FileType, any> = {
+  pdf:  FileText,
+  doc:  File,
+  ppt:  Presentation,
+  link: Link2,
+  img:  Eye,
 };
 
 export default function MaterialesTab({ license: _license }: { license: any }) {
@@ -54,12 +66,15 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
         name:  f.name,
         color: f.color,
         files: (f.files ?? []).map((m: any) => ({
-          id:         String(m.id),
-          name:       m.name,
-          type:       m.type as FileType,
-          size:       m.size,
-          date:       m.date,
-          sharedWith: m.sharedWith ?? [],
+          id:           String(m.id),
+          name:         m.name,
+          type:         m.type as FileType,
+          size:         m.size,
+          date:         m.date,
+          sharedWith:   m.sharedWith ?? [],
+          hasFile:      !!m.hasFile,
+          downloadUrl:  m.downloadUrl ?? null,
+          originalName: m.originalName,
         })),
       }))))
       .catch(() => {})
@@ -80,24 +95,23 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
   const handleUpload = async (folderId: string, files: FileList | null) => {
     if (!files) return;
     for (const f of Array.from(files)) {
-      const fileType: FileType = f.name.endsWith('.pdf') ? 'pdf'
-        : f.name.endsWith('.pptx') || f.name.endsWith('.ppt') ? 'ppt' : 'doc';
-      const payload = {
-        folder_id:  folderId,
-        name:       f.name,
-        type:       fileType,
-        size:       `${(f.size / 1024 / 1024).toFixed(1)} MB`,
-        sharedWith: [],
-      };
+      const form = new FormData();
+      form.append('folder_id', folderId);
+      form.append('file', f, f.name);
       try {
-        const r = await api.post('/teacher/materials/files', payload);
+        const r = await api.post('/teacher/materials/files', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
         const newFile: MaterialFile = {
-          id:         String(r.data.id),
-          name:       r.data.name,
-          type:       r.data.type as FileType,
-          size:       r.data.size,
-          date:       r.data.date,
-          sharedWith: r.data.sharedWith ?? [],
+          id:           String(r.data.id),
+          name:         r.data.name ?? f.name,
+          type:         r.data.type as FileType,
+          size:         r.data.size,
+          date:         r.data.date,
+          sharedWith:   r.data.sharedWith ?? [],
+          hasFile:      !!r.data.hasFile,
+          downloadUrl:  r.data.downloadUrl ?? null,
+          originalName: r.data.originalName,
         };
         setFolders(prev => prev.map(fo => fo.id === folderId ? { ...fo, files: [...fo.files, newFile] } : fo));
         setSelected(prev => prev?.id === folderId ? { ...prev, files: [...prev.files, newFile] } : prev);
@@ -130,9 +144,81 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
     setShareGroups(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   };
 
+  const openShare = (file: MaterialFile) => {
+    // Pre-selecciona los grupos con los que ya está compartido el archivo
+    setShareGroups((file.sharedWith ?? []).filter((x: any) => typeof x === 'string'));
+    setShowShare(file);
+  };
+
+  const handleDownload = async (file: MaterialFile) => {
+    // Enlace: abrir la URL si existe
+    if (file.type === 'link') {
+      const url = (file.sharedWith ?? []).find((x: any) => typeof x === 'string' && /^https?:\/\//i.test(x));
+      if (url) { window.open(url, '_blank', 'noopener,noreferrer'); return; }
+      return;
+    }
+
+    // El backend devuelve downloadUrl = /api/v1/teacher/materials/files/{id}/download.
+    // Como api ya tiene baseURL = '/api/v1', hay que quitar ese prefijo para no duplicarlo.
+    const rel = (file.downloadUrl || '').replace(/^\/api\/v1/, '');
+    if (rel && file.hasFile) {
+      try {
+        const r = await api.get(rel, { responseType: 'blob' });
+        const blob: Blob = r.data;
+
+        // Nombre de archivo desde Content-Disposition (prioriza filename* UTF-8)
+        let filename = '';
+        const cd: string = r.headers?.['content-disposition'] ?? '';
+        const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+        if (star && star[1]) { try { filename = decodeURIComponent(star[1].replace(/"/g, '').trim()); } catch {} }
+        if (!filename) {
+          const plain = /filename="?([^";]+)"?/i.exec(cd);
+          if (plain && plain[1]) filename = plain[1].trim();
+        }
+        if (!filename) {
+          filename = file.originalName || file.name || 'archivo';
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || 'archivo';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // Revocar tras un tick para no cortar la descarga
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        return;
+      } catch {
+        // si falla la descarga real, caemos al respaldo de texto
+      }
+    }
+
+    // Sin archivo adjunto: metadatos en .txt
+    const content = [
+      `NeuroLearn AI — Material didáctico`,
+      ``,
+      `Nombre     : ${file.name}`,
+      `Tipo       : ${file.type.toUpperCase()}`,
+      `Tamaño     : ${file.size}`,
+      `Fecha      : ${file.date}`,
+      `Compartido con: ${file.sharedWith.filter((x: any) => typeof x === 'string').join(', ') || 'Solo yo'}`,
+    ].join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${file.name}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   if (selected) {
     const folder = folders.find(f => f.id === selected.id) ?? selected;
     return (
+      <>
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <button onClick={() => setSelected(null)} className="text-sm text-[#787774] hover:text-[#37352F] transition-colors">← Materiales</button>
@@ -174,7 +260,7 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
               <tbody>
                 {folder.files.map(file => {
                   const fc = FILE_TYPE_CONFIG[file.type];
-                  const FIcon = fc.icon;
+                  const FIcon = FILE_ICONS[file.type] ?? File;
                   return (
                     <tr key={file.id} className="border-b border-[#F7F6F3] hover:bg-[#F7F6F3]/50 transition-colors">
                       <td className="px-4 py-3">
@@ -190,11 +276,11 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
                       <td className="px-4 py-3 text-xs text-[#787774]">{file.sharedWith.join(', ') || 'Solo yo'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => setShowShare(file)} title="Compartir"
+                          <button onClick={() => openShare(file)} title="Compartir"
                             className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#EEF3FD] text-[#2E6FDB] transition-colors">
                             <Share2 className="w-3.5 h-3.5" />
                           </button>
-                          <button title="Descargar"
+                          <button onClick={() => handleDownload(file)} title="Descargar"
                             className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#F7F6F3] text-[#787774] transition-colors">
                             <Download className="w-3.5 h-3.5" />
                           </button>
@@ -212,6 +298,36 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
           </div>
         )}
       </div>
+
+      {/* Modal compartir */}
+      {showShare && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-[#191919]">Compartir con grupos</h3>
+              <button onClick={() => { setShowShare(null); setShareGroups([]); }}><X className="w-4 h-4 text-[#787774]" /></button>
+            </div>
+            <p className="text-xs text-[#787774] mb-3">Archivo: <strong className="text-[#191919]">{showShare.name}</strong></p>
+            <div className="space-y-2 mb-4">
+              {['Todos', ...GROUPS].map(g => (
+                <label key={g} className="flex items-center gap-2.5 cursor-pointer p-2 rounded hover:bg-[#F7F6F3] transition-colors">
+                  <input type="checkbox" checked={shareGroups.includes(g)} onChange={() => toggleGroup(g)}
+                    className="w-4 h-4 text-[#2E6FDB] rounded" />
+                  <span className="text-sm text-[#37352F]">{g}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setShowShare(null); setShareGroups([]); }} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
+              <button onClick={handleShare} disabled={shareGroups.length===0}
+                className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
+                <Share2 className="w-4 h-4" /> Compartir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </>
     );
   }
 
@@ -266,7 +382,7 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
                 </div>
                 {folder.files.slice(0,3).map(f => {
                   const fc = FILE_TYPE_CONFIG[f.type];
-                  const FIcon = fc.icon;
+                  const FIcon = FILE_ICONS[f.type] ?? File;
                   return (
                     <div key={f.id} className="flex items-center gap-2 py-1.5 border-t border-[#F7F6F3]">
                       <FIcon className={`w-3.5 h-3.5 ${fc.color} flex-shrink-0`} />
@@ -309,7 +425,7 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-[#191919]">Compartir con grupos</h3>
-              <button onClick={() => setShowShare(null)}><X className="w-4 h-4 text-[#787774]" /></button>
+              <button onClick={() => { setShowShare(null); setShareGroups([]); }}><X className="w-4 h-4 text-[#787774]" /></button>
             </div>
             <p className="text-xs text-[#787774] mb-3">Archivo: <strong className="text-[#191919]">{showShare.name}</strong></p>
             <div className="space-y-2 mb-4">
@@ -322,7 +438,7 @@ export default function MaterialesTab({ license: _license }: { license: any }) {
               ))}
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowShare(null)} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
+              <button onClick={() => { setShowShare(null); setShareGroups([]); }} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
               <button onClick={handleShare} disabled={shareGroups.length===0}
                 className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
                 <Share2 className="w-4 h-4" /> Compartir

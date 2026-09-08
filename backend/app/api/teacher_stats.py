@@ -10,7 +10,7 @@ correspondiente ("Sin datos suficientes").
 """
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -59,6 +59,24 @@ def get_teacher_stats(
     db: Session = Depends(get_db),
 ):
     """Estadísticas reales y agregadas para el panel del profesor."""
+    try:
+        return _compute_teacher_stats(current_user, db)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        # La base de datos puede estar lenta/caída en serverless; devolver un
+        # 503 controlado en lugar del 500 crudo que rompía el panel.
+        raise HTTPException(
+            status_code=503,
+            detail=f"Servicio de estadísticas no disponible (base de datos). {str(e)[:160]}",
+        )
+
+
+def _compute_teacher_stats(
+    current_user: User,
+    db: Session,
+):
+    """Estadísticas reales y agregadas para el panel del profesor."""
 
     classroom_ids = _teacher_classroom_ids(db, current_user.id)
     student_ids = _enrolled_student_ids(db, classroom_ids)
@@ -71,14 +89,9 @@ def get_teacher_stats(
         ExpertBot.is_active == True,
     ).count()
 
-    # ── Query base de quizzes reales de mis estudiantes ──────────────────
-    quiz_q = db.query(QuizHistory).filter(
-        QuizHistory.user_id.in_(student_ids),
-        QuizHistory.performance_score != None,
-    ) if student_ids else None
-
     # ── Promedio global (0–10) ────────────────────────────────────────────
     avg_global_raw = 0.0
+    quiz_count = 0
     if student_ids:
         avg_global_raw = (
             db.query(func.avg(QuizHistory.performance_score))
@@ -88,6 +101,15 @@ def get_teacher_stats(
             )
             .scalar()
             or 0.0
+        )
+        quiz_count = (
+            db.query(func.count(QuizHistory.id))
+            .filter(
+                QuizHistory.user_id.in_(student_ids),
+                QuizHistory.performance_score != None,
+            )
+            .scalar()
+            or 0
         )
     avg_global = round(avg_global_raw / 10, 1)
     # Índice de salud = transformación directa del promedio real (0–100)
@@ -183,40 +205,43 @@ def get_teacher_stats(
     alert_count = risk_dist["medio"] + risk_dist["alto"]
 
     # ── Desempeño por grupo (solo medias reales) ─────────────────────────
+    # Una sola consulta agregada (Classroom → Enrollment → QuizHistory) en
+    # lugar de 3 queries por aula (N+1) que provocaba 504 en serverless.
     groups_perf = []
     if classroom_ids:
-        classrooms = db.query(Classroom).filter(Classroom.id.in_(classroom_ids)).all()
-        for c in classrooms:
-            cids = [e.student_id for e in db.query(Enrollment).filter(
-                Enrollment.classroom_id == c.id,
+        group_agg = (
+            db.query(
+                Classroom.id,
+                Classroom.name,
+                func.avg(QuizHistory.performance_score).label("grp_avg"),
+                func.count(QuizHistory.id).label("grp_count"),
+            )
+            .join(Enrollment, Enrollment.classroom_id == Classroom.id)
+            .join(QuizHistory, QuizHistory.user_id == Enrollment.student_id)
+            .filter(
+                Classroom.id.in_(classroom_ids),
                 Enrollment.is_active == True,
-            ).all()]
-            grp_avg = 0.0
-            grp_count = 0
-            if cids:
-                grp_avg = (
-                    db.query(func.avg(QuizHistory.performance_score))
-                    .filter(
-                        QuizHistory.user_id.in_(cids),
-                        QuizHistory.performance_score != None,
-                    )
-                    .scalar()
-                    or 0.0
-                )
-                grp_count = db.query(func.count(QuizHistory.id)).filter(
-                    QuizHistory.user_id.in_(cids),
-                    QuizHistory.performance_score != None,
-                ).scalar() or 0
+                QuizHistory.performance_score != None,
+            )
+            .group_by(Classroom.id, Classroom.name)
+            .all()
+        )
+        for idx, (_, cname, gavg, gcount) in enumerate(group_agg):
+            grp_avg = gavg or 0.0
+            grp_count = gcount or 0
             groups_perf.append({
-                "name":  c.name,
+                "name":  cname,
                 "avg":   round(grp_avg / 10, 2) if grp_avg > 0 else 0,
                 "count": int(grp_count),
-                "color": SESSION_COLORS[classrooms.index(c) % len(SESSION_COLORS)],
+                "color": SESSION_COLORS[idx % len(SESSION_COLORS)],
             })
         # Solo grupos con datos reales (evita anillos en 0 rellenos)
         groups_perf = [g for g in groups_perf if g["count"] > 0]
 
     # ── Top estudiantes (con tendencia real) ─────────────────────────────
+    # Optimización: antes esto hacía ~3 queries por estudiante (N+1). Ahora
+    # usamos consultas por lotes: una para los top, una para los usuarios,
+    # una para su clase y una para la tendencia de todos a la vez.
     top_students = []
     if student_ids:
         rows = (
@@ -233,45 +258,71 @@ def get_teacher_stats(
             .limit(5)
             .all()
         )
-        for row in rows:
-            student = db.query(User).filter(User.id == row.user_id).first()
-            if not student:
-                continue
-            enrollment = db.query(Enrollment).filter(
-                Enrollment.student_id == row.user_id,
-                Enrollment.classroom_id.in_(classroom_ids),
-            ).first() if classroom_ids else None
-            classroom = None
-            if enrollment:
-                classroom = db.query(Classroom).filter(
-                    Classroom.id == enrollment.classroom_id
-                ).first()
-
-            # Tendencia real: promedio de la mitad más reciente vs la más antigua
-            ordered = (
-                db.query(QuizHistory.performance_score)
+        top_ids = [row.user_id for row in rows]
+        if top_ids:
+            # 1) Usuarios por lote.
+            users = {
+                u.id: u
+                for u in db.query(User)
+                .filter(User.id.in_(top_ids))
+                .all()
+            }
+            # 2) Clase (grado) de cada estudiante por lote: una fila por estudiante.
+            enrollment_rows = (
+                db.query(Enrollment.student_id, Classroom)
+                .join(Classroom, Classroom.id == Enrollment.classroom_id)
                 .filter(
-                    QuizHistory.user_id == row.user_id,
+                    Enrollment.student_id.in_(top_ids),
+                    Enrollment.classroom_id.in_(classroom_ids),
+                    Enrollment.is_active == True,
+                )
+                .all()
+            )
+            # 3) Tendencias por lote: todos los scores de los top estudiantes.
+            trend_rows = (
+                db.query(
+                    QuizHistory.user_id,
+                    QuizHistory.performance_score,
+                    QuizHistory.completed_at,
+                )
+                .filter(
+                    QuizHistory.user_id.in_(top_ids),
                     QuizHistory.performance_score != None,
                 )
                 .order_by(QuizHistory.completed_at.asc())
                 .all()
             )
-            scores = [s[0] for s in ordered if s[0] is not None]
-            trend = None
-            if len(scores) >= 2:
-                split = len(scores) // 2
-                old = sum(scores[:split]) / split
-                recent = sum(scores[split:]) / (len(scores) - split)
-                delta = round((recent - old) / 10, 1)
-                trend = f"{'+' if delta >= 0 else ''}{delta}" if abs(delta) >= 0.1 else "0.0"
+            scores_by_user: dict[int, list[float]] = {}
+            for uid, s, _ in trend_rows:
+                scores_by_user.setdefault(uid, []).append(s)
 
-            top_students.append({
-                "name":  student.full_name or student.username,
-                "group": classroom.grade if classroom and classroom.grade else "—",
-                "avg":   round((row.avg_score or 0) / 10, 1),
-                "trend": trend,
-            })
+            for row in rows:
+                uid = row.user_id
+                student = users.get(uid)
+                if not student:
+                    continue
+                # grado de su clase (primer classroom encontrado en el lote)
+                grade_label = None
+                for sid, cls in enrollment_rows:
+                    if sid == uid:
+                        grade_label = cls.grade or "—"
+                        break
+                # Tendencia real: promedio de la mitad más reciente vs la más antigua
+                scores = [s for s in scores_by_user.get(uid, []) if s is not None]
+                trend = None
+                if len(scores) >= 2:
+                    split = len(scores) // 2
+                    old = sum(scores[:split]) / split
+                    recent = sum(scores[split:]) / (len(scores) - split)
+                    delta = round((recent - old) / 10, 1)
+                    trend = f"{'+' if delta >= 0 else ''}{delta}" if abs(delta) >= 0.1 else "0.0"
+
+                top_students.append({
+                    "name":  student.full_name or student.username,
+                    "group": grade_label,
+                    "avg":   round((row.avg_score or 0) / 10, 1),
+                    "trend": trend,
+                })
 
     # ── Próximos eventos (this + next month) ─────────────────────────────
     today = datetime.utcnow().date()
@@ -334,12 +385,7 @@ def get_teacher_stats(
                 "color": "bg-[#6940A5]",
             })
 
-    has_data = len(student_ids) > 0 and quiz_q is not None and (
-        db.query(func.count(QuizHistory.id)).filter(
-            QuizHistory.user_id.in_(student_ids),
-            QuizHistory.performance_score != None,
-        ).scalar() or 0
-    ) > 0
+    has_data = len(student_ids) > 0 and quiz_count > 0
 
     return {
         "total_groups":   total_groups,

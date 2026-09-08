@@ -265,6 +265,12 @@ class ModalityScore:
     raw_metrics: Dict[str, float]  = field(default_factory=dict)
     insights: List[str]            = field(default_factory=list)
 
+    @property
+    def state_scores(self) -> Dict[str, float]:
+        """Alias retrocompatible: scores crudos de activación por estado
+        (perfil de patrón), NO la distribución softmax posterior (state_probs)."""
+        return self.state_scores_raw
+
 
 @dataclass
 class CognitiveStateResult:
@@ -282,6 +288,7 @@ class CognitiveStateResult:
     engagement_score: float                         = 0.5
     predicted_next_error: Optional[str]             = None
     insights: List[str]                             = field(default_factory=list)
+    confidence: float                               = 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -645,6 +652,11 @@ class DecisionSequenceAnalyzer:
         self.failure_chain  = 0
         self.total_correct  = 0
         self.total_attempts = 0
+
+    @property
+    def total_incorrect(self) -> int:
+        """Alias retrocompatible: total de respuestas incorrectas."""
+        return max(0, self.total_attempts - self.total_correct)
 
     def add_decision(self, decision: DecisionEvent):
         # Validar indicador de confianza
@@ -1294,6 +1306,15 @@ class ErrorPredictionAnalyzer:
         self.error_contexts: List[str]       = []
         self.prior                           = 0.20   # 20% base (Bloom 1984)
 
+    @property
+    def prior_error_rate(self) -> float:
+        """Alias retrocompatible: prior de error del predictor."""
+        return self.prior
+
+    def predict_error(self, metrics: Dict, other_probs: Optional[Dict] = None) -> ModalityScore:
+        """Alias retrocompatible de `predict`."""
+        return self.predict(metrics, other_probs)
+
     def record_interaction(self, metrics: Dict, had_error: bool, context: str = ""):
         self.interaction_history.append({
             "timestamp": datetime.utcnow(),
@@ -1515,6 +1536,29 @@ class MultimodalCognitiveEngine:
     def add_decision_event(self, decision: DecisionEvent):
         self.decision_analyzer.add_decision(decision)
 
+    def record_chat_answer(self, user_message: str, had_error: bool,
+                           metrics: Optional[Dict] = None,
+                           context: str = "respuesta_chat") -> CognitiveStateResult:
+        """
+        Patrón 5 — Predicción de error EN TIEMPO REAL desde el chat.
+
+        Registra el veredicto (correcto/incorrecto) de una respuesta dada por el
+        estudiante en la conversación y reconstruye el prior bayesiano del
+        predictor de errores con esa señal real, en lugar de depender solo del
+        historial de quizzes.
+
+        Devuelve el resultado de la inferencia multimodal actualizado para que
+        `error_risk` refleje de inmediato lo respondido en el chat.
+        """
+        rm = metrics if metrics is not None else self._get_rhythm_metrics()
+        if not rm:
+            rm = {"rt_ratio": 1.0}
+        # El veredicto de la respuesta del chat alimenta el prior de error.
+        self.error_predictor.record_interaction(
+            dict(rm), had_error=bool(had_error), context=context,
+        )
+        return self._run_inference()
+
     def add_facial_data(self, facial: FacialData):
         self.facial_analyzer.add_data(facial)
 
@@ -1664,16 +1708,25 @@ class MultimodalCognitiveEngine:
                                 ModalityScore(modality=ModalityType.ERROR_PREDICTION)
                                ).raw_metrics.get("error_probability", self.error_predictor.prior)
 
-        # Emoción dominante
+        # Emoción dominante: SOLO se reporta si hay un analizador facial con un
+        # estado real detectado. No se inventan etiquetas "inferidas por voz":
+        # la prosodia mide ritmo/energía, NO emoción (no hay análisis afectivo.
         emotional_state = None
         if facial_ms and facial_ms.is_active:
             emotional_state = facial_ms.raw_metrics.get("dominant_emotion")
-        elif scores.get(ModalityType.VOICE_PROSODY.value, ModalityScore(modality=ModalityType.VOICE_PROSODY)).is_active:
-            emotional_state = "inferido_por_voz"
+        # (voice por sí sola NO produce una etiqueta emocional honesta)
 
         engagement = self._compute_engagement(smoothed, attention, err_risk)
         recs       = self._build_recommendations(state, smoothed, insights)
-        should_adapt, suggested = self._suggest_adaptation(state, prob)
+
+        # Confianza global = promedio de la confianza de las modalidades activas.
+        active_conf = [ms.confidence for ms in scores.values() if ms.is_active and ms.confidence > 0]
+        conf_value  = round(sum(active_conf) / len(active_conf), 3) if active_conf else round(prob, 3)
+
+        # La decisión de adaptar dificultad se basa en la confianza global de
+        # inferencia (convergencia entre canales), NO en la prob. MAP, que se
+        # diluye entre los 8 estados y rara vez supera 0.38.
+        should_adapt, suggested = self._suggest_adaptation(state, conf_value)
 
         result = CognitiveStateResult(
             state              = state,
@@ -1690,6 +1743,7 @@ class MultimodalCognitiveEngine:
             engagement_score   = round(engagement,       3),
             predicted_next_error = self.error_predictor.get_predicted_error_type(),
             insights           = insights[:6],   # top 6 insights
+            confidence         = conf_value,
         )
         self.state_history.append(result)
         log.info("Estado inferido: %-12s P=%.2f  error_risk=%.0f%%  engagement=%.2f  [%s]",

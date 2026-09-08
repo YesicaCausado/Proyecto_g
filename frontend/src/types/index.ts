@@ -126,6 +126,7 @@ export interface Classroom {
   max_students: number;
   student_count: number;
   created_at: string;
+  color?: string;
 }
 
 export interface ClassroomCreate {

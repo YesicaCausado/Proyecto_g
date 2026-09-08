@@ -13,13 +13,12 @@ import { Canvas }       from '@react-three/fiber';
 import { Environment, PerspectiveCamera } from '@react-three/drei';
 import type { AnimationClip } from 'three';
 
-import { CAMERA_CONFIG, CANVAS_CONFIG, ROBOT_TRANSFORM } from './RobotConfig';
+import { CAMERA_CONFIG, CANVAS_CONFIG } from './RobotConfig';
 import type { RobotState }  from './RobotStates';
 import RobotLights          from './RobotLights';
 import type { LightingPresetMap } from './RobotLights';
 import RobotEffects         from './RobotEffects';
 import type { EffectsPresetMap } from './RobotEffects';
-import RobotGeometric       from './RobotGeometric';
 import RobotAnimatedScene   from './RobotAnimatedScene';
 import { useRobotContextSafe } from '../../../../context/RobotContext';
 
@@ -32,6 +31,24 @@ export interface RobotCanvasProps {
   /** Si true, el canvas renderiza con fondo transparente (útil en banners con gradiente) */
   transparent?:  boolean;
   onSceneReady?: () => void;
+  /**
+   * Si false, NO se monta el <Environment preset="city"> (que descarga un HDR
+   * desde un CDN externo). Desactivarlo elimina una dependencia de red innecesaria
+   * y un punto de fallo cuando no hay internet / hay proxy corporativo.
+   * Default: true (comportamiento anterior).
+   */
+  environment?:  boolean;
+  /**
+   * Si false, NO se aplica post-proceso (Bloom/Vignette/Noise). Ahorra GPU y
+   * evita el crash potencial de EffectComposer en contextos WebGL débiles.
+   * Default: true.
+   */
+  effects?:      boolean;
+  /**
+   * Si false, el canvas no renderiza sombras (más ligero).
+   * Default: true.
+   */
+  shadows?:      boolean;
   /**
    * Presets de iluminación para sobrescribir el DEFAULT de RobotConfig,
    * indexados por RobotState. Opcional y 100% compatible hacia atrás:
@@ -50,6 +67,8 @@ interface SceneContentProps {
   onModelLoaded:     (clips: AnimationClip[]) => void;
   lightingPresets?:  LightingPresetMap;
   effectsPresets?:   EffectsPresetMap;
+  environment?:      boolean;
+  effects?:          boolean;
 }
 
 function SceneContent({
@@ -57,6 +76,8 @@ function SceneContent({
   onModelLoaded,
   lightingPresets,
   effectsPresets,
+  environment = true,
+  effects = true,
 }: SceneContentProps) {
   return (
     <>
@@ -71,30 +92,27 @@ function SceneContent({
 
       <RobotLights robotState={robotState} presetOverrides={lightingPresets} />
 
-      <Environment
-        preset="city"
-        environmentIntensity={0.3}
-        backgroundBlurriness={1}
-      />
+      {environment && (
+        <Environment
+          preset="city"
+          environmentIntensity={0.3}
+          backgroundBlurriness={1}
+        />
+      )}
 
       {/*
-       * Suspense muestra RobotGeometric mientras el GLB carga.
-       * RobotAnimatedScene combina modelo + motor de animaciones.
+       * Suspense: mientras el GLB carga no se muestra ningún robot falso.
+       * El splash de carga del layout cubre toda la pantalla con un spinner
+       * neutro. Solo se usa robot.glb real.
        */}
-      <Suspense fallback={
-        <RobotGeometric
-          robotState={robotState}
-          position={ROBOT_TRANSFORM.position}
-          scale={ROBOT_TRANSFORM.scale[0]}
-        />
-      }>
+      <Suspense fallback={null}>
         <RobotAnimatedScene
           robotState={robotState}
           onReady={onModelLoaded}
         />
       </Suspense>
 
-      <RobotEffects robotState={robotState} presets={effectsPresets} />
+      <RobotEffects robotState={robotState} presets={effectsPresets} disabled={!effects} />
     </>
   );
 }
@@ -109,6 +127,9 @@ export default function RobotCanvas({
   onSceneReady,
   lightingPresets,
   effectsPresets,
+  environment   = true,
+  effects       = true,
+  shadows       = true,
 }: RobotCanvasProps) {
   const robotCtx   = useRobotContextSafe();
   const robotState: RobotState = robotStateProp ?? robotCtx?.state ?? 'idle';
@@ -131,7 +152,7 @@ export default function RobotCanvas({
       aria-hidden="true"
     >
       <Canvas
-        shadows={CANVAS_CONFIG.shadows}
+        shadows={shadows ? CANVAS_CONFIG.shadows : false}
         dpr={CANVAS_CONFIG.dpr}
         gl={{
           antialias:             true,
@@ -151,6 +172,8 @@ export default function RobotCanvas({
           onModelLoaded={handleModelLoaded}
           lightingPresets={lightingPresets}
           effectsPresets={effectsPresets}
+          environment={environment}
+          effects={effects}
         />
       </Canvas>
     </div>
