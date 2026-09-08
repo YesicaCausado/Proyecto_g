@@ -175,9 +175,11 @@ export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
                 enabled
                 className="absolute inset-0"
                 onSceneReady={onReady}
-                /* Optimización del login: no descargar HDR desde CDN,
-                   no post-proceso pesado, no sombras. */
-                environment={false}
+                /* El robot.glb es metálico: necesita un environment map o se
+                   vería negro/invisible. Se usa un environment local brillante
+                   (Lightformers, sin descarga HDR desde CDN). El post-proceso
+                   pesado y las sombras se omiten por rendimiento. */
+                environment
                 effects={false}
                 shadows={false}
               />

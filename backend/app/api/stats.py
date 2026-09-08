@@ -69,17 +69,26 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
 
 
 # ─── SUBJECT KEYWORD MAP ───────────────────────────────────────────────────────
+# Incluye formas acentuadas y nombres de competencia para que los topics que
+# envía el frontend (competencia completa) se agrupen correctamente por materia
+# en la sección de desempeño.
 _SUBJECT_MAP = {
-    "matematicas": ["matematica", "algebra", "geometria", "trigonometria",
-                    "calculo", "estadistica", "probabilidad", "aritmetica",
-                    "numerica", "math"],
-    "lectura":     ["lectura", "comprension", "critica", "literatura",
-                    "texto", "español", "comunicacion", "reading"],
-    "ingles":      ["ingles", "english", "grammar", "vocabulary", "idioma"],
-    "ciencias":    ["ciencia", "biologia", "quimica", "fisica", "naturaleza",
-                    "nature", "ciencias"],
-    "sociales":    ["social", "historia", "geografia", "ciudadana", "politica",
-                    "colombia", "constituc"],
+    "matematicas": ["matematica", "matemátic", "algebra", "álgebra", "geometria",
+                    "geométr", "trigonometria", "calculo", "estadistica",
+                    "estadístic", "probabilidad", "aritmetica", "numerica",
+                    "funcion", "ecuaci", "razonamiento cuantitativ", "math"],
+    "lectura":     ["lectura", "lector", "comprension", "comprensión", "critica",
+                    "crítica", "literatura", "texto", "español", "comunicacion",
+                    "reading", "idea principal", "inferencia", "argumentacion"],
+    "ingles":      ["ingles", "inglés", "english", "grammar", "vocabulary",
+                    "idioma", "comunicativa en inglés"],
+    "ciencias":    ["ciencia", "ciencias", "cientifico", "científico", "biologia",
+                    "biolog", "quimica", "química", "fisica", "física",
+                    "naturaleza", "nature", "metodo científico", "ecología"],
+    "sociales":    ["social", "sociales", "historia", "geografia", "geografía",
+                    "ciudadana", "ciudadan", "democraci", "derecho", "econom",
+                    "económ", "politica", "política", "colombia", "constituc",
+                    "pensamiento crítico"],
 }
 
 _SUBJECT_LABELS = {

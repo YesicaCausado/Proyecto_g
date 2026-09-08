@@ -10,7 +10,7 @@
  */
 import { Suspense, useCallback } from 'react';
 import { Canvas }       from '@react-three/fiber';
-import { Environment, PerspectiveCamera } from '@react-three/drei';
+import { Environment, Lightformer, PerspectiveCamera } from '@react-three/drei';
 import type { AnimationClip } from 'three';
 
 import { CAMERA_CONFIG, CANVAS_CONFIG } from './RobotConfig';
@@ -32,10 +32,11 @@ export interface RobotCanvasProps {
   transparent?:  boolean;
   onSceneReady?: () => void;
   /**
-   * Si false, NO se monta el <Environment preset="city"> (que descarga un HDR
-   * desde un CDN externo). Desactivarlo elimina una dependencia de red innecesaria
-   * y un punto de fallo cuando no hay internet / hay proxy corporativo.
-   * Default: true (comportamiento anterior).
+   * Si false, NO se monta el <Environment>. El robot.glb es metálico (metal=1)
+   * y necesita un reflection map para verse; sin él se renderiza negro/invisible.
+   * El entorno se genera en local con <Lightformer> (sin descargas ni CDN),
+   * así que conviene dejarlo activo salvo que se quiera un render plano.
+   * Default: true.
    */
   environment?:  boolean;
   /**
@@ -93,11 +94,26 @@ function SceneContent({
       <RobotLights robotState={robotState} presetOverrides={lightingPresets} />
 
       {environment && (
+        /*
+         * Entorno de luz generado en local con <Lightformer> — sin descargas,
+         * sin CDN ni HDR externo. El robot.glb es metálico (metal=1): sin un
+         * reflection map se ve negro/invisible. frames={1} lo renderiza una
+         * sola vez (barato). Se usa INTENSIDAD ALTA para que el metal quede
+         * bien iluminado y visible.
+         */
         <Environment
-          preset="city"
-          environmentIntensity={0.3}
-          backgroundBlurriness={1}
-        />
+          frames={1}
+          resolution={256}
+          environmentIntensity={2.2}
+          background={false}
+        >
+          {/* Luces "de estudio" acorde al tema azul/violeta de la app */}
+          <Lightformer form="rect" intensity={6} position={[0, 3, 5]}    scale={[10, 6, 1]} color="#ffffff" />
+          <Lightformer form="circle" intensity={5} position={[-5, 1, 2]} scale={5}           color="#4f8ef7" />
+          <Lightformer form="rect" intensity={4} position={[5, 0, 2]}   rotation-y={Math.PI / 2} scale={[8, 5, 1]} color="#a78bfa" />
+          <Lightformer form="rect" intensity={3} position={[0, -2, 3]}   rotation-x={Math.PI / 2} scale={[9, 5, 1]} color="#ffffff" />
+          <Lightformer form="ring" intensity={2.5} position={[0, 0, -4]} scale={6}           color="#0B6E99" />
+        </Environment>
       )}
 
       {/*

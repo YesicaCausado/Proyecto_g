@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useParams } from "react-router-dom";
 import api from "../../services/api";
+import { COMPETENCIES, findCompetency } from "../../data/competencies";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
 import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
@@ -34,13 +35,7 @@ function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement
   );
 }
 
-const SKILLS = [
-  { key: "matematicas", name: "Pensamiento Lógico-Matemático", topic: "Razonamiento cuantitativo y matemáticas para Saber 11", icon: "🧮", color: "from-[#0B6E99] to-[#0B6E99]" },
-  { key: "lectora",     name: "Comprensión Lectora",           topic: "Comprensión lectora y lectura crítica para Saber 11",  icon: "📖", color: "from-[#D9730D] to-[#D9730D]" },
-  { key: "ingles",      name: "Inglés Comunicativo",           topic: "Competencia comunicativa en inglés para Saber 11",     icon: "🌎", color: "from-[#0F7B6C] to-[#0F7B6C]" },
-  { key: "ciudadanas",  name: "Competencias Ciudadanas",       topic: "Competencias ciudadanas y sociales para Saber 11",     icon: "🏛️", color: "from-[#6940A5] to-[#6940A5]" },
-  { key: "cientifico",  name: "Pensamiento Científico",        topic: "Pensamiento científico y ciencias naturales para Saber 11", icon: "🔬", color: "from-cyan-500 to-teal-600" },
-];
+const SKILLS = COMPETENCIES;
 
 const STATE_LABELS: Record<string, { label: string; color: string }> = {
   normal:      { label: "Normal",      color: "bg-[#F7F6F3] text-[#787774]" },
@@ -80,9 +75,13 @@ const detectSkillFromText = (text: string): string => {
 
 export default function ChatPage() {
   const [searchParams] = useSearchParams();
+  const { slug } = useParams<{ slug: string }>();
   const skillParam    = searchParams.get("skill");
   const botIdParam    = searchParams.get("bot_id");
   const botNameParam  = searchParams.get("bot_name");
+
+  // Competencia activa por subruta (/chat/:slug) — "Competencia → Neuro-Chat".
+  const routeCompetency = findCompetency(slug);
 
   // If bot_id is present (teacher testing their own bot), start directly
   const isCustomBot = !!botIdParam;
@@ -95,7 +94,7 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [showConvList, setShowConvList] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
-  const [selectedSkill, setSelectedSkill] = useState(skillParam || "");
+  const [selectedSkill, setSelectedSkill] = useState<string>(skillParam || routeCompetency?.key || "");
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
   const [showDashboard, setShowDashboard] = useState(!isCustomBot);
   const [quizSuggested, setQuizSuggested] = useState(false);
@@ -496,6 +495,15 @@ export default function ChatPage() {
     metrics.reset();
   };
 
+  // Si llegó por subruta /chat/:slug, entra directo a esa competencia.
+  useEffect(() => {
+    if (routeCompetency && !sessionActive && !sending && !isCustomBot) {
+      setSelectedSkill(routeCompetency.key);
+      startSession(routeCompetency.key);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
   const deleteConversation = async (id: number) => {
     try {
       await api.delete(`/chat/conversations/${id}`);
@@ -534,12 +542,16 @@ export default function ChatPage() {
             <NeuronAvatar size={44} online variant="dark" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-[#191919] text-base">Neuron</span>
-                <span className="text-[10px] font-semibold text-[#787774]">·</span>
-                <span className="text-xs text-[#787774]">Asistente IA de NeuroLearn</span>
-                
+                <span className="font-bold text-[#191919] text-base">Neuro-Chat</span>
+                {routeCompetency?.name && (
+                  <span className="text-[12px] font-bold text-[#0B6E99] flex items-center gap-1">
+                    · {routeCompetency.iconEmoji} {routeCompetency.name}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-[#9B9A97] mt-0.5">Tu tutor personal para el ICFES Saber 11</p>
+              <p className="text-xs text-[#9B9A97] mt-0.5">
+                {routeCompetency ? routeCompetency.topic : "Tu tutor personal para el ICFES Saber 11"}
+              </p>
             </div>
             <span className="w-2.5 h-2.5 bg-[#0F7B6C] rounded-full flex-shrink-0" title="En línea" />
           </div>
@@ -645,9 +657,14 @@ export default function ChatPage() {
           <div className="flex items-center gap-3">
             <NeuronAvatar size={36} online variant="dark" />
             <div>
-              <h2 className="font-semibold text-[#191919] text-sm">Neuron</h2>
+              <h2 className="font-semibold text-[#191919] text-sm">
+                Neuro-Chat
+                {SKILLS.find((s) => s.key === selectedSkill)?.name && (
+                  <span className="text-[#0B6E99] font-bold"> · {SKILLS.find((s) => s.key === selectedSkill)?.name}</span>
+                )}
+              </h2>
               <p className="text-xs text-[#787774]">
-                {SKILLS.find((s) => s.key === selectedSkill)?.name || "Sesión activa"}
+                {SKILLS.find((s) => s.key === selectedSkill)?.topic || "Selecciona una competencia para empezar"}
               </p>
             </div>
             {/* Badge Modo Tutor Voz */}

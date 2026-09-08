@@ -79,6 +79,11 @@ function AppRoutes() {
         <Route path="/chat" element={
           <ProtectedRoute role="estudiante"><Layout><ChatPage /></Layout></ProtectedRoute>
         } />
+        {/* Neuro-Chat por competencia: /chat/:slug (ej. /chat/logico-matematico).
+            Mantiene la sección del estudiante y lleva directo a la competencia. */}
+        <Route path="/chat/:slug" element={
+          <ProtectedRoute role="estudiante"><Layout><ChatPage /></Layout></ProtectedRoute>
+        } />
         <Route path="/my-classes" element={
           <ProtectedRoute role="estudiante"><Layout><MyClassesPage /></Layout></ProtectedRoute>
         } />
@@ -86,6 +91,10 @@ function AppRoutes() {
           <ProtectedRoute role="estudiante"><Layout><ClassroomPage /></Layout></ProtectedRoute>
         } />
         <Route path="/quizzes" element={
+          <ProtectedRoute role="estudiante"><Layout><QuizzesPage /></Layout></ProtectedRoute>
+        } />
+        {/* Historial de quizzes dentro de la sección Desafíos */}
+        <Route path="/quizzes/history" element={
           <ProtectedRoute role="estudiante"><Layout><QuizzesPage /></Layout></ProtectedRoute>
         } />
         <Route path="/performance" element={

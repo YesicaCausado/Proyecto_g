@@ -446,9 +446,9 @@ export default function MaterialPage() {
           <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center">
             <BookMarked className="w-4 h-4 text-[#787774]" />
           </div>
-          Material de Estudio
+          Material de Apoyo para el Saber 11
         </h1>
-        <p className="text-[#787774] mt-1 text-sm">Documentos oficiales y guías para prepararte al Saber 11</p>
+        <p className="text-[#787774] mt-1 text-sm">Documentos oficiales y guías de estudio para fortalecer tus conocimientos</p>
       </div>
 
       {/* ── Stats banner ── */}

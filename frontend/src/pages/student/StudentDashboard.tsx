@@ -1,7 +1,8 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { findCompetency } from '../../data/competencies';
 import type { ExpertBot, Classroom } from '../../types';
 import {
   BookOpen,
@@ -223,7 +224,7 @@ export default function StudentDashboard() {
                 {/* Quick Stats Grid */}
                 <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: 'Habilidades', value: `${stats.active_skills}/5`, icon: Target         },
+                      { label: 'Competencias', value: `${stats.active_skills}/5`, icon: Target         },
                       { label: 'Clases',       value: String(stats.total_classes),  icon: BookOpen       },
                       { label: 'Ejercicios',   value: String(stats.total_exercises),icon: ClipboardCheck },
                       { label: 'Horas',        value: `${stats.study_hours}h`,      icon: Clock          },
@@ -254,7 +255,7 @@ export default function StudentDashboard() {
                       Neuron · Modo Práctica
                     </p>
                     <h3 className="text-[16px] font-bold text-[#2e1065] leading-tight">
-                      Habilidades Transversales Saber 11
+                      Competencias Generales
                     </h3>
                     <p className="text-[11px] text-[#6d28d9] opacity-80 mt-0.5">
                       Selecciona una área y practica con tu asistente IA
@@ -281,7 +282,7 @@ export default function StudentDashboard() {
                     return (
                     <Link
                       key={skill.key}
-                      to={`/chat?skill=${skill.key}`}
+                      to={`/chat/${findCompetency(skill.key)?.slug ?? skill.key}`}
                       className="group bg-white border border-[#E9E9E7] hover:border-[#c4b5fd] rounded-xl p-4 transition-all hover:shadow-md"
                     >
                       {/* Top row: icon + name + score */}

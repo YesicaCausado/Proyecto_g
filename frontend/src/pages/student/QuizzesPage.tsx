@@ -1,15 +1,17 @@
-﻿import { useState, useEffect, useCallback } from 'react';
-import { Calculator, BookOpen, FlaskConical, Globe, Languages, ArrowLeft, Trophy, Clock, Target, RotateCcw, Play, CheckCircle, XCircle, AlertCircle, Loader2, type LucideIcon } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Trophy, Clock, Target, RotateCcw, Play, CheckCircle, XCircle, AlertCircle, Loader2, BarChart3 } from 'lucide-react';
 import api from '../../services/api';
+import { COMPETENCIES } from '../../data/competencies';
 
 type Screen = 'select' | 'generating' | 'quiz' | 'results' | 'history';
-type Difficulty = 'facil' | 'medio' | 'dificil';
+type Difficulty = 'auto' | 'facil' | 'medio' | 'dificil';
 
 interface Subject {
   id: string;
   label: string;
   desc: string;
-  icon: LucideIcon;
+  emoji: string;
   color: string;
   bg: string;
   text: string;
@@ -71,15 +73,31 @@ interface HistoryEntry {
   details?: HistoryQuestionDetail[];
 }
 
-const SUBJECTS: Subject[] = [
-  { id: 'matematicas', label: 'Matemáticas', desc: 'Álgebra, geometría y más', icon: Calculator, color: 'from-[#0B6E99] to-[#0B6E99]', bg: 'bg-[#E5F3FF]', text: 'text-[#0B6E99]', border: 'border-[#BFDFF0]', btnColor: 'bg-[#0B6E99] hover:bg-[#095E85]' },
-  { id: 'lectura', label: 'Lectura Crítica', desc: 'Comprensión y análisis', icon: BookOpen, color: 'from-[#6940A5] to-[#6940A5]', bg: 'bg-[#F7F3FB]', text: 'text-[#6940A5]', border: 'border-[#D9CCE9]', btnColor: 'bg-[#6940A5] hover:bg-[#5A358F]' },
-  { id: 'ciencias', label: 'Ciencias', desc: 'Física, química y biología', icon: FlaskConical, color: 'from-[#0F7B6C] to-[#0F7B6C]', bg: 'bg-[#EEF7F4]', text: 'text-[#0F7B6C]', border: 'border-[#B7DDD6]', btnColor: 'bg-[#0F7B6C] hover:bg-[#0A6459]' },
-  { id: 'sociales', label: 'Sociales', desc: 'Historia y geografía', icon: Globe, color: 'from-[#D9730D] to-[#D9730D]', bg: 'bg-[#FDF4EC]', text: 'text-[#D9730D]', border: 'border-[#F2D2B7]', btnColor: 'bg-[#D9730D] hover:bg-[#B8600B]' },
-  { id: 'ingles', label: 'Inglés', desc: 'Grammar, vocabulary & more', icon: Languages, color: 'from-[#AD1A72] to-[#AD1A72]', bg: 'bg-[#FCF0F7]', text: 'text-[#AD1A72]', border: 'border-[#EDB8D4]', btnColor: 'bg-[#AD1A72] hover:bg-[#8F1562]' },
-];
+const SUBJECT_STYLES: Record<string, { color: string; bg: string; text: string; border: string; btnColor: string; emoji: string }> = {
+  matematicas: { color: 'from-[#0B6E99] to-[#0B6E99]', bg: 'bg-[#E5F3FF]', text: 'text-[#0B6E99]', border: 'border-[#BFDFF0]', btnColor: 'bg-[#0B6E99] hover:bg-[#095E85]', emoji: '🧮' },
+  lectora:     { color: 'from-[#D9730D] to-[#D9730D]', bg: 'bg-[#FDF4EC]', text: 'text-[#D9730D]', border: 'border-[#F2D2B7]', btnColor: 'bg-[#D9730D] hover:bg-[#B8600B]', emoji: '📖' },
+  ingles:      { color: 'from-[#0F7B6C] to-[#0F7B6C]', bg: 'bg-[#EEF7F4]', text: 'text-[#0F7B6C]', border: 'border-[#B7DDD6]', btnColor: 'bg-[#0F7B6C] hover:bg-[#0A6459]', emoji: '🌎' },
+  ciudadanas:  { color: 'from-[#6940A5] to-[#6940A5]', bg: 'bg-[#F7F3FB]', text: 'text-[#6940A5]', border: 'border-[#D9CCE9]', btnColor: 'bg-[#6940A5] hover:bg-[#5A358F]', emoji: '🏛️' },
+  cientifico:  { color: 'from-[#0F7B6C] to-[#0F7B6C]', bg: 'bg-[#E5F3FF]', text: 'text-[#0F7B6C]', border: 'border-[#BFDFF0]', btnColor: 'bg-[#0F7B6C] hover:bg-[#0A6459]', emoji: '🔬' },
+};
 
-const DIFF_LABELS: Record<Difficulty, string> = { facil: 'Fácil', medio: 'Medio', dificil: 'Difícil' };
+// Quizzes alineados a las 5 competencias Saber 11 (misma base que el Neuro-Chat).
+const SUBJECTS: Subject[] = COMPETENCIES.map((c) => {
+  const st = SUBJECT_STYLES[c.key] ?? SUBJECT_STYLES.matematicas;
+  return {
+    id: c.slug,
+    label: c.name,
+    desc: c.desc,
+    emoji: st.emoji,
+    color: st.color,
+    bg: st.bg,
+    text: st.text,
+    border: st.border,
+    btnColor: st.btnColor,
+  };
+});
+
+const DIFF_LABELS: Record<Difficulty, string> = { auto: 'Adaptativo', facil: 'Fácil', medio: 'Medio', dificil: 'Difícil' };
 const DIFF_COLORS: Record<Difficulty, string> = {
   facil: 'bg-[#EEF7F4] text-[#37352F] border-[#B7DDD6]',
   medio: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',
@@ -95,7 +113,9 @@ function formatTime(seconds: number): string {
 export default function QuizzesPage() {
   const [screen, setScreen] = useState<Screen>('select');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-  const [difficulty, setDifficulty] = useState<Difficulty>('medio');
+  // "Adaptativo" es el modo por defecto: el backend ajusta dificultad/temas
+  // según el conocimiento y progreso reales del estudiante.
+  const [difficulty, setDifficulty] = useState<Difficulty>('auto');
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -108,6 +128,21 @@ export default function QuizzesPage() {
   const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Sincroniza la vista con la ruta (coherencia menú ↔ contenido):
+  //   /quizzes          → select
+  //   /quizzes/history  → historial
+  useEffect(() => {
+    if (location.pathname.endsWith('/history')) {
+      setScreen('history');
+      loadHistory();
+    } else {
+      setScreen('select');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // Timer
   useEffect(() => {
@@ -161,11 +196,15 @@ export default function QuizzesPage() {
     setElapsedTime(0);
     setScreen('generating'); // ← switch immediately so results screen disappears at once
     try {
-      const res = await api.post('/chat/generate-quiz', {
+      const payload: any = {
         topic: subject.label,
         num_questions: 10,
-        difficulty,
-      });
+      };
+      // En modo Adaptativo (auto) no se envía dificultad: el backend la
+      // calcula a partir del desempeño real (temas estudiados, errores, nivel).
+      if (difficulty !== 'auto') payload.difficulty = difficulty;
+
+      const res = await api.post('/chat/generate-quiz', payload);
 
       // Normalize backend format → frontend format
       // Backend: options = string[], answer = full text string
@@ -279,21 +318,30 @@ export default function QuizzesPage() {
         <div className="pb-5 mb-6 border-b border-[#E9E9E7] flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-[#37352F]">Desafíos</h1>
-            <p className="text-[#787774] text-sm mt-1">Elige una materia, selecciona el nivel y pon a prueba tu conocimiento</p>
+            <p className="text-[#787774] text-sm mt-1">Elige una competencia y pon a prueba tu conocimiento. Tu desempeño se calcula a partir de estos quizzes.</p>
           </div>
-          <button
-            onClick={() => { setScreen('history'); loadHistory(); }}
-            className="flex items-center gap-2 px-4 py-2 border border-[#E9E9E7] bg-white text-[#787774] hover:bg-[#F7F6F3] hover:text-[#37352F] rounded-md transition-colors text-sm font-medium"
-          >
-            <Trophy className="w-4 h-4" />
-            Historial
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/performance"
+              className="flex items-center gap-2 px-4 py-2 border border-[#E9E9E7] bg-white text-[#787774] hover:bg-[#F7F6F3] hover:text-[#37352F] rounded-md transition-colors text-sm font-medium"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Desempeño
+            </Link>
+            <button
+              onClick={() => navigate('/quizzes/history')}
+              className="flex items-center gap-2 px-4 py-2 border border-[#E9E9E7] bg-white text-[#787774] hover:bg-[#F7F6F3] hover:text-[#37352F] rounded-md transition-colors text-sm font-medium"
+            >
+              <Trophy className="w-4 h-4" />
+              Historial
+            </button>
+          </div>
         </div>
 
         {/* Difficulty selector */}
-        <div className="flex items-center gap-3 mb-6 p-4 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md">
+        <div className="flex items-center gap-3 mb-2 p-4 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex-wrap">
           <span className="text-sm font-medium text-[#37352F]">Nivel de dificultad:</span>
-          {(['facil', 'medio', 'dificil'] as Difficulty[]).map(d => (
+          {(['auto', 'facil', 'medio', 'dificil'] as Difficulty[]).map(d => (
             <button
               key={d}
               onClick={() => setDifficulty(d)}
@@ -307,17 +355,20 @@ export default function QuizzesPage() {
             </button>
           ))}
         </div>
+        {difficulty === 'auto' && (
+          <p className="text-xs text-[#9B9A97] mb-5 -mt-1">
+            💡 El modo <strong className="text-[#0B6E99]">Adaptativo</strong> genera cada quiz según tu progreso real: temas que ya estudiaste, errores anteriores y nivel que dominas.
+          </p>
+        )}
 
         {/* Subject cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {SUBJECTS.map(s => {
-            const Icon = s.icon;
-            return (
+          {SUBJECTS.map(s => (
               <div key={s.id} className="bg-white border border-[#E9E9E7] rounded-md hover:border-[#9B9A97] transition-colors overflow-hidden">
                 <div className="p-5">
                   <div className="flex items-start gap-3 mb-3">
-                    <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
-                      <Icon className="w-5 h-5 text-[#787774]" />
+                    <div className={`w-10 h-10 ${s.bg} border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0 text-lg`}>
+                      {s.emoji}
                     </div>
                     <div>
                       <h3 className="font-medium text-[#37352F] text-sm">{s.label}</h3>
@@ -340,8 +391,7 @@ export default function QuizzesPage() {
                   </button>
                 </div>
               </div>
-            );
-          })}
+          ))}
         </div>
       </div>
     );
@@ -532,7 +582,7 @@ export default function QuizzesPage() {
           <button onClick={() => setScreen('select')} className="flex items-center gap-2 px-5 py-2.5 border border-[#E9E9E7] text-[#787774] rounded-md text-sm font-medium hover:bg-[#F7F6F3] transition-colors">
             <ArrowLeft className="w-4 h-4" /> Cambiar Materia
           </button>
-          <button onClick={() => { setScreen('history'); loadHistory(); }} className="flex items-center gap-2 px-5 py-2.5 border border-[#E9E9E7] text-[#787774] rounded-md text-sm font-medium hover:bg-[#F7F6F3] transition-colors">
+          <button onClick={() => { navigate('/quizzes/history'); }} className="flex items-center gap-2 px-5 py-2.5 border border-[#E9E9E7] text-[#787774] rounded-md text-sm font-medium hover:bg-[#F7F6F3] transition-colors">
             <Trophy className="w-4 h-4" /> Ver Historial
           </button>
         </div>
@@ -573,10 +623,10 @@ export default function QuizzesPage() {
     return (
       <div className="p-6 max-w-4xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
         <div className="pb-5 mb-6 border-b border-[#E9E9E7] flex items-center justify-between">
-          <button onClick={() => setScreen('select')} className="flex items-center gap-2 text-[#787774] hover:text-[#37352F] transition-colors text-sm">
+          <button onClick={() => navigate('/quizzes')} className="flex items-center gap-2 text-[#787774] hover:text-[#37352F] transition-colors text-sm">
             <ArrowLeft className="w-4 h-4" /> Volver
           </button>
-          <h2 className="text-sm font-semibold text-[#37352F]">Historial de Desafíos</h2>
+          <h2 className="text-sm font-semibold text-[#37352F]">Historial de Quizzes</h2>
           <div />
         </div>
 
@@ -588,7 +638,7 @@ export default function QuizzesPage() {
           <div className="text-center py-16 text-[#9B9A97]">
             <Trophy className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium text-[#787774]">Aún no has hecho ningún quiz</p>
-            <button onClick={() => setScreen('select')} className="mt-4 px-5 py-2 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors">
+            <button onClick={() => navigate('/quizzes')} className="mt-4 px-5 py-2 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors">
               Empezar ahora
             </button>
           </div>
