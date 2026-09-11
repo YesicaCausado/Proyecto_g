@@ -6,8 +6,8 @@ Toda la lógica de permisos de módulos pasa por este archivo.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -15,6 +15,15 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.user import User
 from app.models.institution import Institution
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LICENCIA ANUAL
+# Cada plan es ANUAL: la vigencia dura 365 días desde la fecha de inicio
+# (institution.created_at). Si existe una fecha de vencimiento explícita
+# (institution.expiry_date), ésta prevalece; en caso contrario la licencia
+# vence automáticamente un año después de su creación y cada día se resta uno.
+# ─────────────────────────────────────────────────────────────────────────────
+LICENSE_DURATION_DAYS = 365
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -37,7 +46,8 @@ from app.models.institution import Institution
 #   reportes, reportes_avanzados, automation, integrations, groups_compare,
 #   personalized_plans, tutor_ia, tutor_ia_adaptive, tutor_ia_advanced,
 #   chat_history, recommendations, adaptive_feedback, difficulty_detection,
-#   skill_tracking, personal_reports, perfil, configuracion, mensajes,
+#   skill_tracking, personal_reports, learning_analytics, personal_analytics,
+#   perfil, configuracion, mensajes,
 #   calendario, recursos, evaluaciones, tareas, anuncios, licencia.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -96,12 +106,16 @@ FEATURE_MATRIX: dict[str, dict[str, list[str]]] = {
     "skill_tracking":       {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
     "personal_reports":     {"basica": [], "premium": [], "pro": ["estudiante"]},
 
+    # ── Análisis del aprendizaje del estudiante ──
+    "learning_analytics":   {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "personal_analytics":   {"basica": [], "premium": [], "pro": ["estudiante"]},
+
     # ── IA docente (contenido generativo) ──
     "teacher_ai":        {"basica": [], "premium": ["profesor"], "pro": ["profesor"]},
 
     # ── Pro: automatizaciones / integraciones ──
     "automation":        {"basica": [], "premium": [], "pro": ["super_profesor", "profesor"]},
-    "integrations":      {"basica": [], "premium": ["profesor"], "pro": ["profesor", "super_profesor"]},
+    "integrations":      {"basica": [], "premium": ["profesor", "super_profesor"], "pro": ["profesor", "super_profesor"]},
     "personalized_plans":{"basica": [], "premium": [], "pro": ["estudiante"]},
 }
 
@@ -362,6 +376,49 @@ class LicenseInfo:
 # 3. Función principal: obtener licencia del usuario
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _effective_expiry(institution: Institution) -> datetime:
+    """
+    Fecha de vencimiento efectiva de la licencia.
+
+    Regla de negocio (licencia ANUAL):
+      - Si institution.expiry_date está fijada, ésta prevalece tal cual.
+      - Si NO hay expiry_date, la licencia dura LICENSE_DURATION_DAYS (365 días)
+        desde institution.created_at. Cada día transcurrido resta un día.
+    """
+    if institution.expiry_date is not None:
+        return institution.expiry_date
+    base = institution.created_at or datetime.now(timezone.utc)
+    return base + timedelta(days=LICENSE_DURATION_DAYS)
+
+
+def _resolve_license_state(
+    institution: Institution,
+) -> Tuple[str, Optional[int]]:
+    """
+    Calcula (license_status, days_left) para una institución activa.
+
+    - "suspended"   → institución suspendida (is_active False) → sin días.
+    - "expired"     → fecha de vencimiento en el pasado → days_left 0.
+    - "expiring_soon" → quedan entre 1 y 30 días.
+    - "active"      → resto de casos (incluida la licencia anual aún vigente).
+    """
+    if not institution.is_active:
+        return "suspended", None
+
+    expiry = _effective_expiry(institution)
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+
+    now = datetime.now(timezone.utc)
+    # created_at sin timezone se asume UTC (coherente con el resto del sistema)
+    delta = (expiry - now).days
+    if delta < 0:
+        return "expired", 0
+    if delta <= 30:
+        return "expiring_soon", delta
+    return "active", delta
+
+
 def get_license_for_user(user: User, db: Session) -> LicenseInfo:
     """
     Devuelve el LicenseInfo correspondiente al usuario autenticado.
@@ -408,30 +465,8 @@ def _get_license_for_user_inner(user: User, db: Session) -> LicenseInfo:
 
     plan = institution.license_type  # "basica" | "premium" | "pro"
 
-    # ── Calcular estado ──────────────────────────────────────────
-    if not institution.is_active:
-        lic_status = "suspended"
-        days_left  = None
-    else:
-        # Fecha de vencimiento: se guarda en institution.expiry_date si existe
-        expiry: Optional[datetime] = getattr(institution, "expiry_date", None)
-        if expiry is None:
-            lic_status = "active"
-            days_left  = None
-        else:
-            now = datetime.now(timezone.utc)
-            if expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=timezone.utc)
-            delta = (expiry - now).days
-            if delta < 0:
-                lic_status = "expired"
-                days_left  = 0
-            elif delta <= 30:
-                lic_status = "expiring_soon"
-                days_left  = delta
-            else:
-                lic_status = "active"
-                days_left  = delta
+    # ── Calcular estado (licencia anual: vence a los 365 días de su inicio) ──
+    lic_status, days_left = _resolve_license_state(institution)
 
     return LicenseInfo(
         license_type=plan,

@@ -222,7 +222,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // ─── Estilos reutilizables por estado (compartidos con todos los paneles) ──
   const linkClass = (active: boolean) =>
-    `group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', active).stateClass}`;
+    `group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', active, { planType: licenseType }).stateClass}`;
   const skipModule = (item: NavItem): boolean =>
     !!item.module && !hasStudentModule(item.module);
 
@@ -259,7 +259,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   if (skipModule(item)) return null;
                   const active = linkActive(item);
                   const icon = iconMap[item.icon] ?? null;
-                  const st = navItemStyle('light', active);
+                  const st = navItemStyle('light', active, { planType: licenseType });
                   return (
                     <Link
                       key={item.id}
@@ -271,7 +271,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       <span className={st.iconClass}>{icon}</span>
                       <span className="flex-1 truncate">{item.label}</span>
                       {active && (
-                        <ChevronRight className="w-3.5 h-3.5 text-[#0B6E99] ml-auto flex-shrink-0" />
+                        <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" style={{ color: plan.accent }} />
                       )}
                     </Link>
                   );
@@ -288,18 +288,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <button
                       type="button"
                       onClick={() => toggleGroup(item.id)}
-                      className={`group w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', groupIsActive).stateClass}`}
-                      style={navItemStyle('light', groupIsActive).style}
+                      className={`group w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', groupIsActive, { planType: licenseType }).stateClass}`}
+                      style={navItemStyle('light', groupIsActive, { planType: licenseType }).style}
                       aria-expanded={open}
                     >
-                      <span className={navItemStyle('light', groupIsActive).iconClass}>
+                      <span className={navItemStyle('light', groupIsActive, { planType: licenseType }).iconClass}>
                         {iconMap[item.icon]}
                       </span>
                       <span className="flex-1 truncate text-left">{item.label}</span>
                       <ChevronRight
                         className={`w-3.5 h-3.5 ml-auto flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''} ${
-                          groupIsActive ? 'text-[#0B6E99]' : 'text-[#AEADAB]'
+                          groupIsActive ? '' : 'text-[#AEADAB]'
                         }`}
+                        style={groupIsActive ? { color: plan.accent } : undefined}
                       />
                     </button>
 
@@ -314,17 +315,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                               key={child.id}
                               to={child.to}
                               onClick={() => mobile && setSidebarOpen(false)}
-                              className={`group flex items-center gap-2.5 pl-2 pr-2.5 py-[6px] rounded-md text-[13px] font-medium transition-all duration-150 ${navItemStyle('light', cActive).stateClass}`}
-                              style={navItemStyle('light', cActive).style}
+                              className={`group flex items-center gap-2.5 pl-2 pr-2.5 py-[6px] rounded-md text-[13px] font-medium transition-all duration-150 ${navItemStyle('light', cActive, { planType: licenseType }).stateClass}`}
+                              style={navItemStyle('light', cActive, { planType: licenseType }).style}
                             >
                               <span
                                 className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
-                                  cActive ? 'bg-[#0B6E99]' : 'bg-[#C4C8CC] group-hover:bg-[#2F5B80]'
+                                  cActive ? '' : 'bg-[#C4C8CC] group-hover:bg-[#2F5B80]'
                                 }`}
+                                style={cActive ? { background: plan.accent } : undefined}
                               />
                               <span className="flex-1 truncate">{child.label}</span>
                               {cIcon && (
-                                <span className={navItemStyle('light', cActive).iconClass}>{cIcon}</span>
+                                <span className={navItemStyle('light', cActive, { planType: licenseType }).iconClass}>{cIcon}</span>
                               )}
                             </Link>
                           );
@@ -452,8 +454,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 onClick={() => setSidebarOpen(false)}
                 className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]"
               >
-                <span className={`transition-colors ${item.active ? 'text-[#0B6E99]' : 'text-[#AEADAB]'}`}>{item.icon}</span>
-                <span className={`text-[10px] font-medium transition-colors ${item.active ? 'text-[#0B6E99]' : 'text-[#AEADAB]'}`}>{item.label}</span>
+                <span className={`transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: plan.accent } : undefined}>{item.icon}</span>
+                <span className={`text-[10px] font-medium transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: plan.accent } : undefined}>{item.label}</span>
               </Link>
             ));
           })()}

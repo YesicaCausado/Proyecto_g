@@ -219,10 +219,10 @@ export default function TeacherPanel() {
     return (
       <button
         onClick={() => handleNav(id)}
-        className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${navItemStyle('light', isActive).stateClass}`}
-        style={navItemStyle('light', isActive).style}
+        className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${navItemStyle('light', isActive, { planType: licenseType }).stateClass}`}
+        style={navItemStyle('light', isActive, { planType: licenseType }).style}
       >
-        <Icon className={`w-4 h-4 flex-shrink-0 ${navItemStyle('light', isActive).iconClass}`} />
+        <Icon className={`w-4 h-4 flex-shrink-0 ${navItemStyle('light', isActive, { planType: licenseType }).iconClass}`} />
         <span className="flex-1 text-left truncate">{label}</span>
         {badge === 'alert' && activeAlerts > 0 && (
           <span className="w-4 h-4 rounded-full bg-[#E03E3E] text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">

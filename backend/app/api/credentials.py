@@ -15,7 +15,7 @@ import io
 import re
 import secrets
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
@@ -39,7 +39,7 @@ router = APIRouter(tags=["Credenciales B2B"])
 # ─── Módulos permitidos del panel Súper Profesor según licencia ──────────────
 # Importados desde license_service.py (única fuente de verdad). Modelo
 # acumulativo y con "perfil" siempre habilitado en todos los planes.
-from app.services.license_service import SUPER_MODULES  # noqa: E402
+from app.services.license_service import SUPER_MODULES, _resolve_license_state  # noqa: E402
 
 
 # ─── Utilidades ──────────────────────────────────────────────────────────────
@@ -1040,24 +1040,17 @@ async def get_license_usage(
     if not institution.is_active:
         license_status = "suspended"
         days_left = None
-    elif institution.expiry_date is None:
-        license_status = "active"
-        days_left = None
     else:
-        expiry = institution.expiry_date
-        if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        delta = (expiry - now).days
-        if delta < 0:
-            license_status = "expired"
-            days_left = 0
-        elif delta <= 30:
-            license_status = "expiring_soon"
-            days_left = delta
-        else:
-            license_status = "active"
-            days_left = delta
+        # Licencia anual: vence a los 365 días de su fecha de inicio
+        # (created_at) a menos que haya una fecha de vencimiento explícita.
+        license_status, days_left = _resolve_license_state(institution)
+
+    # Fecha de vencimiento efectiva: la explícita o created_at + 365 días.
+    effective_expiry = None
+    if institution.expiry_date is not None:
+        effective_expiry = institution.expiry_date
+    elif institution.created_at is not None:
+        effective_expiry = institution.created_at + timedelta(days=365)
 
     return LicenseUsage(
         license_type=institution.license_type,
@@ -1066,7 +1059,7 @@ async def get_license_usage(
         current_teachers=t_count,
         max_students=limits["students"],
         current_students=s_count,
-        expiry_date=institution.expiry_date.isoformat() if institution.expiry_date else None,
+        expiry_date=effective_expiry.isoformat() if effective_expiry else None,
         days_left=days_left,
         institution_name=institution.name,
         super_modules=SUPER_MODULES.get(institution.license_type, SUPER_MODULES["basica"]),

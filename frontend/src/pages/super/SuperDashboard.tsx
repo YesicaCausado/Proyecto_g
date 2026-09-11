@@ -146,11 +146,11 @@ export default function SuperDashboard() {
         title={locked ? `No disponible en tu licencia ${license?.license_type ? `«${license.license_type}»` : ''}` : label}
         onClick={() => handleNav(id)}
         className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${
-          navItemStyle('light', activeTab === id, { disabled: locked }).stateClass
+          navItemStyle('light', activeTab === id, { disabled: locked, planType: licenseType }).stateClass
         }`}
-        style={navItemStyle('light', activeTab === id, { disabled: locked }).style}
+        style={navItemStyle('light', activeTab === id, { disabled: locked, planType: licenseType }).style}
       >
-        <Icon className={`w-4 h-4 flex-shrink-0 ${navItemStyle('light', activeTab === id, { disabled: locked }).iconClass}`} />
+        <Icon className={`w-4 h-4 flex-shrink-0 ${navItemStyle('light', activeTab === id, { disabled: locked, planType: licenseType }).iconClass}`} />
         <span className="flex-1 text-left truncate">{label}</span>
         {locked && <Lock className="w-3.5 h-3.5 text-[#D5D4D2] flex-shrink-0" />}
         {!locked && badge === 'red' && <span className="w-2 h-2 rounded-full bg-[#E03E3E] animate-pulse flex-shrink-0" />}

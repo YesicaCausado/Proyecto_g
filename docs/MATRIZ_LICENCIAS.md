@@ -53,7 +53,6 @@ Autenticación y cierre de sesión son globales (fuera de la matriz).
 | predictive_analytics | ❌ | ❌ | ✅ |
 | automation | ❌ | ❌ | ✅ |
 | groups_compare | ❌ | ❌ | ✅ |
-| integrations (completas) | ❌ | ❌ | ✅ |
 
 ### Profesor
 
@@ -93,8 +92,10 @@ Autenticación y cierre de sesión son globales (fuera de la matriz).
 | difficulty_detection | ❌ | ✅ | ✅ |
 | skill_tracking | ❌ | ✅ | ✅ |
 | neurodigital | ❌ | ✅ | ✅ |
+| learning_analytics (análisis avanzado del aprendizaje) | ❌ | ✅ | ✅ |
 | tutor_ia_advanced (IA avanzada) | ❌ | ❌ | ✅ |
 | personalized_plans | ❌ | ❌ | ✅ |
+| personal_analytics (analítica personal avanzada) | ❌ | ❌ | ✅ |
 | personal_reports | ❌ | ❌ | ✅ |
 
 ## 5. Nombres de feature canónicos
@@ -105,7 +106,8 @@ Autenticación y cierre de sesión son globales (fuera de la matriz).
 `tutor_ia`, `tutor_ia_adaptive`, `tutor_ia_advanced`, `chat_history`,
 `recommendations`, `adaptive_feedback`, `difficulty_detection`,
 `skill_tracking`, `personal_reports`, `teacher_ai`, `automation`,
-`integrations`, `personalized_plans`, `perfil`, `configuracion`, `mensajes`,
+`integrations`, `personalized_plans`, `learning_analytics`, `personal_analytics`,
+`perfil`, `configuracion`, `mensajes`,
 `calendario`, `recursos`, `evaluaciones`, `tareas`, `anuncios`, `licencia`,
 `gestion_profesores`, `gestion_estudiantes`, `gestion_grupos`.
 

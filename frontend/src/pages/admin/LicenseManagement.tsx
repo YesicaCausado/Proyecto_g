@@ -158,7 +158,7 @@ function EditLicenseModal({ institution, onClose, onSaved }: EditModalProps) {
                 onChange={e => setClearExpiry(e.target.checked)}
                 className="rounded"
               />
-              Sin fecha de vencimiento (licencia permanente)
+              Sin fecha personalizada (renovación anual: 365 días)
             </label>
           </div>
 
@@ -397,7 +397,7 @@ export default function LicenseManagement() {
                             {isExpiringSoon && ` (${inst.days_left}d)`}
                           </span>
                         ) : (
-                          <span className="text-xs text-[#9B9A97]">Permanente</span>
+                          <span className="text-xs text-[#9B9A97]">Anual</span>
                         )}
                       </td>
                       <td className="px-4 py-3 min-w-[120px]">

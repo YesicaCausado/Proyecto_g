@@ -62,7 +62,7 @@ export default function NeuronWelcome({ name, subtitle, streakDays }: NeuronWelc
 
         {streakDays !== undefined && (
           <div className="flex items-center gap-1.5 mt-3 sm:mt-4">
-            <Flame className="w-4 h-4 text-[#f97316]" />
+            <Flame className="w-4 h-4 text-[#D9730D]" />
             <span className="text-[12px] sm:text-[13px] font-semibold"
                   style={{ color: plan.welcomeAccent }}>
               Racha actual

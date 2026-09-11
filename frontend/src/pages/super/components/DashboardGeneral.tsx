@@ -65,6 +65,12 @@ export default function DashboardGeneral({
   const daysLeft   = license?.days_left ?? null;
   const isExpiring = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
 
+  // ── Límite de la licencia (máximo de docentes / estudiantes permitidos) ──
+  const maxTeachers  = license?.max_teachers ?? 0;
+  const maxStudents  = license?.max_students ?? 0;
+  const unlimited    = (n: number) => n > 90000;
+  const limitText    = (n: number) => (unlimited(n) ? 'Ilimitado' : n.toLocaleString('es-CO'));
+
   return (
     <div className="space-y-6">
 
@@ -102,7 +108,22 @@ export default function DashboardGeneral({
               {license?.license_status ? (license.license_status === 'active' ? 'Activa' : license.license_status === 'expiring_soon' ? 'Próxima a vencer' : license.license_status === 'expired' ? 'Vencida' : 'Suspendida') : 'Sin datos'}
             </div>
           </div>
-          <div className="mt-5">
+          <div className="mt-5 space-y-3">
+            {/* Límite de la licencia */}
+            <div className="border-t border-white/20 pt-3">
+              <p className="text-xs opacity-70 mb-2">Límite de la licencia</p>
+              <div className="space-y-1 text-sm">
+                <p className="flex justify-between gap-2">
+                  <span className="opacity-80">Docentes</span>
+                  <span className="font-bold">{limitText(maxTeachers)}</span>
+                </p>
+                <p className="flex justify-between gap-2">
+                  <span className="opacity-80">Estudiantes</span>
+                  <span className="font-bold">{limitText(maxStudents)}</span>
+                </p>
+              </div>
+            </div>
+
             {daysLeft !== null ? (
               <>
                 <p className="text-xs opacity-70 mb-0.5">Vence en</p>
@@ -112,7 +133,7 @@ export default function DashboardGeneral({
             ) : (
               <>
                 <p className="text-xs opacity-70 mb-0.5">Vigencia</p>
-                <p className="text-lg font-bold">Sin límite</p>
+                <p className="text-lg font-bold">Anual</p>
               </>
             )}
           </div>

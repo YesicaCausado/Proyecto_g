@@ -483,9 +483,14 @@ async def admin_list_institutions(
             User.institution_id == inst.id,
             User.role == "estudiante"
         ).count()
+        # Licencia anual: si no hay fecha de vencimiento explícita, la vigencia
+        # dura 365 días desde la creación de la institución (cada día resta uno).
+        effective_expiry = inst.expiry_date or (
+            (inst.created_at + timedelta(days=365)) if inst.created_at else None
+        )
         days_left = None
-        if inst.expiry_date:
-            delta = (inst.expiry_date - today).days
+        if effective_expiry:
+            delta = (effective_expiry - today).days
             days_left = max(delta, 0)
         result.append({
             "id":           inst.id,
@@ -493,7 +498,7 @@ async def admin_list_institutions(
             "dane_code":    inst.dane_code,
             "license_type": inst.license_type,
             "is_active":    inst.is_active,
-            "expiry_date":  inst.expiry_date.strftime("%Y-%m-%d") if inst.expiry_date else None,
+            "expiry_date":  effective_expiry.strftime("%Y-%m-%d") if effective_expiry else None,
             "days_left":    days_left,
             "max_teachers": inst.max_teachers,
             "max_students": inst.max_students,

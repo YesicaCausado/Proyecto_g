@@ -103,7 +103,7 @@ export default function LicenciaTab({ license }: { license: any }) {
             <div className="text-right">
               <p className="text-sm opacity-70">Vence en</p>
               <p className="text-3xl font-bold">{daysLeft ?? '—'}</p>
-              <p className="text-sm opacity-70">{daysLeft !== null ? 'días' : 'sin límite'}</p>
+              <p className="text-sm opacity-70">{daysLeft !== null ? 'días' : 'anual'}</p>
             </div>
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function LicenciaTab({ license }: { license: any }) {
             <Calendar className="w-5 h-5 text-[#D9730D]" />
             <div>
               <p className="text-xs text-[#787774]">Fecha de vencimiento</p>
-              <p className="text-sm font-semibold text-[#37352F]">{expiryDate ? expiryDate.toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' }) : 'Sin fecha límite'}</p>
+              <p className="text-sm font-semibold text-[#37352F]">{expiryDate ? expiryDate.toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' }) : 'Anual (365 días)'}</p>
             </div>
           </div>
         </div>
