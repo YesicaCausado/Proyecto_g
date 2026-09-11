@@ -13,7 +13,7 @@ Endpoints:
   GET  /super/institution      - Datos de la institución (nombre, DANE, licencia)
   PATCH /super/institution     - Actualizar nombre de la institución
 """
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from datetime import datetime, timedelta
@@ -667,6 +667,23 @@ class BroadcastSend(BaseModel):
     group_id: Optional[int] = None
 
 
+def _guess_mime(filename: str) -> str:
+    import os
+    ext = os.path.splitext(filename or "")[1].lower()
+    return {
+        ".pdf": "application/pdf", ".doc": "application/msword",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".ppt": "application/vnd.ms-powerpoint",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".xls": "application/vnd.ms-excel",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".txt": "text/plain", ".csv": "text/csv", ".png": "image/png",
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+        ".webp": "image/webp", ".svg": "image/svg+xml", ".zip": "application/zip",
+        ".mp4": "video/mp4", ".mp3": "audio/mpeg",
+    }.get(ext, "application/octet-stream")
+
+
 def _broadcast_recipients(body: "BroadcastSend", sender: "User", db: Session):
     """Devuelve los usuarios a los que va dirigido el broadcast (excluyendo al propio rector)."""
     inst_id = sender.institution_id
@@ -732,6 +749,7 @@ async def list_broadcasts(
             "reads":    int(reads),
             "total":    total,
             "sender":   (db.query(User).filter(User.id == lg.performed_by_id).first() or current_user).full_name or "Rector",
+            "attachment": notes.get("attachment") or None,
         })
 
     return {"broadcasts": result, "total": len(result)}
@@ -739,36 +757,65 @@ async def list_broadcasts(
 
 @router.post("/broadcasts", status_code=201)
 async def send_broadcast(
-    body: BroadcastSend,
+    subject: str = Form(...),
+    body: str = Form(...),
+    recipient_type: str = Form("institucional"),
+    grade: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    scheduled_at: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
 
+    # Construir el "body" del broadcast (por motivos de retrocompatibilidad con
+    # JSON se aceptan también los campos vía form).
+    data = BroadcastSend(
+        subject=subject,
+        body=body,
+        recipient_type=recipient_type,
+        grade=grade,
+    )
+
     # Destinatarios reales (se excluye al propio rector)
-    recipients = _broadcast_recipients(body, current_user, db)
+    recipients = _broadcast_recipients(data, current_user, db)
 
     to_label = {
         "institucional": "Toda la institución",
         "profesores":    "Solo profesores",
         "estudiantes":   "Solo estudiantes",
-        "grado":         f"Grado {body.grade}" if body.grade else "Por grado",
-    }.get(body.recipient_type, body.recipient_type)
+        "grado":         f"Grado {data.grade}" if data.grade else "Por grado",
+    }.get(data.recipient_type, data.recipient_type)
 
     total = len(recipients)
     recipient_ids = [u.id for u in recipients]
 
+    # Adjunto opcional (se entrega el mismo binario a cada destinatario)
+    attach_name = attach_mime = None
+    attach_size = None
+    attach_data = None
+    if file is not None:
+        raw = await file.read()
+        if len(raw) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="El archivo supera el límite de 25 MB.")
+        if raw:
+            attach_name = file.filename or "archivo"
+            attach_mime = file.content_type or _guess_mime(attach_name)
+            attach_size = len(raw)
+            attach_data = raw
+
     # ── Entregar un mensaje real en el buzón de cada destinatario ─────────────
-    # Además del registro de auditoría, se crea un DirectMessage del rector hacia
-    # cada destinatario para que aparezca en el módulo "Mensajes" (con indicador
-    # de no leídos y seguimiento real de lectura / respuesta).
     if recipients:
         db.add_all([
             DirectMessage(
                 sender_id=current_user.id,
                 receiver_id=uid,
-                content=f"📢 {body.subject}\n\n{body.body}",
+                content=f"📢 {data.subject}\n\n{data.body}",
+                attachment_name=attach_name,
+                attachment_mime=attach_mime,
+                attachment_size=attach_size,
+                attachment_data=attach_data,
             )
             for uid in recipient_ids
         ])
@@ -776,11 +823,16 @@ async def send_broadcast(
 
     import json as _json
     notes = _json.dumps({
-        "subject":       body.subject,
-        "body":          body.body,
+        "subject":       data.subject,
+        "body":          data.body,
         "to":            to_label,
         "total":         total,
         "recipient_ids": recipient_ids,
+        "attachment":    {
+            "name": attach_name,
+            "mime": attach_mime,
+            "size": attach_size,
+        } if attach_name else None,
     })
 
     log = AuditLog(
@@ -795,10 +847,11 @@ async def send_broadcast(
 
     return {
         "id":      log.id,
-        "subject": body.subject,
+        "subject": data.subject,
         "to":      to_label,
         "date":    log.created_at.strftime("%Y-%m-%d %H:%M"),
         "reads":   0,
         "total":   total,
         "sender":  current_user.full_name or current_user.username,
+        "attachment": attach_name,
     }

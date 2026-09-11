@@ -5,8 +5,9 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // IMPORTANTE: nombre exacto de tu repositorio de GitHub
-  base: '/Proyecto_g/',
+  // base relativa: funciona tanto en GitHub Pages (subruta /Proyecto_g/)
+  // como en Vercel (raíz /). Requiere HashRouter, que ya usamos en App.tsx.
+  base: './',
 
   plugins: [react(), tailwindcss()],
 
@@ -30,6 +31,7 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     cssCodeSplit: true,
+    chunkSizeWarningLimit: 1500,
 
     rollupOptions: {
       output: {

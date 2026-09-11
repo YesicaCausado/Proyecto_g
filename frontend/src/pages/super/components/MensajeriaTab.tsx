@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { MessageSquare, Send, Users, GraduationCap, BookOpen, User, Paperclip, Clock, CheckCheck, Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { MessageSquare, Send, Users, GraduationCap, BookOpen, User, Paperclip, Clock, CheckCheck, Plus, Trash2, X, Download } from 'lucide-react';
 import api from '../../../services/api';
 import Messaging from '../../../components/Messaging';
 
@@ -9,6 +9,7 @@ type View = 'compose' | 'sent' | 'chat';
 interface SentMsg {
   id: number; subject: string; to: string; date: string;
   reads: number; total: number; sender: string;
+  attachment?: { name: string; mime: string; size: number } | null;
 }
 
 const RECIPIENT_OPTIONS: { value: Recipient; label: string; icon: any }[] = [

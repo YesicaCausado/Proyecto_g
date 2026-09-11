@@ -15,26 +15,40 @@ from app.services.license_service import get_license, LicenseInfo
 router = APIRouter()
 
 
+def _activity_dates(user_id: int, db: Session, since_days: int = 366) -> set:
+    """Fechas (naive datetime.date) con actividad de quiz, en UNA sola query.
+
+    Reemplaza el bucle N+1 previo (hasta 366 queries) que excedía el límite de
+    tiempo de las funciones serverless de Vercel en rachas largas.
+    """
+    since = datetime.utcnow() - timedelta(days=since_days)
+    rows = (
+        db.query(func.date(QuizHistory.completed_at).label("d"))
+        .filter(
+            QuizHistory.user_id == user_id,
+            QuizHistory.completed_at.isnot(None),
+            QuizHistory.completed_at >= since,
+        )
+        .all()
+    )
+    return {r[0] for r in rows if r[0] is not None}
+
+
 def _build_notifications(user: User, db: Session) -> list[dict]:
     notifs = []
     now = datetime.utcnow()
+    today = now.date()
     user_id = user.id
 
-    # ── 1. Racha en riesgo ───────────────────────────────────────────────────
-    today = now.date()
+    # ── 1 + 2. Rachas (en riesgo / lograda) ───────────────────────────────
+    # Consultamos TODAS las fechas activas una sola vez y derivamos la racha
+    # en memoria (sin el bucle de queries N+1 original).
+    activity_dates = _activity_dates(user_id, db)
+    has_today = today in activity_dates
     yesterday = today - timedelta(days=1)
+    has_yesterday = yesterday in activity_dates
 
-    activity_today = db.query(QuizHistory).filter(
-        QuizHistory.user_id == user_id,
-        func.date(QuizHistory.completed_at) == today,
-    ).first()
-
-    activity_yesterday = db.query(QuizHistory).filter(
-        QuizHistory.user_id == user_id,
-        func.date(QuizHistory.completed_at) == yesterday,
-    ).first()
-
-    if activity_yesterday and not activity_today:
+    if has_yesterday and not has_today:
         notifs.append({
             "id": "streak_risk",
             "type": "warning",
@@ -45,19 +59,13 @@ def _build_notifications(user: User, db: Session) -> list[dict]:
             "created_at": now.isoformat(),
         })
 
-    # ── 2. Racha lograda (≥ 7 días) ─────────────────────────────────────────
+    # Contar días consecutivos hacia atrás desde hoy (o ayer si hoy no hay nada).
+    check_date = today if has_today else yesterday
     streak = 0
-    check_date = today if activity_today else yesterday
-    for delta in range(366):
-        d = check_date - timedelta(days=delta)
-        has = db.query(QuizHistory).filter(
-            QuizHistory.user_id == user_id,
-            func.date(QuizHistory.completed_at) == d,
-        ).first()
-        if has:
-            streak += 1
-        else:
-            break
+    d = check_date
+    while d in activity_dates:
+        streak += 1
+        d -= timedelta(days=1)
 
     if streak >= 7 and streak % 7 == 0:
         notifs.append({
@@ -73,8 +81,9 @@ def _build_notifications(user: User, db: Session) -> list[dict]:
     # ── 3. Rendimiento alto reciente ────────────────────────────────────────
     recent = db.query(QuizHistory).filter(
         QuizHistory.user_id == user_id,
+        QuizHistory.completed_at.isnot(None),
         QuizHistory.completed_at >= now - timedelta(days=3),
-        QuizHistory.performance_score != None,
+        QuizHistory.performance_score.isnot(None),
     ).all()
 
     if recent:

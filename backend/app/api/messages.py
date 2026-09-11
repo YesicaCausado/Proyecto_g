@@ -15,10 +15,12 @@ Endpoints:
   POST /messages/conversations/{user_id}/read - marcar leídos
   GET  /messages/contacts               - usuarios con los que puedes iniciar chat
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import Response
+from sqlalchemy.orm import Session, undefer
 from sqlalchemy import or_, and_, func, case
-from pydantic import BaseModel
+from typing import Optional
+from urllib.parse import quote
 
 from app.db.database import get_db
 from app.api.auth import get_current_user
@@ -31,10 +33,6 @@ router = APIRouter(prefix="/messages", tags=["Mensajes Directos"])
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
-
-class MessageSend(BaseModel):
-    content: str
-
 
 def _msg_to_dict(msg: DirectMessage, db: Session) -> dict:
     sender   = db.query(User).filter(User.id == msg.sender_id).first()
@@ -49,7 +47,41 @@ def _msg_to_dict(msg: DirectMessage, db: Session) -> dict:
         "content":       msg.content,
         "is_read":       msg.is_read,
         "created_at":    msg.created_at.isoformat(),
+        "attachment":    {
+            "name":     msg.attachment_name,
+            "mime":     msg.attachment_mime,
+            "size":     msg.attachment_size,
+            "url":      f"/api/v1/messages/{msg.id}/attachment" if msg.attachment_name else None,
+        } if msg.attachment_name else None,
     }
+
+
+# Mapa de extensión -> MIME para conservar el formato en la descarga de adjuntos.
+_MIME_BY_EXT = {
+    ".pdf":   "application/pdf",
+    ".doc":   "application/msword",
+    ".docx":  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".ppt":   "application/vnd.ms-powerpoint",
+    ".pptx":  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xls":   "application/vnd.ms-excel",
+    ".xlsx":  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".txt":   "text/plain",
+    ".csv":   "text/csv",
+    ".png":   "image/png",
+    ".jpg":   "image/jpeg",
+    ".jpeg":  "image/jpeg",
+    ".gif":   "image/gif",
+    ".webp":  "image/webp",
+    ".svg":   "image/svg+xml",
+    ".zip":   "application/zip",
+    ".mp4":   "video/mp4",
+    ".mp3":   "audio/mpeg",
+}
+
+
+def _guess_mime(filename: str) -> str:
+    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+    return _MIME_BY_EXT.get(ext, "application/octet-stream")
 
 
 def _can_message(sender: User, receiver: User, db: Session) -> bool:
@@ -385,16 +417,48 @@ async def get_messages(
     }
 
 
+@router.get("/{message_id}/attachment")
+async def download_attachment(
+    message_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Descarga el adjunto de un mensaje (solo si el usuario es remitente o receptor)."""
+    msg = db.query(DirectMessage).options(undefer(DirectMessage.attachment_data)).filter(
+        DirectMessage.id == message_id,
+    ).first()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Mensaje no encontrado")
+    # Solo el remitente o el receptor pueden descargar el adjunto.
+    if current_user.id not in (msg.sender_id, msg.receiver_id):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este adjunto")
+    if not msg.attachment_name or not msg.attachment_data:
+        raise HTTPException(status_code=404, detail="Este mensaje no tiene archivo adjunto")
+
+    mime = msg.attachment_mime or _guess_mime(msg.attachment_name)
+    ascii_name = "".join(ch if 32 <= ord(ch) < 127 else "_" for ch in msg.attachment_name)
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(msg.attachment_name)}"
+    )
+    return Response(
+        content=bytes(msg.attachment_data),
+        media_type=mime,
+        headers={"Content-Disposition": disposition, "Content-Length": str(len(msg.attachment_data))},
+    )
+
+
 @router.post("/conversations/{other_user_id}", status_code=status.HTTP_201_CREATED)
 async def send_message(
     other_user_id: int,
-    body: MessageSend,
+    content: str = Form(...),
+    file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
     active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
-    """Envía un mensaje al otro usuario según las reglas de rol."""
+    """Envía un mensaje al otro usuario según las reglas de rol (con adjunto opcional)."""
     # Verificar acceso al módulo 'mensajes' y estado de licencia (active_license ya valida estado)
     if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("mensajes"):
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
@@ -402,7 +466,7 @@ async def send_message(
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
     if current_user.role == UserRole.SUPER_PROFESOR.value and not license_info.has_super_module("mensajeria"):
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajeria' no está disponible en tu licencia ({license_info.license_type}).")
-    if not body.content.strip():
+    if not (content or "").strip() and file is None:
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío")
 
     receiver = db.query(User).filter(User.id == other_user_id, User.is_active == True).first()
@@ -415,10 +479,28 @@ async def send_message(
             detail="No tienes permiso para enviar mensajes a este usuario",
         )
 
+    # Adjunto opcional
+    attach_name = attach_mime = None
+    attach_size = None
+    attach_data = None
+    if file is not None:
+        raw = await file.read()
+        if len(raw) > 25 * 1024 * 1024:  # límite 25 MB
+            raise HTTPException(status_code=400, detail="El archivo supera el límite de 25 MB.")
+        if raw:
+            attach_name = file.filename or "archivo"
+            attach_mime = file.content_type or _guess_mime(attach_name)
+            attach_size = len(raw)
+            attach_data = raw
+
     msg = DirectMessage(
         sender_id=current_user.id,
         receiver_id=other_user_id,
-        content=body.content.strip(),
+        content=(content or "").strip(),
+        attachment_name=attach_name,
+        attachment_mime=attach_mime,
+        attachment_size=attach_size,
+        attachment_data=attach_data,
     )
     db.add(msg)
     db.commit()

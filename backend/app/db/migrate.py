@@ -234,6 +234,12 @@ def run_migrations(engine) -> None:
         "CREATE INDEX IF NOT EXISTS idx_cognitive_events_user_ts ON cognitive_events (user_id, timestamp)",
         "CREATE INDEX IF NOT EXISTS idx_classroom_bots_classroom ON classroom_bots (classroom_id)",
         "CREATE INDEX IF NOT EXISTS idx_users_institution_id     ON users (institution_id) WHERE institution_id IS NOT NULL",
+
+        # ── 15. Adjuntos en mensajes directos (direct_messages) ───────────
+        "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255)",
+        "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS attachment_mime VARCHAR(80)",
+        "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER",
+        "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS attachment_data BYTEA",
     ]
 
     applied = 0

@@ -368,18 +368,19 @@ function interactionTL(scope: HTMLDivElement): gsap.core.Timeline {
 
   tl.fromTo(cursor, { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0)
     .fromTo(boxes, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.08 }, 0.1)
-    // Recorrido con MotionPath por el stage (parábola entre cajas)
+    // Recorrido con MotionPath por el stage (píxeles, stage 320×220)
     .to(cursor, {
       motionPath: {
         path: [
-          { x: 0,     y: 0 },
-          { x: '-40%', y: '-38%' },
-          { x: '120%', y: '-20%' },
-          { x: '90%',  y: '55%' },
-          { x: '-30%', y: '70%' },
+          { x: 0,    y: 0 },
+          { x: -90,  y: -60 },
+          { x: 70,   y: -50 },
+          { x: 55,   y: 60 },
+          { x: -70,  y: 50 },
         ],
         curviness: 1.4,
         alignOrigin: [0.5, 0.5],
+        autoRotate: false,
       },
       duration: 2.6,
       ease: 'none',

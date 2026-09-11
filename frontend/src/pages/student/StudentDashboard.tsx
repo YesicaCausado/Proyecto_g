@@ -167,7 +167,7 @@ export default function StudentDashboard() {
                 <span className="text-[#9B9A97] text-xs hidden sm:inline">días racha</span>
             </div>
             <button
-                onClick={() => { setShowNotifications(v => !v); markAllRead(); }}
+                onClick={() => setShowNotifications(v => !v)}
                 className="relative w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center text-[#787774] hover:bg-[#F1F1EF] transition-colors"
             >
                 <Bell className="w-4 h-4" />

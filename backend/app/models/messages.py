@@ -10,8 +10,8 @@ Reglas de conversación (validadas en app/api/messages.py):
   - Profesor    ↔ Super       (rector)
   - Super       ↔ cualquiera  (rector puede hablar con todos)
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, LargeBinary
+from sqlalchemy.orm import relationship, deferred
 from datetime import datetime
 from app.db.database import Base
 
@@ -26,6 +26,11 @@ class DirectMessage(Base):
     content     = Column(Text, nullable=False)
     is_read     = Column(Boolean, default=False)
     created_at  = Column(DateTime, default=datetime.utcnow)
+    # Adjunto opcional (binario en DB, patrón idéntico a teacher_materials)
+    attachment_name      = Column(String(255), nullable=True)   # nombre original del archivo
+    attachment_mime      = Column(String(80), nullable=True)    # tipo MIME real
+    attachment_size      = Column(Integer, nullable=True)       # tamaño en bytes
+    attachment_data      = deferred(Column(LargeBinary, nullable=True))  # binario
 
     sender   = relationship("User", foreign_keys=[sender_id])
     receiver = relationship("User", foreign_keys=[receiver_id])

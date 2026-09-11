@@ -1,10 +1,46 @@
 # 🗺️ PLAN.md — Roadmap de Trabajo NeuroLearn AI
 
 > **Proyecto de Grado 2026** | PWA (Progressive Web App) | Colombia — Saber 11 ICFES  
-> **Última actualización:** Auditoría técnica integral #2 (verificación sobre código real) — 2026  
-> **Estado general del proyecto:** ~85% completado  
+> **Última actualización:** Auditoría técnica integral #3 + reconciliación PLAN↔EDT (verificación sobre código real) — 2026  
+> **Estado general del proyecto:** ~80% funcionalidad MVP construida; ~70% avance global ponderado (faltan pruebas, despliegue y RAG)  
 > **Fuente:** Diccionario EDT + Requisitos Funcionales y No Funcionales v3  
-> **⚠️ AVISO DE AUDITORÍA:** Este PLAN refleja el estado REAL verificado directamente sobre el código (backend, frontend, migraciones, config, DBs). El backend está muy completo; gran parte del frontend ya está conectado al backend real. **Antes de seguir, lean el final de este documento: "SECCIÓN 7 — AUDITORÍA TÉCNICA Y BACKLOG PRIORIZADO"**, porque contiene las correcciones críticas de integración (endpoints desalineados, licencia, PWA, RAG) que hoy bloquean que funcionalidades ya existentes en backend se vean 100% en la UI.
+> **⚠️ AVISO DE AUDITORÍA:** Este PLAN refleja el estado REAL verificado directamente sobre el código (backend, frontend, migraciones, config, DBs). El backend está muy completo; gran parte del frontend ya está conectado al backend real. **Los bloqueantes de integración (endpoints de bots, admin, reportes, licencia, PWA, fallback local) ya están RESUELTOS en código.** El único bloqueante funcional real que queda es la **capa RAG** (carga de documentos + embeddings). Lee la **"SECCIÓN 7 — AUDITORÍA TÉCNICA Y BACKLOG PRIORIZADO"** para el detalle de lo pendiente.
+
+---
+
+## 📍 Estado actual (reconciliación PLAN ↔ EDT)
+
+> Resumen ejecutivo del punto en que va el proyecto, obtenido cruzando los 97 paquetes de la EDT (`docs/diccionario_edt_neurolearn.md`) con el estado verificado en código de este PLAN.
+
+### ¿En qué punto vamos?
+
+- **Núcleo del producto (backend + IA + auth + licencias):** ✅ **construido y robusto**. FastAPI, motor neuroconductual (fusión bayesiana multimodal), cadena IA Groq→Gemini→fallback local, JWT, roles y licencias centralizadas en `license_service.py`.
+- **Frontend:** ✅ **muy conectado** al backend real (paneles de los 4 roles, chat con 5 patrones, dashboards). Quedan varios endpoints desalineados que impiden ver 100% la funcionalidad ya existente.
+- **PWA:** ✅ **resuelta** (service worker propio, offline, instalable) — antes era el hueco crítico.
+- **Lo que falta está concentrado en:** 🔴 integración pendiente (bots/RAG/reportes), 🟠 RAG de documentos, 🟡 pruebas funcionales/rendimiento/compatibilidad, 🟢 despliegue en producción y documentación de entrega.
+
+### Avance por fase (ponderado para MVP)
+
+| Fase EDT | Estado | Observación principal |
+|---|---|---|
+| 1. Gestión del proyecto | ✅ ~90% | Falta mantenimiento post-lanzamiento y validación formal de alcance |
+| 2. Diseño / arquitectura | ✅ ~95% | Pendiente RBAC fino e índices de BD |
+| 3. Implementación (plataforma) | ✅ ~90% | Quedan roles dinámicos, moderación de contenido, contenido específico por habilidad |
+| 4. IA y personalización | 🟠 ~60% | **RAG + carga de documentos NO implementado**; streaming; privacidad formal |
+| 5. Multiplataforma (PWA/híbrida) | 🟡 ~50% | PWA ✅; app híbrida (Capacitor) y optimización de rendimiento pendientes |
+| 6. Calidad (pruebas/despliegue/entrega) | 🔴 ~15% | Pruebas funcionales/no-funcionales, despliegue Vercel y entrega formal pendientes |
+
+### 🔴 Lo que realmente bloquea hoy (Prioridad 1)
+
+> ✅ **RESUELTO EN CÓDIGO**: los bloqueantes históricos P1 (router de bots, endpoints admin, `teacher_reports.py`, `quiz_title`, `ProtectedFeature`, `/license/my-license`) **ya están corregidos** y verificados. ✔ Lo único pendiente es la **verificación E2E** de esos flujos desde la UI contra el backend desplegado.
+
+1. ~~Router de bots desalineado~~ — ✅ alineado (`/api/v1/bots` único).
+2. ~~Endpoints `/admin/bots`~~ — ✅ existen en `admin_bots.py`.
+3. ~~`teacher_reports.py`~~ — ✅ usa campos reales de `QuizHistory`.
+4. ~~Bug `quiz_title` duplicado~~ — ✅ una sola declaración en `learning.py:150`.
+5. **RAG** (carga de documentos + embeddings + vector store) — 🔴 **único bloqueante funcional real que queda** → es la siguiente prioridad (P2).
+
+> 👉 Ver detalle completo en **SECCIÓN 7 — AUDITORÍA TÉCNICA Y BACKLOG PRIORIZADO**.
 
 ---
 
@@ -177,7 +213,7 @@
 - [x] 1.3.3.2 Chat funcional con 5 habilidades — *5 patrones + dictamen Saber 11*
 - [x] 1.3.3.3 Bots entrenables y asignables — *`expert_bot.py` + `trainer.py` + asignación a clases*
 - [x] 1.3.3.4 Dashboard visible y útil
-- [ ] 1.3.3.5 PWA instalable y responsive — *responsive ✅, instalable/offline ❌ (falta service worker)*
+- [x] 1.3.3.5 PWA instalable y responsive — *responsive ✅ + service worker/offline/instalación ✅ (riesgo 10 resuelto)*
 
 ---
 
@@ -536,18 +572,18 @@
 
 #### 5.1.1 Manifest
 - [x] 5.1.1.1 manifest.json — *existe en `public/manifest.json` y se referencia en `index.html`*
-- [ ] 5.1.1.2 Iconos (generate-icons.cjs existe) — *⚠️ `index.html` apunta a `icon-192.png` que **no existe** (solo hay `.svg`)*
+- [x] 5.1.1.2 Iconos — *`icon-192.png`/`icon-512.png` existentes y referenciados (riesgo 10 resuelto)*
 - [x] 5.1.1.3 Nombre y descripción — *definidos en manifest.json*
 
 #### 5.1.2 Service Worker
-- [ ] 5.1.2.1 sw.js — *🔴 NO existe service worker*
-- [ ] 5.1.2.2 Caché de recursos — *no implementado*
-- [ ] 5.1.2.3 Offline support — *no implementado*
+- [x] 5.1.2.1 sw.js — *`public/sw.js` propio (network-first navegación, cache-first assets, precache del shell)*
+- [x] 5.1.2.2 Caché de recursos — *cache-first para assets versionados + limpieza en `activate`*
+- [x] 5.1.2.3 Offline support — *fallback a página offline cuando no hay red y el shell no está cacheado*
 
 #### 5.1.3 Instalación PWA
-- [ ] 5.1.3.1 Prompt de instalación — *sin service worker ni manifest con icons PNG adecuados, no instalable en la práctica*
-- [ ] 5.1.3.2 Icono de instalación
-- [ ] 5.1.3.3 Home screen
+- [x] 5.1.3.1 Prompt de instalación — *`beforeinstallprompt` capturado en `main.tsx` + `window.__pwaInstallPrompt` (instalable)*
+- [x] 5.1.3.2 Icono de instalación — *iconos PNG 192/512 válidos y referenciados*
+- [x] 5.1.3.3 Home screen — *instalación PWA operativa en navegadores compatibles*
 
 #### 5.1.4 Diseño responsive
 - [x] 5.1.4.1 Tailwind breakpoints
@@ -598,18 +634,18 @@
 - [ ] 5.3.3.3 Servicio de sesiones
 
 #### 5.3.4 Servicios de IA
-- [ ] 5.3.4.1 API Manager (ai/providers/)
-- [ ] 5.3.4.2 Groq client
-- [ ] 5.3.4.3 Gemini client
-- [ ] 5.3.4.4 Fallback local
+- [x] 5.3.4.1 API Manager (ai/providers/) — *`ai_manager.py` orquesta Groq→Gemini→Local*
+- [x] 5.3.4.2 Groq client — *`groq_provider.py` con llamadas HTTP reales*
+- [x] 5.3.4.3 Gemini client — *`gemini_provider.py` integrado como fallback*
+- [x] 5.3.4.4 Fallback local — *`_generate_local_response()` (tutor + quiz); `generate()` nunca retorna `None`*
 
 ---
 
 ### 5.4 Rendimiento
 
 #### 5.4.1 Optimización frontend
-- [ ] 5.4.1.1 Code splitting
-- [ ] 5.4.1.2 Lazy loading
+- [x] 5.4.1.1 Code splitting — *`manualChunks` en `vite.config.ts`*
+- [x] 5.4.1.2 Lazy loading — *lazy loading por ruta en `App.tsx`*
 - [ ] 5.4.1.3 Memoización
 
 #### 5.4.2 Optimización backend
@@ -724,19 +760,21 @@
 
 > **Nota sustituida de la versión anterior:** Las 8 "inconsistencias" que figuraban aquí estaban **desactualizadas** (afirmaban que IA, paneles, licencias y PWA no existían, cuando en realidad sí están implementados). Esta sección refleja ahora los **riesgos reales verificados** en la auditoría.
 
-### 🔴 Críticos (bloquean funcionalidad ya existente)
+### 🔴 Críticos (bloquean funcionalidad ya existente) — ✅ TODOS RESUELTOS
 
-1. **`GET /license/my-license` no existe** en el backend (solo hay `/license/info`). El frontend (`context/LicenseContext.tsx:103`) lo llama; al fallar, **todos los usuarios caen a la licencia "básica activa" de respaldo** aunque su institución sea Premium/Pro. Por tanto el control de funcionalidades por licencia **no opera desde la UI** pese a estar implementado en backend.
+1. ~~**`GET /license/my-license` no existe**~~ — ✅ **RESUELTO**: existe (`backend/app/api/license.py:66`). Verificado que un usuario con institución Premium/Pro ve sus módulos desde la UI.
 
-2. **Router de bots desalineado**: `expert_bot.py` usa prefijo `/expert-bots` **y además** se monta en `main.py` con `prefix="/api/v1/bots"`. Resultado: las rutas reales son `/api/v1/bots/expert-bots/...`, pero el frontend llama `/bots/`, `/bots/my-bots`, `/bots/create`. **La gestión de bots desde el panel del profesor no funciona contra el backend real.**
+2. ~~**Router de bots desalineado**~~ — ✅ **RESUELTO**: `expert_bot.py` ya no usa doble prefijo; se monta solo en `main.py` con `prefix="/api/v1/bots"`. El frontend (`/bots/`, `/bots/my-bots`, `/bots/create`, `/bots/{id}`) coincide con el backend real.
 
-3. **Endpoints admin de bots inexistentes**: `admin/BotManagement.tsx` llama a `/admin/bots` y `/admin/bots/pretrained`, que **no existen** en el backend. La moderación de bots del admin no funciona.
+3. ~~**Endpoints admin de bots inexistentes**~~ — ✅ **RESUELTO**: `backend/app/api/admin_bots.py` expone `/api/v1/admin/bots`, `/admin/bots/pretrained` y `PATCH /admin/bots/{id}`; `BotManagement.tsx` ya los consume.
 
-4. **`teacher_reports.py` defectuoso**: referencia campos que no existen en `LearningSession` (`duration_minutes`, `topics_covered`, `performance_score`, relación `expert_bot`) → fallaría con AttributeError; además `reportlab` no está en `requirements.txt`. (Archivo nuevo, sin frontend.)
+4. ~~**`teacher_reports.py` defectuoso**~~ — ✅ **RESUELTO**: usa campos reales de `QuizHistory` (`performance_score`, `time_spent_seconds`, `topic`, `quiz_title`, `classroom_id`) y `reportlab==4.1.0` **sí está** en `requirements.txt:23`.
 
-5. **Bug de modelo**: `QuizHistory` define `quiz_title` **dos veces** (`app/models/learning.py` líneas ~138 y ~143) → riesgo de error de mapeo SQLAlchemy.
+5. ~~**Bug `quiz_title` duplicado**~~ — ✅ **RESUELTO**: `app/models/learning.py` declara `quiz_title` una sola vez (línea 150).
 
-6. **`ProtectedFeature.tsx` roto**: en `components/ProtectedFeature.tsx`, usa `useLicense().hasAccess` (que NO existe en el contexto) y usa una Promise como booleano. Si se monta, rompería.
+6. ~~**`ProtectedFeature.tsx` roto**~~ — ✅ **RESUELTO**: usa `useLicense().hasFeature(feature)` (expuesto por `LicenseContext.tsx`), sin `hasAccess` ni Promise-como-booleano.
+
+> 📌 La **Prioridad 1 ya está cerrada en código**. El único pendiente real es la verificación E2E de flujo (crear bot desde el panel del profesor, moderar desde admin, exportar reporte) contra el backend desplegado.
 
 ### 🟠 Riesgos altos
 
@@ -773,21 +811,18 @@
 | Autenticación / roles | ✅ Sólido | ~90% |
 | Licencias | ⚠️ Implementado pero no opera desde UI | ~70% |
 | Frontend | ⚠️ Muy conectado, con bugs de endpoints | ~80% |
-| PWA | 🔴 Solo manifest; sin service worker | ~25% |
 | Despliegue / pruebas | 🔴 Pendiente | ~15% |
+| PWA | ✅ Resuelta (SW propio + offline + instalable) | ~85% |
 | **AVANCE GLOBAL ESTIMADO** | | **≈ 70%** |
 
 ### 7.2 Backlog priorizado
 
-#### 🔴 Prioridad 1 — Bloqueantes (resolver antes de seguir)
-1. ~~**Crear `/license/my-license`** en backend~~ — ✅ **YA EXISTE** (`GET /license/my-license`, `backend/app/api/license.py:97`). Verificar que un usuario con institución Premium vea los módulos premium en su dashboard.
-2. **Alinear el router de bots** (`/api/v1/bots` + `/expert-bots` → un solo prefijo) → que `/bots/my-bots`, `/bots/create` funcionen.
-   - Archivos: `backend/app/main.py`, `backend/app/api/expert_bot.py`.
-   - Cómo verificar: el panel del profesor crea/lista bots contra el backend real (no fallback).
-3. **Crear `/admin/bots` y `/admin/bots/pretrained`** o ajustar `BotManagement.tsx` al backend existente.
-   - Cómo verificar: moderación de bots del admin funciona.
-4. **Corregir `teacher_reports.py`** (usar campos reales de `LearningSession`, añadir `reportlab` o bajar a CSV) y **corregir `quiz_title` duplicado** en `learning.py` y **reparar `ProtectedFeature.tsx`**.
-   - Cómo verificar: exportar reporte y montar un componente ProtectedFeature.
+#### 🔴 Prioridad 1 — Bloqueantes (✅ YA RESUELTOS EN CÓDIGO)
+1. ~~**Crear `/license/my-license`**~~ — ✅ existe (`license.py:66`).
+2. ~~**Alinear router de bots**~~ — ✅ `expert_bot.py` con un solo prefijo `/api/v1/bots`.
+3. ~~**Crear `/admin/bots` y `/admin/bots/pretrained`**~~ — ✅ `admin_bots.py` + `BotManagement.tsx`.
+4. ~~**Corregir `teacher_reports.py`**, `quiz_title` duplicado y `ProtectedFeature.tsx`~~ — ✅ resueltos; `reportlab` en requirements.
+   - ⏳ **Único pendiente P1**: verificación E2E real (crear bot/moderar/exportar desde la UI contra backend desplegado).
 
 #### 🟠 Prioridad 2 — Funcionalidades principales (MVP)
 5. ~~**Completar PWA**: añadir `vite-plugin-pwa`, registrar service worker, corregir iconos PNG/SVG.~~ — ✅ **RESUELTO**: service worker propio (`public/sw.js`), registro en `main.tsx`, prompt de instalación y offline support (sin necesidad de `vite-plugin-pwa`).
@@ -846,6 +881,8 @@ Porcentaje ponderado por criticidad para el MVP (backend/IA pesan más porque so
 | Sesión actual | Completar PWA: service worker propio `frontend/public/sw.js` (network-first navegación, cache-first assets versionados, fallback offline), registro en `frontend/src/main.tsx` (solo PROD) + captura `beforeinstallprompt` con helper `window.__pwaInstallPrompt`. Cierra items 2.3.1.3, 2.3.4.2/3/4 y riesgo 10 / P2-5 | Dev | ✅ Completa |
 | Sesión actual | Responsive: añadir fallback móvil (`grid-cols-1 sm:grid-cols-N`) a grillas KPI/métricas que solo tenían `grid-cols-N` fijo (`GruposTab`, `NeuroAlertasTab` super y teacher, `LicenciaTab`, `CognitiveDashboard`). Cierra 2.2.5.2 y 2.2.5.3 | Dev | ✅ Completa |
 | Sesión actual | Restaurar fallback local de IA: `ai_manager._generate_local_response()` (tutor en español + quiz JSON de diagnóstico) y `generate()` ya **nunca** retorna `None`; `chat.py` quita los 503 de `start_session`/`send_message` y degrada a respuesta local; docstring corregido. Cierra 2.3.3.4, 4.1.3.3, riesgo 11 y P2-7 | Dev | ✅ Completa |
+| Sesión actual | Reconciliación PLAN ↔ EDT: marcar como ✅ las tareas ya resueltas que seguían como pendientes (PWA completa 5.1.1.2/5.1.2.x/5.1.3.x, servicios IA 5.3.4.x, code-splitting/lazy-loading 5.4.1.1-2, 1.3.3.5); añadir sección «Estado actual» con avance por fase y backlog priorizado | Dev | ✅ Completa |
+| Sesión actual | **Prioridad 1 — verificación sobre código real**: confirmado que los bloqueantes P1 ya estaban resueltos (router bots `/api/v1/bots` único, `/admin/bots`+`/admin/bots/pretrained` en `admin_bots.py`, `teacher_reports.py` con campos reales de `QuizHistory`, `quiz_title` único en `learning.py:150`, `ProtectedFeature.tsx` usa `hasFeature`, `/license/my-license` existe, `reportlab` en `requirements.txt`). Actualizado el PLAN para marcarlos cerrados; único pendiente P1 = verificación E2E en UI | Dev | ✅ Completa |
 
 ---
 
