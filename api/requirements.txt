@@ -1,18 +1,17 @@
-# Vercel Python Function Dependencies — MÍNIMO para que el bundle quede < 500 MB
-# Todo lo pesado e innecesario en serverless fue removido:
-#   - scikit-learn (~140MB), pandas (~56MB), numpy (~35MB)  → NO se usan en producción
-#   - uvicorn[standard] (decenas de subpaquetes)            → Vercel no necesita uvicorn
-#   - reportlab, openpyxl, joblib, alembic, mangum          → no usados / innecesarios
+# Vercel Python Function Dependencies - MINIMO estricto
+# Solo lo imprescindible para que la funcion de /api pese < 225 MB.
+#   - scikit-learn, pandas, numpy, reportlab, openpyxl, joblib  -> no se usan
+#   - uvicorn[standard], alembic, mangum, resend               -> innecesarios
+#   - openai (SDK)                                             -> Groq/Gemini usan httpx
+#   - python-jose[cryptography]                                -> HS256 usa HMAC de stdlib
 fastapi==0.104.1
 sqlalchemy==2.0.23
 pydantic==2.5.2
 pydantic-settings==2.1.0
-python-jose[cryptography]==3.3.0
+python-jose==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-multipart==0.0.6
-openai==1.6.1
 httpx==0.25.2
 python-dotenv==1.0.0
-# Driver PostgreSQL que usa SQLAlchemy (URL postgres://)
 psycopg2-binary==2.9.9

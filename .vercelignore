@@ -24,6 +24,8 @@ backend/server.log
 backend/.env
 backend/docs/
 backend/package-lock.json
+backend/Dockerfile
+backend/requirements.txt
 
 # ── Raíz ────────────────────────────────────────────────────────────────
 .env
@@ -37,5 +39,6 @@ PLAN.md
 README.md
 generate_hashes.py
 pyrightconfig.json
-backend/vercel.json
-backend/Dockerfile
+
+# ── Frontend extra (evitar que entre al contexto de la función) ─────────
+frontend/package-lock.json
