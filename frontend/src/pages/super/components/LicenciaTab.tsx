@@ -108,7 +108,7 @@ export default function LicenciaTab({ license }: { license: any }) {
           </div>
         </div>
 
-        <div className="p-6 grid grid-cols-2 gap-6">
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div className="flex items-center gap-3 p-3 bg-[#F7F6F3] rounded-md">
             <Calendar className="w-5 h-5 text-[#787774]" />
             <div>

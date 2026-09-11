@@ -24,7 +24,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isAuthEndpoint && localStorage.getItem('token')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      // HashRouter: navegar vía hash para que funcione también en GitHub Pages
+      window.location.href = `${window.location.pathname}#/login`;
     }
     return Promise.reject(error);
   }

@@ -28,6 +28,7 @@ from app.models.institution import AuditLog, Institution
 from app.models.learning import LearningSession, QuizHistory
 from app.models.expert_bot import ExpertBot
 from app.models.messages import DirectMessage
+from app.services.license_service import require_feature, require_active_license, LicenseInfo
 
 router = APIRouter(prefix="/super", tags=["Super Profesor - Stats"])
 
@@ -140,6 +141,7 @@ async def update_institution(
 @router.get("/stats/dashboard")
 async def get_super_dashboard(
     current_user: User = Depends(get_current_user),
+    active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)
@@ -268,6 +270,7 @@ async def get_super_dashboard(
 @router.get("/stats/alerts")
 async def get_super_alerts(
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_feature("neuroalertas")),
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)

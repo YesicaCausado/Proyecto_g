@@ -1,4 +1,4 @@
-﻿/**
+/**
  * VRMTutor — Avatar 3D del tutor cargado desde /tutor.vrm
  *
  * Funciones:
@@ -55,7 +55,7 @@ const EMOTION_MAP: Record<CognitiveEmotion, { preset: string; weight: number }> 
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 const VRMTutor = forwardRef<VRMTutorHandle, Props>(
-  ({ className = "", vrmPath = "/tutor.vrm", onLoad, onError }, ref) => {
+  ({ className = "", vrmPath = `${import.meta.env.BASE_URL}tutor.vrm`, onLoad, onError }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const vrmRef    = useRef<VRM | null>(null);
     const clockRef  = useRef(new THREE.Clock());

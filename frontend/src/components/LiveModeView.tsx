@@ -165,7 +165,7 @@ export default function LiveModeView({
             <VRMTutor
               ref={vrmRef}
               className="w-full h-full"
-              vrmPath="/tutor.vrm"
+              vrmPath={`${import.meta.env.BASE_URL}tutor.vrm`}
             />
           </div>
 

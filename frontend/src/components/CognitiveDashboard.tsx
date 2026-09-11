@@ -209,7 +209,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
       </div>
 
       {/* Métricas Globales */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {[
           { label: 'Engagement', val: engagement, color: 'blue' as const, tint: 'bg-[#E5F3FF]', text: 'text-[#0B6E99]' },
           { label: 'Atención', val: attention, color: 'green' as const, tint: 'bg-[#EEF7F4]', text: 'text-[#0F7B6C]' },

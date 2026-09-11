@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import {
   FileText, Download, Eye, Search,
   BookOpen, Calculator, MessageSquare,
@@ -37,6 +37,8 @@ interface ExternalResource {
 }
 
 // ─── Catálogo de materiales ───────────────────────────────────────────────────
+// BASE_URL respeta el base de Vite (ej. '/Proyecto_g/' en GitHub Pages).
+const B = import.meta.env.BASE_URL;
 const MATERIALS: Material[] = [
   {
     id: '12',
@@ -45,7 +47,7 @@ const MATERIALS: Material[] = [
     subject: 'general',
     type: 'simulacro',
     pages: 32,
-    file: '/material/12.pdf',
+    file: `${B}material/12.pdf`,
     year: '2026',
     difficulty: 'Medio',
     recommended: true,
@@ -57,7 +59,7 @@ const MATERIALS: Material[] = [
     subject: 'lectura',
     type: 'cuaderno',
     pages: 32,
-    file: '/material/2.pdf',
+    file: `${B}material/2.pdf`,
     year: '2025',
     difficulty: 'Medio',
     recommended: true,
@@ -69,7 +71,7 @@ const MATERIALS: Material[] = [
     subject: 'lectura',
     type: 'cuaderno',
     pages: 32,
-    file: '/material/1.pdf',
+    file: `${B}material/1.pdf`,
     year: '2025',
     difficulty: 'Difícil',
   },
@@ -80,7 +82,7 @@ const MATERIALS: Material[] = [
     subject: 'general',
     type: 'guia',
     pages: 32,
-    file: '/material/3.pdf',
+    file: `${B}material/3.pdf`,
     year: '2025',
     difficulty: 'Medio',
   },
@@ -91,7 +93,7 @@ const MATERIALS: Material[] = [
     subject: 'general',
     type: 'simulacro',
     pages: 100,
-    file: '/material/4.pdf',
+    file: `${B}material/4.pdf`,
     year: '2025',
     difficulty: 'Difícil',
     recommended: true,
@@ -103,7 +105,7 @@ const MATERIALS: Material[] = [
     subject: 'general',
     type: 'guia',
     pages: 40,
-    file: '/material/5.pdf',
+    file: `${B}material/5.pdf`,
     year: '2025',
     difficulty: 'Fácil',
   },

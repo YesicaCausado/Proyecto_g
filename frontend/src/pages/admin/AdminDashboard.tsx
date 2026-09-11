@@ -100,7 +100,7 @@ export default function AdminDashboard() {
       <div className="px-6 py-5 border-b border-[#37352F]/60">
         <div className="flex items-center gap-3">
           <img
-            src="/2d.png"
+            src={`${import.meta.env.BASE_URL}2d.png`}
             alt="NeuroLearn"
             className="w-9 h-9 object-contain rounded-md bg-white shrink-0"
           />
@@ -176,7 +176,7 @@ export default function AdminDashboard() {
       {/* ── MOBILE HEADER ────────────────────────────────────────── */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-12 bg-[#191919] text-white flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <img src="/2d.png" alt="NeuroLearn" className="w-7 h-7 object-contain rounded-md bg-white shrink-0" />
+          <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-7 h-7 object-contain rounded-md bg-white shrink-0" />
           <span className="font-bold text-sm">NeuroLearn IA</span>
           <span className="text-xs text-[#0B6E99] ml-1 hidden sm:inline">Admin</span>
         </div>

@@ -119,3 +119,19 @@ Autenticación y cierre de sesión son globales (fuera de la matriz).
   centralizado) y `<ProtectedFeature feature="..." />` para envolver bloques UI.
 - **Respuesta de `/api/v1/license/my-license`:** incluye `role`, `features` y
   `super_modules`, de modo que frontend y backend usan exactamente la misma lista.
+
+## 7. Protección backend por feature (endpoint → dependency)
+
+| Feature (Premium/Pro) | Endpoint | Protección |
+|---|---|---|
+| `teacher_ai` (IA docente) | `POST /teacher/ai/generate` | `require_feature("teacher_ai")` |
+| `integrations` (nivel Premium) | `/integrations`, `/integrations/google/*` | `require_feature("integrations")` |
+| `automation` (Pro) | `/automations`, `/automation-options` | `require_feature("automation")` |
+| `neuroalertas` (Premium) | `GET /super/stats/alerts` | `require_feature("neuroalertas")` |
+| `reportes_avanzados` (Premium) | `GET /teacher/reports/export?format=pdf` | `require_feature("reportes_avanzados")` |
+| `reportes` (Básico+) | `GET /teacher/reports/export?format=csv` | `require_feature("reportes")` |
+| Estado de licencia (global) | `/teacher/stats`, `/super/stats/dashboard`, escrituras | `require_active_license()` |
+| Chat / tutoría | `/chat/*`, `/chat/conversations/*` | `require_chat_access()` |
+
+> Nota: los endpoints de administración (`/admin/*`) usan `_require_admin` y son
+> independientes de la licencia institucional.

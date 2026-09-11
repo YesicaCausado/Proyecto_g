@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LicenseProvider } from './context/LicenseContext';
@@ -159,12 +159,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AuthProvider>
         <LicenseProvider>
           <AppRoutes />
         </LicenseProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

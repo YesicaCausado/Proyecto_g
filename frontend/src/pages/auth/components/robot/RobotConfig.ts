@@ -14,7 +14,8 @@ export type Vector3Tuple = [x: number, y: number, z: number];
 export type EulerTuple   = [x: number, y: number, z: number];
 
 // ── Ruta al modelo ────────────────────────────────────────────
-export const ROBOT_GLB_PATH = '/robot.glb' as const;
+// BASE_URL respeta el base de Vite (ej. '/Proyecto_g/' en GitHub Pages).
+export const ROBOT_GLB_PATH = `${import.meta.env.BASE_URL}robot.glb`;
 
 // ── Transformación del modelo en la escena ───────────────────
 export interface RobotTransform {

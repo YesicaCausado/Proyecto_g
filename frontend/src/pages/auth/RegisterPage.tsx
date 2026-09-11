@@ -43,7 +43,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/2d.png" alt="NeuroLearn" className="w-16 h-16 object-contain rounded-md bg-white mx-auto mb-4" />
+          <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-16 h-16 object-contain rounded-md bg-white mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-[#37352F]">Crear Cuenta</h1>
           <p className="text-[#787774] text-sm mt-1">Únete a NeuroLearn AI</p>
         </div>

@@ -172,7 +172,7 @@ export default function HeroFinal() {
           {/* CTA final */}
           <div className="fin-reveal mt-10 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
             <a
-              href="/login"
+              href="#/login"
               className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full px-8 py-4 text-[15px] font-semibold text-[#06131a] transition-none"
               style={{
                 background: 'linear-gradient(92deg, #5DC8B4 0%, #3FA9DB 100%)',

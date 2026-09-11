@@ -71,7 +71,7 @@ function StudentProfile({ student, onBack }: { student: Student; onBack: () => v
       </div>
 
       {/* Métricas */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label:'Tiempo de estudio', value:student.study_time, icon:Clock     },
           { label:'Uso de IA',          value:`${student.ai_usage}%`, icon:Brain },

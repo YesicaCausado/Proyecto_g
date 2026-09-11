@@ -16,19 +16,21 @@ from app.services.license_service import (
     get_license_for_user,
     TEACHER_LIMITS,
     STUDENT_LIMITS,
-    TEACHER_MODULES,
-    STUDENT_MODULES,
+    features_for_user,
 )
 
 router = APIRouter(prefix="/license", tags=["License Control"])
 
-# Feature keys expuestos por /license/info (mapeo estable hacia la UI),
-# derivados de los módulos canónicos por plan en license_service.py.
+# Feature keys expuestos por /license/info — derivados de la MATRIZ
+# de funcionalidades (FEATURE_MATRIX). Para /info se usa la unión de features
+# de los tres roles en ese plan (vista institucional), no de un rol concreto.
 def _features_for_plan(plan: str) -> List[str]:
-    """Devuelve la unión de funcionalidades docentes+estudiante del plan."""
-    t = set(TEACHER_MODULES.get(plan, TEACHER_MODULES["basica"]))
-    s = set(STUDENT_MODULES.get(plan, STUDENT_MODULES["basica"]))
-    return sorted(t | s)
+    """Unión de features disponibles en el plan para los tres roles."""
+    roles = ("super_profesor", "profesor", "estudiante")
+    acc: set = set()
+    for r in roles:
+        acc |= set(features_for_user(r, plan))
+    return sorted(acc)
 
 
 def _check_feature_access(
@@ -40,15 +42,11 @@ def _check_feature_access(
     """
     Verifica si el usuario tiene acceso a una funcionalidad según su licencia.
 
-    feature: nombre de módulo (p. ej. "neurobots", "tutor_ia", "reportes").
-    Consulta la licencia canónica del usuario vía license_service.
+    feature: nombre canónico de FEATURE_MATRIX (ej. "neuroalertas", "automation").
+    Comprueba ROL + LICENCIA usando la lógica central de license_service.
     """
     lic = get_license_for_user(current_user, db)
-    # Los nombres de "features" legacy (chat_basic, chat_advanced, etc.) ya no
-    # se usan; ahora las funcionalidades son los módulos por plan/rol.
-    if feature in lic.teacher_modules or feature in lic.student_modules:
-        return True
-    return False
+    return lic.has_feature(feature)
 
 
 class LicenseInfo(BaseModel):
@@ -138,13 +136,10 @@ async def get_license_info(
     ).count()
 
     enabled_features = _features_for_plan(plan)
-    blocked_features = []
-
-    # Identificar funcionalidades bloqueadas según licencia (acumulativo)
-    if plan == "basica":
-        blocked_features = sorted(set(_features_for_plan("pro")) - set(enabled_features))
-    elif plan == "premium":
-        blocked_features = sorted(set(_features_for_plan("pro")) - set(enabled_features))
+    # Funcionalidades bloqueadas = todo lo de PRO menos lo que sí tiene el plan
+    # actual (modelo acumulativo: PRO es el superset de todas las features).
+    all_features = _features_for_plan("pro")
+    blocked_features = sorted(set(all_features) - set(enabled_features))
 
     total_cupos = teachers_limit + students_limit
     total_uso = teachers + students

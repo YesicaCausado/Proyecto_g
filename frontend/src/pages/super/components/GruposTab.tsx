@@ -82,7 +82,7 @@ export default function GruposTab() {
       )}
 
       {/* KPIs rápidos */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { icon: BookOpen, label: 'Grupos activos',      value: activeGroups,   color: 'text-[#0B6E99]', bg: 'bg-[#E5F3FF]' },
           { icon: Users,    label: 'Total estudiantes',   value: totalStudents,  color: 'text-[#0F7B6C]', bg: 'bg-[#EEF8F6]' },

@@ -233,7 +233,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="px-4 pt-5 pb-4 border-b border-[#E9E9E7]">
         <div className="flex items-center gap-2.5">
           <img
-            src="/2d.png"
+            src={`${import.meta.env.BASE_URL}2d.png`}
             alt="NeuroLearn"
             className="w-8 h-8 object-contain rounded-md bg-white flex-shrink-0"
           />
@@ -389,7 +389,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-[#E9E9E7] z-40 h-12 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <img
-            src="/2d.png"
+            src={`${import.meta.env.BASE_URL}2d.png`}
             alt="NeuroLearn"
             className="w-7 h-7 object-contain rounded-md bg-white"
           />

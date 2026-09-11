@@ -67,9 +67,10 @@ class AIManager:
         
         Returns:
             Dict con:
-            - response: Texto generado (o None si todo falla)
-            - provider: Nombre del proveedor que respondió
-            - fallback_used: Si se usó un proveedor alternativo
+            - response: Texto generado (SIEMPRE: si todos los proveedores
+                        fallan, se devuelve un template local de respaldo)
+            - provider: Nombre del proveedor que respondió ("local" si degradó)
+            - fallback_used: Si se usó un proveedor alternativo o el local
         """
         for i, entry in enumerate(self.providers):
             name = entry["name"]
@@ -98,13 +99,66 @@ class AIManager:
 
             logger.warning(f"⚠️ Proveedor {name} falló. Intentando siguiente...")
 
-        # Todos los proveedores fallaron → modo local
+        # Todos los proveedores fallaron → modo local (templates curados)
         logger.warning("🔄 Todos los proveedores fallaron. Usando modo local.")
+        local_text = self._generate_local_response(prompt, system_prompt)
         return {
-            "response": None,
+            "response": local_text,
             "provider": "local",
             "fallback_used": True,
         }
+
+    def _generate_local_response(self, prompt: str, system_prompt: str = "") -> str:
+        """
+        Genera una respuesta local de respaldo (template) cuando todos los
+        proveedores externos fallan o no están configurados.
+
+        Degrada con tronco pedagógico útil en español, SIN inventar datos:
+        reconoce de forma honesta que no hay conectividad y ofrece orientación
+        y siguientes pasos, de modo que el chat nunca quede en blanco.
+        """
+        # Intentamos recuperar el tema desde el system prompt para personalizar.
+        topic = ""
+        for line in (system_prompt or "").splitlines():
+            if line.startswith("TEMA ACTUAL:"):
+                topic = line.split(":", 1)[1].strip()
+                break
+
+        # Si el prompt pide generar un quiz/JSON, devolvemos un template
+        # coherente con lo que se espera (el caller lo valida de todos modos).
+        prompt_lower = (prompt or "").lower()
+        if "quiz" in prompt_lower or '"questions"' in prompt or "questions" in prompt_lower:
+            import json
+            quiz = {
+                "questions": [
+                    {
+                        "id": 1,
+                        "question": "Explica con tus propias palabras el concepto principal de este tema.",
+                        "options": ["No lo sé aún", "Puedo intentarlo", "Lo tengo claro, déjame explicarlo"],
+                        "answer": "Lo tengo claro, déjame explicarlo",
+                        "explanation": "Esta es una pregunta de diagnóstico: responde según lo que recuerdes.",
+                    }
+                ]
+            }
+            return json.dumps(quiz, ensure_ascii=False)
+
+        if topic:
+            return (
+                f"📚 Estoy aquí para ayudarte con **{topic}** aunque ahora mismo no "
+                f"tengo conexión con el motor de IA.\n\n"
+                f"Para continuar, te propongo:\n"
+                f"1️⃣ Explícame en tus palabras qué sabes ya sobre este tema.\n"
+                f"2️⃣ Escribe `ejemplo` para revisar un caso práctico.\n"
+                f"3️⃣ Escribe `evaluar` para poner a prueba tus conocimientos.\n\n"
+                f"Volveré a conectarme automáticamente en tu próximo mensaje. 😊"
+            )
+
+        return (
+            "🤖 En este momento no tengo conexión con el motor de IA, pero "
+            "estoy listo para retomar en tu próximo mensaje.\n\n"
+            "Mientras tanto, cuéntame qué tema estás estudiando o qué "
+            "pregunta tienes y te ayudaré en cuanto pueda."
+        )
 
     def get_status(self) -> Dict:
         """Retorna el estado de todos los proveedores"""

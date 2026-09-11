@@ -48,8 +48,9 @@ const DEFAULT_SNAPSHOT: FacialSnapshot = {
 };
 
 // Rutas servidas desde public/ (ver vite.config / public/mediapipe)
-const WASM_PATH = '/mediapipe/wasm';
-const MODEL_PATH = '/mediapipe/face_landmarker.task';
+// BASE_URL respeta el base de Vite (ej. '/Proyecto_g/' en GitHub Pages).
+const WASM_PATH = `${import.meta.env.BASE_URL}mediapipe/wasm`;
+const MODEL_PATH = `${import.meta.env.BASE_URL}mediapipe/face_landmarker.task`;
 
 type Landmark = { x: number; y: number; z?: number };
 type LandmarkerLike = {

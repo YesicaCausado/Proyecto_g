@@ -164,7 +164,7 @@ export default function SuperDashboard() {
       {/* Logo + usuario */}
       <div className="px-3 pt-4 pb-3 border-b border-[#E9E9E7]">
         <div className="flex items-center gap-2 mb-4 px-1">
-          <img src="/2d.png" alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white flex-shrink-0" />
+          <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white flex-shrink-0" />
           <div>
             <p className="text-[13px] font-bold text-[#191919] leading-tight">NeuroLearn</p>
             <p className="text-[10px] text-[#787774]">Panel Institucional</p>
@@ -235,7 +235,7 @@ export default function SuperDashboard() {
       {/* ══ MOBILE HEADER ════ */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-12 bg-[#F7F6F3] border-b border-[#E9E9E7] flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <img src="/2d.png" alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white" />
+          <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white" />
           <span className="text-[13px] font-bold text-[#191919]">NeuroLearn</span>
           <span className="text-[10px] text-[#787774] ml-1 hidden sm:inline">Institucional</span>
         </div>

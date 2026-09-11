@@ -243,8 +243,6 @@ async def admin_stats(
 ):
     _require_admin(current_user)
 
-    today = datetime.utcnow()
-
     # Contadores por rol
     role_counts: dict = {}
     for role in UserRole:
@@ -254,17 +252,20 @@ async def admin_stats(
 
     total_institutions   = db.query(Institution).count()
     active_institutions  = db.query(Institution).filter(Institution.is_active == True).count()
-    expired_licenses     = db.query(Institution).filter(
-        Institution.expiry_date != None,
-        Institution.expiry_date < today,
-        Institution.is_active == True,
-    ).count()
-    expiring_soon = db.query(Institution).filter(
-        Institution.expiry_date != None,
-        Institution.expiry_date >= today,
-        Institution.expiry_date <= today + timedelta(days=30),
-        Institution.is_active == True,
-    ).count()
+
+    # Conteo de licencias vencidas / por vencer usando la MISMA lógica central
+    # (_resolve_license_state) que emplea el resto del sistema: la licencia es
+    # anual (created_at + 365 días) salvo que exista expiry_date explícita.
+    from app.services.license_service import _resolve_license_state
+    expired_licenses = 0
+    expiring_soon = 0
+    _active_insts = db.query(Institution).filter(Institution.is_active == True).all()
+    for inst in _active_insts:
+        status, _ = _resolve_license_state(inst)
+        if status == "expired":
+            expired_licenses += 1
+        elif status == "expiring_soon":
+            expiring_soon += 1
 
     # Conteo por tipo de licencia
     license_breakdown: dict = {}

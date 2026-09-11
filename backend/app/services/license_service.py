@@ -207,26 +207,31 @@ STUDENT_MODULES: dict[str, list[str]] = {
 }
 
 # Módulos del panel del Súper Profesor (Rector) por licencia — acumulativo.
+# Alineado con FEATURE_MATRIX: el Súper Profesor BÁSICO ya tiene NeuroBots
+# (básicos) y Reportes (básicos); NeuroAlertas/alertas es exclusivo Premium+.
 # "perfil" es común y está siempre presente.
 SUPER_MODULES: dict[str, list[str]] = {
     "basica": [
         "dashboard", "profesores", "estudiantes", "grupos",
+        "neurobots", "reportes",
         "mensajeria", "calendario", "auditoria",
         "configuracion", "licencia", "seguridad", "perfil",
     ],
     "premium": [
         "dashboard", "profesores", "estudiantes", "grupos",
+        "neurobots", "reportes",
         "mensajeria", "calendario", "auditoria",
         "configuracion", "licencia", "seguridad", "perfil",
         # ── exclusivos Premium ──
-        "neurobots", "alertas", "reportes",
+        "alertas",
     ],
     "pro": [
         "dashboard", "profesores", "estudiantes", "grupos",
+        "neurobots", "reportes",
         "mensajeria", "calendario", "auditoria",
         "configuracion", "licencia", "seguridad", "perfil",
         # ── exclusivos Premium ──
-        "neurobots", "alertas", "reportes",
+        "alertas",
     ],
 }
 
@@ -410,13 +415,20 @@ def _resolve_license_state(
         expiry = expiry.replace(tzinfo=timezone.utc)
 
     now = datetime.now(timezone.utc)
-    # created_at sin timezone se asume UTC (coherente con el resto del sistema)
-    delta = (expiry - now).days
-    if delta < 0:
+    # created_at sin timezone se asume UTC (coherente con el resto del sistema).
+    # Comparamos instantes con precisión (no `.days`, que trunca hacia cero y
+    # hacía reportar "expiring_soon" en lugar de "expired" cuando la licencia
+    # venció hace menos de 24 h).
+    if expiry <= now:
         return "expired", 0
-    if delta <= 30:
-        return "expiring_soon", delta
-    return "active", delta
+    days_left = (expiry - now).days
+    # Si aún no ha pasado un día completo pero ya vence hoy, contar como 1 día
+    # restante (evita "expiring_soon" con 0 días).
+    if days_left == 0:
+        days_left = 1
+    if days_left <= 30:
+        return "expiring_soon", days_left
+    return "active", days_left
 
 
 def get_license_for_user(user: User, db: Session) -> LicenseInfo:

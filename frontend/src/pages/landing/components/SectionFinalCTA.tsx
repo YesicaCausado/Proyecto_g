@@ -118,7 +118,7 @@ export default function SectionFinalCTA() {
         </p>
 
         <div className="nl-reveal mt-9 flex flex-wrap items-center justify-center gap-4">
-          <a href="/login" className="nl-btn nl-btn-primary" style={{ padding: '17px 36px', fontSize: '16px' }}>
+          <a href="#/login" className="nl-btn nl-btn-primary" style={{ padding: '17px 36px', fontSize: '16px' }}>
             {CTA_FINAL.primary}
             <span className="nl-btn-arrow" aria-hidden="true">→</span>
           </a>

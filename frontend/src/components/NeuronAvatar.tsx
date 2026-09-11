@@ -25,7 +25,7 @@ export default function NeuronAvatar({
       style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}
     >
       <img
-        src="/2d.png"
+        src={`${import.meta.env.BASE_URL}2d.png`}
         alt="Neuron"
         width={size}
         height={size}

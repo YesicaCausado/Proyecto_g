@@ -241,8 +241,8 @@
 
 #### 2.2.5 Diseño responsive
 - [x] 2.2.5.1 Layout responsive (Tailwind CSS)
-- [ ] 2.2.5.2 Adaptación móvil completa — *en curso*
-- [ ] 2.2.5.3 Optimización para tablets — *en curso*
+- [x] 2.2.5.2 Adaptación móvil completa — *headers móviles + sidebars overlay + bottom nav en `Layout.tsx`, `TeacherPanel.tsx`, `AdminDashboard.tsx`, `SuperDashboard.tsx`; breakpoints `sm/md/lg/xl` en todas las grillas y tablas (`overflow-x-auto`)*
+- [x] 2.2.5.3 Optimización para tablets — *breakpoints `md/lg` adaptan grillas KPI y layout de 2-3 columnas en paneles*
 
 ---
 
@@ -251,8 +251,8 @@
 #### 2.3.1 Frontend
 - [x] 2.3.1.1 React 18 + TypeScript
 - [x] 2.3.1.2 Vite + Tailwind CSS
-- [ ] 2.3.1.3 Service Workers (PWA)
-- [ ] 2.3.1.4 Optimización de bundles
+- [x] 2.3.1.3 Service Workers (PWA) — *`public/sw.js` (network-first para navegación, cache-first para assets versionados, offline page) + registro en `main.tsx`*
+- [x] 2.3.1.4 Optimización de bundles — *`manualChunks` en `vite.config.ts` + lazy loading por ruta en `App.tsx`*
 
 #### 2.3.2 Backend
 - [x] 2.3.2.1 FastAPI + Uvicorn
@@ -264,13 +264,13 @@
 - [x] 2.3.3.1 Motor neuroconductual (ai/cognitive/neuroconductual_engine.py) — *fusión bayesiana multimodal real con 5 analizadores y baselines científicos*
 - [x] 2.3.3.2 Integración Groq/Llama — *`groq_provider.py` realiza llamadas HTTP reales*
 - [x] 2.3.3.3 Fallback a Gemini — *`ai_manager.py` implementa cadena Groq→Gemini funcional*
-- [ ] 2.3.3.4 Fallback local (templates) — *🔴 ROTO/NO FUNCIONAL pese a existir: `ai_manager.generate()` retorna `response: None` y **no** genera template local. El chatbot tiene `_local` pero el flujo en `chat.py` no lo usa. (Ver P1-4 en Sección 7)*
+- [x] 2.3.3.4 Fallback local (templates) — *`ai_manager.generate()` devuelve template local (nunca `None`) cuando Groq/Gemini fallan; `chat.py` ya no devuelve 503 sino que degrada a respuesta local*
 
 #### 2.3.4 Arquitectura PWA/híbrida
 - [x] 2.3.4.1 Manifest.json — *`public/manifest.json` + `index.html` lo referencia*
-- [ ] 2.3.4.2 Service Worker
-- [ ] 2.3.4.3 Instalación PWA
-- [ ] 2.3.4.4 Offline support
+- [x] 2.3.4.2 Service Worker — *`public/sw.js` (caché por versiones, precache del shell, limpieza en `activate`)*
+- [x] 2.3.4.3 Instalación PWA — *`beforeinstallprompt` capturado en `main.tsx` + `window.__pwaInstallPrompt` + iconos PNG (192/512) existentes*
+- [x] 2.3.4.4 Offline support — *fallback a página offline cuando no hay red y el shell no está cacheado*
 
 ---
 
@@ -443,7 +443,7 @@
 #### 4.1.3 Generación de respuestas
 - [x] 4.1.3.1 Integración Groq — *`api/chat.py` usa `AIManager` con Groq real*
 - [x] 4.1.3.2 Fallback Gemini — *funcional en `ai_manager.py`*
-- [ ] 4.1.3.3 Templates locales — *🔴 rotos: no se usan (ver 2.3.3.4 y P1-4)*
+- [x] 4.1.3.3 Templates locales — *`ai_manager._generate_local_response()` (tutor + quiz JSON de diagnóstico); usados como último eslabón de la cadena Groq→Gemini→Local*
 
 #### 4.1.4 Tutoría personalizada
 - [x] 4.1.4.1 Decisión pedagógica (ai/chatbot/adaptive_chatbot.py)
@@ -746,8 +746,8 @@
 
 ### 🟡 Riesgos medios
 
-10. **PWA incompleta**: sin service worker ni `vite-plugin-pwa`; index.html apunta a `icon-192.png` inexistente. No instalable ni offline.
-11. **Fallback local de IA roto**: `ai_manager.generate()` retorna `response: None` cuando todo falla (no genera template), contradiciendo su docstring.
+10. **PWA incompleta** — ✅ **RESUELTO**: service worker propio (`public/sw.js`) sin dependencia de `vite-plugin-pwa`, con registro en `main.tsx`, captura de `beforeinstallprompt` (instalable) y fallback offline. Iconos `icon-192.png`/`icon-512.png` existentes y referenciados.
+11. **Fallback local de IA roto** — ✅ **RESUELTO**: `ai_manager.generate()` ahora genera un template local de respaldo (nunca `None`) cuando Groq/Gemini fallan; añadido `_generate_local_response()` (tutor + quiz JSON) y `chat.py` degrada a respuesta local en lugar de lanzar 503.
 12. **`DEMO_MODE` contradictorio** — ✅ **RESUELTO**: `AuthContext.tsx` lo definía `false` y `demoChat.ts` `true`; se eliminó por completo el modo demo del frontend (credenciales demo, botones demo y cuentas demo del panel admin). El login usa siempre el backend real.
 13. **Documentación desactualizada** (`CAMBIOS_REALIZADOS.md`, README): describen arquitectura de microservicios con `auth-service` que ya fue deprecada y unificada en el backend.
 14. **Código duplicado/legacy**: `src/auth-service/` es una copia muerta; `auth-service/` está deprecada; hay dos `neurolearn.db` duplicadas.
@@ -790,10 +790,9 @@
    - Cómo verificar: exportar reporte y montar un componente ProtectedFeature.
 
 #### 🟠 Prioridad 2 — Funcionalidades principales (MVP)
-5. **Completar PWA**: añadir `vite-plugin-pwa`, registrar service worker, corregir iconos PNG/SVG.
-   - Archivos: `frontend/vite.config.ts`, `frontend/src/main.tsx`, `frontend/public/`.
+5. ~~**Completar PWA**: añadir `vite-plugin-pwa`, registrar service worker, corregir iconos PNG/SVG.~~ — ✅ **RESUELTO**: service worker propio (`public/sw.js`), registro en `main.tsx`, prompt de instalación y offline support (sin necesidad de `vite-plugin-pwa`).
 6. **Unificar límites de licencia** en una única fuente central (`license_service.py`) y eliminar los `LICENSE_LIMITS` dispersos.
-7. **Restaurar el fallback local** en `ai_manager.generate()` para que ante fallo total de Groq/Gemini responda con templates.
+7. ~~**Restaurar el fallback local** en `ai_manager.generate()` para que ante fallo total de Groq/Gemini responda con templates.~~ — ✅ **RESUELTO**: `_generate_local_response()` añadido y `generate()` nunca retorna `None`; `chat.py` degrada a respuesta local (quita los 503 de `start_session`/`send_message`).
 8. **Implementar RAG real** (embeddings + vector store) para la carga de documentos de los NeuroBots.
 
 #### 🟡 Prioridad 3 — Mejoras
@@ -843,6 +842,10 @@ Porcentaje ponderado por criticidad para el MVP (backend/IA pesan más porque so
 | Sesión actual | RLS multi-tenant para Supabase — políticas de fila en `backend/migrations/applied/005_rls_multitenant.sql` + README | Dev | ✅ Completa (aplica en Supabase SQL Editor) |
 | Sesión actual | Unificar licencias: `license_service.py` como única fuente (módulos por rol/plan acumulativos, cupos, neurobots, export). `license.py`/`expert_bot.py`/`credentials.py` importan de ahí. `SUPER_MODULES` incluye `perfil`; el módulo `perfil` queda SIEMPRE habilitado en todos los roles y planes (backend + frontend `SuperDashboard`, `TeacherPanel`, `Layout`, `LicenseContext`) | Dev | ✅ Completa |
 | Sesión actual | Matriz declarativa de funcionalidades: `FEATURE_MATRIX` (feature → plan → roles), `has_feature()`/`features_for_user()` y dependency `require_feature()` en `license_service.py`; `LicenseInfo` expone `role`/`features`/`super_modules`; `teacher_ai.py` usa `require_feature("teacher_ai")`; frontend `LicenseContext.hasFeature()` + `ProtectedFeature` con feature names; `TeacherPanel`/`LicenciaTab` alineados a la matriz; doc `docs/MATRIZ_LICENCIAS.md` | Dev | ✅ Completa |
+| Sesión actual | Auditoría de seguridad licencias (backend): protegidas con `require_feature` las funciones Premium/Pro — `integrations.py` (integrations/automation; antes `require_teacher_module` excluía al Súper Profesor), `teacher_reports.py` (PDF=reportes_avanzados, CSV=reportes), `super_stats.py` (alerts=neuroalertas, dashboard=active_license), `teacher_stats.py` (active_license), `teacher_ai.py` (teacher_ai). Corrección matriz: `integrations` Premium incluye Súper Profesor; añadidas `learning_analytics`(premium)/`personal_analytics`(pro) estudiante | Dev | ✅ Completa |
+| Sesión actual | Completar PWA: service worker propio `frontend/public/sw.js` (network-first navegación, cache-first assets versionados, fallback offline), registro en `frontend/src/main.tsx` (solo PROD) + captura `beforeinstallprompt` con helper `window.__pwaInstallPrompt`. Cierra items 2.3.1.3, 2.3.4.2/3/4 y riesgo 10 / P2-5 | Dev | ✅ Completa |
+| Sesión actual | Responsive: añadir fallback móvil (`grid-cols-1 sm:grid-cols-N`) a grillas KPI/métricas que solo tenían `grid-cols-N` fijo (`GruposTab`, `NeuroAlertasTab` super y teacher, `LicenciaTab`, `CognitiveDashboard`). Cierra 2.2.5.2 y 2.2.5.3 | Dev | ✅ Completa |
+| Sesión actual | Restaurar fallback local de IA: `ai_manager._generate_local_response()` (tutor en español + quiz JSON de diagnóstico) y `generate()` ya **nunca** retorna `None`; `chat.py` quita los 503 de `start_session`/`send_message` y degrada a respuesta local; docstring corregido. Cierra 2.3.3.4, 4.1.3.3, riesgo 11 y P2-7 | Dev | ✅ Completa |
 
 ---
 

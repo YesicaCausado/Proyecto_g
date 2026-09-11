@@ -909,12 +909,6 @@ async def start_session(
     db: Session = Depends(get_db),
 ):
     """Inicia sesión: la IA genera un mensaje de bienvenida al tema."""
-    if not ai_manager.providers:
-        raise HTTPException(
-            status_code=503,
-            detail="No hay proveedores de IA configurados. Añade GROQ_API_KEY en Vercel."
-        )
-
     system_prompt = _build_system_prompt(request.topic)
     result = await ai_manager.generate(
         prompt=f"El estudiante empieza a estudiar: {request.topic}. Preséntate brevemente y comienza con una introducción motivadora al tema. Luego haz la primera pregunta de diagnóstico.",
@@ -1303,10 +1297,14 @@ async def send_message(
         )
 
         if not result["response"]:
-            raise HTTPException(
-                status_code=503,
-                detail="La IA no respondió. Puede que se hayan agotado los tokens de Groq. Verifica en console.groq.com"
+            # Defensa en profundidad: generate() ya retorna un template local,
+            # pero si algo salió mal no rompemos el chat con un 503.
+            logger.error("⚠️ AIManager devolvió respuesta vacía tras el fallback local.")
+            result["response"] = (
+                "🤖 En este momento no puedo procesar tu mensaje. "
+                "Inténtalo de nuevo en unos segundos."
             )
+            result["provider"] = "local"
 
         logger.info(f"✅ Respuesta IA de: {result['provider']}")
 

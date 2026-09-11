@@ -47,7 +47,7 @@ export default function LandingNavbar() {
             NeuroChat
           </a>
           <a
-            href="/login"
+            href="#/login"
             className="hero-cta hero-cta-primary inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold text-white"
             style={{ background: '#0c0d10' }}
           >
