@@ -432,6 +432,13 @@ async def update_institution_license(
     db.commit()
     db.refresh(inst)
 
+    # Invalida la caché TTL de licencia para que el cambio aplique de inmediato.
+    try:
+        from app.services.license_service import _invalidate_institution_cache
+        _invalidate_institution_cache(inst.id)
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "institution_id": inst.id,

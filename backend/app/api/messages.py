@@ -42,10 +42,10 @@ def _msg_to_dict(msg: DirectMessage, db: Session) -> dict:
     return {
         "id":            msg.id,
         "sender_id":     msg.sender_id,
-        "sender_name":   sender.full_name or sender.username if sender else "?",
+        "sender_name":   (sender.full_name or sender.username) if sender else "?",
         "sender_role":   sender.role if sender else "estudiante",
         "receiver_id":   msg.receiver_id,
-        "receiver_name": receiver.full_name or receiver.username if receiver else "?",
+        "receiver_name": (receiver.full_name or receiver.username) if receiver else "?",
         "content":       msg.content,
         "is_read":       msg.is_read,
         "created_at":    msg.created_at.isoformat(),
@@ -110,6 +110,8 @@ async def get_contacts(
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
     if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mensajes"):
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.SUPER_PROFESOR.value and not license_info.has_super_module("mensajeria"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mensajeria' no está disponible en tu licencia ({license_info.license_type}).")
 
     uid  = current_user.id
     role = current_user.role
@@ -192,6 +194,8 @@ async def list_conversations(
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
     if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mensajes"):
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.SUPER_PROFESOR.value and not license_info.has_super_module("mensajeria"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mensajeria' no está disponible en tu licencia ({license_info.license_type}).")
     uid = current_user.id
 
     # ── Optimización (504 en producción): ─────────────────────────────────
@@ -358,6 +362,8 @@ async def get_messages(
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
     if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mensajes"):
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.SUPER_PROFESOR.value and not license_info.has_super_module("mensajeria"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mensajeria' no está disponible en tu licencia ({license_info.license_type}).")
     uid = current_user.id
     msgs = db.query(DirectMessage).filter(
         or_(
@@ -394,6 +400,8 @@ async def send_message(
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
     if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mensajes"):
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.SUPER_PROFESOR.value and not license_info.has_super_module("mensajeria"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mensajeria' no está disponible en tu licencia ({license_info.license_type}).")
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío")
 
@@ -432,6 +440,8 @@ async def mark_as_read(
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
     if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mensajes"):
         raise HTTPException(status_code=403, detail=f"El módulo 'mensajes' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.SUPER_PROFESOR.value and not license_info.has_super_module("mensajeria"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mensajeria' no está disponible en tu licencia ({license_info.license_type}).")
     db.query(DirectMessage).filter(
         DirectMessage.sender_id == other_user_id,
         DirectMessage.receiver_id == current_user.id,

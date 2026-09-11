@@ -29,6 +29,12 @@ class CognitiveSessionState(Base):
         # Ventana móvil de las últimas ~30 respuestas: [{c: 1|0|None, ts, len}]
         chat_answers = Column(JSON, default=list)
 
+        # Estado compacto del motor neuroconductual (baselines calibrados +
+        # prior del predictor de error + EMA). Permite reconstruir la
+        # personalización del motor entre cold starts serverless (Vercel),
+        # donde el estado en memoria de proceso se pierde en cada invocación.
+        neural_state = Column(JSON, default={})
+
         updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
         __table_args__ = (

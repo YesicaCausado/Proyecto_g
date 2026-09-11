@@ -84,9 +84,9 @@ async def export_reports(
     # ─── Estadísticas (usando campos reales de LearningSession / QuizHistory) ──
     total_sessions = len(quizzes)
     total_students = len({q.user_id for q in quizzes if q.user_id})
-    avg_duration = (sum((q.time_spent_seconds or 0) for q in quizzes) / 60) / total_sessions if total_sessions else 0
+    avg_duration = (sum((q.time_spent_seconds or 0) for q in quizzes) / 60 / total_sessions) if total_sessions else 0
     scored = [q.performance_score for q in quizzes if q.performance_score is not None]
-    avg_score = sum(scored) / len(scored) if scored else 0
+    avg_score = sum(scored) / len(scored) if scored else 0  # escala 0-100 (%)
 
     # ─── Generar CSV ────────────────────────────────────────────────────────────
     csv_buffer = io.StringIO()

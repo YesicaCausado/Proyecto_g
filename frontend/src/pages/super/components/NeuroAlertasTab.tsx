@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
   BrainCircuit, AlertTriangle, TrendingDown,
-  Clock, Filter, RefreshCw, ChevronRight, CheckCircle, Info, Loader2
+  Clock, Filter, RefreshCw, ChevronRight, CheckCircle, Info, Loader2,
+  X, User, BookOpen, Hash, Target, BarChart3, Zap
 } from 'lucide-react';
 import api from '../../../services/api';
 
 type Priority = 'alta' | 'media' | 'baja';
 
 interface Alert {
-  id: number;
+  id: string;
   priority: Priority;
   category: string;
   title: string;
@@ -18,6 +19,17 @@ interface Alert {
   affectedLabel: string;
   time: string;
   resolved: boolean;
+  // ── Detalle enriquecido (backend) ──
+  studentName?: string;
+  classroom?: string;
+  grade?: string | null;
+  subject?: string;
+  averageScore?: number;
+  totalSessions?: number;
+  totalTimeMinutes?: number;
+  riskLevel?: string;
+  riskFactors?: string[];
+  daysInactive?: number;
 }
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string; border: string; dot: string; icon: any }> = {
@@ -28,9 +40,10 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: stri
 
 export default function NeuroAlertasTab() {
   const [filterPriority, setFilterPriority] = useState<Priority | 'todas'>('todas');
-  const [resolved, setResolved] = useState<Set<number>>(new Set());
+  const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Alert | null>(null);
 
   useEffect(() => {
     api.get('/super/stats/alerts')
@@ -146,7 +159,10 @@ export default function NeuroAlertasTab() {
                           Afecta a <span className="font-semibold text-[#37352F]">{alert.affectedCount} {alert.affectedLabel}</span>
                         </span>
                         <div className="flex items-center gap-2">
-                          <button className="text-xs text-[#787774] hover:text-[#37352F] flex items-center gap-1 transition-colors">
+                          <button
+                            onClick={() => setSelected(alert)}
+                            className="text-xs text-[#787774] hover:text-[#37352F] flex items-center gap-1 transition-colors"
+                          >
                             Ver detalles <ChevronRight className="w-3 h-3" />
                           </button>
                           <button
@@ -164,6 +180,136 @@ export default function NeuroAlertasTab() {
             })}
           </div>
         )}
+      </div>
+
+      {/* ── Modal de detalles ── */}
+      {selected && <AlertDetailModal alert={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
+}
+
+// ── Modal de detalle de alerta ────────────────────────────────────────────────
+function AlertDetailModal({ alert, onClose }: { alert: Alert; onClose: () => void }) {
+  const cfg = PRIORITY_CONFIG[alert.priority];
+  const PriorityIcon = cfg.icon;
+  const riskLabel: Record<string, string> = {
+    none: 'Sin riesgo', low: 'Riesgo bajo', medium: 'Riesgo medio', high: 'Riesgo alto',
+  };
+
+  const rows = [
+    { icon: User,      label: 'Estudiante',    value: alert.studentName ?? '—' },
+    { icon: BookOpen,  label: 'Clase',         value: alert.classroom ?? '—' },
+    { icon: BookOpen,  label: 'Materia',       value: alert.subject ?? '—' },
+    { icon: Hash,      label: 'Grado',         value: alert.grade ?? '—' },
+    { icon: BarChart3, label: 'Promedio',      value: alert.averageScore != null ? `${alert.averageScore}%` : '—' },
+    { icon: Zap,       label: 'Sesiones',      value: alert.totalSessions != null ? String(alert.totalSessions) : '—' },
+    { icon: Clock,     label: 'Tiempo total',  value: alert.totalTimeMinutes != null ? `${alert.totalTimeMinutes} min` : '—' },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl border border-[#E9E9E7] shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Encabezado */}
+        <div className="flex items-start justify-between gap-3 p-5 border-b border-[#E9E9E7]">
+          <div className="flex items-start gap-3">
+            <div className={`w-10 h-10 rounded-lg ${cfg.bg} flex items-center justify-center flex-shrink-0`}>
+              <PriorityIcon className={`w-5 h-5 ${cfg.color}`} />
+            </div>
+            <div>
+              <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color} mb-1.5`}>
+                {cfg.label} · {alert.category}
+              </span>
+              <h2 className="text-base font-bold text-[#191919]">{alert.title}</h2>
+              <p className="text-xs text-[#787774] flex items-center gap-1 mt-0.5">
+                <Clock className="w-3 h-3" /> {alert.time}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-[#787774] hover:text-[#37352F] transition-colors flex-shrink-0"
+            aria-label="Cerrar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* Descripción */}
+          <p className="text-sm text-[#37352F] leading-relaxed">{alert.description}</p>
+
+          {/* Predicción */}
+          {alert.prediction && (
+            <div className="flex items-start gap-2 bg-[#F7F6F3] rounded-md p-3">
+              <BrainCircuit className="w-3.5 h-3.5 text-[#6940A5] mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-[#6940A5] leading-relaxed font-medium">{alert.prediction}</p>
+            </div>
+          )}
+
+          {/* Ficha de datos */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {rows.map(({ icon: Icon, label, value }) => (
+              <div key={label} className="flex items-center gap-2.5 bg-[#F7F6F3] rounded-md px-3 py-2.5">
+                <Icon className="w-4 h-4 text-[#787774] flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wide text-[#AEADAB]">{label}</p>
+                  <p className="text-sm font-medium text-[#191919] truncate">{value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Factores de riesgo */}
+          {((alert.riskFactors && alert.riskFactors.length > 0) || alert.riskLevel) && (
+            <div className="border border-[#E9E9E7] rounded-md p-3.5">
+              <div className="flex items-center gap-2 mb-2.5">
+                <Target className="w-4 h-4 text-[#E03E3E]" />
+                <h3 className="text-xs font-semibold text-[#191919]">Nivel de riesgo</h3>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color}`}>
+                  {riskLabel[alert.riskLevel ?? ''] ?? alert.riskLevel ?? '—'}
+                </span>
+              </div>
+              {alert.riskFactors && alert.riskFactors.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {alert.riskFactors.map((f, i) => (
+                    <li key={i} className="text-xs text-[#37352F] flex items-start gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#E03E3E] flex-shrink-0 mt-1" />{f}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[#787774]">No se reportaron factores específicos.</p>
+              )}
+            </div>
+          )}
+
+          {/* Inactividad */}
+          {alert.daysInactive != null && (
+            <div className="flex items-start gap-2 bg-[#FCF6E5] border border-[#EDD88A] rounded-md p-3">
+              <TrendingDown className="w-4 h-4 text-[#D9730D] mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-[#37352F] leading-relaxed">
+                <strong>{alert.daysInactive} días</strong> sin actividad registrada. Se recomienda contactar
+                al estudiante y al acudiente para retomar la participación.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Pie */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[#E9E9E7] bg-[#F7F6F3]">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md text-sm font-medium bg-[#37352F] text-white hover:bg-[#2F2C28] transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
       </div>
     </div>
   );

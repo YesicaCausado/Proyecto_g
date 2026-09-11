@@ -6,6 +6,8 @@ Toda la lógica de permisos de módulos pasa por este archivo.
 """
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
@@ -15,6 +17,47 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.user import User
 from app.models.institution import Institution
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Caché TTL de instituciones (evita 1 query a Postgres por petición)
+# -----------------------------------------------------------------------------
+# Cada endpoint autenticado dispara get_current_user (1 query) + get_license
+# (1 query a institutions). La licencia/institucion cambia muy poco, así que
+# cacheamos el objeto Institution por institution_id durante un TTL corto.
+# El estado suspenso/vencido se sigue respetando porque la caché expira y se
+# revalida en cada ventana TTL (además _resolve_license_state se recalcula
+# SIEMPRE con la fecha actual, por lo que el vencimiento no queda "congelado").
+# ─────────────────────────────────────────────────────────────────────────────
+_INSTITUTION_CACHE: dict[int, tuple[float, Institution]] = {}
+_INSTITUTION_CACHE_LOCK = threading.Lock()
+_INSTITUTION_CACHE_TTL = float(__import__("os").getenv("LICENSE_CACHE_TTL_SECONDS", "30"))
+
+
+def _get_cached_institution(institution_id: int) -> Optional[Institution]:
+    """Devuelve la Institution cacheada si aún no expiró su TTL."""
+    with _INSTITUTION_CACHE_LOCK:
+        entry = _INSTITUTION_CACHE.get(institution_id)
+        if entry is None:
+            return None
+        ts, institution = entry
+        if time.monotonic() - ts > _INSTITUTION_CACHE_TTL:
+            _INSTITUTION_CACHE.pop(institution_id, None)
+            return None
+        return institution
+
+
+def _cache_institution(institution: Institution) -> None:
+    """Guarda la Institution en caché; borra la entrada si se convierte en None."""
+    if institution is None:
+        return
+    with _INSTITUTION_CACHE_LOCK:
+        _INSTITUTION_CACHE[institution.id] = (time.monotonic(), institution)
+
+
+def _invalidate_institution_cache(institution_id: int) -> None:
+    """Invalida el caché cuando cambia el estado de la institución."""
+    with _INSTITUTION_CACHE_LOCK:
+        _INSTITUTION_CACHE.pop(institution_id, None)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LICENCIA ANUAL
@@ -92,6 +135,10 @@ FEATURE_MATRIX: dict[str, dict[str, list[str]]] = {
     "neurodigital":     {"basica": [], "premium": ["profesor", "estudiante"], "pro": ["profesor", "estudiante"]},
 
     # ── Reportes ──
+    # La licencia Básica expone SOLO 6 reportes básicos (export CSV). Los 2
+    # reportes comparativos (mensual y anual) son exclusivos Premium+ y, junto
+    # con los PDF/Excel, quedan detrás de "reportes_avanzados". El frontend
+    # (ReportesTab) aplica la misma regla: 6 básicos en Básica, 8 en Premium/Pro.
     "reportes":          {"basica": ["super_profesor", "profesor"], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
     "reportes_avanzados":{"basica": [], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
 
@@ -376,6 +423,14 @@ class LicenseInfo:
             return module in READONLY
         return module in self.student_modules
 
+    def has_super_module(self, module: str) -> bool:
+        if self.license_status == "suspended":
+            return False
+        if self.license_status == "expired":
+            READONLY = {"dashboard", "reportes", "mensajeria", "calendario"}
+            return module in READONLY
+        return module in self.super_modules
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Función principal: obtener licencia del usuario
@@ -454,9 +509,13 @@ def get_license_for_user(user: User, db: Session) -> LicenseInfo:
 def _get_license_for_user_inner(user: User, db: Session) -> LicenseInfo:
     institution: Optional[Institution] = None
     if user.institution_id:
-        institution = db.query(Institution).filter(
-            Institution.id == user.institution_id
-        ).first()
+        # 1º intenta caché (evita 1 query por petición); 2º consulta DB.
+        institution = _get_cached_institution(user.institution_id)
+        if institution is None:
+            institution = db.query(Institution).filter(
+                Institution.id == user.institution_id
+            ).first()
+            _cache_institution(institution)
 
     if institution is None:
         # Sin institución → licencia básica activa (para admin / testing)

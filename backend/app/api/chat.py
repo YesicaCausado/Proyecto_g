@@ -212,11 +212,73 @@ def _get_user_engine(user_id: int) -> MultimodalCognitiveEngine:
     estadísticas de sesión (mensajes, rachas de error, etc.) siempre se
     leen de la base de datos, así que no se pierden aunque el motor sí
     "olvide" su baseline entre cold starts.
+
+    Para mitigar esa pérdida, la calibración (baselines personalizados y
+    prior del predictor) se restaura desde CognitiveSessionState.neural_state
+    cuando se crea el motor por primera vez en un proceso.
     """
     key = f"u{user_id}"
     if key not in _user_engines:
-        _user_engines[key] = MultimodalCognitiveEngine()
+        engine = MultimodalCognitiveEngine()
+        _user_engines[key] = engine
+        # Restaurar calibración persistida (no bloquea si no hay datos).
+        try:
+            stored = _load_neural_state_cache.get(user_id)
+            if stored:
+                engine.restore_state(stored)
+        except Exception as exc:
+            logger.debug("No se pudo restaurar neural_state para user %s: %s", user_id, exc)
     return _user_engines[key]
+
+
+# Caché en memoria de proceso del neural_state ya leído de la BD, para no
+# re-consultarlo en cada reconstruction. Se refresca en cada guardado.
+_load_neural_state_cache: Dict[int, dict] = {}
+
+
+def _load_neural_state(db: Session, user_id: int, topic: str) -> Optional[dict]:
+    """Lee el estado compacto del motor desde CognitiveSessionState."""
+    try:
+        from app.models.learning import CognitiveSessionState
+        row = db.query(CognitiveSessionState).filter(
+            CognitiveSessionState.user_id == user_id,
+            CognitiveSessionState.topic == topic,
+        ).first()
+        if row is None:
+            return None
+        return row.neural_state or {}
+    except Exception as exc:
+        logger.debug("_load_neural_state falló (no bloquea): %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _save_neural_state(db: Session, user_id: int, topic: str, state: dict) -> None:
+    """Persiste el estado compacto del motor en CognitiveSessionState."""
+    if not state:
+        return
+    try:
+        from app.models.learning import CognitiveSessionState
+        row = db.query(CognitiveSessionState).filter(
+            CognitiveSessionState.user_id == user_id,
+            CognitiveSessionState.topic == topic,
+        ).first()
+        if row is None:
+            row = CognitiveSessionState(user_id=user_id, topic=topic)
+            db.add(row)
+        row.neural_state = state
+        row.updated_at = datetime.utcnow()
+        db.commit()
+        _load_neural_state_cache[user_id] = state
+    except Exception as exc:
+        logger.debug("_save_neural_state falló (no bloquea): %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def _default_stats_row() -> dict:
@@ -1000,6 +1062,17 @@ async def send_message(
         # ═══ Cargar estado de sesión REAL desde la base de datos ═══
         session_stats = _load_session_stats(db, current_user.id, topic)
 
+        # ═══ Restaurar calibración del motor neuroconductual (cold start) ═══
+        # Lee el estado compacto persistido y lo deja listo para que
+        # _get_user_engine() lo aplique al construir el motor en este proceso.
+        if current_user.id not in _load_neural_state_cache:
+            try:
+                stored = _load_neural_state(db, current_user.id, topic)
+                if stored:
+                    _load_neural_state_cache[current_user.id] = stored
+            except Exception as exc:
+                logger.debug("No se pudo leer neural_state: %s", exc)
+
         # ═══ ANÁLISIS NEUROCONDUCTUAL — 5 PATRONES ═══
         analysis = None
         # Inicializados FUERA del try para que, si el bloque de análisis
@@ -1207,6 +1280,14 @@ async def send_message(
             session_stats = _record_chat_answer(session_stats, correct_flag)
             _save_session_stats(db, current_user.id, topic, session_stats)
 
+            # ── Persistir el estado compacto del motor (baselines + prior) ──
+            # para que la personalización sobreviva a cold starts serverless.
+            try:
+                state = user_engine.serialize_state()
+                _save_neural_state(db, current_user.id, topic, state)
+            except Exception as exc:
+                logger.debug("No se pudo persistir neural_state: %s", exc)
+
             if analysis:
                 logger.info(
                     f"🧠 Estado: {cognitive_state} | P={analysis.probability:.2f} "
@@ -1372,28 +1453,40 @@ async def send_message(
                         "response_time_ms": request.response_time_ms,
                         "typing_speed_cpm": request.typing_speed_cpm,
                         "pause_before_ms": request.pause_before_ms,
-                        "active": True,
+                        # Activo SOLO si llegó al menos una señal real de ritmo.
+                        "active": (request.response_time_ms is not None and request.response_time_ms > 0)
+                                  or (request.typing_speed_cpm is not None and request.typing_speed_cpm > 0)
+                                  or (request.pause_before_ms is not None and request.pause_before_ms > 0),
                     },
                     "P2_decision_sequence": {
                         "corrections": request.corrections,
                         "typing_bursts": request.typing_bursts,
                         "is_question": request.is_question,
-                        "active": True,
+                        # Activo SOLO si llegó al menos una señal real de decisión.
+                        "active": (request.corrections is not None and request.corrections > 0)
+                                  or (request.typing_bursts is not None and request.typing_bursts > 0)
+                                  or bool(request.is_question),
                     },
                     "P3_facial": {
                         "active": bool(request.facial_data),
                         "data": request.facial_data or {},
                     },
                     "P4_voice": {
-                        "active": bool(request.voice_data),
+                        "active": bool(voice_event is not None),
                         "data": request.voice_data or {},
                     },
                     "P5_error_prediction": {
                         "quiz_error_rate": round(quiz_error_rate, 3),
                         "weak_concepts": weak_concepts,
-                        "active": True,
+                        # Activo SOLO si hay un predictor con historial real (>=3
+                        # interacciones) o veredicto de chat/quiz real disponible.
+                        "active": (
+                            verdict is not None
+                            or quiz_error_rate > 0
+                            or (session_stats.get("chat_eval_count", 0) or 0) >= 3
+                        ),
                         # ═══ P5 EN TIEMPO REAL desde el chat ═══
-                        "real_time": True,
+                        "real_time": verdict is not None,
                         "last_answer_grade": verdict,
                         "last_answer_correct": corrected if verdict is not None else None,
                         "chat_error_rate": round(chat_error_rate, 3),

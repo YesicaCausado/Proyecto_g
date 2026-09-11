@@ -242,6 +242,152 @@ export const FOOTER_LINKS = {
   empresa:  ['Sobre NeuroLearn', 'Contacto', 'Privacidad', 'Términos'],
 } as const;
 
+// ── Cinco patrones neurodigitales (experiencia horizontal) ──
+// Los nombres SON EXACTOS: Facial, Voz, Teclado, Interacción,
+// Rendimiento. NO se cambian. Cada uno ocupa ~una pantalla en el
+// recorrido horizontal pinned (GSAP + ScrollTrigger).
+export interface NeuroPattern {
+  id:      string;      // clave única (ancla/estado)
+  index:   string;      // numeración técnica (01..05)
+  title:   string;      // nombre exacto del patrón
+  tag:     string;      // etiqueta técnica corta (microcopy)
+  desc:    string;      // descripción sencilla del patrón
+  accent:  string;      // acento de la paleta (monocromo + azul)
+  /** Señales/labels que aparecen progresivamente durante el scroll */
+  labels:  string[];
+}
+
+export const NEURO_PATTERNS: NeuroPattern[] = [
+  {
+    id: 'facial', index: '01', title: 'Facial', tag: 'Microexpresión',
+    desc: 'Analiza microexpresiones y cambios faciales durante la interacción.',
+    accent: '#3B82F6',
+    labels: ['Microexpresiones', 'Atención', 'Mirada'],
+  },
+  {
+    id: 'voz', index: '02', title: 'Voz', tag: 'Prosodia',
+    desc: 'Analiza aspectos como el ritmo, las pausas y la prosodia.',
+    accent: '#60A5FA',
+    labels: ['Ritmo', 'Pausas', 'Prosodia'],
+  },
+  {
+    id: 'teclado', index: '03', title: 'Teclado', tag: 'Escritura',
+    desc: 'Observa la velocidad, las pausas y los errores al escribir.',
+    accent: '#2563EB',
+    labels: ['Velocidad', 'Pausas', 'Errores'],
+  },
+  {
+    id: 'interaccion', index: '04', title: 'Interacción', tag: 'Navegación',
+    desc: 'Analiza cómo navegas, haces clic y utilizas la plataforma.',
+    accent: '#3B82F6',
+    labels: ['Click', 'Navegación', 'Interacción'],
+  },
+  {
+    id: 'rendimiento', index: '05', title: 'Rendimiento', tag: 'Progreso',
+    desc: 'Analiza respuestas, errores, tiempo y progreso para entender tu evolución.',
+    accent: '#60A5FA',
+    labels: ['Respuestas', 'Errores', 'Tiempo', 'Progreso'],
+  },
+];
+
+// ── ¿Qué es NeuroLearn? (flujo secuencial) ─────────────────
+export interface WhatIsStep {
+  id:    string;
+  label: string;
+  note:  string;
+}
+
+export const WHAT_IS: {
+  title:     string;
+  highlight: string;
+  lead:      string;
+  steps:     WhatIsStep[];
+} = {
+  title: '¿Qué es',
+  highlight: 'NeuroLearn?',
+  lead:
+    'NeuroLearn utiliza inteligencia artificial para entender cómo aprende cada estudiante y adaptar su experiencia de aprendizaje.',
+  steps: [
+    { id: 'estudiante', label: 'Estudiante', note: 'Interactúa con la plataforma' },
+    { id: 'interaccion', label: 'Interacción', note: 'Voz, rostro, teclado y clics' },
+    { id: 'ia', label: 'IA', note: 'Neuron observa y decodifica' },
+    { id: 'analisis', label: 'Análisis', note: 'Patrones neurodigitales' },
+    { id: 'personalizado', label: 'Aprendizaje personalizado', note: 'Se adapta al estudiante' },
+  ],
+};
+
+// ── Personalización (¿Cómo se adapta?) ─────────────────────
+export interface AdaptationAxis {
+  id:    string;
+  label: string;
+  desc:  string;
+  from:  string;
+  to:    string;
+}
+
+export const ADAPTATION: {
+  eyebrow:   string;
+  title:     string;
+  highlight: string;
+  lead:      string;
+  axes:      AdaptationAxis[];
+} = {
+  eyebrow: 'Personalización',
+  title: 'El aprendizaje cambia según',
+  highlight: 'cada estudiante.',
+  lead:
+    'Toda la información converge en un perfil vivo. NeuroLearn ajusta la experiencia en tiempo real, sesión a sesión.',
+  axes: [
+    { id: 'dificultad', label: 'Dificultad', desc: 'Nivel del contenido', from: 'Base', to: 'Desafiante' },
+    { id: 'contenido', label: 'Contenido', desc: 'Qué se enseña', from: 'Genérico', to: 'Personalizado' },
+    { id: 'recomendaciones', label: 'Recomendaciones', desc: 'Qué se sugiere', from: 'Globales', to: 'Individuales' },
+    { id: 'ritmo', label: 'Ritmo', desc: 'Velocidad de avance', from: 'Fijo', to: 'Adaptativo' },
+  ],
+};
+
+// ── Beneficios ─────────────────────────────────────────────
+export interface Benefit {
+  id:    string;
+  icon:  string;
+  title: string;
+  desc:  string;
+  from:  'left' | 'right' | 'top' | 'bottom';
+}
+
+export const BENEFITS: Benefit[] = [
+  { id: 'personalizado', icon: 'Sparkles',  title: 'Aprendizaje personalizado', desc: 'La experiencia se adapta al estudiante.', from: 'left' },
+  { id: 'seguimiento',   icon: 'Activity',  title: 'Seguimiento inteligente',   desc: 'Observa la evolución y el progreso.', from: 'top' },
+  { id: 'ia',            icon: 'Brain',     title: 'IA educativa',              desc: 'NeuroLearn acompaña al estudiante durante su aprendizaje.', from: 'bottom' },
+  { id: 'docentes',      icon: 'Users',     title: 'Información para docentes', desc: 'Los docentes pueden identificar avances y posibles dificultades.', from: 'right' },
+];
+
+// ── Instituciones ──────────────────────────────────────────
+export interface InstitutionRole {
+  id:      string;
+  label:   string;
+  note:    string;
+}
+
+export const INSTITUTIONS: {
+  eyebrow:   string;
+  title:     string;
+  highlight: string;
+  lead:      string;
+  roles:     InstitutionRole[];
+} = {
+  eyebrow: 'Instituciones',
+  title: 'Pensado para todo el',
+  highlight: 'ecosistema educativo.',
+  lead:
+    'NeuroLearn no solo acompaña al estudiante: conecta instituciones, docentes y estudiantes en una única inteligencia.',
+  roles: [
+    { id: 'institucion', label: 'Institución', note: 'Gobierna y supervisa' },
+    { id: 'docentes', label: 'Docentes', note: 'Enseñan y acompañan' },
+    { id: 'estudiantes', label: 'Estudiantes', note: 'Aprenden a su ritmo' },
+    { id: 'neurolearn', label: 'NeuroLearn AI', note: 'La inteligencia que conecta todo' },
+  ],
+};
+
 // ── Responsive ──────────────────────────────────────────────
 export const RESPONSIVE = {
   mobileBreakpoint: 768,

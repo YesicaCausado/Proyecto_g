@@ -18,46 +18,37 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
     if license_info.license_status == "suspended":
         raise HTTPException(status_code=403, detail="La licencia institucional está suspendida.")
     
-    # 1. Total Exercises (sum of questions answered in quizzes)
-    total_exercises = db.query(func.sum(QuizHistory.questions_count)).filter(
+    # Filtro común para todas las métricas de quizzes completados.
+    _completed_filter = (
         QuizHistory.user_id == user_id,
         QuizHistory.completed_at.isnot(None),
         QuizHistory.performance_score.isnot(None),
         QuizHistory.user_score.isnot(None),
-    ).scalar() or 0
-    
+    )
+
+    # 1–4. Una sola query agregada en lugar de 3 queries separadas
+    #     (sum questions, avg performance, sum time) + una para topics.
+    agg = db.query(
+        func.sum(QuizHistory.questions_count),
+        func.avg(QuizHistory.performance_score),
+        func.sum(QuizHistory.time_spent_seconds),
+        func.count(func.distinct(QuizHistory.topic)),
+    ).filter(*_completed_filter).one()
+
+    total_exercises = agg[0] or 0
+    avg_performance = agg[1] or 0
+    total_study_time_seconds = agg[2] or 0
+    active_skills_count = int(agg[3] or 0)
+
     # 2. Total Class Sessions
     total_classes = db.query(LearningSession).filter(
         LearningSession.user_id == user_id
     ).count()
-    
-    # 3. Overall Progress (%)
-    avg_performance = db.query(func.avg(QuizHistory.performance_score)).filter(
-        QuizHistory.user_id == user_id,
-        QuizHistory.completed_at.isnot(None),
-        QuizHistory.performance_score.isnot(None),
-        QuizHistory.user_score.isnot(None),
-    ).scalar() or 0
-    
+
     # 4. Total Study Time (hours)
     # Estimate based on learning sessions 
     # (Here we sum session time if added later, but for now we fallback to standard 1 hour per session approximation or use Quiz time spent if we had it populated always)
-    total_study_time_seconds = db.query(func.sum(QuizHistory.time_spent_seconds)).filter(
-        QuizHistory.user_id == user_id,
-        QuizHistory.completed_at.isnot(None),
-        QuizHistory.performance_score.isnot(None),
-        QuizHistory.user_score.isnot(None),
-    ).scalar() or 0
-    total_study_hours = (total_study_time_seconds / 3600) + (total_classes * 0.5) 
-    
-    # 5. Active Skills (Topics attempted)
-    active_skills_query = db.query(QuizHistory.topic).filter(
-        QuizHistory.user_id == user_id,
-        QuizHistory.completed_at.isnot(None),
-        QuizHistory.performance_score.isnot(None),
-        QuizHistory.user_score.isnot(None),
-    ).distinct().all()
-    active_skills_count = len(active_skills_query)
+    total_study_hours = (total_study_time_seconds / 3600) + (total_classes * 0.5)
     
     return {
         "progress_percentage": int(avg_performance),

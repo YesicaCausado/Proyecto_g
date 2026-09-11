@@ -1898,6 +1898,115 @@ class MultimodalCognitiveEngine:
         self._ema_dist = None
         log.info("Motor reseteado")
 
+    # ── Persistencia del estado personalizado (cold starts serverless) ──────
+    # El motor vive en memoria de proceso. En Vercel/FaaS un cold start lo
+    # reinicia y pierde los baselines calibrados y el prior del predictor.
+    # serialize_state()/restore_state() capturan SOLO el estado compacto
+    # (baselines + prior + EMA + conteos), no el historial de eventos completo
+    # (que sería enorme y regenerable), para persistirlo en
+    # CognitiveSessionState.neural_state y restaurarlo en la reconstrucción.
+
+    def serialize_state(self) -> Dict[str, Any]:
+        """Devuelve un diccionario JSON-serializable con el estado compacto."""
+        def _summary_deque(d: deque, n: int) -> List[Dict]:
+            # Solo los últimos n eventos con sus campos numéricos clave, para
+            # no arrastrar el historial completo (regenerable con el tiempo).
+            return list(d)[-n:]
+
+        rhythm = self.rhythm_analyzer
+        decision = self.decision_analyzer
+        facial = self.facial_analyzer
+        voice = self.voice_analyzer
+        pred = self.error_predictor
+
+        return {
+            "version": 1,
+            "rhythm": {
+                "baseline": dict(rhythm.baseline),
+                "baseline_from_data": rhythm._baseline_from_data,
+                "n_events": len(rhythm.events),
+            },
+            "decision": {
+                "success_chain": decision.success_chain,
+                "failure_chain": decision.failure_chain,
+                "total_correct": decision.total_correct,
+                "total_attempts": decision.total_attempts,
+            },
+            "facial": {
+                "baseline_blink": facial.baseline_blink,
+                "baseline_attn": facial.baseline_attn,
+                "calibrated": facial._calibrated,
+            },
+            "voice": {
+                "baseline_pitch": voice.baseline_pitch,
+                "baseline_volume": voice.baseline_volume,
+                "baseline_rate": voice.baseline_rate,
+                "calibrated": voice._calibrated,
+            },
+            "error_prediction": {
+                "prior": pred.prior,
+                "interaction_history": pred.interaction_history[-pred._PRIOR_WINDOW:],
+                "error_contexts": pred.error_contexts[-10:],
+            },
+            "ema_dist": self._ema_dist,
+        }
+
+    def restore_state(self, state: Dict[str, Any]) -> bool:
+        """Restaura el estado compacto previamente serializado. No lanza."""
+        if not state or not isinstance(state, dict):
+            return False
+        try:
+            rhythm = state.get("rhythm") or {}
+            if isinstance(rhythm.get("baseline"), dict) and rhythm["baseline"]:
+                self.rhythm_analyzer.baseline = dict(rhythm["baseline"])
+                self.rhythm_analyzer._baseline_from_data = bool(rhythm.get("baseline_from_data", False))
+
+            decision = state.get("decision") or {}
+            self.decision_analyzer.success_chain = int(decision.get("success_chain", 0))
+            self.decision_analyzer.failure_chain = int(decision.get("failure_chain", 0))
+            self.decision_analyzer.total_correct = int(decision.get("total_correct", 0))
+            self.decision_analyzer.total_attempts = int(decision.get("total_attempts", 0))
+
+            facial = state.get("facial") or {}
+            if facial.get("baseline_blink"):
+                self.facial_analyzer.baseline_blink = float(facial["baseline_blink"])
+            if facial.get("baseline_attn"):
+                self.facial_analyzer.baseline_attn = float(facial["baseline_attn"])
+            self.facial_analyzer._calibrated = bool(facial.get("calibrated", False))
+
+            voice = state.get("voice") or {}
+            if voice.get("baseline_pitch"):
+                self.voice_analyzer.baseline_pitch = float(voice["baseline_pitch"])
+            if voice.get("baseline_volume"):
+                self.voice_analyzer.baseline_volume = float(voice["baseline_volume"])
+            if voice.get("baseline_rate"):
+                self.voice_analyzer.baseline_rate = float(voice["baseline_rate"])
+            self.voice_analyzer._calibrated = bool(voice.get("calibrated", False))
+
+            pred = state.get("error_prediction") or {}
+            if pred.get("prior") is not None:
+                self.error_predictor.prior = float(pred["prior"])
+            # Reinyectar la ventana del historial del predictor (solo si está
+            # vacío, para no duplicar interacciones ya registradas).
+            hist = pred.get("interaction_history") or []
+            if hist and not self.error_predictor.interaction_history:
+                self.error_predictor.interaction_history = list(hist)
+            ctx = pred.get("error_contexts") or []
+            if ctx:
+                self.error_predictor.error_contexts = list(ctx)
+
+            ema = state.get("ema_dist")
+            if isinstance(ema, dict) and ema:
+                self._ema_dist = {str(k): float(v) for k, v in ema.items()}
+
+            log.info("Motor restaurado desde estado persistido (baselines=%s, prior=%.3f)",
+                     "personalizados" if rhythm.get("baseline_from_data") else "poblacionales",
+                     self.error_predictor.prior)
+            return True
+        except Exception as exc:  # nunca romper el arranque del chat
+            log.warning("restore_state falló (se ignora): %s", exc)
+            return False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ALIAS DE COMPATIBILIDAD

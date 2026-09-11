@@ -1,20 +1,19 @@
 /**
- * LandingPage.tsx — Landing de NeuroLearn (rewrite)
+ * LandingPage.tsx — Landing de NeuroLearn (narrativa por scroll)
  * ─────────────────────────────────────────────────────────────
- * Landing completa, futurista y monocroma (negro/blanco/gris/azul).
- * MANTIENE el Hero anterior (cinematográfico editorial con el robot
- * 3D) y añade el viaje de Neuron: un Neuron que se "transporta"
- * siguiendo la sección activa mientras el usuario baja o sube.
+ * Landing completa, minimalista, futurista y monocroma
+ * (negro/blanco/gris/azul). Cuenta una HISTORIA mediante el scroll:
  *
- * Story-board:
- *   · 00 Hero (Neuron despierta) — Hero anterior conservado
- *   · 01 Neuron analiza
- *   · 02 Cinco competencias (red neuronal)
- *   · 03 Pipeline Datos → Aprendizaje
- *   · 04 NeuroChat / NeuroTutor
- *   · 05 Plataforma estudiantes/docentes
- *   · 06 Integración y automatización
- *   · 07 CTA final (Neuron vuelve) · 08 Footer
+ *   HERO → ¿Qué es NeuroLearn? → Patrones (recorrido horizontal
+ *   pinneado) → Personalización → Beneficios → Instituciones →
+ *   CTA final → Footer
+ *
+ * Técnica:
+ *   · Lenis (smooth scroll) sincronizado con ScrollTrigger.
+ *   · La sección de patrones se pinnea y recorre horizontalmente
+ *     los 5 patrones neurodigitales (GSAP + ScrollTrigger).
+ *   · props: reutiliza Hero (Neuron 3D), NeuronGlyph, TravellingNeuron,
+ *     useCustomCursor y respeta prefers-reduced-motion.
  * ─────────────────────────────────────────────────────────────
  */
 import { useEffect } from 'react';
@@ -24,26 +23,24 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import './landing.css';
 import LandingNavbar from './components/LandingNavbar';
 import Hero from './components/Hero';
-import SectionAnalyze from './components/SectionAnalyze';
-import SectionCapabilities from './components/SectionCapabilities';
-import SectionPipeline from './components/SectionPipeline';
-import SectionChatTutor from './components/SectionChatTutor';
-import SectionPlatform from './components/SectionPlatform';
-import SectionIntegration from './components/SectionIntegration';
+import SectionWhatIs from './components/SectionWhatIs';
+import PatternHorizontalPinned from './components/PatternHorizontalPinned';
+import SectionPersonalization from './components/SectionPersonalization';
+import SectionBenefits from './components/SectionBenefits';
+import SectionInstitutions from './components/SectionInstitutions';
 import SectionFinalCTA from './components/SectionFinalCTA';
 import LandingFooter from './components/LandingFooter';
 import useCustomCursor from './hooks/useCustomCursor';
 import TravellingNeuron, { type NeuronStop } from './components/TravellingNeuron';
 
 const NEURON_STOPS: NeuronStop[] = [
-  { id: 'hero',        label: 'Neuron despierta' },
-  { id: 'analisis',    label: 'Analiza' },
-  { id: 'capacidades', label: 'Competencias' },
-  { id: 'podemos',     label: 'Proceso' },
-  { id: 'chattutor',   label: 'NeuroTutor' },
-  { id: 'plataforma',  label: 'Plataforma' },
-  { id: 'integracion', label: 'Integración' },
-  { id: 'cta',         label: 'Contigo' },
+  { id: 'hero',            label: 'Neuron despierta' },
+  { id: 'que-es',          label: 'NeuroLearn' },
+  { id: 'patrones',        label: 'Patrones' },
+  { id: 'personalizacion', label: 'Personalización' },
+  { id: 'beneficios',      label: 'Beneficios' },
+  { id: 'instituciones',   label: 'Instituciones' },
+  { id: 'cta',             label: 'Contigo' },
 ];
 
 export default function LandingPage() {
@@ -78,12 +75,11 @@ export default function LandingPage() {
       <TravellingNeuron stops={NEURON_STOPS} />
       <main>
         <Hero />
-        <SectionAnalyze />
-        <SectionCapabilities />
-        <SectionPipeline />
-        <SectionChatTutor />
-        <SectionPlatform />
-        <SectionIntegration />
+        <SectionWhatIs />
+        <PatternHorizontalPinned />
+        <SectionPersonalization />
+        <SectionBenefits />
+        <SectionInstitutions />
         <SectionFinalCTA />
       </main>
       <LandingFooter />

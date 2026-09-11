@@ -42,13 +42,13 @@ export default function LicenciaTab({ license }: { license: any }) {
     basica: [
       'Hasta 20 profesores', 'Hasta 300 estudiantes', 'Dashboard institucional',
       'Gestión de profesores, estudiantes y grupos', 'NeuroBots básicos',
-      'Reportes básicos', 'Estadísticas básicas', 'Exportación CSV',
+      '6 reportes básicos', 'Estadísticas básicas', 'Exportación CSV',
     ],
     premium: [
       'Hasta 60 profesores', 'Hasta 1.500 estudiantes', 'Estadísticas avanzadas',
       'NeuroBots avanzados', 'NeuroAlertas', 'Análisis avanzado del rendimiento',
-      'Indicadores de riesgo', 'Analítica institucional', 'Reportes avanzados (PDF y Excel)',
-      'Integraciones avanzadas',
+      'Indicadores de riesgo', 'Analítica institucional', '8 reportes (básicos + comparativos)',
+      'Reportes avanzados (PDF y Excel)', 'Integraciones avanzadas',
     ],
     pro: [
       'Profesores ilimitados', 'Estudiantes ilimitados', 'NeuroBots ilimitados',
@@ -190,7 +190,7 @@ export default function LicenciaTab({ license }: { license: any }) {
                 ['NeuroBots', 'Básicos', 'Avanzados', 'Ilimitados'],
                 ['Exportación', 'CSV', 'CSV, PDF, Excel', 'CSV, PDF, Excel'],
                 ['Analítica', 'Básica', 'Institucional', 'Predictiva avanzada'],
-                ['Reportes', 'Básicos', 'Avanzados', 'Completos'],
+                ['Reportes', '6 básicos', '8 (básicos + comparativos)', 'Completos'],
                 ['IA institucional', 'No disponible', 'Disponible', 'Completa'],
                 ['Integraciones', 'No disponible', 'Avanzadas', 'Completas (Google, Microsoft, SIS)'],
                 ['Automatizaciones', 'No disponible', 'No disponible', 'Sí'],

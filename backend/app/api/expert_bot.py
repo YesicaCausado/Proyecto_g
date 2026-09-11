@@ -15,6 +15,7 @@ from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.expert_bot import ExpertBot
+from app.models.classroom import Classroom, Enrollment, ClassroomBot
 from app.models.learning import ChatMessage, LearningSession
 from app.services.license_service import NEUROBOT_LIMITS
 
@@ -116,6 +117,88 @@ async def list_bots(
             for bot in bots
         ]
     }
+
+
+# ─── GET /shared-with-me (bots compartidos con el estudiante) ─────────────────
+@router.get("/shared-with-me")
+async def list_shared_bots(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    NeuroBots que el profesor ha compartido con el estudiante actual.
+
+    Incluye:
+    - Bots asignados a las clases en las que está inscrito el estudiante.
+    - Bots públicos (is_public=True) creados por profesores.
+
+    Formato consumido por el frontend del estudiante (NeuroBotsPage):
+    {bots: [{id, name, description, subject, creator_name, classroom_name,
+             is_required, source}]}.
+    """
+    result: List[dict] = []
+    seen: set = set()
+
+    # 1) Bots asignados a clases en las que el estudiante está inscrito
+    enrollments = db.query(Enrollment).filter(
+        Enrollment.student_id == current_user.id,
+        Enrollment.is_active == True,
+    ).all()
+
+    classroom_ids = [e.classroom_id for e in enrollments]
+    if classroom_ids:
+        assignments = (
+            db.query(ClassroomBot, Classroom)
+            .join(Classroom, ClassroomBot.classroom_id == Classroom.id)
+            .filter(ClassroomBot.classroom_id.in_(classroom_ids))
+            .order_by(ClassroomBot.order_index)
+            .all()
+        )
+        for assignment, classroom in assignments:
+            bot = db.query(ExpertBot).filter(ExpertBot.id == assignment.bot_id).first()
+            if not bot or not bot.is_active:
+                continue
+            key = ("classroom", bot.id, classroom.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append({
+                "id": bot.id,
+                "name": bot.name,
+                "description": bot.description or "",
+                "subject": bot.category or "",
+                "creator_name": bot.creator.full_name if bot.creator else "",
+                "classroom_id": classroom.id,
+                "classroom_name": classroom.name,
+                "is_required": assignment.is_required,
+                "source": "classroom",
+            })
+
+    # 2) Bots públicos creados por profesores (que no sean del propio estudiante)
+    public_bots = (
+        db.query(ExpertBot)
+        .filter(ExpertBot.is_public == True, ExpertBot.is_active == True)
+        .order_by(ExpertBot.created_at.desc())
+        .all()
+    )
+    for bot in public_bots:
+        key = ("public", bot.id, 0)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "id": bot.id,
+            "name": bot.name,
+            "description": bot.description or "",
+            "subject": bot.category or "",
+            "creator_name": bot.creator.full_name if bot.creator else "",
+            "classroom_id": None,
+            "classroom_name": None,
+            "is_required": False,
+            "source": "public",
+        })
+
+    return {"bots": result, "total": len(result)}
 
 
 # ─── GET /my-bots (bots del usuario actual) ────────────────────────────────────

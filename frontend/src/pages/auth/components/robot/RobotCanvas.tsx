@@ -105,16 +105,19 @@ export default function RobotCanvas({
 
   const handleCreated = useCallback(
     ({ gl }: { gl: import('three').WebGLRenderer }) => {
-      // Evita que un Context Lost de WebGL tumbe el canvas completo.
-      // Al perder el contexto, prevenimos el default para poder
-      // restaurarlo limpiamente cuando el navegador lo recupere.
+      // IMPORTANTE: NO llamar a e.preventDefault() en `webglcontextlost`.
+      // Hacerlo bloquea la restauración automática del contexto que Three.js
+      // ya gestiona, dejando el canvas en negro (el robot "no aparece" y se
+      // registra "Context Lost"). Dejamos que el renderer se recupere solo;
+      // solo escuchamos para forzar un re-render cuando se restaure.
       const dom = gl.domElement;
-      const onLost = (e: Event) => { e.preventDefault(); };
-      const onRestored = () => { /* R3F re-inicializa el renderer */ };
-      dom.addEventListener('webglcontextlost', onLost, false);
+      const onRestored = () => {
+        // Fuerza un setSize + render para repoblar el framebuffer tras
+        // recuperar el contexto (escenario de pestaña en segundo plano / GPU lenta).
+        gl.setSize(gl.domElement.clientWidth || 1, gl.domElement.clientHeight || 1, false);
+      };
       dom.addEventListener('webglcontextrestored', onRestored, false);
       return () => {
-        dom.removeEventListener('webglcontextlost', onLost, false);
         dom.removeEventListener('webglcontextrestored', onRestored, false);
       };
     },

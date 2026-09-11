@@ -145,6 +145,21 @@ async def get_super_dashboard(
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)
+    try:
+        return _compute_super_dashboard(current_user, db)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        # Cualquier error interno (BD lenta/caída, tipo de dato, N+1) se
+        # convierte en un 503 controlado en vez del 500 crudo que el frontend
+        # silenciaba y dejaba los reportes vacíos sin explicación.
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudo calcular el dashboard (base de datos). {str(e)[:160]}",
+        ) from e
+
+
+def _compute_super_dashboard(current_user: User, db: Session):
     inst_id = _get_institution_id(current_user, db)
     if not inst_id:
         raise HTTPException(status_code=400, detail="No tienes una institución asignada")
@@ -167,9 +182,9 @@ async def get_super_dashboard(
     teacher_ids = [t.id for t in teachers_q.all()]
     groups_q = db.query(Classroom).filter(
         Classroom.is_active == True,
-        Classroom.teacher_id.in_(teacher_ids) if teacher_ids else False,
+        Classroom.teacher_id.in_(teacher_ids),
     )
-    total_groups = groups_q.count() if teacher_ids else 0
+    total_groups = groups_q.count()
 
     # ── Promedio general ─────────────────────────────────────────
     student_ids = [s.id for s in students_q.all()]
@@ -179,7 +194,8 @@ async def get_super_dashboard(
             QuizHistory.user_id.in_(student_ids),
             QuizHistory.performance_score != None,
         ).scalar()
-        avg_score = round(float(avg_raw or 0), 1)
+        # QuizHistory.performance_score está en escala 0-100; normalizamos a 0-10.
+        avg_score = round(float(avg_raw or 0) / 10, 1)
 
     # ── Estudiantes en riesgo (enrollment con risk_level medium/high) ──
     at_risk_ids: set[int] = set()
@@ -242,6 +258,61 @@ async def get_super_dashboard(
             "risk":    e.risk_level if e else "medium",
         })
 
+    # ── Detalle de TODOS los estudiantes (no solo en riesgo) ──────
+    # El "Reporte por Estudiante" debe listar a todos los estudiantes de la
+    # institución con su promedio real, grado y área. Se calcula el promedio
+    # desde QuizHistory (actividad real); los que aún no tienen quizzes
+    # aparecen con promedio 0 y riesgo "Sin actividad".
+    students_detail = []
+    if student_ids:
+        agg_rows = (
+            db.query(
+                QuizHistory.user_id,
+                func.avg(QuizHistory.performance_score).label("avg_score"),
+                func.count(QuizHistory.id).label("attempts"),
+            )
+            .filter(
+                QuizHistory.user_id.in_(student_ids),
+                QuizHistory.performance_score != None,
+            )
+            .group_by(QuizHistory.user_id)
+            .all()
+        )
+        avg_by_student: dict[int, float] = {r.user_id: float(r.avg_score or 0) for r in agg_rows}
+        attempts_by_student: dict[int, int] = {r.user_id: int(r.attempts or 0) for r in agg_rows}
+
+        # Riesgo por estudiante (desde Enrollment) para mostrar el estado real.
+        risk_by_student: dict[int, str] = {}
+        enroll_rows = (
+            db.query(Enrollment.student_id, Enrollment.risk_level)
+            .filter(
+                Enrollment.student_id.in_(student_ids),
+                Enrollment.is_active == True,
+            )
+            .all()
+        )
+        for sid, rl in enroll_rows:
+            if rl in ("medium", "high"):
+                risk_by_student[sid] = rl
+
+        for st in students_q.order_by(User.full_name).all():
+            sid = st.id
+            raw_avg = avg_by_student.get(sid, 0.0)
+            attempts = attempts_by_student.get(sid, 0)
+            risk = risk_by_student.get(sid, "none")
+            students_detail.append({
+                "name":     st.full_name or st.username,
+                "grade":    st.grade or "—",
+                "avg":      round(raw_avg / 10, 1),        # 0-100 → 0-10
+                "subject":  st.subject_area or "—",
+                "risk":     risk if risk != "none" else ("Sin actividad" if attempts == 0 else "normal"),
+                "attempts": attempts,
+            })
+
+        # Ordenar: en riesgo primero, luego por promedio desc.
+        risk_prio = {"high": 0, "medium": 1, "normal": 2, "none": 3, "Sin actividad": 3}
+        students_detail.sort(key=lambda x: (risk_prio.get(x["risk"], 3), -x["avg"]))
+
     # ── Distribución por áreas (clases por materia) ───────────────
     areas: dict[str, int] = {}
     for c in groups_q.all():
@@ -261,6 +332,7 @@ async def get_super_dashboard(
         "at_risk_count":  at_risk_count,
         "teacher_ranking": teacher_ranking[:10],
         "at_risk_detail":  at_risk_detail,
+        "students_detail": students_detail,
         "areas_data":      areas_data[:8],
     }
 
@@ -302,6 +374,20 @@ async def get_super_alerts(
             st = db.query(User).filter(User.id == e.student_id).first()
             name = st.full_name or st.username if st else "Estudiante"
 
+            # Datos compartidos a todas las alertas del estudiante en esta clase
+            common = {
+                "studentId":   e.student_id,
+                "studentName": name,
+                "classroom":   c.name,
+                "grade":       st.grade if st else None,
+                "subject":     c.subject,
+                "averageScore": round(float(e.average_score or 0), 1),
+                "totalSessions": int(e.total_sessions or 0),
+                "totalTimeMinutes": int(e.total_time_minutes or 0),
+                "riskLevel":    e.risk_level,
+                "riskFactors":  e.risk_factors or [],
+            }
+
             if e.last_activity:
                 days_inactive = (datetime.utcnow() - e.last_activity).days
                 if days_inactive >= 7:
@@ -315,6 +401,8 @@ async def get_super_alerts(
                         "affectedLabel": "estudiante",
                         "time": f"Hace {days_inactive} días",
                         "resolved": False,
+                        "daysInactive": days_inactive,
+                        **common,
                     })
             elif e.total_sessions == 0:
                 alerts.append({
@@ -327,6 +415,7 @@ async def get_super_alerts(
                     "affectedLabel": "estudiante",
                     "time": "Pendiente",
                     "resolved": False,
+                    **common,
                 })
 
             if e.total_sessions >= 3 and e.average_score < 40:
@@ -340,6 +429,7 @@ async def get_super_alerts(
                     "affectedLabel": "estudiante",
                     "time": "Actual",
                     "resolved": False,
+                    **common,
                 })
 
             if e.risk_level in ("medium", "high"):
@@ -353,6 +443,7 @@ async def get_super_alerts(
                     "affectedLabel": "estudiante",
                     "time": "Reciente",
                     "resolved": False,
+                    **common,
                 })
 
     priority_order = {"alta": 0, "media": 1, "baja": 2}

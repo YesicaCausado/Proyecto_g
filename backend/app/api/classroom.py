@@ -171,15 +171,32 @@ async def list_enrolled_classrooms(
         Enrollment.is_active == True,
     ).all()
 
+    if not enrollments:
+        return ClassroomListResponse(classrooms=[], total=0)
+
+    classroom_ids = [e.classroom_id for e in enrollments]
+
+    # 1 sola consulta para las clases activas (en lugar de 1 por inscripción)
+    classrooms = db.query(Classroom).filter(
+        Classroom.id.in_(classroom_ids),
+        Classroom.is_active == True,
+    ).all()
+    classrooms_by_id = {c.id: c for c in classrooms}
+
+    # 1 sola consulta para los contadores de estudiantes de todas las clases
+    counts = db.query(
+        Enrollment.classroom_id, func.count(Enrollment.id).label("cnt")
+    ).filter(
+        Enrollment.classroom_id.in_(classroom_ids),
+        Enrollment.is_active == True,
+    ).group_by(Enrollment.classroom_id).all()
+    counts_map = {cid: cnt for (cid, cnt) in counts}
+
     result = []
     for e in enrollments:
-        c = db.query(Classroom).filter(Classroom.id == e.classroom_id).first()
-        if not c or not c.is_active:
+        c = classrooms_by_id.get(e.classroom_id)
+        if c is None:
             continue
-        student_count = db.query(Enrollment).filter(
-            Enrollment.classroom_id == c.id,
-            Enrollment.is_active == True,
-        ).count()
         result.append(ClassroomResponse(
             id=c.id,
             teacher_id=c.teacher_id,
@@ -191,7 +208,7 @@ async def list_enrolled_classrooms(
             is_active=c.is_active,
             max_students=c.max_students,
             color=getattr(c, 'color', '#2E6FDB') or '#2E6FDB',
-            student_count=student_count,
+            student_count=counts_map.get(c.id, 0),
             created_at=c.created_at,
         ))
 
@@ -291,17 +308,24 @@ async def get_student_classroom_detail(
     ).order_by(ClassroomBot.order_index).all()
 
     bots = []
-    for a in assignments:
-        bot = db.query(ExpertBot).filter(ExpertBot.id == a.bot_id).first()
-        if bot:
-            bots.append(ClassroomBotResponse(
-                bot_id=bot.id,
-                name=bot.name,
-                description=bot.description or "",
-                category=bot.category,
-                is_required=a.is_required,
-                order_index=a.order_index,
-            ))
+    if assignments:
+        bot_ids = [a.bot_id for a in assignments]
+        # 1 sola consulta para todos los bots (en lugar de 1 por bot)
+        bot_map = {
+            b.id: b
+            for b in db.query(ExpertBot).filter(ExpertBot.id.in_(bot_ids)).all()
+        }
+        for a in assignments:
+            bot = bot_map.get(a.bot_id)
+            if bot:
+                bots.append(ClassroomBotResponse(
+                    bot_id=bot.id,
+                    name=bot.name,
+                    description=bot.description or "",
+                    category=bot.category,
+                    is_required=a.is_required,
+                    order_index=a.order_index,
+                ))
 
     return ClassroomStudentDetailResponse(
         id=classroom.id,
@@ -436,9 +460,15 @@ async def list_students(
     ).all()
 
     result = []
-    for e in enrollments:
-        student = db.query(User).filter(User.id == e.student_id).first()
-        result.append(_enrollment_to_response(e, student))
+    if enrollments:
+        student_ids = [e.student_id for e in enrollments]
+        # 1 sola consulta para todos los estudiantes (en lugar de 1 por estudiante)
+        students_by_id = {
+            u.id: u
+            for u in db.query(User).filter(User.id.in_(student_ids)).all()
+        }
+        for e in enrollments:
+            result.append(_enrollment_to_response(e, students_by_id.get(e.student_id)))
 
     return result
 
@@ -513,6 +543,51 @@ async def assign_bot_to_classroom(
     return {"message": f"Bot '{bot.name}' asignado a la clase '{classroom.name}'"}
 
 
+@router.get("/{classroom_id}/available-bots")
+async def list_available_bots(
+    classroom_id: int,
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(require_teacher_module("neurobots")),
+    db: Session = Depends(get_db),
+):
+    """Lista los bots del profesor (aún no asignados a esta clase) elegibles
+    para compartir con la clase. Usado por el frontend del profesor para
+    mostrar el selector 'Asignar a clase'."""
+    require_teacher(current_user)
+
+    classroom = db.query(Classroom).filter(
+        Classroom.id == classroom_id,
+        Classroom.teacher_id == current_user.id,
+    ).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Clase no encontrada")
+
+    assigned_ids = set(
+        row[0]
+        for row in db.query(ClassroomBot.bot_id).filter(
+            ClassroomBot.classroom_id == classroom_id
+        ).all()
+    )
+
+    bots = (
+        db.query(ExpertBot)
+        .filter(ExpertBot.creator_id == current_user.id)
+        .order_by(ExpertBot.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for bot in bots:
+        result.append({
+            "bot_id": bot.id,
+            "name": bot.name,
+            "subject": bot.category or "",
+            "assigned": bot.id in assigned_ids,
+        })
+
+    return {"bots": result, "total": len(result)}
+
+
 @router.get("/{classroom_id}/bots")
 async def list_classroom_bots(
     classroom_id: int,
@@ -526,17 +601,23 @@ async def list_classroom_bots(
     ).order_by(ClassroomBot.order_index).all()
 
     result = []
-    for a in assignments:
-        bot = db.query(ExpertBot).filter(ExpertBot.id == a.bot_id).first()
-        if bot:
-            result.append({
-                "bot_id": bot.id,
-                "name": bot.name,
-                "description": bot.description,
-                "category": bot.category,
-                "is_required": a.is_required,
-                "order_index": a.order_index,
-            })
+    if assignments:
+        bot_ids = [a.bot_id for a in assignments]
+        bot_map = {
+            b.id: b
+            for b in db.query(ExpertBot).filter(ExpertBot.id.in_(bot_ids)).all()
+        }
+        for a in assignments:
+            bot = bot_map.get(a.bot_id)
+            if bot:
+                result.append({
+                    "bot_id": bot.id,
+                    "name": bot.name,
+                    "description": bot.description,
+                    "category": bot.category,
+                    "is_required": a.is_required,
+                    "order_index": a.order_index,
+                })
 
     return {"bots": result, "total": len(result)}
 
@@ -611,10 +692,17 @@ async def get_classroom_stats(
     students_at_risk = sum(1 for e in enrollments if e.risk_level in ("medium", "high"))
 
     # Top performers y estudiantes con dificultades
+    # 1 sola consulta para todos los estudiantes (evita N+1 en ambos bucles)
+    student_ids = [e.student_id for e in enrollments]
+    students_by_id = {
+        u.id: u
+        for u in db.query(User).filter(User.id.in_(student_ids)).all()
+    }
+
     sorted_by_score = sorted(enrollments, key=lambda e: e.average_score, reverse=True)
     top_performers = []
     for e in sorted_by_score[:5]:
-        student = db.query(User).filter(User.id == e.student_id).first()
+        student = students_by_id.get(e.student_id)
         if student:
             top_performers.append({
                 "name": student.full_name or student.username,
@@ -625,7 +713,7 @@ async def get_classroom_stats(
     struggling = []
     for e in enrollments:
         if e.risk_level in ("medium", "high"):
-            student = db.query(User).filter(User.id == e.student_id).first()
+            student = students_by_id.get(e.student_id)
             if student:
                 struggling.append({
                     "name": student.full_name or student.username,
@@ -705,9 +793,16 @@ async def get_classroom_alerts(
         Enrollment.is_active == True,
     ).all()
 
+    # 1 sola consulta para todos los estudiantes (evita N+1 en el bucle)
+    student_ids = [e.student_id for e in enrollments]
+    students_by_id = {
+        u.id: u
+        for u in db.query(User).filter(User.id.in_(student_ids)).all()
+    } if student_ids else {}
+
     alerts = []
     for e in enrollments:
-        student = db.query(User).filter(User.id == e.student_id).first()
+        student = students_by_id.get(e.student_id)
         if not student:
             continue
 

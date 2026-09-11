@@ -10,7 +10,9 @@
  *  - Temblor de voz → varianza de amplitud (voice_tremor)
  *  - Silencio acumulado → silence_duration_ms
  *  - Velocidad de habla estimada → speech_rate_wpm (por eventos de actividad)
- *  - Palabras de relleno → no detectables sin STT; valor fijo=0
+ *  - Palabras de relleno → heurístico sin STT: cuenta short low-pitch utterances
+ *    (filled pauses tipo "eh"/"um") rodeadas de silencio. Es una ESTIMACIÓN,
+ *    no un conteo literal de palabras.
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
@@ -20,7 +22,7 @@ export interface VoiceSnapshot {
   speech_rate_wpm: number;     // palabras/min estimadas
   voice_tremor: number;        // 0-1: varianza de amplitud normalizada
   energy_level: number;        // 0-1: energía espectral normalizada
-  filler_words_count: number;  // 0 (sin STT)
+  filler_words_count: number;  // estimación heurística de muletillas (sin STT)
   silence_duration_ms: number; // ms de silencio acumulado en ventana
   is_active: boolean;          // hay voz en este momento
 }
@@ -47,6 +49,18 @@ const ANALYSIS_INTERVAL_MS = 150; // actualizar ~7 veces/seg
 const SILENCE_THRESHOLD = 0.01;   // RMS por debajo = silencio
 const SPEECH_WINDOW_MS = 5000;    // ventana para speech rate
 
+// ── Detección heurística de muletillas ("eh"/"um") ──
+// Un "filled pause" es un segmento de voz MUY corto (entre UTT_MIN y UTT_MAX ms)
+// rodeado de silencio. Sin reconocimiento de voz no podemos distinguir la
+// palabra exacta, pero la duración de la emisión + su baja energía distinguen
+// una muletilla de una palabra con contenido. Es una ESTIMACIÓN honesta: se
+// etiqueta como "heurístico", no como conteo de palabras real.
+const UTT_MIN_MS = 60;      // descarta chasquidos/ruidos de micrófono
+const UTT_MAX_MS = 450;     // una palabra con contenido suele superar esto
+const FILLER_PITCH_HZ = 220; // energía espectral baja → sonido vocálico sostenido
+const FILLER_WINDOW_MS = 15000; // ventana acumulada (reinicio al arrancar)
+const MAX_CONSEC_FILLERS = 8;    // techo para no inflar el conteo por ruido
+
 export function useVoiceProsody(): VoiceProsodyControls {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -60,6 +74,12 @@ export function useVoiceProsody(): VoiceProsodyControls {
   const silenceAccumRef = useRef<number>(0);
   const lastFrameTimeRef = useRef<number>(Date.now());
   const wasActiveRef = useRef<boolean>(false);
+
+  // ── Estado para detección de muletillas (filled pauses) ──
+  const utteranceStartRef = useRef<number>(0);       // inicio de la emisión actual
+  const lastUtterPitchRef = useRef<number>(0);       // pitch de la última emisión
+  const fillerLogRef = useRef<number[]>([]);         // timestamps de muletillas detectadas
+  const consecFillerRef = useRef<number>(0);         // racha de muletillas (anti-ruido)
 
   const [snapshot, setSnapshot] = useState<VoiceSnapshot>(DEFAULT_SNAPSHOT);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -118,7 +138,6 @@ export function useVoiceProsody(): VoiceProsodyControls {
       // onset de voz
       activityLog.current.push(now);
     }
-    wasActiveRef.current = isVoiceActive;
 
     // limpiar actividad vieja
     const cutoff = now - SPEECH_WINDOW_MS;
@@ -140,6 +159,39 @@ export function useVoiceProsody(): VoiceProsodyControls {
       totalPower += power;
     }
     const pitch_mean_hz = totalPower > 0 ? Math.min(weightedSum / totalPower, 4000) : 0;
+
+    // --- Detección de muletillas (filled pauses) ---
+    // Seguimos las transiciones de voz activa→silencio: cuando termina una
+    // emisión de voz, evaluamos su duración y pitch para decidir si fue una
+    // muletilla ("eh"/"um") o una palabra con contenido.
+    if (isVoiceActive && !wasActiveRef.current) {
+      // onset de la emisión
+      utteranceStartRef.current = now;
+      lastUtterPitchRef.current = pitch_mean_hz > 0 ? pitch_mean_hz : 0;
+    } else if (!isVoiceActive && wasActiveRef.current) {
+      // offset de la emisión → evaluar duración
+      const dur = now - utteranceStartRef.current;
+      if (dur >= UTT_MIN_MS && dur <= UTT_MAX_MS) {
+        // Emisión corta. Si además tiene pitch bajo (sonido vocálico sostenido),
+        // la tratamos como muletilla. Un techo anti-ruido evita inflar el conteo.
+        const isFillerPitch = lastUtterPitchRef.current > 0 && lastUtterPitchRef.current <= FILLER_PITCH_HZ;
+        if (isFillerPitch && consecFillerRef.current < MAX_CONSEC_FILLERS) {
+          fillerLogRef.current.push(now);
+          consecFillerRef.current += 1;
+        }
+      } else if (dur > UTT_MAX_MS) {
+        // Emisión larga → palabra con contenido, reinicia la racha anti-ruido.
+        consecFillerRef.current = 0;
+      }
+      utteranceStartRef.current = 0;
+      lastUtterPitchRef.current = 0;
+    }
+    wasActiveRef.current = isVoiceActive;
+
+    // limpiar muletillas viejas (ventana de 15 s)
+    const fillerCutoff = now - FILLER_WINDOW_MS;
+    fillerLogRef.current = fillerLogRef.current.filter((t) => t > fillerCutoff);
+    const filler_words_count = fillerLogRef.current.length;
 
     // --- Energía (suma normalizada de frecuencias relevantes 80-4000 Hz) ---
     const minBin = Math.floor(80 / (nyquist / bufferLen));
@@ -163,7 +215,7 @@ export function useVoiceProsody(): VoiceProsodyControls {
       speech_rate_wpm: parseFloat(speech_rate_wpm.toFixed(1)),
       voice_tremor: parseFloat(voice_tremor.toFixed(3)),
       energy_level: parseFloat(energy_level.toFixed(3)),
-      filler_words_count: 0,
+      filler_words_count: filler_words_count,
       silence_duration_ms: Math.round(silenceAccumRef.current),
       is_active: isVoiceActive,
     });
@@ -223,6 +275,10 @@ export function useVoiceProsody(): VoiceProsodyControls {
     intervalRef.current = null;
     rmsHistory.current = [];
     activityLog.current = [];
+    fillerLogRef.current = [];
+    utteranceStartRef.current = 0;
+    lastUtterPitchRef.current = 0;
+    consecFillerRef.current = 0;
 
     setIsStreaming(false);
     setSnapshot(DEFAULT_SNAPSHOT);

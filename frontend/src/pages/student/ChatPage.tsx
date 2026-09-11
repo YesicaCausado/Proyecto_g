@@ -73,6 +73,49 @@ const detectSkillFromText = (text: string): string => {
   return "matematicas";
 };
 
+type FacialSnapshotLike = {
+  valence: number;
+  arousal: number;
+  attention_score: number;
+  brow_furrow: number;
+  smile_intensity: number;
+  gaze_direction: string;
+};
+
+/**
+ * Mapea el snapshot REAL de MediaPipe a la emoción discreta que el backend
+ * entiende. Cubre el espectro completo (no solo happy/sad/neutral/confused):
+ *   happy | sad | surprised | confused | focused | bored | fearful | neutral
+ * Los umbrales se apoyan en el modelo circumplejo (valencia × arousal) y en las
+ * señales de ceño/atención/mirada que ya detecta useFacialDetection.
+ */
+const mapFacialEmotion = (s: FacialSnapshotLike): string => {
+  const { valence, arousal, attention_score: attn, brow_furrow, smile_intensity, gaze_direction } = s;
+
+  // Mirada ausente sostenida → atención baja (bored/away)
+  if (gaze_direction === "away" || attn < 0.35) return "bored";
+
+  // Confusión / esfuerzo: ceño fruncido con arousal medio-bajo
+  if (brow_furrow > 0.45 && arousal < 0.55) return "confused";
+
+  // Frustración/enfado: ceño muy marcado + arousal alto + valencia negativa
+  if (brow_furrow > 0.55 && valence < -0.2) return "fearful";
+
+  // Sorpresa: arousal alto + valencia neutra (jaw/motion domina el arousal)
+  if (arousal > 0.75 && valence > -0.15 && valence < 0.3) return "surprised";
+
+  // Alegría: sonrisa y valencia positiva
+  if (smile_intensity > 0.25 && valence > 0.2) return "happy";
+
+  // Enfocado: atención alta con arousal medio y valencia neutra-positiva
+  if (attn > 0.7 && arousal >= 0.35 && valence > 0.0 && brow_furrow < 0.3) return "focused";
+
+  // Tristeza: valencia muy negativa sin ceño agresivo
+  if (valence < -0.3) return "sad";
+
+  return "neutral";
+};
+
 export default function ChatPage() {
   const [searchParams] = useSearchParams();
   const { slug } = useParams<{ slug: string }>();
@@ -325,14 +368,10 @@ export default function ChatPage() {
         message_length:    behavioralMetrics.message_length,
         ...(facial.isStreaming && facial.snapshot.is_active ? {
           facial_data: {
-            // Emociones VÁLIDAS para el backend (happy/sad/neutral/confused/focused).
-            emotion: facial.snapshot.valence > 0.2
-              ? "happy"
-              : facial.snapshot.valence < -0.2
-                ? "sad"
-                : facial.snapshot.brow_furrow > 0.45
-                  ? "confused"
-                  : "neutral",
+            // Emociones VÁLIDAS para el backend (happy/sad/neutral/confused/focused/bored/surprised).
+            // Se mapea el espectro REAL del snapshot (valencia + arousal + ceño +
+            // atención + mirada) en lugar de las 4 etiquetas anteriores.
+            emotion: mapFacialEmotion(facial.snapshot),
             valence: facial.snapshot.valence,
             arousal: facial.snapshot.arousal,
             attention_score: facial.snapshot.attention_score,
