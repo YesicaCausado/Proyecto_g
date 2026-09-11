@@ -58,7 +58,7 @@ def _post_to_dict(post: Post, current_user_id: int, db: Session) -> dict:
         comments.append({
             "id": c.id,
             "author_id": c.author_id,
-            "author_name": author.full_name or author.username if author else "?",
+            "author_name": (author.full_name or author.username) if author else "?",
             "author_role": author.role if author else "estudiante",
             "content": c.content,
             "created_at": c.created_at.isoformat(),
@@ -72,7 +72,7 @@ def _post_to_dict(post: Post, current_user_id: int, db: Session) -> dict:
         "classroom_id": post.classroom_id,
         "classroom_name": classroom.name if classroom else "",
         "teacher_id": post.teacher_id,
-        "teacher_name": teacher.full_name or teacher.username if teacher else "Profesor",
+        "teacher_name": (teacher.full_name or teacher.username) if teacher else "Profesor",
         "post_type": post.post_type,
         "title": post.title,
         "content": post.content,
@@ -279,7 +279,7 @@ async def list_comments(
         result.append({
             "id": c.id,
             "author_id": c.author_id,
-            "author_name": author.full_name or author.username if author else "?",
+            "author_name": (author.full_name or author.username) if author else "?",
             "author_role": author.role if author else "estudiante",
             "content": c.content,
             "created_at": c.created_at.isoformat(),

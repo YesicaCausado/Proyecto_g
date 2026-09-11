@@ -18,6 +18,7 @@ interface Comment {
 
 interface Post {
   id: string;
+  classroomId?: string;
   type: PostType;
   title: string;
   content: string;
@@ -29,11 +30,15 @@ interface Post {
   dueDate?: string;
 }
 
-const GROUPS = ['Matemáticas 9A','Física 10B','Álgebra 8C','Cálculo 11A'];
+interface Classroom {
+  id: string;
+  name: string;
+}
 
 function mapPost(raw: any): Post {
   return {
     id:          String(raw.id),
+    classroomId: raw.classroom_id != null ? String(raw.classroom_id) : undefined,
     type:        (raw.post_type ?? raw.type ?? 'anuncio') as PostType,
     title:       raw.title,
     content:     raw.content,
@@ -61,15 +66,24 @@ const REACTION_EMOJIS = ['👍','❤️','😊','😮','😂','💪'];
 export default function TableroTab() {
   const { user } = useAuth();
   const [posts,       setPosts]       = useState<Post[]>([]);
+  const [classrooms,  setClassrooms]  = useState<Classroom[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showCompose, setShowCompose] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState('Todos los grupos');
+  const [selectedGroup, setSelectedGroup] = useState('all');
   const [commentText,   setCommentText]   = useState<Record<string, string>>({});
   const [expandComments, setExpandComments] = useState<Set<string>>(new Set());
   const [menuPostId,  setMenuPostId]  = useState<string | null>(null);
+  const [publishing,  setPublishing]  = useState(false);
+  const [publishError, setPublishError] = useState('');
 
   const fileRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ type:'anuncio' as PostType, title:'', content:'', group:'Todos los grupos', dueDate:'', attachments: [] as string[] });
+  const [form, setForm] = useState({ type:'anuncio' as PostType, title:'', content:'', classroomId:'', dueDate:'', attachments: [] as string[] });
+
+  useEffect(() => {
+    api.get('/classrooms/my-classes')
+      .then(r => setClassrooms((r.data.classrooms ?? []).map((c: any) => ({ id: String(c.id), name: c.name }))))
+      .catch(() => setClassrooms([]));
+  }, []);
 
   useEffect(() => {
     api.get('/posts')
@@ -118,30 +132,34 @@ export default function TableroTab() {
 
   const handlePublish = async () => {
     if (!form.title.trim() || !form.content.trim()) return;
+    if (!form.classroomId) {
+      setPublishError('Selecciona un grupo al que publicar');
+      return;
+    }
+    setPublishing(true);
+    setPublishError('');
     try {
       const res = await api.post('/posts', {
+        classroom_id: Number(form.classroomId),
         post_type: form.type,
         title:     form.title.trim(),
         content:   form.content.trim(),
         due_date:  form.dueDate || null,
+        attachments: form.attachments,
       });
       setPosts(prev => [mapPost(res.data), ...prev]);
-    } catch {
-      const newPost: Post = {
-        id: Date.now().toString(), type: form.type, title: form.title.trim(),
-        content: form.content.trim(), group: form.group,
-        date: new Date().toISOString().slice(0,10),
-        dueDate: form.dueDate || undefined,
-        reactions: [], comments: [], attachments: form.attachments,
-      };
-      setPosts(prev => [newPost, ...prev]);
+      setShowCompose(false);
+      setForm({ type:'anuncio', title:'', content:'', classroomId:'', dueDate:'', attachments:[] });
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail ?? 'No se pudo guardar la publicación. Intenta de nuevo.';
+      setPublishError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setPublishing(false);
     }
-    setShowCompose(false);
-    setForm({ type:'anuncio', title:'', content:'', group:'Todos los grupos', dueDate:'', attachments:[] });
   };
 
   const filtered = posts.filter(p =>
-    selectedGroup === 'Todos los grupos' || p.group === 'Todos los grupos' || p.group === selectedGroup
+    selectedGroup === 'all' || p.classroomId === selectedGroup
   );
 
   return (
@@ -157,11 +175,11 @@ export default function TableroTab() {
       <div className="flex items-center gap-3 flex-wrap">
         <select value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)}
           className="px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm text-[#37352F] focus:outline-none focus:ring-1 focus:ring-[#2E6FDB] bg-white">
-          <option>Todos los grupos</option>
-          {GROUPS.map(g => <option key={g}>{g}</option>)}
+          <option value="all">Todos los grupos</option>
+          {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <div className="flex-1" />
-        <button onClick={() => setShowCompose(true)}
+        <button onClick={() => { setPublishError(''); setShowCompose(true); }}
           className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm">
           <Plus className="w-4 h-4" /> Nueva publicación
         </button>
@@ -317,11 +335,11 @@ export default function TableroTab() {
               </div>
               {/* Grupo */}
               <div>
-                <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Grupo</label>
-                <select value={form.group} onChange={e => setForm(p=>({...p,group:e.target.value}))}
+                <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Grupo *</label>
+                <select value={form.classroomId} onChange={e => setForm(p=>({...p,classroomId:e.target.value}))}
                   className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB] bg-white">
-                  <option>Todos los grupos</option>
-                  {GROUPS.map(g => <option key={g}>{g}</option>)}
+                  <option value="">Selecciona un grupo</option>
+                  {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               {/* Título */}
@@ -358,12 +376,19 @@ export default function TableroTab() {
                 </button>
               </div>
             </div>
-            <div className="px-6 pb-5 flex justify-end gap-2">
-              <button onClick={() => setShowCompose(false)} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
-              <button onClick={handlePublish} disabled={!form.title.trim() || !form.content.trim()}
-                className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
-                <Send className="w-4 h-4" /> Publicar
-              </button>
+            <div className="px-6 pb-5 flex flex-col gap-2">
+              {publishError && (
+                <p className="text-xs text-[#E03E3E] bg-red-50 border border-red-100 rounded-lg px-3 py-2">{publishError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowCompose(false)} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
+                <button onClick={handlePublish} disabled={!form.title.trim() || !form.content.trim() || !form.classroomId || publishing}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
+                  {publishing
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Publicando…</>
+                    : <><Send className="w-4 h-4" /> Publicar</>}
+                </button>
+              </div>
             </div>
           </div>
         </div>

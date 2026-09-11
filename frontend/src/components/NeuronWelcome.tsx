@@ -7,7 +7,8 @@
  * ─────────────────────────────────────────────────────────────
  */
 import { Flame } from 'lucide-react';
-import NeuronRobotStatic from './NeuronRobotStatic';
+import RobotCanvas from '../pages/auth/components/robot/RobotCanvas';
+import { RobotErrorBoundary } from '../pages/auth/components/robot/RobotErrorBoundary';
 import { useLicense } from '../context/LicenseContext';
 import { planColor } from '../styles/plan';
 
@@ -79,9 +80,15 @@ export default function NeuronWelcome({ name, subtitle, streakDays }: NeuronWelc
         )}
       </div>
 
-      {/* ── Robot Neuron — derecha (SVG estático, sin WebGL) ── */}
-      <div className="absolute right-0 top-0 bottom-0 w-[44%] sm:w-[42%] flex items-end justify-center pointer-events-none overflow-hidden">
-        <NeuronRobotStatic size={150} className="opacity-90" />
+      {/* ── Robot Neuron — derecha (robot.glb 3D real) ── */}
+      <div className="absolute right-0 top-0 bottom-0 w-[44%] sm:w-[42%] pointer-events-none overflow-hidden">
+        <RobotErrorBoundary>
+          <RobotCanvas
+            robotState="idle"
+            transparent
+            className="h-full w-full"
+          />
+        </RobotErrorBoundary>
       </div>
 
       {/* ── Burbuja de Neuron ────────────────────────────────── */}

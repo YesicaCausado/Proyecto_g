@@ -3,7 +3,7 @@ import { useSearchParams, useParams } from "react-router-dom";
 import api from "../../services/api";
 import { COMPETENCIES, findCompetency } from "../../data/competencies";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
-import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions } from "lucide-react";
+import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions, Plus, MessageSquare, Trash2, History, RefreshCw } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
