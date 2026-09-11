@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, Users, GraduationCap, BookOpen, User, Paperclip, Clock, CheckCheck, Plus, Trash2, X, Download } from 'lucide-react';
+import { MessageSquare, Send, Users, GraduationCap, BookOpen, User, Paperclip, Clock, CheckCheck, Plus, Trash2, X } from 'lucide-react';
 import api from '../../../services/api';
 import Messaging from '../../../components/Messaging';
 
@@ -29,6 +29,8 @@ export default function MensajeriaTab() {
   const [sent, setSent]           = useState<SentMsg[]>([]);
   const [sending, setSending]     = useState(false);
   const [success, setSuccess]     = useState('');
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [teacherCount, setTeacherCount] = useState<number | null>(null);
   const [studentCount, setStudentCount] = useState<number | null>(null);
   const [grades, setGrades]             = useState<string[]>([]);
@@ -52,15 +54,19 @@ export default function MensajeriaTab() {
     if (!subject.trim() || !body.trim()) return;
     setSending(true);
     try {
-      const res = await api.post('/super/broadcasts', {
-        subject,
-        body,
-        recipient_type: recipient,
-        grade: recipient === 'grado' ? grade : undefined,
-        scheduled_at: scheduleDate || undefined,
+      const form = new FormData();
+      form.append('subject', subject);
+      form.append('body', body);
+      form.append('recipient_type', recipient);
+      if (recipient === 'grado') form.append('grade', grade);
+      if (attachment) form.append('file', attachment);
+      const res = await api.post('/super/broadcasts', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       setSent(prev => [res.data, ...prev]);
       setSubject(''); setBody(''); setScheduleDate('');
+      setAttachment(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setSuccess('¡Mensaje enviado exitosamente!');
       setTimeout(() => setSuccess(''), 4000);
       setView('sent');
@@ -150,12 +156,30 @@ export default function MensajeriaTab() {
               className="px-3 py-2 border border-[#E9E9E7] rounded-md text-sm outline-none focus:ring-1 focus:ring-[#0066FF] bg-white" />
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-[#E9E9E7]">
-            <button className="flex items-center gap-2 text-sm text-[#787774] hover:text-[#37352F] transition-colors">
-              <Paperclip className="w-4 h-4" /> Adjuntar archivo
-            </button>
+          <div className="flex items-center justify-between pt-2 border-t border-[#E9E9E7] gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={e => setAttachment(e.target.files?.[0] ?? null)}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 text-sm text-[#787774] hover:text-[#37352F] transition-colors"
+              >
+                <Paperclip className="w-4 h-4" /> Adjuntar archivo
+              </button>
+              {attachment && (
+                <span className="flex items-center gap-1.5 text-xs bg-[#F7F6F3] border border-[#E9E9E7] rounded-full px-2.5 py-1 text-[#37352F] min-w-0">
+                  <Paperclip className="w-3 h-3 text-[#787774] flex-shrink-0" />
+                  <span className="truncate max-w-[160px]">{attachment.name}</span>
+                  <button onClick={() => { setAttachment(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="text-[#787774] hover:text-[#E03E3E] flex-shrink-0"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+            </div>
             <div className="flex gap-2">
-              <button onClick={() => { setSubject(''); setBody(''); }}
+              <button onClick={() => { setSubject(''); setBody(''); setAttachment(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
                 className="px-4 py-2 border border-[#E9E9E7] rounded-md text-sm text-[#787774] hover:bg-[#F7F6F3] transition-colors">
                 Limpiar
               </button>
@@ -186,6 +210,11 @@ export default function MensajeriaTab() {
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-[#191919]">{msg.subject}</p>
                       <p className="text-xs text-[#787774]">De: {msg.sender}</p>
+                      {msg.attachment?.name && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-[#787774] mt-1">
+                          <Paperclip className="w-3 h-3" /> {msg.attachment.name}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3.5">
                       <span className="inline-flex items-center gap-1 text-xs bg-[#F7F6F3] px-2 py-0.5 rounded-full text-[#787774] border border-[#E9E9E7]">

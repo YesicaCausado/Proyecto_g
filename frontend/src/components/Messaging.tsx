@@ -177,7 +177,9 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
       const form = new FormData();
       form.append('content', content);
       if (file) form.append('file', file);
-      await api.post(`/messages/conversations/${active.otherId}`, form);
+      await api.post(`/messages/conversations/${active.otherId}`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
     } catch {
       setText(content);
       setAttachment(file);

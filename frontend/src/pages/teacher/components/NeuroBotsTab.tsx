@@ -150,23 +150,15 @@ interface ClassOption {
   grade: string;
 }
 
-interface AssignedClass {
-  classroom_id: number;
-  classroom_name: string;
-  is_required: boolean;
-}
-
 // ── Modal para compartir / asignar el bot a clases ────────────────────────────
-function ShareBotModal({ bot, onClose, onSaved }: {
+function ShareBotModal({ bot, onClose }: {
   bot: NeuroBot;
   onClose: () => void;
-  onSaved: () => void;
 }) {
   const [classes,    setClasses]    = useState<ClassOption[]>([]);
   const [assigned,   setAssigned]   = useState<Set<string>>(new Set());
   const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState<string | null>(null);
-  const [current,    setCurrent]    = useState<AssignedClass[]>([]);
   const [error,      setError]      = useState('');
 
   useEffect(() => {
@@ -174,9 +166,8 @@ function ShareBotModal({ bot, onClose, onSaved }: {
       setLoading(true);
       setError('');
       try {
-        const [clsRes, botRes] = await Promise.all([
+        const [clsRes] = await Promise.all([
           api.get('/classrooms/my-classes'),
-          api.get(`/bots/${bot.id}`),
         ]);
         // Clases del profesor
         const clsList: ClassOption[] = (clsRes.data.classrooms ?? []).map((c: any) => ({
@@ -190,7 +181,6 @@ function ShareBotModal({ bot, onClose, onSaved }: {
         // Obtener a qué clases ya está asignado este bot
         // (consultamos la asignación en cada clase)
         const assignedSet = new Set<string>();
-        const curList: AssignedClass[] = [];
         await Promise.all(clsList.map(async (c) => {
           try {
             const r = await api.get(`/classrooms/${c.id}/bots`);
@@ -198,16 +188,10 @@ function ShareBotModal({ bot, onClose, onSaved }: {
             const found = botsInClass.find((b: any) => String(b.bot_id) === String(bot.id));
             if (found) {
               assignedSet.add(c.id);
-              curList.push({
-                classroom_id: Number(c.id),
-                classroom_name: c.name,
-                is_required: !!found.is_required,
-              });
             }
           } catch { /* ignore */ }
         }));
         setAssigned(assignedSet);
-        setCurrent(curList);
       } catch {
         setClasses([]);
       } finally {
@@ -225,7 +209,6 @@ function ShareBotModal({ bot, onClose, onSaved }: {
       if (isCurrentlyAssigned) {
         await api.delete(`/classrooms/${classId}/bots/${bot.id}`);
         setAssigned(prev => { const n = new Set(prev); n.delete(classId); return n; });
-        setCurrent(prev => prev.filter(c => String(c.classroom_id) !== classId));
       } else {
         await api.post(`/classrooms/${classId}/bots`, {
           bot_id: Number(bot.id),
@@ -233,8 +216,6 @@ function ShareBotModal({ bot, onClose, onSaved }: {
           order_index: 0,
         });
         setAssigned(prev => { const n = new Set(prev); n.add(classId); return n; });
-        const cls = classes.find(c => c.id === classId);
-        setCurrent(prev => [...prev, { classroom_id: Number(classId), classroom_name: cls?.name ?? '', is_required: false }]);
       }
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? 'No se pudo actualizar la asignación');
@@ -384,7 +365,7 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
   return (
     <div className="space-y-5">
       {showShare && (
-        <ShareBotModal bot={bot} onClose={() => setShowShare(false)} onSaved={() => {}} />
+        <ShareBotModal bot={bot} onClose={() => setShowShare(false)} />
       )}
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-[#787774] hover:text-[#37352F] transition-colors">
         ← NeuroBots
