@@ -1,13 +1,41 @@
 # Ignorar en el deploy de Vercel
+# ── Entornos virtuales y caches ──────────────────────────────────────────
+.venv
 backend/.venv
-backend/__pycache__
-backend/**/__pycache__
-backend/**/*.pyc
-backend/data/trained_bots/
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+
+# ── Frontend: NO debe ir al bundle de la función Python ──────────────────
+# (Vercel lo construye aparte con buildCommand → frontend/dist)
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# ── Backend: excluir TODO lo que no es código fuente ─────────────────────
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
 backend/tests/
 backend/scripts/
-backend/*.db
+backend/migrations/
 backend/server.log
 backend/.env
+backend/docs/
+backend/package-lock.json
+
+# ── Raíz ────────────────────────────────────────────────────────────────
 .env
-.venv
+.env.*
+docs/
+scripts/
+docker-compose.yml
+PLAN.md
+.git
+.gitignore
+README.md
+generate_hashes.py
+pyrightconfig.json
+backend/vercel.json
+backend/Dockerfile

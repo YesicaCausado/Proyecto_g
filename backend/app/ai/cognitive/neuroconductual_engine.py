@@ -64,13 +64,17 @@ REFERENCIAS CIENTÍFICAS DE LOS BASELINES
 
 import logging
 import math
+import statistics
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
+# NOTA: numpy fue removido para reducir el bundle de la función serverless en
+# Vercel (numpy ~35MB). Las operaciones se reemplazaron por stdlib:
+#   np.mean → statistics.mean | np.std → statistics.pstdev
+#   np.exp  → math.exp         | np.clip → min/max
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LOGGING
@@ -302,10 +306,11 @@ def softmax(scores: Dict[str, float], temperature: float = 1.0) -> Dict[str, flo
     temperature < 1 → distribución más concentrada (más certeza)
     """
     keys = list(scores.keys())
-    vals = np.array([scores[k] / temperature for k in keys], dtype=float)
-    vals -= vals.max()           # estabilidad numérica
-    exp_vals = np.exp(vals)
-    probs = exp_vals / exp_vals.sum()
+    vals = [scores[k] / temperature for k in keys]
+    max_val = max(vals)          # estabilidad numérica
+    exp_vals = [math.exp(v - max_val) for v in vals]
+    total = sum(exp_vals)
+    probs = [e / total for e in exp_vals]
     return {k: float(p) for k, p in zip(keys, probs)}
 
 
@@ -411,10 +416,10 @@ class InteractionRhythmAnalyzer:
         errors = sum(1 for e in evts if e.error_occurred)
 
         self.baseline = {
-            "avg_rt":    float(np.mean(rts))    if rts    else self._POPULATION_BASELINE["avg_rt"],
-            "std_rt":    float(np.std(rts))     if len(rts)>1 else self._POPULATION_BASELINE["std_rt"],
-            "avg_speed": float(np.mean(speeds)) if speeds else self._POPULATION_BASELINE["avg_speed"],
-            "avg_pause": float(np.mean(pauses)) if pauses else self._POPULATION_BASELINE["avg_pause"],
+            "avg_rt":    float(statistics.mean(rts))    if rts    else self._POPULATION_BASELINE["avg_rt"],
+            "std_rt":    float(statistics.pstdev(rts))     if len(rts)>1 else self._POPULATION_BASELINE["std_rt"],
+            "avg_speed": float(statistics.mean(speeds)) if speeds else self._POPULATION_BASELINE["avg_speed"],
+            "avg_pause": float(statistics.mean(pauses)) if pauses else self._POPULATION_BASELINE["avg_pause"],
             "error_rate": errors / max(len(evts), 1),
         }
         self._baseline_from_data = True
@@ -476,17 +481,17 @@ class InteractionRhythmAnalyzer:
         spd = [e.typing_speed_cpm  for e in events if e.typing_speed_cpm  > 10]
         pse = [e.pause_duration_ms  for e in events if e.pause_duration_ms  > 0]
 
-        avg_rt  = float(np.mean(rts)) if rts else self.baseline["avg_rt"]
-        std_rt  = float(np.std(rts))  if len(rts) > 1 else self.baseline["std_rt"]
-        avg_spd = float(np.mean(spd)) if spd else self.baseline["avg_speed"]
+        avg_rt  = float(statistics.mean(rts)) if rts else self.baseline["avg_rt"]
+        std_rt  = float(statistics.pstdev(rts))  if len(rts) > 1 else self.baseline["std_rt"]
+        avg_spd = float(statistics.mean(spd)) if spd else self.baseline["avg_speed"]
 
         # Tendencia: segunda mitad vs primera mitad
         rt_trend  = 0.0
         spd_decay = 0.0
         if len(rts) >= 6:
             h = len(rts) // 2
-            rt_trend  = (np.mean(rts[h:]) - np.mean(rts[:h])) / max(np.mean(rts[:h]), 1)
-            spd_decay = (np.mean(spd[:h]) - np.mean(spd[h:])) / max(np.mean(spd[:h]), 1) if len(spd) >= 6 else 0.0
+            rt_trend  = (statistics.mean(rts[h:]) - statistics.mean(rts[:h])) / max(statistics.mean(rts[:h]), 1)
+            spd_decay = (statistics.mean(spd[:h]) - statistics.mean(spd[h:])) / max(statistics.mean(spd[:h]), 1) if len(spd) >= 6 else 0.0
 
         # Coeficiente de variación del ritmo (intervalos entre eventos)
         intervals = []
@@ -494,7 +499,7 @@ class InteractionRhythmAnalyzer:
             dt = (events[i].timestamp - events[i-1].timestamp).total_seconds()
             if 0 < dt < 300:   # ignorar pausas mayores a 5 min (probablemente ausencia)
                 intervals.append(dt)
-        rhythm_cv = float(np.std(intervals) / max(np.mean(intervals), 0.01)) if len(intervals) >= 3 else 0.0
+        rhythm_cv = float(statistics.pstdev(intervals) / max(statistics.mean(intervals), 0.01)) if len(intervals) >= 3 else 0.0
 
         errors      = sum(1 for e in events if e.error_occurred)
         corrections = sum(1 for e in events if e.correction_made)
@@ -507,7 +512,7 @@ class InteractionRhythmAnalyzer:
             "avg_rt":       avg_rt,
             "std_rt":       std_rt,
             "avg_speed":    avg_spd,
-            "avg_pause":    float(np.mean(pse)) if pse else 0,
+            "avg_pause":    float(statistics.mean(pse)) if pse else 0,
             "rt_ratio":     avg_rt / max(self.baseline["avg_rt"], 1),
             "speed_ratio":  avg_spd / max(self.baseline["avg_speed"], 1),
             "rt_trend":     float(rt_trend),
@@ -755,20 +760,20 @@ class DecisionSequenceAnalyzer:
         conf_trend = 0.0
         if len(confs) >= 4:
             h = len(confs) // 2
-            conf_trend = float(np.mean(confs[h:])) - float(np.mean(confs[:h]))
+            conf_trend = float(statistics.mean(confs[h:])) - float(statistics.mean(confs[:h]))
 
         hes_rate   = sum(1 for d in decisions if d.changes_count > 0 or d.hesitation_pauses > 0) / n
-        depth_cv   = float(np.std(depths) / max(np.mean(depths), 1)) if len(depths) > 1 else 0.0
+        depth_cv   = float(statistics.pstdev(depths) / max(statistics.mean(depths), 1)) if len(depths) > 1 else 0.0
         accuracy   = self.total_correct / max(self.total_attempts, 1)
 
         return {
-            "avg_changes":    float(np.mean(changes)),
-            "avg_time_ms":    float(np.mean(times)) if times else 3200,
-            "avg_conf":       float(np.mean(confs)),
+            "avg_changes":    float(statistics.mean(changes)),
+            "avg_time_ms":    float(statistics.mean(times)) if times else 3200,
+            "avg_conf":       float(statistics.mean(confs)),
             "conf_trend":     conf_trend,
             "hesitation_rate": hes_rate,
-            "avg_backspaces": float(np.mean(backspaces)),
-            "avg_depth":      float(np.mean(depths)) if depths else 0,
+            "avg_backspaces": float(statistics.mean(backspaces)),
+            "avg_depth":      float(statistics.mean(depths)) if depths else 0,
             "depth_cv":       depth_cv,
             "success_chain":  float(self.success_chain),
             "failure_chain":  float(self.failure_chain),
@@ -889,9 +894,9 @@ class FacialMicroexpressionAnalyzer:
         blinks = [f.blink_rate for f in d if f.blink_rate > 0]
         attns  = [f.attention_score for f in d]
         if blinks:
-            self.baseline_blink = float(np.mean(blinks))
+            self.baseline_blink = float(statistics.mean(blinks))
         if attns:
-            self.baseline_attn  = float(np.mean(attns))
+            self.baseline_attn  = float(statistics.mean(attns))
         self._calibrated = True
         log.info("Facial calibrado: blink=%.1f/min attn=%.2f", self.baseline_blink, self.baseline_attn)
 
@@ -923,7 +928,7 @@ class FacialMicroexpressionAnalyzer:
         score.state_probs      = softmax(raw, temperature=0.8)
 
         confs = [d.emotion_confidence for d in recent if d.emotion_confidence > 0]
-        score.confidence = float(np.mean(confs)) * 0.90 if confs else 0.0
+        score.confidence = float(statistics.mean(confs)) * 0.90 if confs else 0.0
 
         # Usar baseline de tarea (no reposo) para detectar caída real de atención
         effective_blink_base = self.task_blink_base if self._calibrated else self.baseline_blink
@@ -953,28 +958,28 @@ class FacialMicroexpressionAnalyzer:
         attns    = [d.attention_score for d in data]
         blinks   = [d.blink_rate for d in data if d.blink_rate > 0]
 
-        avg_val = float(np.mean(valences))
+        avg_val = float(statistics.mean(valences))
         val_trend = 0.0
         if len(valences) >= 6:
             h = len(valences) // 2
-            val_trend = float(np.mean(valences[h:]) - np.mean(valences[:h]))
+            val_trend = float(statistics.mean(valences[h:]) - statistics.mean(valences[:h]))
 
-        avg_attn = float(np.mean(attns))
+        avg_attn = float(statistics.mean(attns))
         attn_drop = max(0.0, self.baseline_attn - avg_attn)
 
         return {
             "dominant_emotion":  dom,
             "avg_valence":       avg_val,
             "valence_trend":     val_trend,
-            "avg_arousal":       float(np.mean(arousals)),
+            "avg_arousal":       float(statistics.mean(arousals)),
             "avg_attn":          avg_attn,
             "attn_drop":         attn_drop,
             "away_ratio":        sum(1 for d in data if d.gaze_direction != "screen") / n,
-            "avg_blink":         float(np.mean(blinks)) if blinks else self.baseline_blink,
-            "blink_elev":        float(np.mean(blinks) / max(self.task_blink_base, 1)) if blinks else 1.0,
-            "avg_brow_furrow":   float(np.mean([d.brow_furrow     for d in data])),
-            "avg_smile":         float(np.mean([d.smile_intensity for d in data])),
-            "avg_jaw_drop":      float(np.mean([d.jaw_drop        for d in data])),
+            "avg_blink":         float(statistics.mean(blinks)) if blinks else self.baseline_blink,
+            "blink_elev":        float(statistics.mean(blinks) / max(self.task_blink_base, 1)) if blinks else 1.0,
+            "avg_brow_furrow":   float(statistics.mean([d.brow_furrow     for d in data])),
+            "avg_smile":         float(statistics.mean([d.smile_intensity for d in data])),
+            "avg_jaw_drop":      float(statistics.mean([d.jaw_drop        for d in data])),
             "neg_emotion_ratio": sum(1 for d in data if d.valence < -0.20) / n,
             "confused_ratio":    emo_counts.get("confused", 0) / n,
             "focused_ratio":     emo_counts.get("focused", 0) / n,
@@ -1104,9 +1109,9 @@ class VoiceProsodyAnalyzer:
         pitches = [v.pitch_mean_hz   for v in d if v.pitch_mean_hz   > 0]
         volumes = [v.volume_db       for v in d if v.volume_db       > 0]
         rates   = [v.speech_rate_wpm for v in d if v.speech_rate_wpm > 0]
-        if pitches: self.baseline_pitch  = float(np.mean(pitches))
-        if volumes: self.baseline_volume = float(np.mean(volumes))
-        if rates:   self.baseline_rate   = float(np.mean(rates))
+        if pitches: self.baseline_pitch  = float(statistics.mean(pitches))
+        if volumes: self.baseline_volume = float(statistics.mean(volumes))
+        if rates:   self.baseline_rate   = float(statistics.mean(rates))
         self._calibrated = True
         log.info("Voz calibrada: F0=%.0fHz vol=%.0fdB rate=%.0fWPM",
                  self.baseline_pitch, self.baseline_volume, self.baseline_rate)
@@ -1139,7 +1144,7 @@ class VoiceProsodyAnalyzer:
         score.state_probs      = softmax(raw, temperature=0.8)
 
         confs = [v.emotion_confidence for v in recent if v.emotion_confidence > 0]
-        score.confidence = float(np.mean(confs)) * 0.85 if confs else 0.25
+        score.confidence = float(statistics.mean(confs)) * 0.85 if confs else 0.25
 
         if m.get("tremor", 0) > 0.25:
             score.insights.append("Temblor vocal detectado (jitter elevado — ansiedad/fatiga, Goberman 2002)")
@@ -1159,9 +1164,9 @@ class VoiceProsodyAnalyzer:
         volumes = [d.volume_db       for d in data if d.volume_db       > 0]
         rates   = [d.speech_rate_wpm for d in data if d.speech_rate_wpm > 0]
 
-        avg_p = float(np.mean(pitches)) if pitches else self.baseline_pitch
-        avg_v = float(np.mean(volumes)) if volumes else self.baseline_volume
-        avg_r = float(np.mean(rates))   if rates   else self.baseline_rate
+        avg_p = float(statistics.mean(pitches)) if pitches else self.baseline_pitch
+        avg_v = float(statistics.mean(volumes)) if volumes else self.baseline_volume
+        avg_r = float(statistics.mean(rates))   if rates   else self.baseline_rate
 
         # Fillers por minuto (más interpretable que por segmento)
         total_fillers = sum(d.filler_words_count for d in data)
@@ -1171,17 +1176,17 @@ class VoiceProsodyAnalyzer:
 
         return {
             "avg_pitch":   avg_p,
-            "pitch_var":   float(np.std(pitches)) if len(pitches) > 1 else 0,
+            "pitch_var":   float(statistics.pstdev(pitches)) if len(pitches) > 1 else 0,
             "pitch_elev":  (avg_p - self.baseline_pitch)  / max(self.baseline_pitch,  1),
             "avg_volume":  avg_v,
-            "vol_var":     float(np.std(volumes)) if len(volumes) > 1 else 0,
+            "vol_var":     float(statistics.pstdev(volumes)) if len(volumes) > 1 else 0,
             "vol_change":  (avg_v - self.baseline_volume) / max(self.baseline_volume, 1),
             "avg_rate":    avg_r,
             "rate_change": (avg_r - self.baseline_rate)   / max(self.baseline_rate,   1),
-            "tremor":      float(np.mean([d.voice_tremor for d in data])),
-            "energy":      float(np.mean([d.energy_level for d in data])),
+            "tremor":      float(statistics.mean([d.voice_tremor for d in data])),
+            "energy":      float(statistics.mean([d.energy_level for d in data])),
             "filler_pm":   filler_pm,
-            "pause_ratio": float(np.mean([d.pause_ratio  for d in data])),
+            "pause_ratio": float(statistics.mean([d.pause_ratio  for d in data])),
         }
 
     def _fatigue(self, m: Dict) -> float:
@@ -1421,7 +1426,7 @@ class ErrorPredictionAnalyzer:
 
         # Convertir odds a probabilidad
         posterior = odds / (1 + odds)
-        return float(np.clip(posterior, 0.0, 1.0))
+        return float(min(max(posterior, 0.0), 1.0))
 
     def _recent_rate(self, n: int) -> float:
         hist = self.interaction_history[-n:]
