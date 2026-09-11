@@ -154,6 +154,16 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
     }
   }, [convs]);
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter envía; Shift+Enter no envía. Se ignoran los Enter generados por la
+    // composición del teclado (p. ej. acentos del español con IME/autocorrección),
+    // que de otro modo tragan o disparan el envío antes de tiempo.
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
   const sendMessage = async () => {
     if ((!text.trim() && !attachment) || !active || sending) return;
     const content = text.trim();
@@ -419,7 +429,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                 <input
                   value={text}
                   onChange={e => setText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
+                  onKeyDown={handleKeyDown}
                   placeholder={`Escribe a ${active.name}...`}
                   className="flex-1 px-4 py-2 border border-[#E9E9E7] rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 focus:border-[#0066FF]"
                 />

@@ -1994,8 +1994,13 @@ async def submit_quiz_answers(
     quiz_entry.adaptation_applied = adaptation_message
 
     if quiz_entry.created_at:
-        time_diff = datetime.utcnow() - quiz_entry.created_at
-        quiz_entry.time_spent_seconds = int(time_diff.total_seconds())
+        # Usa el tiempo real que el frontend midió con su cronómetro (duration).
+        # Solo si no viene, se estima con la diferencia entre creación y envío.
+        if submission.duration is not None:
+            quiz_entry.time_spent_seconds = int(submission.duration)
+        else:
+            time_diff = datetime.utcnow() - quiz_entry.created_at
+            quiz_entry.time_spent_seconds = int(time_diff.total_seconds())
 
     db.commit()
     logger.info(f"Quiz analizado: {percentage}% - Conceptos débiles: {weak_concepts}")
@@ -2097,9 +2102,13 @@ async def get_quiz_history(
                 "explanation": question.get("explanation", ""),
             })
 
+        # La fecha real de finalización (completed_at) es la que importa para
+        # el historial y el dashboard. created_at es solo el momento en que se
+        # generó el quiz (puede diferir del momento en que se respondió).
+        completed = entry.completed_at or entry.created_at
         history_list.append(QuizHistoryEntry(
             id=entry.id,
-            date=entry.created_at.strftime("%Y-%m-%d"),
+            date=completed.strftime("%Y-%m-%d"),
             title=entry.quiz_title,
             questions_count=entry.questions_count,
             user_score=entry.user_score,

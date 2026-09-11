@@ -17,6 +17,7 @@ class ClassroomEvent(Base):
     id           = Column(Integer, primary_key=True, index=True)
     classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)   # NULL = institucional/global
     teacher_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
+    institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True, index=True)  # scope multi-tenant
 
     title        = Column(String(200), nullable=False)
     event_type   = Column(String(30), default="clase")    # examen|tarea|clase|anuncio|evento|feriado

@@ -265,6 +265,7 @@ def get_performance_stats(
             "materia":   _SUBJECT_LABELS.get(sk, e.topic[:20]),
             "topic_key": sk,
             "fecha":     fecha,
+            "score":     int(parts[0]) if parts and parts[0].isdigit() else 0,
             "total":     int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else e.questions_count,
             "tiempo":    f"{round(e.time_spent_seconds / 60)}min" if e.time_spent_seconds else "—",
             "diff":      e.difficulty or "Medio",

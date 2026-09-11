@@ -7,7 +7,7 @@
  * ─────────────────────────────────────────────────────────────
  */
 import { Flame } from 'lucide-react';
-import RobotCanvas from '../pages/auth/components/robot/RobotCanvas';
+import NeuronRobotStatic from './NeuronRobotStatic';
 import { useLicense } from '../context/LicenseContext';
 import { planColor } from '../styles/plan';
 
@@ -28,6 +28,10 @@ export default function NeuronWelcome({ name, subtitle, streakDays }: NeuronWelc
       style={{
         height: 'clamp(180px, 22vw, 240px)',
         background: plan.welcome,
+        position: 'relative',
+        zIndex: 0,
+        transform: 'translateZ(0)',
+        isolation: 'isolate',
       }}
     >
       {/* Decoración de fondo — círculos difusos */}
@@ -75,9 +79,9 @@ export default function NeuronWelcome({ name, subtitle, streakDays }: NeuronWelc
         )}
       </div>
 
-      {/* ── Robot 3D original del login — derecha ───────────── */}
-      <div className="absolute right-0 top-0 bottom-0 w-[44%] sm:w-[42%]">
-        <RobotCanvas robotState="idle" transparent className="w-full h-full" />
+      {/* ── Robot Neuron — derecha (SVG estático, sin WebGL) ── */}
+      <div className="absolute right-0 top-0 bottom-0 w-[44%] sm:w-[42%] flex items-end justify-center pointer-events-none overflow-hidden">
+        <NeuronRobotStatic size={150} className="opacity-90" />
       </div>
 
       {/* ── Burbuja de Neuron ────────────────────────────────── */}

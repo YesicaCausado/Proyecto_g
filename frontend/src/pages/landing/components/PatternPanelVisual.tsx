@@ -1,53 +1,45 @@
 /**
  * PatternPanelVisual.tsx
  * ─────────────────────────────────────────────────────────────
- * Visuales a pantalla completa de cada patrón neurodigital para la
- * experiencia horizontal pinneada (PatternHorizontalPinned). Cada
- * visual es una representación futurista y minimalista (SIN cámara
- * real) que "se enciende" progresivamente con el scroll (scrub):
+ * Escenas CINEMATOGRÁFICAS por patrón neurodigital, basadas en
+ * IMAGEN (public/Imagenes_Landing/) como escena principal + overlays
+ * SVG tecnológicos minimalistas (scan lines, tracking points, onda,
+ * keystrokes, cursor, gráfico de datos).
  *
- *   · facial       → SVG draw (stroke-dashoffset) + beam lines +
- *                    puntos faciales que se activan en cadena
- *   · voz          → audio waveform animada + ritmo/pausas/prosodia
- *   · teclado      → typing animation (TextPlugin) + text cursor +
- *                    stagger de teclas que se iluminan
- *   · interaccion  → magnet (cursor atrae tarjetas) + spotlight card
- *                    + recorrido MotionPath
- *   · rendimiento  → number ticker (0→94%) + progress bars + ScrollTrigger
+ * Cada escena se controla con el scroll (scrub) mediante una timeline
+ * GSAP que expone play(progress)/reset()/timeline(). La imagen hace
+ * zoom/parallax lentos ("cámara"); los overlays entran en cadena.
  *
- * Técnicas: GSAP + ScrollTrigger + MotionPathPlugin + TextPlugin.
- * Para el "draw" de SVG se usa stroke-dashoffset nativo (equivale a
- * DrawSVG sin depender del plugin premium). Cada visual expone
- * play(progress)/reset()/timeline() para ser scrubeados por la
- * sección pinneada. prefers-reduced-motion → estado estático visible.
+ * Técnicas:
+ *   · GSAP + ScrollTrigger (scrub desde PatternHorizontalPinned)
+ *   · SVG con strokeDasharray/strokeDashoffset para el "draw"
+ *   · transform/opacity only (rendimiento ~60fps)
+ *   · Sin librerías de pago, sin 3D, sin R3F
+ *
+ * prefers-reduced-motion → estado estático visible (sin scrub).
  * ─────────────────────────────────────────────────────────────
  */
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
-import { TextPlugin } from 'gsap/TextPlugin';
-
-gsap.registerPlugin(ScrollTrigger, MotionPathPlugin, TextPlugin);
 
 export interface PatternPanelVisualHandle {
-  /** Scrub 0→1 del visual (el panel llama con su progreso local) */
   play(progress: number): void;
-  /** Vuelve al estado inicial (sin re-animar) */
   reset(): void;
-  /** Timeline GSAP crudo por si el panel quiere sincronizar */
   timeline(): gsap.core.Timeline | null;
 }
 
 interface Props {
   id: string;
+  /** Ruta de la imagen de escena (relativa a BASE_URL) */
+  image: string;
+  /** Nombres de los labels a mostrar (overlays de datos) */
+  labels: string[];
   style?: CSSProperties;
-  /** Ancho real del viewport para calibra el magnet/spotlight */
 }
 
 export default forwardRef<PatternPanelVisualHandle, Props>(
-  function PatternPanelVisual({ id, style }, ref) {
+  function PatternPanelVisual({ id, image, labels, style }, ref) {
     const scopeRef = useRef<HTMLDivElement>(null);
     const tlRef = useRef<gsap.core.Timeline | null>(null);
 
@@ -67,7 +59,6 @@ export default forwardRef<PatternPanelVisualHandle, Props>(
       },
     }), []);
 
-    // Construir el timeline GSAP una sola vez, acotado al scope del visual.
     useLayoutEffect(() => {
       if (reduce) return;
       const scope = scopeRef.current;
@@ -80,9 +71,32 @@ export default forwardRef<PatternPanelVisualHandle, Props>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reduce]);
 
+    const src = `${import.meta.env.BASE_URL}${image}`;
+
     return (
-      <div ref={scopeRef} className="pp-visual" style={style} aria-hidden="true">
-        {renderVisual(id)}
+      <div ref={scopeRef} className="pp-visual pp-scene" style={style} aria-hidden="true">
+        {/* Imagen de escena (protagonista) */}
+        <div className="pp-scene-img-wrap">
+          <img
+            className="pp-scene-img"
+            src={src}
+            alt=""
+            loading="lazy"
+            draggable={false}
+          />
+          {/* Vignette/velo para legibilidad de overlay */}
+          <span className="pp-scene-veil" />
+        </div>
+
+        {/* Overlays SVG específicos por patrón */}
+        {renderOverlay(id)}
+
+        {/* Labels de datos (aparecen en cadena) */}
+        <div className="pp-scene-labels">
+          {labels.map((l) => (
+            <span key={l} className="pp-scene-label" data-scene-label>{l}</span>
+          ))}
+        </div>
       </div>
     );
   },
@@ -95,385 +109,341 @@ function useReduce(): boolean {
   );
 }
 
-/** Elige el builder de timeline según el id del patrón. */
+/* ═══════════════════════════════════════════════════════════
+   Overlays SVG por patrón
+   ═══════════════════════════════════════════════════════════ */
+function renderOverlay(id: string): ReactNode {
+  switch (id) {
+    case 'facial':      return <FacialOverlay />;
+    case 'voz':         return <VoiceOverlay />;
+    case 'teclado':     return <KeyboardOverlay />;
+    case 'interaccion': return <InteractionOverlay />;
+    case 'rendimiento': return <PerformanceOverlay />;
+    default:            return null;
+  }
+}
+
+/* ── FACIAL: scan line + tracking points + líneas ─────────── */
+const FACE_PTS: { x: number; y: number }[] = [
+  { x: 180, y: 180 }, { x: 300, y: 170 },   // cejas
+  { x: 150, y: 250 }, { x: 330, y: 250 },   // ojos
+  { x: 190, y: 320 }, { x: 290, y: 320 },   // pómulos
+  { x: 240, y: 360 },                        // nariz
+  { x: 200, y: 420 }, { x: 280, y: 420 },   // boca
+  { x: 240, y: 470 },                        // mentón
+];
+
+function FacialOverlay() {
+  return (
+    <svg className="pp-overlay" viewBox="0 0 480 520" fill="none" preserveAspectRatio="xMidYMid slice">
+      {/* Línea de escaneo horizontal */}
+      <line className="pp-scan" x1="0" y1="260" x2="480" y2="260"
+        stroke="rgba(96,165,250,0.85)" strokeWidth="1.5" />
+      <line className="pp-scan" x1="0" y1="258" x2="480" y2="258"
+        stroke="rgba(96,165,250,0.25)" strokeWidth="4" />
+      {/* Conexiones sutiles entre puntos */}
+      {FACE_PTS.slice(0, 9).map((p, i) => {
+        const n = FACE_PTS[(i + 1) % 9];
+        return (
+          <line key={`c${i}`} className="pp-face-link" x1={p.x} y1={p.y} x2={n.x} y2={n.y}
+            stroke="rgba(96,165,250,0.4)" strokeWidth="1" strokeDasharray="3 5" />
+        );
+      })}
+      {/* Puntos de tracking */}
+      {FACE_PTS.map((p, i) => (
+        <g key={i}>
+          <circle className="pp-face-ring" cx={p.x} cy={p.y} r="11" fill="none"
+            stroke="rgba(96,165,250,0.45)" strokeWidth="1" />
+          <circle className="pp-face-dot" cx={p.x} cy={p.y} r="4" fill="#3B82F6" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/* ── VOZ: waveform orgánica ──────────────────────────────── */
+const WAVE_PTS = Array.from({ length: 40 }, (_, i) => {
+  const t = i / 39;
+  return {
+    x: i * 12 + 6,
+    // onda pseudo-orgánica (varias frecuencias)
+    base: Math.sin(t * Math.PI * 3) * 0.5 + Math.sin(t * Math.PI * 7) * 0.25 + Math.sin(t * Math.PI * 13) * 0.15,
+  };
+});
+
+function VoiceOverlay() {
+  const mid = 200;
+  return (
+    <svg className="pp-overlay" viewBox="0 0 480 400" fill="none" preserveAspectRatio="xMidYMid meet">
+      {/* Línea central */}
+      <line x1="0" y1={mid} x2="480" y2={mid} stroke="rgba(96,165,250,0.2)" strokeWidth="1" />
+      {WAVE_PTS.map((p, i) => {
+        const amp = p.base * 120;
+        const y1 = mid - amp;
+        const y2 = mid + amp;
+        return (
+          <line key={i} className="pp-wave-line" data-wave
+            x1={p.x} y1={y1} x2={p.x} y2={y2}
+            stroke="url(#pp-wavegrad)" strokeWidth="2" strokeLinecap="round"
+          />
+        );
+      })}
+      <defs>
+        <linearGradient id="pp-wavegrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#60A5FA" />
+          <stop offset="0.5" stopColor="#3B82F6" />
+          <stop offset="1" stopColor="#60A5FA" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+/* ── TECLADO: overlays discretos sobre teclas ────────────── */
+const KEYS: { x: number; y: number; w: number; h: number }[] = [
+  { x: 40,  y: 130, w: 46, h: 46 },
+  { x: 130, y: 130, w: 46, h: 46 },
+  { x: 220, y: 130, w: 46, h: 46 },
+  { x: 310, y: 130, w: 60, h: 46 },
+  { x: 370, y: 130, w: 46, h: 46 },
+  { x: 85,  y: 210, w: 46, h: 46 },
+  { x: 175, y: 210, w: 46, h: 46 },
+  { x: 265, y: 210, w: 46, h: 46 },
+  { x: 355, y: 210, w: 46, h: 46 },
+  { x: 130, y: 290, w: 80, h: 46 },
+  { x: 260, y: 290, w: 46, h: 46 },
+];
+
+function KeyboardOverlay() {
+  return (
+    <svg className="pp-overlay" viewBox="0 0 480 400" fill="none" preserveAspectRatio="xMidYMid meet">
+      {KEYS.map((k, i) => (
+        <rect key={i} className="pp-key-hl" data-key
+          x={k.x} y={k.y} width={k.w} height={k.h} rx="8"
+          fill="rgba(59,130,246,0.12)" stroke="rgba(96,165,250,0.7)" strokeWidth="1.4"
+        />
+      ))}
+      {/* Trailer de "pulsación" bajo algunas teclas */}
+      {KEYS.slice(0, 6).map((k, i) => (
+        <circle key={`p${i}`} className="pp-key-pulse" data-keypulse
+          cx={k.x + k.w / 2} cy={k.y + k.h / 2} r="6"
+          fill="none" stroke="#60A5FA" strokeWidth="1.5" />
+      ))}
+    </svg>
+  );
+}
+
+/* ── INTERACCIÓN: cursor + clics + conexiones ────────────── */
+function InteractionOverlay() {
+  return (
+    <div className="pp-inter-action">
+      {/* Conexiones sutiles entre nodos de UI (viewBox landscape 480×320) */}
+      <svg className="pp-overlay" viewBox="0 0 480 320" fill="none" preserveAspectRatio="xMidYMid meet">
+        <path className="pp-conn" d="M80 88 L210 128 L320 72 L400 144 L360 240 L180 208 L80 88"
+          stroke="rgba(59,130,246,0.5)" strokeWidth="1.2" fill="none"
+          strokeDasharray="4 6" />
+        {[[80, 88], [210, 128], [320, 72], [400, 144], [360, 240], [180, 208]].map(([x, y], i) => (
+          <circle key={i} className="pp-conn-node" data-node cx={x} cy={y} r="5" fill="#3B82F6" />
+        ))}
+      </svg>
+      {/* Cursor SVG/HTML que recorre la escena */}
+      <div className="pp-live-cursor" data-cursor>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M5 3l15 9-7 1.5L9.5 18 5 3z" fill="#3B82F6" stroke="#fff" strokeWidth="1.3" />
+        </svg>
+        <span className="pp-live-click" data-click />
+      </div>
+    </div>
+  );
+}
+
+/* ── RENDIMIENTO: gráfico SVG + datos ────────────────────── */
+const LINE_PTS = '20,160 90,140 160,150 230,110 300,120 340,60 380,80 440,40';
+const AREA_PTS = `20,160 ${LINE_PTS} 440,200 20,200`;
+
+function PerformanceOverlay() {
+  return (
+    <div className="pp-perf">
+      {/* Gráfico de línea (se dibuja con dashoffset) */}
+      <svg className="pp-overlay" viewBox="0 0 480 220" fill="none" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="pp-areagrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="rgba(96,165,250,0.35)" />
+            <stop offset="1" stopColor="rgba(96,165,250,0)" />
+          </linearGradient>
+        </defs>
+        <polygon className="pp-chart-area" points={AREA_PTS} fill="url(#pp-areagrad)" />
+        <polyline className="pp-chart-line" data-chart points={LINE_PTS}
+          fill="none" stroke="#60A5FA" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {LINE_PTS.split(' ').map((pt, i) => {
+          const [x, y] = pt.split(',').map(Number);
+          return <circle key={i} className="pp-chart-dot" data-chartdot cx={x} cy={y} r="4" fill="#3B82F6" />;
+        })}
+      </svg>
+      {/* Números de datos */}
+      <div className="pp-perf-stats">
+        <div className="pp-perf-stat" data-stat>
+          <span className="pp-perf-val" data-count data-to="92">0%</span>
+          <span className="pp-perf-key">respuestas</span>
+        </div>
+        <div className="pp-perf-stat" data-stat>
+          <span className="pp-perf-val" data-count data-to="8">0%</span>
+          <span className="pp-perf-key">errores</span>
+        </div>
+        <div className="pp-perf-stat" data-stat>
+          <span className="pp-perf-val" data-count data-to="24">0m</span>
+          <span className="pp-perf-key">tiempo</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Builders de timeline (scrub ligado al progress de la sección)
+   ═══════════════════════════════════════════════════════════ */
 function buildTimeline(id: string, scope: HTMLDivElement): gsap.core.Timeline | null {
   switch (id) {
     case 'facial':      return facialTL(scope);
     case 'voz':         return voiceTL(scope);
-    case 'teclado':     return typingTL(scope);
+    case 'teclado':     return keyboardTL(scope);
     case 'interaccion': return interactionTL(scope);
-    case 'rendimiento': return trendTL(scope);
+    case 'rendimiento': return performanceTL(scope);
     default:            return null;
   }
 }
 
-/** Elige el JSX del visual según el id. */
-function renderVisual(id: string): ReactNode {
-  switch (id) {
-    case 'facial':      return <Facial />;
-    case 'voz':         return <Voice />;
-    case 'teclado':     return <Typing />;
-    case 'interaccion': return <Interaction />;
-    case 'rendimiento': return <Trend />;
-    default:            return null;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════
-   FACIAL — SVG draw + beam lines + puntos de seguimiento
-   ═══════════════════════════════════════════════════════════ */
-// Puntos de seguimiento facial (grid sobre el óvalo).
-const FACE_POINTS: { x: number; y: number }[] = [
-  { x: 122, y: 96 },  { x: 178, y: 96 },   // cejas
-  { x: 108, y: 140 }, { x: 192, y: 140 },  // ojos
-  { x: 122, y: 176 }, { x: 178, y: 176 },  // pómulos
-  { x: 150, y: 200 },                       // nariz
-  { x: 132, y: 236 }, { x: 168, y: 236 },  // boca
-  { x: 150, y: 272 },                       // mentón
-];
-
-function Facial() {
-  return (
-    <div className="pp-panel pp-panel-facial relative h-full w-full">
-      <svg className="pp-face-full" viewBox="0 0 300 320" width="100%" height="100%" fill="none">
-        <rect width="300" height="320" fill="transparent" />
-        {/* Óvalo del rostro (draw con stroke-dashoffset) */}
-        <ellipse
-          className="pp-face-outline"
-          cx="150" cy="168" rx="84" ry="118"
-          stroke="url(#pp-grad)" strokeWidth="2"
-          fill="rgba(59,130,246,0.03)"
-        />
-        {/* Líneas "beam" desde el centro hacia cada punto */}
-        {FACE_POINTS.map((p, i) => (
-          <line
-            key={`l${i}`}
-            className="pp-face-line"
-            x1="150" y1="168" x2={p.x} y2={p.y}
-            stroke="url(#pp-beam)" strokeWidth="1.2" strokeLinecap="round"
-            data-face-line
-          />
-        ))}
-        {/* Nodos de seguimiento */}
-        {FACE_POINTS.map((p, i) => (
-          <g key={`d${i}`}>
-            <circle className="pp-face-ring" cx={p.x} cy={p.y} r="8" fill="none" stroke="rgba(96,165,250,0.35)" strokeWidth="1" />
-            <circle className="pp-face-dot" cx={p.x} cy={p.y} r="4.4" fill="#3B82F6" />
-          </g>
-        ))}
-        <defs>
-          <linearGradient id="pp-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#60A5FA" />
-            <stop offset="1" stopColor="#2563EB" />
-          </linearGradient>
-          <linearGradient id="pp-beam" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="rgba(96,165,250,0)" />
-            <stop offset="0.5" stopColor="rgba(96,165,250,0.9)" />
-            <stop offset="1" stopColor="rgba(96,165,250,0)" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <span className="pp-label">Microexpresiones</span>
-    </div>
-  );
+/** Helper: anima los labels en cadena al final de cada escena. */
+function labelsIn(tl: gsap.core.Timeline, scope: HTMLDivElement, at: number) {
+  const labels = scope.querySelectorAll('[data-scene-label]');
+  tl.fromTo(labels, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.12, ease: 'power2.out' }, at);
 }
 
 function facialTL(scope: HTMLDivElement): gsap.core.Timeline {
   const tl = gsap.timeline({ defaults: { ease: 'power2.out' }, paused: true });
-  const face = scope.querySelector('.pp-face');
-  const outline = scope.querySelector('.pp-face-outline');
+  const img = scope.querySelector('.pp-scene-img');
+  const scan = scope.querySelector('.pp-scan');
   const dots = scope.querySelectorAll('.pp-face-dot');
   const rings = scope.querySelectorAll('.pp-face-ring');
-  const lines = scope.querySelectorAll('[data-face-line]');
-  const label = scope.querySelector('.pp-label');
-  if (!face || !outline || !label) return tl;
-  if (outline) {
-    const len = 2 * Math.PI * (84 + 118) * 0.5; // aprox perímetro de la elipse
-    gsap.set(outline, { strokeDasharray: len, strokeDashoffset: len });
-  }
-  tl.fromTo(face, { opacity: 0, scale: 0.86 }, { opacity: 1, scale: 1, duration: 0.5 }, 0)
-    // Draw del contorno
-    .to(outline, { strokeDashoffset: 0, duration: 0.7, ease: 'power1.inOut' }, 0.15)
-    // Beam lines se "dibujan" desde el centro (scaleX)
-    .fromTo(lines, { scaleX: 0, opacity: 0, transformOrigin: 'left center' },
-      { scaleX: 1, opacity: 1, duration: 0.4, stagger: 0.05, ease: 'power1.inOut' }, 0.4)
-    // Puntos se activan en cadena
-    .fromTo(dots, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, stagger: 0.055, ease: 'back.out(2.4)' }, 0.55)
-    // Anillos "pulse" en puntos clave
-    .fromTo(rings, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, stagger: 0.05, ease: 'power2.out' }, 0.65)
-    .fromTo(label, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45 }, 0.9);
-  return tl;
-}
+  const links = scope.querySelectorAll('.pp-face-link');
+  if (!img) return tl;
 
-/* ═══════════════════════════════════════════════════════════
-   VOZ — audio waveform animada + prosodia/ritmo/pausas
-   ═══════════════════════════════════════════════════════════ */
-function Voice() {
-  const heights = [0.28, 0.55, 0.4, 0.95, 0.5, 1, 0.62, 0.74, 0.38, 0.88, 0.48, 0.68, 0.32, 0.58, 0.44, 0.82, 0.52, 0.7, 0.36, 0.6];
-  return (
-    <div className="pp-panel pp-panel-voice relative flex h-full w-full flex-col items-center justify-center gap-9">
-      <div className="pp-wave" aria-hidden="true">
-        {heights.map((h, i) => (
-          <span
-            key={i}
-            className="pp-voice-bar"
-            data-wavebar
-            style={{ height: `${Math.round(h * 132)}px` }}
-          />
-        ))}
-      </div>
-      {/* Labels de prosodia/ritmo/pausas que se encienden */}
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        {['Prosodia', 'Ritmo', 'Pausas'].map((l) => (
-          <span key={l} className="pp-voice-label">{l}</span>
-        ))}
-      </div>
-    </div>
-  );
+  // Cámara: zoom progresivo suave + leve pane
+  tl.fromTo(img, { scale: 1.06, xPercent: 2 }, { scale: 1.18, xPercent: 0, duration: 1, ease: 'none' }, 0)
+    // Scan line entra de arriba y barre
+    .fromTo(scan, { y: -160, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power1.inOut' }, 0.15)
+    .to(scan, { y: 160, duration: 0.7, ease: 'power1.inOut' }, 0.7)
+    // Líneas de conexión se dibujan
+    .fromTo(links, { strokeDashoffset: 60, opacity: 0 }, { strokeDashoffset: 0, opacity: 1, duration: 0.5, stagger: 0.06, ease: 'power1.inOut' }, 0.3)
+    // Puntos de tracking se activan en cadena
+    .fromTo(dots, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, stagger: 0.05, ease: 'back.out(2.4)' }, 0.4)
+    .fromTo(rings, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, stagger: 0.05, ease: 'power2.out' }, 0.45);
+
+  labelsIn(tl, scope, 0.75);
+  return tl;
 }
 
 function voiceTL(scope: HTMLDivElement): gsap.core.Timeline {
   const tl = gsap.timeline({ defaults: { ease: 'power2.out' }, paused: true });
-  const bars = scope.querySelectorAll('[data-wavebar]');
-  const labels = scope.querySelectorAll('.pp-voice-label');
-  // La onda "aparece" barra a barra con amplitud creciente.
-  tl.fromTo(bars, { scaleY: 0.06, opacity: 0, transformOrigin: 'center center' },
-    { scaleY: 1, opacity: 1, duration: 0.45, stagger: 0.03, ease: 'back.out(1.6)' }, 0)
-    // Desplazamiento lateral sutil de la onda (sensación de audio vivo)
-    .to(bars, { y: () => gsap.utils.random(-4, 4), duration: 0.6, stagger: 0.02, ease: 'sine.inOut', yoyo: true, repeat: 1 }, 0.5)
-    .fromTo(labels, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.12 }, 0.7);
+  const img = scope.querySelector('.pp-scene-img');
+  const waves = scope.querySelectorAll('[data-wave]');
+  if (!img) return tl;
+
+  if (waves.length) {
+    // Cada barra de onda dibuja su longitud desde el centro
+    gsap.set(waves, { scaleY: 0.05, transformOrigin: 'center center' });
+  }
+  tl.fromTo(img, { scale: 1.05, xPercent: -2 }, { scale: 1.16, xPercent: 2, duration: 1, ease: 'none' }, 0)
+    // La onda crece orgánicamente
+    .fromTo(waves, { scaleY: 0.05, opacity: 0.4 }, { scaleY: 1, opacity: 1, duration: 0.6, stagger: 0.018, ease: 'power1.out' }, 0.15)
+    // Deformación lenta tipo "voz viva"
+    .to(waves, { scaleY: 1.25, duration: 0.5, stagger: 0.03, ease: 'sine.inOut', yoyo: true, repeat: 1 }, 0.55);
+
+  labelsIn(tl, scope, 0.75);
   return tl;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   TECLADO — typing animation + text cursor + teclas iluminadas
-   ═══════════════════════════════════════════════════════════ */
-const TYPED_TEXT = 'aprendizaje adaptativo';
-const KEY_ROWS: string[][] = [
-  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-  ['Z', 'X', 'C', 'V', 'B', 'N', 'M'],
-];
-const HOT_KEYS = new Set(['A', 'P', 'R', 'E', 'N', 'D', 'I', 'Z', 'J', 'T']);
-
-function Typing() {
-  return (
-    <div className="pp-panel pp-panel-keyboard relative flex h-full w-full flex-col items-center justify-center gap-9">
-      {/* Línea de texto tipeada con cursor */}
-      <div className="pp-typed">
-        <span className="pp-typed-text" data-typed />
-        <span className="pp-cursor-caret" data-caret />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        {KEY_ROWS.map((row, ri) => (
-          <div key={ri} className="flex justify-center gap-2">
-            {row.map((k) => (
-              <span
-                key={k}
-                className={`pp-key ${HOT_KEYS.has(k) ? 'pp-key-hot' : ''}`}
-                data-key={k}
-              >{k}</span>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        {['Velocidad', 'Pausas', 'Errores'].map((l) => (
-          <span key={l} className="pp-voice-label">{l}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function typingTL(scope: HTMLDivElement): gsap.core.Timeline {
+function keyboardTL(scope: HTMLDivElement): gsap.core.Timeline {
   const tl = gsap.timeline({ defaults: { ease: 'power2.out' }, paused: true });
-  const typed = scope.querySelector('[data-typed]');
-  const caret = scope.querySelector('[data-caret]');
-  const keys = scope.querySelectorAll('.pp-key');
-  const hot = scope.querySelectorAll('.pp-key-hot');
-  const labels = scope.querySelectorAll('.pp-voice-label');
-  if (!typed) return tl;
+  const img = scope.querySelector('.pp-scene-img');
+  const keys = scope.querySelectorAll('[data-key]');
+  const pulses = scope.querySelectorAll('[data-keypulse]');
+  if (!img) return tl;
 
-  tl.fromTo(keys, { opacity: 0, y: 16, scale: 0.94 },
-    { opacity: 1, y: 0, scale: 1, duration: 0.35, stagger: 0.02, ease: 'back.out(1.8)' }, 0)
-    // Typing animation con TextPlugin (escribe el texto carácter a carácter)
-    .fromTo(typed, { text: '' }, {
-      text: TYPED_TEXT, duration: 1.2, ease: 'none',
-    }, 0.35)
-    // Cursor parpadeando mientras escribe
-    .fromTo(caret, { opacity: 0 }, { opacity: 1, duration: 0.15, repeat: 7, yoyo: true }, 0.35)
-    // Teclas "calientes" se iluminan conforme avanza la escritura
-    .fromTo(hot, { backgroundColor: 'rgba(96,165,250,0.10)', color: '#e5e7eb' },
-      { backgroundColor: '#3B82F6', color: '#0b1220', duration: 0.25, stagger: 0.12, ease: 'power1.inOut' }, 0.5)
-    .to(hot, { backgroundColor: 'rgba(96,165,250,0.10)', color: '#e5e7eb', duration: 0.25, stagger: 0.12 }, 1.0)
-    .fromTo(labels, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 }, 1.2)
-    .fromTo(caret, { opacity: 1 }, { opacity: 0.25, duration: 0.4, repeat: -1, yoyo: true }, 1.6);
+  tl.fromTo(img, { scale: 1.08, yPercent: 2 }, { scale: 1.2, yPercent: -2, duration: 1, ease: 'none' }, 0)
+    // Overlays de teclas aparecen en cadena
+    .fromTo(keys, { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.35, stagger: 0.06, ease: 'back.out(1.6)' }, 0.15)
+    // Pulses de pulsación
+    .fromTo(pulses, { scale: 0, opacity: 0.9 }, { scale: 1.6, opacity: 0, duration: 0.5, stagger: 0.2, repeat: 1, ease: 'power1.out' }, 0.5);
+
+  labelsIn(tl, scope, 0.75);
   return tl;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   INTERACCIÓN — magnet (cursor atrae tarjetas) + spotlight + path
-   ═══════════════════════════════════════════════════════════ */
-const UI_BOXES = [
-  { id: 'a', top: '14%', left: '12%' },
-  { id: 'b', top: '16%', left: '58%' },
-  { id: 'c', top: '60%', left: '18%' },
-  { id: 'd', top: '62%', left: '52%', wide: true },
-];
-
-function Interaction() {
-  return (
-    <div className="pp-panel pp-panel-interaction relative flex h-full w-full flex-col items-center justify-center gap-8">
-      <div className="pp-ui-stage" data-spotlight>
-        {/* Cursor */}
-        <div className="pp-cursor" data-cursor>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path d="M5 3l14 8-6 1.5L9.5 18 5 3z" fill="#3B82F6" stroke="#fff" strokeWidth="1.2" />
-          </svg>
-        </div>
-        <span className="pp-click-ring" data-ring />
-        {/* Elementos de interfaz (magnéticos) */}
-        {UI_BOXES.map((b) => (
-          <div
-            key={b.id}
-            className={`pp-ui-box ${b.wide ? 'pp-ui-box-wide' : ''}`}
-            data-magnet
-            style={{ top: b.top, left: b.left }}
-          />
-        ))}
-        {/* Spotlight */}
-        <span className="pp-spotlight" data-spot />
-      </div>
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        {['Click', 'Navegación', 'Interacción'].map((l) => (
-          <span key={l} className="pp-voice-label">{l}</span>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function interactionTL(scope: HTMLDivElement): gsap.core.Timeline {
   const tl = gsap.timeline({ defaults: { ease: 'power2.inOut' }, paused: true });
+  const img = scope.querySelector('.pp-scene-img');
   const cursor = scope.querySelector('[data-cursor]');
-  const boxes = scope.querySelectorAll('[data-magnet]');
-  const ring = scope.querySelector('[data-ring]');
-  const spot = scope.querySelector('[data-spot]');
-  const labels = scope.querySelectorAll('.pp-voice-label');
-  if (!cursor || !ring) return tl;
-  const stage = cursor.closest('.pp-ui-stage');
+  const click = scope.querySelector('[data-click]');
+  const conns = scope.querySelector('.pp-conn');
+  const nodes = scope.querySelectorAll('[data-node]');
+  if (!img || !cursor) return tl;
 
-  tl.fromTo(cursor, { opacity: 0 }, { opacity: 1, duration: 0.2 }, 0)
-    .fromTo(boxes, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.08 }, 0.1)
-    // Recorrido con MotionPath por el stage (píxeles, stage 320×220)
-    .to(cursor, {
-      motionPath: {
-        path: [
-          { x: 0,    y: 0 },
-          { x: -90,  y: -60 },
-          { x: 70,   y: -50 },
-          { x: 55,   y: 60 },
-          { x: -70,  y: 50 },
-        ],
-        curviness: 1.4,
-        alignOrigin: [0.5, 0.5],
-        autoRotate: false,
-      },
-      duration: 2.6,
-      ease: 'none',
-    }, 0.3)
-    // Magnet: cada caja se "asoma" hacia el cursor al pasar
-    .to(boxes, { scale: 1.06, duration: 0.25, stagger: 0.3, yoyo: true, repeat: 1, ease: 'power1.inOut' }, 0.6)
-    // Spotlight que sigue al recorrido
-    .fromTo(spot, { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 1.4, ease: 'power1.inOut' }, 0.3)
-    // Clic en puntos calientes
-    .fromTo(ring, { scale: 0, opacity: 0.9 }, { scale: 1, opacity: 0, duration: 0.4, ease: 'power1.out' }, 1.1)
-    .fromTo(ring, { scale: 0, opacity: 0.9 }, { scale: 1, opacity: 0, duration: 0.4, ease: 'power1.out' }, 2.2)
-    .fromTo(labels, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 }, 2.6);
-
-  // El spotlight DOM se mueve dentro del stage de forma sutil
-  if (spot && stage) {
-    tl.to(spot, { x: '-20%', y: '-10%', duration: 0.8 }, 0.3)
-      .to(spot, { x: '30%', y: '20%', duration: 0.8 }, 1.2)
-      .to(spot, { x: '-10%', y: '30%', duration: 0.7 }, 2.0);
+  if (conns) {
+    const len = (conns as SVGPathElement).getTotalLength?.() || 900;
+    gsap.set(conns, { strokeDasharray: len, strokeDashoffset: len });
   }
+
+  tl.fromTo(img, { scale: 1.04 }, { scale: 1.15, duration: 1, ease: 'none' }, 0)
+    // Cursor entra
+    .fromTo(cursor, { opacity: 0, x: -40, y: 20 }, { opacity: 1, x: 0, y: 0, duration: 0.4, ease: 'power2.out' }, 0.1)
+    // Recorrido del cursor (cámara guiada)
+    .to(cursor, { x: 120, y: -30, duration: 0.5, ease: 'power1.inOut' }, 0.35)
+    .fromTo(click, { scale: 0, opacity: 0.9 }, { scale: 1.4, opacity: 0, duration: 0.35, ease: 'power1.out' }, 0.85)
+    .to(cursor, { x: -80, y: 50, duration: 0.5, ease: 'power1.inOut' }, 0.9)
+    .fromTo(click, { scale: 0, opacity: 0.9 }, { scale: 1.4, opacity: 0, duration: 0.35, ease: 'power1.out' }, 1.4)
+    .to(cursor, { x: 40, y: -10, duration: 0.4, ease: 'power1.inOut' }, 1.5)
+    // Conexiones se dibujan
+    .fromTo(conns, { strokeDashoffset: (conns as SVGPathElement).getTotalLength?.() || 900 }, { strokeDashoffset: 0, duration: 0.7, ease: 'power1.inOut' }, 0.4)
+    .fromTo(nodes, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, stagger: 0.08, ease: 'back.out(2)' }, 0.6);
+
+  labelsIn(tl, scope, 0.8);
   return tl;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   RENDIMIENTO — number ticker + progress bars
-   ═══════════════════════════════════════════════════════════ */
-const COMPETENCIES = [
-  { label: 'Pensamiento lógico', pct: 90 },
-  { label: 'Lectura crítica', pct: 80 },
-  { label: 'Inglés', pct: 70 },
-  { label: 'Ciencias', pct: 88 },
-];
-
-function Trend() {
-  return (
-    <div className="pp-panel pp-panel-trend relative flex h-full w-full flex-col items-center justify-center gap-9">
-      <div className="pp-dashboard">
-        {/* Ticker central 0→94% */}
-        <div className="pp-ticker">
-          <span className="pp-ticker-value" data-ticker>0%</span>
-          <span className="pp-ticker-label">progreso global</span>
-        </div>
-
-        {/* Barras de competencias */}
-        <div className="pp-comp-grid">
-          {COMPETENCIES.map((c) => (
-            <div key={c.label} className="pp-comp">
-              <div className="pp-comp-head">
-                <span>{c.label}</span>
-                <span className="pp-comp-val" data-compval data-to={c.pct}>0%</span>
-              </div>
-              <div className="pp-comp-track">
-                <span className="pp-comp-fill" data-compfill style={{ width: `${c.pct}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        {['Respuestas', 'Errores', 'Tiempo', 'Progreso'].map((l) => (
-          <span key={l} className="pp-voice-label">{l}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function trendTL(scope: HTMLDivElement): gsap.core.Timeline {
+function performanceTL(scope: HTMLDivElement): gsap.core.Timeline {
   const tl = gsap.timeline({ defaults: { ease: 'power2.out' }, paused: true });
-  const ticker = scope.querySelector('[data-ticker]');
-  const fills = scope.querySelectorAll('[data-compfill]');
-  const vals = scope.querySelectorAll('[data-compval]');
-  const labels = scope.querySelectorAll('.pp-voice-label');
-  if (!ticker) return tl;
+  const img = scope.querySelector('.pp-scene-img');
+  const line = scope.querySelector('[data-chart]');
+  const area = scope.querySelector('.pp-chart-area');
+  const dots = scope.querySelectorAll('[data-chartdot]');
+  const stats = scope.querySelectorAll('[data-stat]');
+  const counts = scope.querySelectorAll('[data-count]');
+  if (!img || !line) return tl;
 
-  const tickObj = { v: 0 };
-  tl.fromTo(tickObj, { v: 0 }, {
-    v: 94, duration: 1.6, ease: 'power1.inOut',
-    onUpdate() { ticker.textContent = `${Math.round(tickObj.v)}%`; },
-  }, 0.2)
-    .fromTo(fills, { scaleX: 0, transformOrigin: 'left center' },
-      { scaleX: 1, duration: 0.7, stagger: 0.1, ease: 'power1.inOut' }, 0.5);
+  const lineEl = line as SVGPathElement | SVGPolylineElement;
+  const len = (lineEl.getTotalLength?.() as number) || 500;
+  gsap.set(line, { strokeDasharray: len, strokeDashoffset: len });
 
-  // Cada barra anima su número propio (0→pct)
-  vals.forEach((val, i) => {
-    const target = Number((val as HTMLElement).dataset.to ?? 0);
+  tl.fromTo(img, { scale: 1.06, opacity: 0.95 }, { scale: 1.14, opacity: 1, duration: 1, ease: 'none' }, 0)
+    // Gráfico se dibuja
+    .fromTo(line, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.8, ease: 'power1.inOut' }, 0.15)
+    .fromTo(area, { opacity: 0 }, { opacity: 1, duration: 0.6, ease: 'power1.out' }, 0.35)
+    .fromTo(dots, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, stagger: 0.06, ease: 'back.out(2)' }, 0.4)
+    // Stats aparecen
+    .fromTo(stats, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.1, ease: 'power2.out' }, 0.6);
+
+  // Número ticker por stat (0 → dato)
+  counts.forEach((c, i) => {
+    const target = Number((c as HTMLElement).dataset.to ?? 0);
+    const unit = (c as HTMLElement).textContent?.match(/[a-z%]+/i)?.[0] ?? '%';
     const obj = { v: 0 };
     tl.fromTo(obj, { v: 0 }, {
-      v: target, duration: 0.7, ease: 'power1.inOut',
-      onUpdate() { val.textContent = `${Math.round(obj.v)}%`; },
-    }, 0.5 + i * 0.1);
+      v: target, duration: 0.6, ease: 'power1.inOut',
+      onUpdate() { c.textContent = `${Math.round(obj.v)}${unit}`; },
+    }, 0.6 + i * 0.1);
   });
 
-  tl.fromTo(labels, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1 }, 1.3);
+  labelsIn(tl, scope, 0.85);
   return tl;
 }

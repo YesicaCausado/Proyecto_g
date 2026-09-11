@@ -11,7 +11,7 @@ correspondiente ("Sin datos suficientes").
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -336,7 +336,13 @@ def _compute_teacher_stats(
     upcoming_events = (
         db.query(ClassroomEvent)
         .filter(
-            ClassroomEvent.classroom_id.in_(classroom_ids + [None]),
+            or_(
+                ClassroomEvent.classroom_id.in_(classroom_ids),
+                and_(
+                    ClassroomEvent.classroom_id == None,
+                    ClassroomEvent.institution_id == getattr(current_user, "institution_id", None),
+                ),
+            ),
             ClassroomEvent.event_date >= today.isoformat(),
             ClassroomEvent.event_date < cutoff.isoformat(),
             ClassroomEvent.is_active == True,

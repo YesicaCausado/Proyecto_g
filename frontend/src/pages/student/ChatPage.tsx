@@ -328,6 +328,13 @@ export default function ChatPage() {
     await sendMessageWithText(input.trim());
   };
 
+  const handleSendKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
   const sendMessageWithText = async (msgContent: string, skillKeyOverride?: string) => {
     if (!msgContent.trim() || sending) return;
 
@@ -535,8 +542,27 @@ export default function ChatPage() {
   };
 
   // Si llegó por subruta /chat/:slug, entra directo a esa competencia.
+  // React reutiliza este componente al cambiar de /chat/:slug, por lo que hay
+  // que reiniciar la sesión cuando la competencia cambia realmente (sin esto,
+  // al elegir otra competencia el chat anterior seguía visible).
+  const prevSlugRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (routeCompetency && !sessionActive && !sending && !isCustomBot) {
+    // Ignorar el montaje inicial (prevSlugRef indefinido) para no duplicar
+    // el auto-arranque ni pisar una sesión ya iniciada por ?bot_id=... etc.
+    const isSlugChange = prevSlugRef.current !== undefined && prevSlugRef.current !== slug;
+    prevSlugRef.current = slug;
+
+    if (!routeCompetency || isCustomBot) return;
+
+    if (isSlugChange || !sessionActive) {
+      if (sending) return; // dejar terminar la petición en curso antes de reiniciar
+      // Reiniciar por completo para mostrar el chat de la nueva competencia.
+      setConversationId(null);
+      setMessages([]);
+      setLastResponse(null);
+      setCurrentQuiz(null);
+      setQuizSuggested(false);
+      metrics.reset();
       setSelectedSkill(routeCompetency.key);
       startSession(routeCompetency.key);
     }
@@ -1058,7 +1084,7 @@ export default function ChatPage() {
               type="text"
               value={input}
               onChange={(e) => handleInputChange(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+              onKeyDown={handleSendKeyDown}
               placeholder="Escribe tu respuesta..."
               disabled={sending}
               className="flex-1 px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-[#F7F6F3]"

@@ -216,6 +216,7 @@ class QuizSubmission(BaseModel):
     quiz_title: str
     user_answers: Dict[int, str]  # {question_id: selected_answer}
     classroom_id: Optional[int] = None 
+    duration: Optional[int] = None  # segundos que tardó el usuario en responder 
 
 class QuizAnalysisResponse(BaseModel):
     """Respuesta del análisis de quiz con recomendaciones adaptativas"""

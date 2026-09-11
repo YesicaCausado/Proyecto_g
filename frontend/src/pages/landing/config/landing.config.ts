@@ -255,6 +255,8 @@ export interface NeuroPattern {
   accent:  string;      // acento de la paleta (monocromo + azul)
   /** Señales/labels que aparecen progresivamente durante el scroll */
   labels:  string[];
+  /** Ruta de la imagen de escena (public/Imagenes_Landing/) */
+  image:   string;
 }
 
 export const NEURO_PATTERNS: NeuroPattern[] = [
@@ -263,30 +265,35 @@ export const NEURO_PATTERNS: NeuroPattern[] = [
     desc: 'Analiza microexpresiones y cambios faciales durante la interacción.',
     accent: '#3B82F6',
     labels: ['Microexpresiones', 'Atención', 'Mirada'],
+    image: 'Imagenes_Landing/facial1.jpg',
   },
   {
     id: 'voz', index: '02', title: 'Voz', tag: 'Prosodia',
     desc: 'Analiza aspectos como el ritmo, las pausas y la prosodia.',
     accent: '#60A5FA',
     labels: ['Ritmo', 'Pausas', 'Prosodia'],
+    image: 'Imagenes_Landing/voz.jpg',
   },
   {
     id: 'teclado', index: '03', title: 'Teclado', tag: 'Escritura',
     desc: 'Observa la velocidad, las pausas y los errores al escribir.',
     accent: '#2563EB',
     labels: ['Velocidad', 'Pausas', 'Errores'],
+    image: 'Imagenes_Landing/teclado.jpg',
   },
   {
     id: 'interaccion', index: '04', title: 'Interacción', tag: 'Navegación',
     desc: 'Analiza cómo navegas, haces clic y utilizas la plataforma.',
     accent: '#3B82F6',
-    labels: ['Click', 'Navegación', 'Interacción'],
+    labels: ['Clics', 'Navegación', 'Comportamiento'],
+    image: 'Imagenes_Landing/interaccion.jpg',
   },
   {
     id: 'rendimiento', index: '05', title: 'Rendimiento', tag: 'Progreso',
     desc: 'Analiza respuestas, errores, tiempo y progreso para entender tu evolución.',
     accent: '#60A5FA',
     labels: ['Respuestas', 'Errores', 'Tiempo', 'Progreso'],
+    image: 'Imagenes_Landing/rendimiento.jpg',
   },
 ];
 

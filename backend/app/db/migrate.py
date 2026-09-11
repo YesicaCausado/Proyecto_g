@@ -240,6 +240,17 @@ def run_migrations(engine) -> None:
         "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS attachment_mime VARCHAR(80)",
         "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER",
         "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS attachment_data BYTEA",
+
+        # ── 16. institution_id en classroom_events — scope multi-tenant del
+        #        calendario. Antes los eventos eran "globales" (classroom_id
+        #        NULL) sin institución, por lo que un evento institucional de
+        #        una institución podía aparecerle (o no) a estudiantes de otra.
+        "ALTER TABLE classroom_events ADD COLUMN IF NOT EXISTS institution_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_classroom_events_institution ON classroom_events (institution_id)"
+        " WHERE institution_id IS NOT NULL",
+        # Backfill: asociar eventos existentes a la institución de su profesor.
+        "UPDATE classroom_events ce SET institution_id = u.institution_id"
+        " FROM users u WHERE ce.teacher_id = u.id AND ce.institution_id IS NULL",
     ]
 
     applied = 0

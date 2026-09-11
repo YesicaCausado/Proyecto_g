@@ -45,10 +45,15 @@ interface QuizAnalysis {
 }
 
 interface QuizAnalysisResponse {
-  analysis: QuizAnalysis;
-  score: number;
-  total: number;
-  duration: number;
+  analysis?: QuizAnalysis;
+  score?: string | number;
+  correct_answers?: number;
+  wrong_answers?: number;
+  percentage?: number;
+  mistakes?: unknown[];
+  weak_concepts?: string[];
+  recommended_difficulty?: string;
+  adaptation_message?: string;
 }
 
 interface HistoryQuestionDetail {
@@ -68,6 +73,7 @@ interface HistoryEntry {
   questions_count?: number;
   difficulty?: string;
   user_score?: string | number;
+  date?: string;
   created_at?: string;
   recommended_difficulty?: string;
   details?: HistoryQuestionDetail[];
@@ -109,6 +115,20 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
+}
+
+// Formatea una fecha "YYYY-MM-DD" (o ISO) sin el offset de zona horaria que
+// `new Date("YYYY-MM-DD")` interpreta como medianoche UTC y desfasa un día.
+function formatHistoryDate(value?: string | null): string {
+  if (!value) return '';
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const [, y, mo, d] = m;
+    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const idx = Math.max(0, Math.min(11, Number(mo) - 1));
+    return `${d} ${meses[idx]} ${y}`;
+  }
+  return value;
 }
 
 export default function QuizzesPage() {
@@ -168,7 +188,8 @@ export default function QuizzesPage() {
         questions_count: entry.questions_count ?? 0,
         difficulty: entry.difficulty ?? 'medio',
         user_score: entry.user_score ?? '0/0',
-        created_at: entry.created_at ?? entry.date,
+        date: entry.date ?? entry.created_at ?? null,
+        created_at: entry.created_at ?? entry.date ?? null,
         recommended_difficulty: entry.recommended_difficulty,
         details: Array.isArray(entry.details) ? entry.details : [],
       }));
@@ -256,7 +277,13 @@ export default function QuizzesPage() {
     if (!quiz) return;
     setIsSubmitted(true);
     setIsAnalyzing(true);
-    const duration = elapsedTime;
+    // Detiene el cronómetro en el instante del envío: se congela el elapsedTime
+    // y se limpia startTime para que el useEffect del timer deje de actualizar.
+    const duration = startTime !== null
+      ? Math.max(0, Math.floor((Date.now() - startTime) / 1000))
+      : elapsedTime;
+    setElapsedTime(duration);
+    setStartTime(null);
     let score = 0;
     quiz.questions.forEach(q => {
       if (selectedAnswers[q.id] === q.correct_answer) score++;
@@ -514,11 +541,25 @@ export default function QuizzesPage() {
 
   // ── RESULTS SCREEN ─────────────────────────────────────────────
   if (screen === 'results') {
-    const analysis = analysisResult?.analysis ?? null;
-    const currentScore = analysisResult?.score ?? localScore;
-    const totalQ = analysisResult?.total ?? totalQuestions;
-    const duration = analysisResult?.duration ?? elapsedTime;
-    const percentage = totalQ > 0 ? Math.round((currentScore / totalQ) * 100) : pct;
+    const analysis = (analysisResult?.analysis ?? analysisResult ?? null) as {
+    adaptation_message?: string;
+    weak_concepts?: string[];
+    recommended_difficulty?: string;
+  } | null;
+    const weakConcepts = analysis?.weak_concepts ?? [];
+    const totalQ = totalQuestions > 0
+      ? totalQuestions
+      : (analysisResult?.correct_answers ?? 0) + (analysisResult?.wrong_answers ?? 0);
+    // El backend ya devuelve el porcentaje calculado (analysisResult.percentage).
+    // Como fallback, se calcula con el puntaje correcto y el total de preguntas.
+    const correctCount = typeof analysisResult?.correct_answers === 'number'
+      ? analysisResult.correct_answers
+      : localScore;
+    const percentage = typeof analysisResult?.percentage === 'number'
+      ? Math.round(analysisResult.percentage)
+      : totalQ > 0 ? Math.round((correctCount / totalQ) * 100) : pct;
+    const currentScore = correctCount;
+    const duration = elapsedTime;
     const passed = percentage >= 60;
 
     return (
@@ -559,11 +600,11 @@ export default function QuizzesPage() {
             {analysis.adaptation_message && (
               <p className="text-sm text-[#37352F] bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-3 py-2">{analysis.adaptation_message}</p>
             )}
-            {analysis.weak_concepts?.length > 0 && (
+            {weakConcepts.length > 0 && (
               <div>
                 <p className="text-sm font-medium text-[#37352F] mb-2">Conceptos a reforzar:</p>
                 <div className="flex flex-wrap gap-2">
-                  {analysis.weak_concepts.map((c, i) => (
+                  {weakConcepts.map((c, i) => (
                     <span key={i} className="px-2 py-1 bg-[#FCF6E5] border border-[#EDD88A] text-[#DFAB01] rounded-md text-xs">{c}</span>
                   ))}
                 </div>
@@ -656,10 +697,19 @@ export default function QuizzesPage() {
                   ? Number(entry.user_score.split('/')[0] || 0)
                   : Number(entry.user_score || 0);
                 const questions = entry.questions_count ?? 1;
-                const pctH = questions > 0 ? Math.round((rawScore / questions) * 100) : Math.round((entry.performance_score ?? 0) * 100);
+                // Prioriza el porcentaje real que calcula el backend (performance_score).
+                // Solo si no existe, se deriva del puntaje crudo sobre el total.
+                const pctH = typeof entry.performance_score === 'number' && entry.performance_score > 0
+                  ? Math.round(entry.performance_score)
+                  : questions > 0 ? Math.round((rawScore / questions) * 100) : 0;
                 const passedH = pctH >= 60;
                 const diff = (entry.difficulty ?? 'medio') as Difficulty;
                 const isSelected = selectedHistory?.id === entry.id;
+                // Fecha real de finalización: se parsea sin offset de zona horaria
+                // para no mostrar un día antes en Colombia (UTC-5).
+                const dateLabel = (entry.date ?? entry.created_at)
+                  ? formatHistoryDate(entry.date ?? entry.created_at)
+                  : '';
 
                 return (
                   <button
@@ -677,7 +727,7 @@ export default function QuizzesPage() {
                           {DIFF_LABELS[diff] ?? diff}
                         </span>
                         <span className="text-xs text-[#9B9A97]">{entry.user_score ?? `${Math.round((entry.performance_score ?? 0) * (entry.questions_count ?? 10))}/${entry.questions_count ?? 10}`} correctas</span>
-                        <span className="text-xs text-[#9B9A97]">{entry.created_at ? new Date(entry.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</span>
+                        <span className="text-xs text-[#9B9A97]">{dateLabel}</span>
                       </div>
                     </div>
                     {entry.recommended_difficulty && (

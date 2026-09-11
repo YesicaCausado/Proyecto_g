@@ -26,7 +26,6 @@ const todayStr = dateStr(today.getFullYear(), today.getMonth(), today.getDate())
 
 const DAYS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const GROUPS = ['Matemáticas 9A','Física 10B','Álgebra 8C','Cálculo 11A','Todos'];
 
 function mapEvent(raw: any): CalEvent {
   return {
@@ -44,7 +43,8 @@ export default function CalendarioTab() {
   const [events,   setEvents]   = useState<CalEvent[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ title:'', type:'clase' as EventType, group:'Todos', date:'' });
+  const [classrooms, setClassrooms] = useState<{ id: number; name: string }[]>([]);
+  const [form, setForm] = useState({ title:'', type:'clase' as EventType, group:'', date:'' });
 
   const monthStr = `${year}-${pad(month + 1)}`;
 
@@ -53,6 +53,13 @@ export default function CalendarioTab() {
       .then(r => setEvents((r.data.events ?? r.data ?? []).map(mapEvent)))
       .catch(() => setEvents([]));
   }, [monthStr]);
+
+  // Cargar las clases reales del profesor para poder asignar el evento a una clase.
+  useEffect(() => {
+    api.get('/classrooms/my-classes')
+      .then(r => setClassrooms((r.data.classrooms ?? []).map((c: any) => ({ id: c.id, name: c.name }))))
+      .catch(() => setClassrooms([]));
+  }, []);
 
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -71,13 +78,14 @@ export default function CalendarioTab() {
         title:      form.title.trim(),
         event_type: form.type,
         event_date: form.date,
+        classroom_id: form.group ? Number(form.group) : null,
       });
       setEvents(prev => [...prev, mapEvent(res.data)]);
     } catch {
-      const ev: CalEvent = { id: Date.now().toString(), title: form.title.trim(), type: form.type, date: form.date, group: form.group !== 'Todos' ? form.group : undefined };
+      const ev: CalEvent = { id: Date.now().toString(), title: form.title.trim(), type: form.type, date: form.date, group: form.group ? classrooms.find(c => c.id === Number(form.group))?.name : undefined };
       setEvents(prev => [...prev, ev]);
     }
-    setForm({ title:'', type:'clase', group:'Todos', date:'' });
+    setForm({ title:'', type:'clase', group:'', date:'' });
     setShowForm(false);
   };
 
@@ -240,10 +248,11 @@ export default function CalendarioTab() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Grupo (opcional)</label>
+              <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Grupo / Clase (opcional)</label>
               <select value={form.group} onChange={e => setForm(p=>({...p,group:e.target.value}))}
                 className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none bg-white">
-                {GROUPS.map(g => <option key={g}>{g}</option>)}
+                <option value="">Todos (institucional)</option>
+                {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="flex justify-end gap-2 pt-1">
