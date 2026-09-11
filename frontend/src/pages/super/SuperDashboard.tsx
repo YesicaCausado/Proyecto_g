@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useLicense } from '../../context/LicenseContext';
+import { planColor } from '../../styles/plan';
 import api from '../../services/api';
 import DashboardGeneral from './components/DashboardGeneral';
 import { TeachersTab, StudentsTab } from './components/UsersTabs';
@@ -22,6 +24,7 @@ import {
   MessageSquare, Calendar, Shield, CreditCard, Lock, ChevronRight,
   Menu, X, UserRound
 } from 'lucide-react';
+import { navItemStyle } from '../../styles/sidebar';
 
 const NAV_SECTIONS = [
   {
@@ -79,6 +82,7 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
 
 export default function SuperDashboard() {
   const { user, logout } = useAuth();
+  const { licenseType } = useLicense();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [license, setLicense] = useState<any>(null);
@@ -98,11 +102,17 @@ export default function SuperDashboard() {
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
+  // Plan vigente: prioriza el dato del endpoint /super/license-usage y, como
+  // respaldo, el LicenseContext (ambos exponen license_type).
+  const plan = planColor(license?.license_type ?? licenseType);
+
   // ── Habilitación de módulos según licencia (1.2.1.6 / 1.2.1.10 / 1.2.1.11) ──
   const ALL_TAB_IDS = NAV_SECTIONS.flatMap(s => s.items.map(i => i.id));
+  // "perfil" es una función común a todos los roles y planes: nunca se bloquea.
+  const ALWAYS_ENABLED_IDS = new Set<string>(['perfil']);
   // Si el backend no entrega super_modules (versión antigua), dejamos todo habilitado.
   const enabledTabIds = new Set<string>(license?.super_modules?.length
-    ? license.super_modules
+    ? [...license.super_modules, ...ALWAYS_ENABLED_IDS]
     : ALL_TAB_IDS);
   const isModuleLocked = (id: string) => !enabledTabIds.has(id);
 
@@ -136,14 +146,11 @@ export default function SuperDashboard() {
         title={locked ? `No disponible en tu licencia ${license?.license_type ? `«${license.license_type}»` : ''}` : label}
         onClick={() => handleNav(id)}
         className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${
-          locked
-            ? 'text-[#AEADAB] cursor-not-allowed border border-transparent'
-            : activeTab === id
-              ? 'bg-white font-semibold text-[#191919] shadow-sm border border-[#E9E9E7]'
-              : 'text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] border border-transparent'
+          navItemStyle('light', activeTab === id, { disabled: locked }).stateClass
         }`}
+        style={navItemStyle('light', activeTab === id, { disabled: locked }).style}
       >
-        <Icon className={`w-4 h-4 flex-shrink-0 ${locked ? 'text-[#D5D4D2]' : activeTab === id ? 'text-[#6940A5]' : 'text-[#9B9A97] group-hover:text-[#37352F]'}`} />
+        <Icon className={`w-4 h-4 flex-shrink-0 ${navItemStyle('light', activeTab === id, { disabled: locked }).iconClass}`} />
         <span className="flex-1 text-left truncate">{label}</span>
         {locked && <Lock className="w-3.5 h-3.5 text-[#D5D4D2] flex-shrink-0" />}
         {!locked && badge === 'red' && <span className="w-2 h-2 rounded-full bg-[#E03E3E] animate-pulse flex-shrink-0" />}
@@ -172,7 +179,12 @@ export default function SuperDashboard() {
           </div>
           <div className="overflow-hidden flex-1">
             <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">{user?.full_name}</p>
-            <p className="text-[10px] text-[#787774] truncate">{user?.role?.replace('_', ' ')}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] text-[#787774] truncate">{user?.role?.replace('_', ' ')}</p>
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${plan.className}`}>
+                {plan.label}
+              </span>
+            </div>
           </div>
           <ShieldCheck className="w-3.5 h-3.5 text-[#6940A5] flex-shrink-0" />
         </div>
@@ -216,7 +228,7 @@ export default function SuperDashboard() {
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
 
       {/* ══ SIDEBAR DESKTOP ══ */}
-      <aside className="hidden lg:flex lg:flex-col w-60 bg-[#F7F6F3] border-r border-[#E9E9E7] flex-shrink-0">
+      <aside className="hidden lg:flex lg:flex-col w-60 border-r border-[#E9E9E7] flex-shrink-0" style={{ background: plan.background }}>
         <SidebarContent />
       </aside>
 
@@ -242,7 +254,8 @@ export default function SuperDashboard() {
       {sidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}>
           <div
-            className="absolute left-0 top-12 bottom-0 w-64 bg-[#F7F6F3] border-r border-[#E9E9E7] flex flex-col overflow-y-auto"
+            className="absolute left-0 top-12 bottom-0 w-64 border-r border-[#E9E9E7] flex flex-col overflow-y-auto"
+            style={{ background: plan.background }}
             onClick={e => e.stopPropagation()}
           >
             <SidebarContent />

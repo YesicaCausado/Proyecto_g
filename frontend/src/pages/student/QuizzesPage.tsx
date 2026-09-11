@@ -99,6 +99,7 @@ const SUBJECTS: Subject[] = COMPETENCIES.map((c) => {
 
 const DIFF_LABELS: Record<Difficulty, string> = { auto: 'Adaptativo', facil: 'Fácil', medio: 'Medio', dificil: 'Difícil' };
 const DIFF_COLORS: Record<Difficulty, string> = {
+  auto: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',
   facil: 'bg-[#EEF7F4] text-[#37352F] border-[#B7DDD6]',
   medio: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',
   dificil: 'bg-[#FDEEEE] text-[#37352F] border-[#F4BDBD]',
@@ -219,7 +220,12 @@ export default function QuizzesPage() {
             text: typeof opt === 'string' ? opt : (opt as any).text || String(opt),
           }));
           const correctText: string = q.answer || q.correct_answer || '';
-          const correctOption = options.find(o => o.text === correctText);
+          // Normaliza (minúsculas, sin acentos, espacios colapsados) para que el
+          // texto correcto del backend coincida con una opción aunque haya
+          // diferencias de mayúsculas/acentos/espacios → nota local = nota real.
+          const norm = (s: string) =>
+            (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ');
+          const correctOption = options.find(o => norm(o.text) === norm(correctText));
           return {
             id: q.id ?? qi + 1,
             question: q.question || '',

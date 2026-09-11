@@ -15,7 +15,7 @@
  *   5. Cuando robotState cambia, llama a controller.play()
  * ─────────────────────────────────────────────────────────────
  */
-import { useEffect, useRef }         from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { Preload }                 from '@react-three/drei'
 import type { AnimationClip }      from 'three'
 import type * as THREE             from 'three'
@@ -79,18 +79,33 @@ export default function RobotAnimatedScene({
 
   // ── Reaccionar a cambios de estado externos (formulario) ─
   // Solo estados accionables desde el formulario.
-  // 'idle' y 'greeting' los gestiona el engine internamente.
+  // 'greeting' lo gestiona el engine internamente (saludo inicial).
+  // 'idle' SÍ debe propagarse: cuando el contexto transiciona
+  // greeting→idle (auto-idle a los 2.8s), el motor debe reproducir
+  // la animación idle; si no, el robot queda congelado/invisible.
   useEffect(() => {
-    if (!isReady || !greetingPlayed.current) return
-    if (robotState === 'idle' || robotState === 'greeting') return
+    if (!isReady) return
+    if (robotState === 'greeting' && !greetingPlayed.current) return
+    if (robotState === 'idle') {
+      // Reproduce idle si el motor no está ya en idle
+      if (controller.currentState !== 'idle') {
+        controller.play('idle')
+      }
+      return
+    }
     controller.play(robotState)
   }, [robotState, isReady, controller])
 
   // ── Callback adaptado para RobotModel.onLoaded ───────────
-  const handleLoaded = (clips: AnimationClip[], scene: THREE.Object3D) => {
-    onClipsLoaded(clips, scene)
-    onReady?.(clips)
-  }
+  // useCallback con identidad estable: evita que RobotModel
+  // re-ejecute su useEffect (y re-dispare onLoaded) en cada render.
+  const handleLoaded = useCallback(
+    (clips: AnimationClip[], scene: THREE.Object3D) => {
+      onClipsLoaded(clips, scene)
+      onReady?.(clips)
+    },
+    [onClipsLoaded, onReady],
+  )
 
   return (
     <>

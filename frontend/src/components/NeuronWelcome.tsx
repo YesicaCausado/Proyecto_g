@@ -8,6 +8,8 @@
  */
 import { Flame } from 'lucide-react';
 import RobotCanvas from '../pages/auth/components/robot/RobotCanvas';
+import { useLicense } from '../context/LicenseContext';
+import { planColor } from '../styles/plan';
 
 interface NeuronWelcomeProps {
   name: string;
@@ -17,38 +19,43 @@ interface NeuronWelcomeProps {
 
 export default function NeuronWelcome({ name, subtitle, streakDays }: NeuronWelcomeProps) {
   const firstName = name?.split(' ')[0] || name;
+  const { licenseType } = useLicense();
+  const plan = planColor(licenseType);
 
   return (
     <div
       className="relative w-full rounded-2xl overflow-hidden mb-6"
       style={{
         height: 'clamp(180px, 22vw, 240px)',
-        background: 'linear-gradient(135deg, #ede9ff 0%, #ddd5ff 45%, #c8baff 100%)',
+        background: plan.welcome,
       }}
     >
       {/* Decoración de fondo — círculos difusos */}
       <div
         className="absolute -top-10 -right-10 w-64 h-64 rounded-full opacity-30 pointer-events-none"
-        style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }}
+        style={{ background: `radial-gradient(circle, ${plan.welcomeAccentSoft} 0%, transparent 70%)` }}
       />
       <div
         className="absolute bottom-0 left-1/3 w-40 h-40 rounded-full opacity-20 pointer-events-none"
-        style={{ background: 'radial-gradient(circle, #818cf8 0%, transparent 70%)' }}
+        style={{ background: `radial-gradient(circle, ${plan.welcomeAccentSoft} 0%, transparent 70%)` }}
       />
 
       {/* ── Texto izquierda ─────────────────────────────────── */}
       <div className="relative z-10 flex flex-col justify-center h-full pl-6 sm:pl-10 pr-[42%] sm:pr-[44%]">
-        <p className="text-[10px] sm:text-[11px] font-bold text-[#7c3aed] uppercase tracking-widest mb-1 sm:mb-2">
+        <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-widest mb-1 sm:mb-2"
+           style={{ color: plan.welcomeAccentSoft }}>
           Neuron · NeuroLearn AI
         </p>
 
-        <h2 className="text-[18px] sm:text-[26px] md:text-[30px] font-bold text-[#2e1065] leading-tight tracking-tight">
+        <h2 className="text-[18px] sm:text-[26px] md:text-[30px] font-bold leading-tight tracking-tight"
+            style={{ color: plan.welcomeAccent }}>
           ¡Bienvenido,{' '}
-          <span className="text-[#7c3aed]">{firstName}</span>! 👋
+          <span style={{ color: plan.welcomeAccentSoft }}>{firstName}</span>! 👋
         </h2>
 
         {subtitle && (
-          <p className="text-[11px] sm:text-[13px] text-[#6d28d9] mt-1 sm:mt-2 leading-snug opacity-80">
+          <p className="text-[11px] sm:text-[13px] mt-1 sm:mt-2 leading-snug opacity-80"
+             style={{ color: plan.welcomeAccentSoft }}>
             {subtitle}
           </p>
         )}
@@ -56,10 +63,12 @@ export default function NeuronWelcome({ name, subtitle, streakDays }: NeuronWelc
         {streakDays !== undefined && (
           <div className="flex items-center gap-1.5 mt-3 sm:mt-4">
             <Flame className="w-4 h-4 text-[#f97316]" />
-            <span className="text-[12px] sm:text-[13px] font-semibold text-[#2e1065]">
+            <span className="text-[12px] sm:text-[13px] font-semibold"
+                  style={{ color: plan.welcomeAccent }}>
               Racha actual
             </span>
-            <span className="text-[12px] sm:text-[13px] text-[#6d28d9] font-medium">
+            <span className="text-[12px] sm:text-[13px] font-medium"
+                  style={{ color: plan.welcomeAccentSoft }}>
               {streakDays} días
             </span>
           </div>
@@ -74,11 +83,11 @@ export default function NeuronWelcome({ name, subtitle, streakDays }: NeuronWelc
       {/* ── Burbuja de Neuron ────────────────────────────────── */}
       <div
         className="absolute right-[40%] sm:right-[38%] top-4 sm:top-5 z-20 bg-white rounded-xl shadow-md px-3 py-2 max-w-[130px] sm:max-w-[150px] hidden sm:block"
-        style={{ boxShadow: '0 4px 20px rgba(124,58,237,0.15)' }}
+        style={{ boxShadow: `0 4px 20px ${plan.welcomeAccentSoft}26` }}
       >
-        <p className="text-[10px] font-semibold text-[#7c3aed] leading-none mb-0.5">
+        <p className="text-[10px] font-semibold leading-none mb-0.5" style={{ color: plan.welcomeAccentSoft }}>
           ¡Hola! Soy{' '}
-          <span className="text-[#4f46e5]">Neuron</span>
+          <span style={{ color: plan.welcomeAccent }}>Neuron</span>
         </p>
         <p className="text-[9px] text-[#6b7280] leading-tight">
           Tu asistente inteligente para el Saber 11

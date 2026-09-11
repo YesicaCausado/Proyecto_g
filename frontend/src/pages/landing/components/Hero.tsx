@@ -333,8 +333,6 @@ export default function Hero() {
         ref={robotWrapRef}
         top={isMobile ? HERO_RESPONSIVE.mobileTop : HERO_ROBOT.top}
         scale={isMobile ? HERO_RESPONSIVE.mobileRobotScale : HERO_ROBOT.scale}
-        reduceMotion={reduceMotion}
-        isMobile={isMobile}
       />
 
       {/* Halo monocromo sutil tras Neurón */}

@@ -85,15 +85,14 @@ export function transitionIdle(ctx: AnimationContext): TransitionResult {
   if (neck)  entry.to(neck.rotation,  { x: 0, y: 0, z: 0, duration: 0.70 }, 0)
   if (spine) entry.to(spine.rotation, { x: 0, y: 0, z: 0, duration: 0.75 }, 0)
 
-  // Loop: flotación suave vertical (premium — muy sutil)
-  const loop = gsap.timeline({ repeat: -1, yoyo: true })
-  loop.to(root.position, {
-    y: homeY + 0.04,
-    duration: 2.2,
-    ease: 'sine.inOut',
-  })
+  // NOTA: la flotación/respiración NO se hace aquí con GSAP.
+  // useRobotIdleAnimation ya gestiona position.y / rotaciones vía
+  // useFrame. Si ambos sistemas escribieran rootGroup.position.y
+  // habría una carrera: el hook capturaba un baseY incorrecto y
+  // "empujaba" el robot fuera de cámara (el síntoma de "desaparece").
+  // Aquí solo restauramos a neutral; el loop vivo queda en el hook.
 
-  return { entry, loop }
+  return { entry, loop: null }
 }
 
 // ── GREETING ─────────────────────────────────────────────────

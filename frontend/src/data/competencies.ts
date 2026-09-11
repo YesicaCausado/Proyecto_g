@@ -110,7 +110,7 @@ export const COMPETENCIES: Competency[] = [
 export function findCompetency(value?: string | null): Competency | undefined {
   if (!value) return undefined;
   const v = value.toLowerCase().trim();
-  return COMPETENCIAS.find(
+  return COMPETENCIES.find(
     (c) => c.slug === v || c.key === v || c.name.toLowerCase() === v,
   );
 }

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.api.auth import get_current_user
 from app.models.user import User
-from app.services.license_service import require_teacher_module, require_active_license, LicenseInfo
+from app.services.license_service import require_feature, require_active_license, LicenseInfo
 from app.core.config import settings
 
 # Reutilizar el mismo gestor que usa el chat (Groq → Gemini → local).
@@ -228,7 +228,7 @@ def _matches_schema(kind: str, parsed) -> bool:
 @router.post("/generate")
 async def generate_content(
     req: GenerateRequest,
-    license_info: LicenseInfo = Depends(require_teacher_module("ia")),
+    license_info: LicenseInfo = Depends(require_feature("teacher_ai")),
     active_license: LicenseInfo = Depends(require_active_license()),
     current_user: User = Depends(get_current_user),
 ):

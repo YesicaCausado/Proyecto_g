@@ -33,6 +33,9 @@ export interface LicenseInfo {
   license_type:           LicenseType;
   license_status:         LicenseStatus;
   days_left:              number | null;
+  role?:                  string;
+  features?:              string[];
+  super_modules?:         string[];
   teacher_modules:        string[];
   student_modules:        string[];
   teacher_dashboard_kpis: string[];
@@ -49,6 +52,7 @@ interface LicenseContextType {
   licenseType:       LicenseType;
   licenseStatus:     LicenseStatus;
   daysLeft:          number | null;
+  hasFeature:        (feature: string) => boolean;
   hasTeacherModule:  (mod: string) => boolean;
   hasStudentModule:  (mod: string) => boolean;
   hasKpi:            (kpi: string) => boolean;
@@ -64,13 +68,24 @@ const BASIC_ACTIVE: LicenseInfo = {
   license_type:           'basica',
   license_status:         'active',
   days_left:              null,
+  features: [
+    'perfil', 'configuracion', 'mensajes', 'calendario', 'dashboard',
+    'recursos', 'evaluaciones', 'tareas', 'anuncios', 'licencia',
+    'gestion_profesores', 'gestion_estudiantes', 'gestion_grupos',
+    'basic_analytics', 'neurobots', 'reportes', 'tutor_ia',
+  ],
+  super_modules: [
+    'dashboard', 'profesores', 'estudiantes', 'grupos',
+    'mensajeria', 'calendario', 'auditoria',
+    'configuracion', 'licencia', 'seguridad', 'perfil',
+  ],
   teacher_modules:        [
     'dashboard', 'cursos', 'grupos', 'estudiantes',
     'evaluaciones', 'recursos', 'calendario', 'mensajes', 'perfil',
   ],
   student_modules:        [
     'inicio', 'mis_cursos', 'mis_tareas', 'evaluaciones',
-    'recursos', 'calendario', 'mensajes', 'perfil',
+    'recursos', 'calendario', 'mensajes', 'perfil', 'tutor_ia', 'estadisticas',
   ],
   teacher_dashboard_kpis: [
     'cursos_activos', 'estudiantes', 'evaluaciones_creadas', 'actividades_pendientes',
@@ -133,6 +148,22 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     return info.student_modules.includes(mod);
   };
 
+  const hasFeature = (feature: string): boolean => {
+    // La fuente de verdad es la lista `features` devuelta por el backend
+    // (calculada desde la matriz rol+licencia). Fallback: si no vino,
+    // derivar de teacher/student modules para mantener compatibilidad.
+    if (info.license_status === 'suspended') return false;
+    if (info.license_status === 'expired') {
+      return ['perfil', 'configuracion', 'mensajes', 'calendario'].includes(feature);
+    }
+    if (info.features?.length) return info.features.includes(feature);
+
+    // Fallback por módulos (versión antigua del backend sin `features`).
+    const translacionales = ['perfil', 'configuracion', 'mensajes', 'calendario'];
+    if (translacionales.includes(feature)) return true;
+    return info.teacher_modules.includes(feature) || info.student_modules.includes(feature);
+  };
+
   const hasKpi = (kpi: string): boolean =>
     info.teacher_dashboard_kpis.includes(kpi);
 
@@ -147,6 +178,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         licenseType:     info.license_type,
         licenseStatus:   info.license_status,
         daysLeft:        info.days_left,
+        hasFeature,
         hasTeacherModule,
         hasStudentModule,
         hasKpi,

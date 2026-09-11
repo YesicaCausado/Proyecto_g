@@ -1,6 +1,7 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLicense } from '../context/LicenseContext';
+import { planColor } from '../styles/plan';
 import LicenseBanner from './LicenseBanner';
 import SuspendedScreen from './SuspendedScreen';
 import { COMPETENCIES } from '../data/competencies';
@@ -23,7 +24,8 @@ import {
   Play,
   Target,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
+import { navItemStyle } from '../styles/sidebar';
 
 type NavModule =
   | 'mis_cursos'
@@ -32,7 +34,8 @@ type NavModule =
   | 'estadisticas'
   | 'recursos'
   | 'mensajes'
-  | 'calendario';
+  | 'calendario'
+  | 'perfil';
 
 interface NavLinkItem {
   id: string;
@@ -81,7 +84,7 @@ const iconMap: Record<string, ReactNode> = {
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const { hasStudentModule, licenseStatus } = useLicense();
+  const { hasStudentModule, licenseStatus, licenseType } = useLicense();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -92,6 +95,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const isTeacher = user?.role === 'profesor';
+  const plan = planColor(licenseType);
 
   // Pantalla de suspensión
   if (licenseStatus === 'suspended' && user?.role === 'estudiante') {
@@ -100,7 +104,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const exact = (path: string) => location.pathname === path;
 
-  const navSections: NavSection[] = isTeacher
+  const navSections = (isTeacher
     ? [
         {
           label: 'PRINCIPAL',
@@ -146,7 +150,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               ],
             },
             { id: 'material', type: 'link', to: '/material', label: 'Material de Apoyo', icon: 'material', module: 'recursos' },
-          ].filter((i: NavItem) => !i.module || hasStudentModule(i.module)),
+          ].filter((i: any) => !i.module || hasStudentModule(i.module)),
         },
         {
           label: 'MI INSTITUCIÓN',
@@ -154,13 +158,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             { id: 'mis-clases', type: 'link', to: '/my-classes', label: 'Mis Clases', icon: 'clases', module: 'mis_cursos' },
             { id: 'tablero', type: 'link', to: '/tablero', label: 'Tablero', icon: 'tablero', module: 'mis_cursos' },
             { id: 'calendario', type: 'link', to: '/calendar', label: 'Calendario', icon: 'calendario', module: 'calendario' },
-          ].filter((i: NavItem) => !i.module || hasStudentModule(i.module)),
+          ].filter((i: any) => !i.module || hasStudentModule(i.module)),
         },
         {
           label: 'COMUNICACIÓN',
           items: [
             { id: 'mensajes', type: 'link', to: '/messages', label: 'Mensajes', icon: 'mensajes', module: 'mensajes' },
-          ].filter((i: NavItem) => !i.module || hasStudentModule(i.module)),
+          ].filter((i: any) => !i.module || hasStudentModule(i.module)),
         },
         {
           label: 'CUENTA',
@@ -168,7 +172,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             { id: 'perfil', type: 'link', to: '/settings', label: 'Mi Perfil', icon: 'perfil' },
           ],
         },
-      ].filter((sec) => sec.items.length > 0);
+      ].filter((sec) => sec.items.length > 0)) as NavSection[];
 
   // ── Estado activo de una opción ──────────────────────────────────────
   const linkActive = (item: NavLinkItem): boolean => exact(item.to);
@@ -193,6 +197,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return next;
     });
 
+  // Mantener coherencia: al navegar, abre automáticamente el grupo activo
+  // (p. ej. "Competencias" al entrar a /chat/matematicas, "Desafíos" en
+  // /quizzes o /performance).
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      for (const section of navSections) {
+        for (const item of section.items) {
+          if (item.type === 'group' && groupActive(item)) next.add(item.id);
+        }
+      }
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
   const initials = (user?.full_name || user?.username || '?')
     .split(' ')
     .map((w) => w[0])
@@ -200,13 +220,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     .join('')
     .toUpperCase();
 
-  // ─── Estilos reutilizables por estado ────────────────────────────────
+  // ─── Estilos reutilizables por estado (compartidos con todos los paneles) ──
   const linkClass = (active: boolean) =>
-    `group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${
-      active
-        ? 'bg-[#E7F1FB] text-[#0B3B5C]'
-        : 'text-[#787774] hover:bg-[#EDF3FA] hover:text-[#1F2A37]'
-    }`;
+    `group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', active).stateClass}`;
   const skipModule = (item: NavItem): boolean =>
     !!item.module && !hasStudentModule(item.module);
 
@@ -243,17 +259,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   if (skipModule(item)) return null;
                   const active = linkActive(item);
                   const icon = iconMap[item.icon] ?? null;
+                  const st = navItemStyle('light', active);
                   return (
                     <Link
                       key={item.id}
                       to={item.to}
                       onClick={() => mobile && setSidebarOpen(false)}
                       className={linkClass(active)}
-                      style={active ? { boxShadow: 'inset 3px 0 0 #0B6E99' } : undefined}
+                      style={st.style}
                     >
-                      {active
-                        ? <span style={{ color: '#0B6E99' }}>{icon}</span>
-                        : <span style={{ color: '#9B9A97' }} className="group-hover:text-[#2F5B80]">{icon}</span>}
+                      <span className={st.iconClass}>{icon}</span>
                       <span className="flex-1 truncate">{item.label}</span>
                       {active && (
                         <ChevronRight className="w-3.5 h-3.5 text-[#0B6E99] ml-auto flex-shrink-0" />
@@ -273,15 +288,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <button
                       type="button"
                       onClick={() => toggleGroup(item.id)}
-                      className={`group w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${
-                        groupIsActive
-                          ? 'bg-[#E7F1FB] text-[#0B3B5C]'
-                          : 'text-[#787774] hover:bg-[#EDF3FA] hover:text-[#1F2A37]'
-                      }`}
-                      style={groupIsActive ? { boxShadow: 'inset 3px 0 0 #0B6E99' } : undefined}
+                      className={`group w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', groupIsActive).stateClass}`}
+                      style={navItemStyle('light', groupIsActive).style}
                       aria-expanded={open}
                     >
-                      <span style={{ color: groupIsActive ? '#0B6E99' : '#9B9A97' }} className="group-hover:text-[#2F5B80]">
+                      <span className={navItemStyle('light', groupIsActive).iconClass}>
                         {iconMap[item.icon]}
                       </span>
                       <span className="flex-1 truncate text-left">{item.label}</span>
@@ -303,12 +314,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                               key={child.id}
                               to={child.to}
                               onClick={() => mobile && setSidebarOpen(false)}
-                              className={`group flex items-center gap-2.5 pl-2 pr-2.5 py-[6px] rounded-md text-[13px] font-medium transition-all duration-150 ${
-                                cActive
-                                  ? 'bg-[#E7F1FB] text-[#0B3B5C]'
-                                  : 'text-[#787774] hover:bg-[#EDF3FA] hover:text-[#1F2A37]'
-                              }`}
-                              style={cActive ? { boxShadow: 'inset 3px 0 0 #0B6E99' } : undefined}
+                              className={`group flex items-center gap-2.5 pl-2 pr-2.5 py-[6px] rounded-md text-[13px] font-medium transition-all duration-150 ${navItemStyle('light', cActive).stateClass}`}
+                              style={navItemStyle('light', cActive).style}
                             >
                               <span
                                 className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
@@ -317,7 +324,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                               />
                               <span className="flex-1 truncate">{child.label}</span>
                               {cIcon && (
-                                <span className={cActive ? 'text-[#0B6E99]' : 'text-[#9B9A97]'}>{cIcon}</span>
+                                <span className={navItemStyle('light', cActive).iconClass}>{cIcon}</span>
                               )}
                             </Link>
                           );
@@ -344,7 +351,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">
               {user?.full_name || user?.username}
             </p>
-            <p className="text-[10px] text-[#787774] capitalize truncate">{user?.role}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] text-[#787774] capitalize truncate">{user?.role}</p>
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${plan.className}`}>
+                {plan.label}
+              </span>
+            </div>
           </div>
           <button
             onClick={handleLogout}
@@ -366,7 +378,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Sidebar Desktop ── */}
       <aside
         className="hidden md:flex md:flex-col md:w-[240px] flex-shrink-0 border-r border-[#E9E9E7]"
-        style={{ background: '#F7F6F3' }}
+        style={{ background: plan.background }}
       >
         <SidebarContent />
       </aside>
@@ -385,6 +397,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             NeuroLearn
           </span>
+          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${plan.className}`}>
+            {plan.label}
+          </span>
         </div>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -402,7 +417,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         >
           <div
             className="absolute left-0 top-12 bottom-0 w-[240px] border-r border-[#E9E9E7]"
-            style={{ background: '#F7F6F3' }}
+            style={{ background: plan.background }}
             onClick={(e) => e.stopPropagation()}
           >
             <SidebarContent mobile />
@@ -425,10 +440,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {(() => {
             const items: { to: string; label: string; icon: ReactNode; module: NavModule; active: boolean }[] = [
               { to: '/dashboard', label: 'Inicio', icon: <Home className="w-5 h-5" />, module: 'inicio' as NavModule, active: exact('/dashboard') },
-              { to: '/chat', label: 'Competencias', icon: <BookOpen className="w-5 h-5" />, module: 'tutor_ia', active: location.pathname.startsWith('/chat') },
-              { to: '/quizzes', label: 'Desafíos', icon: <Trophy className="w-5 h-5" />, module: 'evaluaciones', active: location.pathname.startsWith('/quizzes') || exact('/performance') },
-              { to: '/my-classes', label: 'Clases', icon: <Users className="w-5 h-5" />, module: 'mis_cursos', active: location.pathname.startsWith('/my-classes') },
-              { to: '/settings', label: 'Perfil', icon: <Settings className="w-5 h-5" />, module: 'settings' as NavModule, active: exact('/settings') },
+              { to: '/chat', label: 'Competencias', icon: <BookOpen className="w-5 h-5" />, module: 'tutor_ia' as NavModule, active: location.pathname.startsWith('/chat') },
+              { to: '/quizzes', label: 'Desafíos', icon: <Trophy className="w-5 h-5" />, module: 'evaluaciones' as NavModule, active: location.pathname.startsWith('/quizzes') || exact('/performance') },
+              { to: '/my-classes', label: 'Clases', icon: <Users className="w-5 h-5" />, module: 'mis_cursos' as NavModule, active: location.pathname.startsWith('/my-classes') },
+              { to: '/settings', label: 'Perfil', icon: <Settings className="w-5 h-5" />, module: 'perfil' as NavModule, active: exact('/settings') },
             ].filter((i) => !i.module || hasStudentModule(i.module));
             return items.map((item) => (
               <Link

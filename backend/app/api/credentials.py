@@ -37,27 +37,9 @@ from app.services.email_service import send_credentials_email
 router = APIRouter(tags=["Credenciales B2B"])
 
 # ─── Módulos permitidos del panel Súper Profesor según licencia ──────────────
-# Refleja la misma política de TEACHER_MODULES de license_service.py:
-# los módulos de IA/avanzados (neurobots, alertas, reportes) exigen Premium+.
-SUPER_MODULES: dict[str, list[str]] = {
-    "basica": [
-        "dashboard", "profesores", "estudiantes", "grupos",
-        "mensajeria", "calendario", "auditoria",
-        "configuracion", "licencia", "seguridad",
-    ],
-    "premium": [
-        "dashboard", "profesores", "estudiantes", "grupos",
-        "neurobots", "alertas", "reportes",
-        "mensajeria", "calendario", "auditoria",
-        "configuracion", "licencia", "seguridad",
-    ],
-    "pro": [
-        "dashboard", "profesores", "estudiantes", "grupos",
-        "neurobots", "alertas", "reportes",
-        "mensajeria", "calendario", "auditoria",
-        "configuracion", "licencia", "seguridad",
-    ],
-}
+# Importados desde license_service.py (única fuente de verdad). Modelo
+# acumulativo y con "perfil" siempre habilitado en todos los planes.
+from app.services.license_service import SUPER_MODULES  # noqa: E402
 
 
 # ─── Utilidades ──────────────────────────────────────────────────────────────

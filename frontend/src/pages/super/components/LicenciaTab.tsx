@@ -40,19 +40,21 @@ export default function LicenciaTab({ license }: { license: any }) {
 
   const PLAN_FEATURES: Record<'basica' | 'premium' | 'pro', string[]> = {
     basica: [
-      'Hasta 20 profesores', 'Hasta 300 estudiantes', 'Dashboard básico', 'NeuroAlertas básicas',
-      '1 NeuroBot por profesor', 'Exportación CSV',
+      'Hasta 20 profesores', 'Hasta 300 estudiantes', 'Dashboard institucional',
+      'Gestión de profesores, estudiantes y grupos', 'NeuroBots básicos',
+      'Reportes básicos', 'Estadísticas básicas', 'Exportación CSV',
     ],
     premium: [
-      'Hasta 60 profesores', 'Hasta 1.500 estudiantes', 'Dashboard avanzado',
-      'NeuroAlertas inteligentes', 'Analítica institucional', 'Reportes PDF y Excel',
-      'Hasta 10 NeuroBots por profesor', 'Predicción de riesgo académico', 'Comparativos históricos',
+      'Hasta 60 profesores', 'Hasta 1.500 estudiantes', 'Estadísticas avanzadas',
+      'NeuroBots avanzados', 'NeuroAlertas', 'Análisis avanzado del rendimiento',
+      'Indicadores de riesgo', 'Analítica institucional', 'Reportes avanzados (PDF y Excel)',
+      'Integraciones avanzadas',
     ],
     pro: [
       'Profesores ilimitados', 'Estudiantes ilimitados', 'NeuroBots ilimitados',
-      'IA institucional completa', 'Analítica predictiva avanzada', 'Reportes personalizados',
-      'Integraciones (Google Workspace, Microsoft 365)', 'API de integración',
-      'Almacenamiento ampliado', 'Acceso anticipado a nuevas funciones',
+      'Analítica predictiva', 'Automatizaciones', 'Integraciones completas',
+      'Comparación avanzada entre grupos', 'Reportes avanzados completos',
+      'Analítica institucional avanzada',
     ],
   };
 
@@ -184,16 +186,15 @@ export default function LicenciaTab({ license }: { license: any }) {
                 ['Profesores', 'Hasta 20', 'Hasta 60', 'Ilimitados'],
                 ['Estudiantes', 'Hasta 300', 'Hasta 1.500', 'Ilimitados'],
                 ['Dashboard', 'Básico', 'Avanzado', 'Predictivo completo'],
-                ['NeuroAlertas', 'Básicas', 'Inteligentes', 'Predictivas'],
-                ['NeuroBots por profesor', '1', 'Hasta 10', 'Ilimitados'],
+                ['NeuroAlertas', 'No disponible', 'Inteligentes', 'Predictivas'],
+                ['NeuroBots', 'Básicos', 'Avanzados', 'Ilimitados'],
                 ['Exportación', 'CSV', 'CSV, PDF, Excel', 'CSV, PDF, Excel'],
-                ['Analítica', 'No disponible', 'Institucional', 'Predictiva avanzada'],
-                ['Reportes', 'Básicos', 'PDF y Excel', 'Personalizados'],
+                ['Analítica', 'Básica', 'Institucional', 'Predictiva avanzada'],
+                ['Reportes', 'Básicos', 'Avanzados', 'Completos'],
                 ['IA institucional', 'No disponible', 'Disponible', 'Completa'],
-                ['Integraciones', 'No disponible', 'No disponible', 'Google Workspace, Microsoft 365, SIS'],
-                ['API de integración', 'No', 'No', 'Sí'],
-                ['Almacenamiento', 'Estándar', 'Ampliado', 'Ampliado'],
-                ['Acceso a nuevas funciones', 'No', 'No', 'Anticipado'],
+                ['Integraciones', 'No disponible', 'Avanzadas', 'Completas (Google, Microsoft, SIS)'],
+                ['Automatizaciones', 'No disponible', 'No disponible', 'Sí'],
+                ['Comparación de grupos', 'No disponible', 'No disponible', 'Sí'],
               ].map(([feature, basica, premium, pro], i) => (
                 <tr key={feature} className={i % 2 === 0 ? 'bg-white' : 'bg-[#FBFAF8]'}>
                   <td className="border border-[#E9E9E7] px-3 py-3 font-medium text-[#37352F]">{feature}</td>

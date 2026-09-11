@@ -17,15 +17,10 @@
  * Neurón se reutiliza por completo: RobotCanvas (robotState="idle")
  * renderiza el /robot.glb real con su motor de respiración,
  * parpadeo y mirada al usuario — seguimos sin tocar ese motor.
- *
- * Palette: se inyecta HERO_LIGHTING.preset (luces blancas/grises)
- * para que Neurón mantenga la estética estrictamente monocroma del
- * Hero, sin alterar la escena azul/violeta del login.
  * ─────────────────────────────────────────────────────────────
  */
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import RobotCanvas from '../../auth/components/robot/RobotCanvas';
-import { HERO_LIGHTING } from '../config/hero.config';
 
 export interface HeroRobotHandle {
   /** Contenedor externo — lo anima GSAP en entrada / scroll / mouse */
@@ -38,13 +33,10 @@ interface HeroRobotProps {
   /** Posicionamiento del robot dentro del hero */
   top:    number;
   scale:  number;
-  /** Para desactivar efectos en modo reducido o móvil */
-  reduceMotion: boolean;
-  isMobile: boolean;
 }
 
 const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
-  function HeroRobot({ top, scale, reduceMotion, isMobile }, ref) {
+  function HeroRobot({ top, scale }, ref) {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const floatRef   = useRef<HTMLDivElement>(null);
 
@@ -78,21 +70,7 @@ const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
             robotState="idle"
             transparent
             className="w-full h-full"
-            lightingPresets={HERO_LIGHTING.preset}
           />
-          
-          {/* Ojos brillantes - efecto de brillo progresivo */}
-          {!reduceMotion && !isMobile && (
-            <div className="absolute inset-0 pointer-events-none"
-              style={{
-                backgroundImage: `
-                  radial-gradient(circle at 30% 35%, rgba(0,255,100,0.15) 0%, transparent 40%),
-                  radial-gradient(circle at 70% 35%, rgba(0,255,100,0.15) 0%, transparent 40%)
-                `,
-                pointerEvents: 'none'
-              }}
-            />
-          )}
         </div>
       </div>
     );

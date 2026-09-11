@@ -16,6 +16,7 @@ from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.expert_bot import ExpertBot
 from app.models.learning import ChatMessage, LearningSession
+from app.services.license_service import NEUROBOT_LIMITS
 
 # Router montado en main.py con prefix="/api/v1/bots".
 # (El antiguo `prefix="/expert-bots"` se eliminó para evitar rutas duplicadas
@@ -222,7 +223,7 @@ async def create_bot(
     # Verificar cupos de la institución
     institution = current_user.institution
     if institution and institution.license_type:
-        limits = {"basica": 10, "premium": 50, "pro": 200}.get(institution.license_type, 10)
+        limits = NEUROBOT_LIMITS.get(institution.license_type, NEUROBOT_LIMITS["basica"])
         if db.query(ExpertBot).filter(ExpertBot.creator_id == current_user.id).count() >= limits:
             raise HTTPException(status_code=400, detail=f"Límite de bots alcanzado: {limits}")
 

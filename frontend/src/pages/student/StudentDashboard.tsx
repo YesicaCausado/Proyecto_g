@@ -70,6 +70,16 @@ const SUBJECT_LABELS: Record<string, string> = {
   sociales:    'Sociales',
 };
 
+// Mapea las claves de materia del backend a las claves de competencia del
+// frontend para navegar a la subruta correcta del Neuro-Chat.
+const SUBJECT_TO_COMPETENCY: Record<string, string> = {
+  matematicas: 'matematicas',
+  lectura:     'lectora',
+  ingles:      'ingles',
+  ciencias:    'cientifico',
+  sociales:    'ciudadanas',
+};
+
 export default function StudentDashboard() {
   const { user } = useAuth();
   const [, setBots] = useState<ExpertBot[]>([]);
@@ -546,7 +556,7 @@ export default function StudentDashboard() {
                   const actionText = weak && weak !== 'Sin datos aún'
                     ? `Refuerza "${weak}" en ${label}: tu puntaje actual es ${s.score}%.`
                     : `Practica más ejercicios de ${label}; ahora estás en ${s.score}%.`;
-                  addRec(actionText, `/chat?skill=${key}`);
+                  addRec(actionText, `/chat/${findCompetency(SUBJECT_TO_COMPETENCY[key] ?? key)?.slug ?? key}`);
                 });
 
                 if (sorted[0]?.[1].trend < -5) {

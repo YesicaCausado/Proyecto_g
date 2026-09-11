@@ -741,7 +741,7 @@
 ### 🟠 Riesgos altos
 
 7. **Credenciales reales de producción en `frontend/.env`** (Supabase, Groq, Gemini, NVIDIA). Aunque `.gitignore` las excluye del repo versionado, están en disco… ⚠️ **ACCIÓN AÚN PENDIENTE: rotar las claves** (especialmente `SECRET_KEY` y las API keys). El `SECRET_KEY` y `DATABASE_URL` sí quedaron además en el nuevo `backend/.env` (sin el cual se desconecta la DB).
-8. **Límites de licencia incoherentes**: hay **cuatro conjuntos distintos** de límites/cupos (`institution.py`, `license.py`, `license_service.py`, `expert_bot.py`) con valores que no coinciden → cupos y funcionalidades inconsistentes entre módulos.
+8. **Límites de licencia incoherentes** — ✅ **RESUELTO**: se unificó en `license_service.py` (única fuente de verdad para módulos por rol/plan, KPIs, cupos docentes/estudiantes, límite de neurobots y formatos de exportación). `license.py` y `expert_bot.py` ahora importan de ahí; `SUPER_MODULES` vive en `license_service.py` y `credentials.py` lo importa. Los planes son **acumulativos** (Premium = Básica + extras, Pro = Premium + extras) y el módulo **`perfil` está siempre habilitado** en todos los roles y planes.
 9. **DB SQLite locales casi vacías** (`backend/neurolearn.db`, `neurolearn.db`): solo usuarios demo; las tablas B2B nuevas (`institutions`, `quiz_history`, `cognitive_session_state`, etc.) **no existen** en estas DB locales. Solo la DB real (Supabase PostgreSQL vía `.env`) las tiene.
 
 ### 🟡 Riesgos medios
@@ -841,6 +841,8 @@ Porcentaje ponderado por criticidad para el MVP (backend/IA pesan más porque so
 | Sesión actual | Protección CSRF/origen + security headers (CSP, X-Frame-Options, etc.) en endpoints de auth | Dev | ✅ Completa |
 | Sesión actual | Pruebas automatizadas de seguridad (rate-limit, CSRF/origen, XSS, SQLi, cabeceras) en `backend/tests/test_security.py` — PASS 7/7 | Dev | ✅ Completa |
 | Sesión actual | RLS multi-tenant para Supabase — políticas de fila en `backend/migrations/applied/005_rls_multitenant.sql` + README | Dev | ✅ Completa (aplica en Supabase SQL Editor) |
+| Sesión actual | Unificar licencias: `license_service.py` como única fuente (módulos por rol/plan acumulativos, cupos, neurobots, export). `license.py`/`expert_bot.py`/`credentials.py` importan de ahí. `SUPER_MODULES` incluye `perfil`; el módulo `perfil` queda SIEMPRE habilitado en todos los roles y planes (backend + frontend `SuperDashboard`, `TeacherPanel`, `Layout`, `LicenseContext`) | Dev | ✅ Completa |
+| Sesión actual | Matriz declarativa de funcionalidades: `FEATURE_MATRIX` (feature → plan → roles), `has_feature()`/`features_for_user()` y dependency `require_feature()` en `license_service.py`; `LicenseInfo` expone `role`/`features`/`super_modules`; `teacher_ai.py` usa `require_feature("teacher_ai")`; frontend `LicenseContext.hasFeature()` + `ProtectedFeature` con feature names; `TeacherPanel`/`LicenciaTab` alineados a la matriz; doc `docs/MATRIZ_LICENCIAS.md` | Dev | ✅ Completa |
 
 ---
 

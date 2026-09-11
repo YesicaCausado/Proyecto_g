@@ -27,6 +27,8 @@ import {
   Settings, LogOut, Bell, ChevronRight, Zap, Menu, X,
   BarChart2, FlaskConical, Link2, Cpu,
 } from 'lucide-react';
+import { navItemStyle } from '../../styles/sidebar';
+import { planColor } from '../../styles/plan';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 type LicensePlan = 'basica' | 'premium' | 'pro';
@@ -38,11 +40,6 @@ interface TeacherLicense {
   bots_limit: number | 'unlimited';
   expiry_date: string;
 }
-const PLAN_COLORS: Record<LicensePlan, { bg: string; text: string; label: string }> = {
-  basica:   { bg: 'bg-[#F7F6F3]',   text: 'text-[#787774]', label: 'Básica'   },
-  premium:  { bg: 'bg-amber-50',    text: 'text-amber-700',  label: 'Premium'  },
-  pro:      { bg: 'bg-purple-50',   text: 'text-[#6940A5]',  label: 'Pro ✦'   },
-};
 
 // ── Definición completa de todos los ítems del menú ──────────────────────────
 interface NavItemDef {
@@ -50,71 +47,73 @@ interface NavItemDef {
   icon: any;
   badge?: string;
   module: string;
+  /** Funcionalidad canónica (FEATURE_MATRIX) que habilita este ítem. */
+  feature?: string;
   id?: string;
 }
 
 const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
-  dashboard:      { label: 'Dashboard',       icon: LayoutDashboard, module: 'dashboard'      },
-  grupos:         { label: 'Mis Grupos',       icon: BookOpen,        module: 'grupos'         },
-  neurobots:      { label: 'NeuroBots',        icon: Bot,             module: 'neurobots'      },
-  alertas:        { label: 'NeuroAlertas',     icon: BrainCircuit,    module: 'alertas', badge: 'alert' },
-  tablero:        { label: 'Tablero',          icon: LayoutList,      module: 'cursos'         },
-  evaluaciones:   { label: 'Evaluaciones',     icon: ClipboardList,   module: 'evaluaciones'   },
-  materiales:     { label: 'Materiales',       icon: FolderOpen,      module: 'recursos'       },
-  mensajes:       { label: 'Mensajes',         icon: MessageSquare,   module: 'mensajes', badge: 'msg' },
-  calendario:     { label: 'Calendario',       icon: Calendar,        module: 'calendario'     },
-  analitica:      { label: 'Analítica',        icon: BarChart2,       module: 'analitica'      },
-  ia:             { label: 'IA Generativa',    icon: Cpu,             module: 'ia'             },
-  integraciones:  { label: 'Integraciones',    icon: Link2,           module: 'integraciones'  },
-  automatizaciones:{ label: 'Automatizaciones',icon: FlaskConical,    module: 'automatizaciones'},
-  configuracion:  { label: 'Configuración',    icon: Settings,        module: 'configuracion'  },
+  dashboard:      { label: 'Dashboard',       icon: LayoutDashboard, module: 'dashboard',      feature: 'dashboard'           },
+  grupos:         { label: 'Mis Grupos',       icon: BookOpen,        module: 'grupos',         feature: 'gestion_grupos'      },
+  neurobots:      { label: 'NeuroBots',        icon: Bot,             module: 'neurobots',      feature: 'neurobots', badge: 'alert' },
+  alertas:        { label: 'NeuroAlertas',     icon: BrainCircuit,    module: 'alertas',        feature: 'neuroalertas', badge: 'alert' },
+  tablero:        { label: 'Tablero',          icon: LayoutList,      module: 'cursos',         feature: 'anuncios'            },
+  evaluaciones:   { label: 'Evaluaciones',     icon: ClipboardList,   module: 'evaluaciones',   feature: 'evaluaciones'        },
+  materiales:     { label: 'Materiales',       icon: FolderOpen,      module: 'recursos',       feature: 'recursos'            },
+  mensajes:       { label: 'Mensajes',         icon: MessageSquare,   module: 'mensajes',       feature: 'mensajes', badge: 'msg' },
+  calendario:     { label: 'Calendario',       icon: Calendar,        module: 'calendario',     feature: 'calendario'          },
+  analitica:      { label: 'Analítica',        icon: BarChart2,       module: 'analitica',      feature: 'advanced_analytics'  },
+  ia:             { label: 'IA Generativa',    icon: Cpu,             module: 'ia',             feature: 'teacher_ai'          },
+  integraciones:  { label: 'Integraciones',    icon: Link2,           module: 'integraciones',  feature: 'integrations'        },
+  automatizaciones:{ label: 'Automatizaciones',icon: FlaskConical,    module: 'automatizaciones', feature: 'automation'       },
+  configuracion:  { label: 'Configuración',    icon: Settings,        module: 'configuracion',  feature: 'perfil'              },
 };
 
 // ── Función que construye el menú según licencia ──────────────────────────────
-function buildNavSections(hasModule: (m: string) => boolean) {
+function buildNavSections(hasFeature: (f: string) => boolean) {
   const sections: { label: string; items: typeof ALL_NAV_ITEMS[string][] }[] = [];
 
-  // PRINCIPAL — siempre visible si tiene el módulo
+  // PRINCIPAL — siempre visible si tiene la funcionalidad
   const principal = ['dashboard', 'grupos'].filter(id =>
-    hasModule(ALL_NAV_ITEMS[id].module)
+    hasFeature(ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module)
   );
   if (principal.length) {
     sections.push({ label: 'PRINCIPAL', items: principal.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
   }
 
-  // INTELIGENCIA IA — solo si tiene neurobots o alertas
-  const ia = ['neurobots', 'alertas'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  // INTELIGENCIA IA — neurobots (básico) y alertas (premium+)
+  const ia = ['neurobots', 'alertas'].filter(id => hasFeature(ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module));
   if (ia.length) {
     sections.push({ label: 'INTELIGENCIA IA', items: ia.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
   }
 
   // AULA
   const aula = ['tablero', 'evaluaciones', 'materiales'].filter(id =>
-    hasModule(ALL_NAV_ITEMS[id].module)
+    hasFeature(ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module)
   );
   if (aula.length) {
     sections.push({ label: 'AULA', items: aula.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
   }
 
   // ANALYTICS (premium / pro)
-  const analytics = ['analitica', 'ia'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  const analytics = ['analitica', 'ia'].filter(id => hasFeature(ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module));
   if (analytics.length) {
     sections.push({ label: 'ANALÍTICA & IA', items: analytics.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
   }
 
   // AVANZADO (pro)
-  const advanced = ['integraciones', 'automatizaciones'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  const advanced = ['integraciones', 'automatizaciones'].filter(id => hasFeature(ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module));
   if (advanced.length) {
     sections.push({ label: 'AVANZADO', items: advanced.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
   }
 
   // COMUNICACIÓN
-  const comms = ['mensajes', 'calendario'].filter(id => hasModule(ALL_NAV_ITEMS[id].module));
+  const comms = ['mensajes', 'calendario'].filter(id => hasFeature(ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module));
   if (comms.length) {
     sections.push({ label: 'COMUNICACIÓN', items: comms.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
   }
 
-  // CUENTA
+  // CUENTA — siempre (perfil/configuración transversales)
   sections.push({ label: 'CUENTA', items: [{ ...ALL_NAV_ITEMS.configuracion, id: 'configuracion' }] });
 
   return sections;
@@ -140,7 +139,7 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function TeacherPanel() {
   const { user, logout } = useAuth();
-  const { licenseInfo, licenseStatus, licenseType, hasTeacherModule } = useLicense();
+  const { licenseInfo, licenseStatus, licenseType, hasFeature } = useLicense();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -149,7 +148,7 @@ export default function TeacherPanel() {
     license_status: 'active' as const,
     days_left: null,
     teacher_modules: ['dashboard', 'cursos', 'grupos', 'estudiantes', 'evaluaciones', 'recursos', 'calendario', 'mensajes', 'perfil'],
-    student_modules: ['inicio', 'mis_cursos', 'mis_tareas', 'evaluaciones', 'recursos', 'calendario', 'mensajes', 'perfil'],
+    student_modules: ['inicio', 'mis_cursos', 'mis_tareas', 'evaluaciones', 'recursos', 'calendario', 'mensajes', 'perfil', 'tutor_ia', 'estadisticas'],
     teacher_dashboard_kpis: ['cursos_activos', 'estudiantes', 'evaluaciones_creadas', 'actividades_pendientes'],
     neurobot_limit: 1,
     groups_limit: 10,
@@ -169,7 +168,7 @@ export default function TeacherPanel() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Construir menú dinámico basado en licencia
-  const navSections = buildNavSections(hasTeacherModule);
+  const navSections = buildNavSections(hasFeature);
 
   // Pantalla de suspensión total
   if (licenseStatus === 'suspended') {
@@ -205,7 +204,7 @@ export default function TeacherPanel() {
 
   const handleLogout = () => { logout(); navigate('/login'); };
   const meta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
-  const planStyle = PLAN_COLORS[(licenseType as LicensePlan)] ?? PLAN_COLORS['basica'];
+  const planStyle = planColor(licenseType);
   const license = _license;
 
   const handleNav = (id: string) => {
@@ -220,13 +219,10 @@ export default function TeacherPanel() {
     return (
       <button
         onClick={() => handleNav(id)}
-        className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${
-          isActive
-            ? 'bg-white font-semibold text-[#191919] shadow-sm border border-[#E9E9E7]'
-            : 'text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] border border-transparent'
-        }`}
+        className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${navItemStyle('light', isActive).stateClass}`}
+        style={navItemStyle('light', isActive).style}
       >
-        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#2E6FDB]' : 'text-[#9B9A97] group-hover:text-[#37352F]'}`} />
+        <Icon className={`w-4 h-4 flex-shrink-0 ${navItemStyle('light', isActive).iconClass}`} />
         <span className="flex-1 text-left truncate">{label}</span>
         {badge === 'alert' && activeAlerts > 0 && (
           <span className="w-4 h-4 rounded-full bg-[#E03E3E] text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
@@ -267,7 +263,7 @@ export default function TeacherPanel() {
             </p>
             <p className="text-[10px] text-[#787774] truncate">Docente</p>
           </div>
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${planStyle.bg} ${planStyle.text} flex-shrink-0`}>
+          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${planStyle.className} flex-shrink-0`}>
             {planStyle.label}
           </span>
         </div>
@@ -311,7 +307,7 @@ export default function TeacherPanel() {
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
 
       {/* ══ SIDEBAR DESKTOP ══════════════════════════════════════════════════ */}
-      <aside className="hidden lg:flex lg:flex-col w-60 bg-[#F7F6F3] border-r border-[#E9E9E7] flex-shrink-0">
+      <aside className="hidden lg:flex lg:flex-col w-60 border-r border-[#E9E9E7] flex-shrink-0" style={{ background: planStyle.background }}>
         <SidebarContent />
       </aside>
 
@@ -342,7 +338,8 @@ export default function TeacherPanel() {
           onClick={() => setSidebarOpen(false)}
         >
           <div
-            className="absolute left-0 top-12 bottom-0 w-64 bg-[#F7F6F3] border-r border-[#E9E9E7] flex flex-col overflow-y-auto"
+            className="absolute left-0 top-12 bottom-0 w-64 border-r border-[#E9E9E7] flex flex-col overflow-y-auto"
+            style={{ background: planStyle.background }}
             onClick={e => e.stopPropagation()}
           >
             <SidebarContent />

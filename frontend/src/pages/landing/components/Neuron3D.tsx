@@ -13,7 +13,6 @@
  */
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import RobotCanvas from '../../auth/components/robot/RobotCanvas';
-import type { LightingPresetMap } from '../../auth/components/robot/RobotLights';
 import NeuronGlyph from './NeuronGlyph';
 
 export interface Neuron3DHandle {
@@ -26,19 +25,6 @@ interface Props {
   scale: number;
   use3D: boolean;
 }
-
-/** Luces monocromas + azul tenue para perfilar los detalles metálicos. */
-const LIGHTING: LightingPresetMap = {
-  idle: {
-    ambient: { color: '#ffffff', intensity: 0.6 },
-    directional: { color: '#ffffff', intensity: 1.15, position: [3, 5, 3], castShadow: true },
-    pointLights: [
-      { color: '#ffffff', intensity: 0.95, position: [-3, 2, 2], distance: 12, decay: 2 },
-      { color: '#d9d9d9', intensity: 0.7,  position: [3, 1, 1],  distance: 12, decay: 2 },
-      { color: '#60A5FA', intensity: 0.55, position: [0, -1, 3], distance: 12, decay: 2 },
-    ],
-  },
-};
 
 const Neuron3D = forwardRef<Neuron3DHandle, Props>(
   function Neuron3D({ top, scale, use3D }, ref) {
@@ -72,7 +58,6 @@ const Neuron3D = forwardRef<Neuron3DHandle, Props>(
                 robotState="idle"
                 transparent
                 className="h-full w-full"
-                lightingPresets={LIGHTING}
               />
             ) : (
               <NeuronGlyph size={Math.min(window.innerWidth * 0.72, 360)} active />

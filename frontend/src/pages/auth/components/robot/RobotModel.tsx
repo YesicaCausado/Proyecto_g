@@ -17,6 +17,15 @@ export interface RobotModelProps {
   onError?:       (error: Error) => void;
 }
 
+export function RobotFallback({ position, scale }: { position: Vector3Tuple; scale: Vector3Tuple }) {
+  return (
+    <mesh position={position} scale={scale}>
+      <capsuleGeometry args={[0.3, 0.8, 4, 8]} />
+      <meshStandardMaterial color="#4f8ef7" transparent opacity={0.18} wireframe />
+    </mesh>
+  );
+}
+
 export default function RobotModel({
   position,
   rotation,
@@ -30,10 +39,19 @@ export default function RobotModel({
 }: RobotModelProps) {
   const internalRef                = useRef<Group>(null);
   const resolvedRef                = (groupRef ?? internalRef) as React.RefObject<Group>;
+
+  // Flag para que la normalización + onLoaded se ejecuten UNA sola vez
+  // por escena cargada. Antes, al cambiar la identidad de onLoaded
+  // (recreada en cada render), el useEffect se re-ejecutaba, volvía a
+  // reposicionar/escalar el modelo y re-disparaba onLoaded, lo que
+  // desconectaba/reconectaba el motor de animación (el robot "desaparecía").
+  const initializedRef = useRef(false);
+
   const { scene, animations }      = useGLTF(glbPath, true);
 
   useEffect(() => {
-    if (!scene) return;
+    if (!scene || initializedRef.current) return;
+    initializedRef.current = true;
 
     // Resetear transformación interna del GLB para que
     // ROBOT_TRANSFORM en RobotConfig sea el único que manda

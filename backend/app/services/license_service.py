@@ -18,52 +18,205 @@ from app.models.institution import Institution
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. Definición de módulos por plan y rol
+# 1. MATRIZ DE FUNCIONALIDADES (ÚNICA FUENTE DE VERDAD)
+#
+# φ(feature, plan) = conjunto de ROLES que la tienen disponible en ese plan.
+#
+# Reglas:
+#   - Los planes son ACUMULATIVOS: premium hereda básica, pro hereda premium.
+#   - El ACCESO final = (rol tiene permiso a la feature) AND (la licencia de la
+#     institución la incluye). Ambas condiciones deben ser ciertas.
+#   - ADMIN es un rol administrativo independiente de la licencia institucional:
+#     no participa de esta matriz (acceso global, gestionado aparte).
+#   - Funcionalidades TRANSVERSALES (perfil, configuracion, mensajes,
+#     autenticación/logout) están en los 3 planes para los 3 roles.
+#
+# Nombres de feature canónicos (usan el mismo vocabulario en frontend y backend):
+#   dashboard, basic_analytics, advanced_analytics, predictive_analytics,
+#   neurobots, neurobots_advanced, neuroalertas, neurodigital, risk_indicators,
+#   reportes, reportes_avanzados, automation, integrations, groups_compare,
+#   personalized_plans, tutor_ia, tutor_ia_adaptive, tutor_ia_advanced,
+#   chat_history, recommendations, adaptive_feedback, difficulty_detection,
+#   skill_tracking, personal_reports, perfil, configuracion, mensajes,
+#   calendario, recursos, evaluaciones, tareas, anuncios, licencia.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ALL_ROLES = ("super_profesor", "profesor", "estudiante")
+
+# feature → {plan: [roles]}
+FEATURE_MATRIX: dict[str, dict[str, list[str]]] = {
+    # ── Transversales (los 3 planes, los 3 roles) ──
+    "perfil":          {"basica": list(ALL_ROLES), "premium": list(ALL_ROLES), "pro": list(ALL_ROLES)},
+    "configuracion":   {"basica": list(ALL_ROLES), "premium": list(ALL_ROLES), "pro": list(ALL_ROLES)},
+    "mensajes":        {"basica": list(ALL_ROLES), "premium": list(ALL_ROLES), "pro": list(ALL_ROLES)},
+    "calendario":      {"basica": list(ALL_ROLES), "premium": list(ALL_ROLES), "pro": list(ALL_ROLES)},
+
+    # ── Comunes por rol (presentes en los 3 planes) ──
+    "dashboard":       {"basica": ["super_profesor", "profesor", "estudiante"], "premium": ["super_profesor", "profesor", "estudiante"], "pro": ["super_profesor", "profesor", "estudiante"]},
+    "recursos":        {"basica": ["profesor", "estudiante"], "premium": ["profesor", "estudiante"], "pro": ["profesor", "estudiante"]},
+    "evaluaciones":    {"basica": ["profesor", "estudiante"], "premium": ["profesor", "estudiante"], "pro": ["profesor", "estudiante"]},
+    "tareas":          {"basica": ["estudiante"], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "anuncios":        {"basica": ["profesor"], "premium": ["profesor"], "pro": ["profesor"]},
+    "licencia":        {"basica": ["super_profesor"], "premium": ["super_profesor"], "pro": ["super_profesor"]},
+
+    # ── Gestión institucional (Súper Profesor) ──
+    "gestion_profesores": {"basica": ["super_profesor"], "premium": ["super_profesor"], "pro": ["super_profesor"]},
+    "gestion_estudiantes": {"basica": ["super_profesor"], "premium": ["super_profesor"], "pro": ["super_profesor"]},
+    "gestion_grupos":     {"basica": ["super_profesor"], "premium": ["super_profesor"], "pro": ["super_profesor"]},
+
+    # ── Analítica / estadísticas (acumulativo) ──
+    "basic_analytics":       {"basica": ["super_profesor", "profesor", "estudiante"], "premium": ["super_profesor", "profesor", "estudiante"], "pro": ["super_profesor", "profesor", "estudiante"]},
+    "advanced_analytics":    {"basica": [], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
+    "predictive_analytics":  {"basica": [], "premium": [], "pro": ["super_profesor", "profesor"]},
+    "groups_compare":        {"basica": [], "premium": [], "pro": ["super_profesor", "profesor"]},
+
+    # ── NeuroBots ──
+    "neurobots":          {"basica": ["super_profesor", "profesor"], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
+    "neurobots_advanced": {"basica": [], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
+
+    # ── NeuroAlertas / riesgo ──
+    "neuroalertas":     {"basica": [], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
+    "risk_indicators":  {"basica": [], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
+
+    # ── Neurodigital (análisis conductual en tiempo real) ──
+    "neurodigital":     {"basica": [], "premium": ["profesor", "estudiante"], "pro": ["profesor", "estudiante"]},
+
+    # ── Reportes ──
+    "reportes":          {"basica": ["super_profesor", "profesor"], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
+    "reportes_avanzados":{"basica": [], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
+
+    # ── IA / tutoría ──
+    "tutor_ia":             {"basica": ["estudiante"], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "tutor_ia_adaptive":    {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "tutor_ia_advanced":    {"basica": [], "premium": [], "pro": ["estudiante"]},
+    "chat_history":         {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "recommendations":      {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "adaptive_feedback":    {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "difficulty_detection": {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "skill_tracking":       {"basica": [], "premium": ["estudiante"], "pro": ["estudiante"]},
+    "personal_reports":     {"basica": [], "premium": [], "pro": ["estudiante"]},
+
+    # ── IA docente (contenido generativo) ──
+    "teacher_ai":        {"basica": [], "premium": ["profesor"], "pro": ["profesor"]},
+
+    # ── Pro: automatizaciones / integraciones ──
+    "automation":        {"basica": [], "premium": [], "pro": ["super_profesor", "profesor"]},
+    "integrations":      {"basica": [], "premium": ["profesor"], "pro": ["profesor", "super_profesor"]},
+    "personalized_plans":{"basica": [], "premium": [], "pro": ["estudiante"]},
+}
+
+
+def has_feature(role: str, license_type: str, feature: str) -> bool:
+    """
+    Comprueba acceso a una funcionalidad según ROL + LICENCIA.
+
+    Devuelve True solo si:
+      1. el rol está habilitado para esa feature, Y
+      2. el plan de la institución la incluye.
+
+    La matriz FEATURE_MATRIX ya enumera, para cada feature, los roles de cada
+    plan con el modelo ACUMULATIVO aplicado (premium incluye los roles de
+    básica, pro incluye los de premium). Por eso basta una consulta exacta al
+    plan del usuario.
+    """
+    if role == "admin":
+        # Admin es independiente de la licencia institucional.
+        return True
+    entry = FEATURE_MATRIX.get(feature)
+    if entry is None:
+        return False
+    roles = entry.get(license_type) or entry.get("basica") or []
+    return role in roles
+
+
+def features_for_user(role: str, license_type: str) -> list[str]:
+    """Lista de features disponibles para un rol + plan determinados."""
+    return sorted(f for f in FEATURE_MATRIX if has_feature(role, license_type, f))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. Módulos por plan y rol (derivados de FEATURE_MATRIX por compatibilidad)
+#    Mantenidos como listas explícitas para que los endpoints existentes que
+#    usan require_teacher_module / require_student_module sigan funcionando.
 # ─────────────────────────────────────────────────────────────────────────────
 
 TEACHER_MODULES: dict[str, list[str]] = {
     "basica": [
         "dashboard", "cursos", "grupos", "estudiantes",
-        "evaluaciones", "recursos", "calendario", "mensajes", "perfil", "ia",
+        "evaluaciones", "recursos", "calendario", "mensajes",
+        "perfil",
     ],
     "premium": [
         "dashboard", "cursos", "grupos", "estudiantes",
-        "evaluaciones", "recursos", "neurobots", "alertas", "reportes",
-        "calendario", "mensajes", "perfil", "ia", "analitica",
-        "banco_preguntas",
+        "evaluaciones", "recursos", "calendario", "mensajes",
+        "perfil",
+        # ── exclusivos Premium ──
+        "ia", "neurobots", "alertas", "reportes", "analitica", "banco_preguntas",
     ],
     "pro": [
         "dashboard", "cursos", "grupos", "estudiantes",
-        "evaluaciones", "recursos", "neurobots", "alertas", "ia", "reportes",
-        "analitica", "banco_preguntas", "integraciones",
-        "automatizaciones", "configuracion", "perfil",
+        "evaluaciones", "recursos", "calendario", "mensajes",
+        "perfil",
+        # ── exclusivos Premium ──
+        "ia", "neurobots", "alertas", "reportes", "analitica", "banco_preguntas",
+        # ── exclusivos Pro ──
+        "integraciones", "automatizaciones", "configuracion",
     ],
 }
 
 STUDENT_MODULES: dict[str, list[str]] = {
     "basica": [
         "inicio", "mis_cursos", "mis_tareas", "evaluaciones",
-        "recursos", "calendario", "mensajes", "perfil", "tutor_ia",
-        "estadisticas",
+        "recursos", "calendario", "mensajes", "perfil",
+        "tutor_ia", "estadisticas",
     ],
     "premium": [
         "inicio", "mis_cursos", "mis_tareas", "evaluaciones",
         "recursos", "calendario", "mensajes", "perfil",
-        "tutor_ia", "resumenes_ia", "generador_preguntas",
-        "recomendaciones", "certificados", "progreso", "estadisticas",
+        "tutor_ia", "estadisticas",
+        # ── exclusivos Premium ──
+        "resumenes_ia", "generador_preguntas", "recomendaciones",
+        "certificados", "progreso",
     ],
     "pro": [
         "inicio", "mis_cursos", "mis_tareas", "evaluaciones",
         "recursos", "calendario", "mensajes", "perfil",
-        "tutor_ia", "resumenes_ia", "generador_preguntas",
-        "recomendaciones", "certificados", "progreso", "estadisticas",
+        "tutor_ia", "estadisticas",
+        # ── exclusivos Premium ──
+        "resumenes_ia", "generador_preguntas", "recomendaciones",
+        "certificados", "progreso",
+        # ── exclusivos Pro ──
         "chat_ia", "mapas_mentales", "generador_ejercicios",
         "planes_personalizados", "biblioteca_premium",
         "gamificacion", "analitica_personal", "objetivos", "asistente",
     ],
 }
 
-# KPI cards visibles en el Dashboard del profesor por licencia
+# Módulos del panel del Súper Profesor (Rector) por licencia — acumulativo.
+# "perfil" es común y está siempre presente.
+SUPER_MODULES: dict[str, list[str]] = {
+    "basica": [
+        "dashboard", "profesores", "estudiantes", "grupos",
+        "mensajeria", "calendario", "auditoria",
+        "configuracion", "licencia", "seguridad", "perfil",
+    ],
+    "premium": [
+        "dashboard", "profesores", "estudiantes", "grupos",
+        "mensajeria", "calendario", "auditoria",
+        "configuracion", "licencia", "seguridad", "perfil",
+        # ── exclusivos Premium ──
+        "neurobots", "alertas", "reportes",
+    ],
+    "pro": [
+        "dashboard", "profesores", "estudiantes", "grupos",
+        "mensajeria", "calendario", "auditoria",
+        "configuracion", "licencia", "seguridad", "perfil",
+        # ── exclusivos Premium ──
+        "neurobots", "alertas", "reportes",
+    ],
+}
+
+# KPI cards visibles en el Dashboard del profesor por licencia — acumulativo.
 TEACHER_DASHBOARD_KPIS: dict[str, list[str]] = {
     "basica": [
         "cursos_activos", "estudiantes", "evaluaciones_creadas",
@@ -71,16 +224,31 @@ TEACHER_DASHBOARD_KPIS: dict[str, list[str]] = {
     ],
     "premium": [
         "cursos_activos", "estudiantes", "evaluaciones_creadas",
-        "actividades_pendientes", "neurobots_creados", "uso_ia",
+        "actividades_pendientes",
+        "neurobots_creados", "uso_ia",
         "promedio_academico", "participacion", "estudiantes_riesgo",
     ],
     "pro": [
         "cursos_activos", "estudiantes", "evaluaciones_creadas",
-        "actividades_pendientes", "neurobots_creados", "uso_ia",
+        "actividades_pendientes",
+        "neurobots_creados", "uso_ia",
         "promedio_academico", "participacion", "estudiantes_riesgo",
         "estado_licencia", "consumo_ia", "usuarios_activos",
         "riesgo_academico", "prediccion_abandono",
     ],
+}
+
+# ── Límites de recursos por plan (única fuente de verdad) ─────────────────────
+TEACHER_LIMITS: dict[str, int] = {
+    "basica":  20,
+    "premium": 60,
+    "pro":     9999,
+}
+
+STUDENT_LIMITS: dict[str, int] = {
+    "basica":  300,
+    "premium": 1500,
+    "pro":     999_999,
 }
 
 # Límite de NeuroBots por profesor según plan
@@ -103,12 +271,6 @@ GROUP_LIMITS: dict[str, int] = {
     "pro":     999_999,
 }
 
-STUDENT_LIMITS: dict[str, int] = {
-    "basica":  300,
-    "premium": 1500,
-    "pro":     999_999,
-}
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Clase de resultado de licencia
@@ -128,6 +290,9 @@ class LicenseInfo:
         groups_limit: int,
         students_limit: int,
         institution_name: str,
+        role: str = "estudiante",
+        features: Optional[list[str]] = None,
+        super_modules: Optional[list[str]] = None,
     ):
         self.license_type            = license_type
         self.license_status          = license_status
@@ -140,12 +305,19 @@ class LicenseInfo:
         self.groups_limit            = groups_limit
         self.students_limit          = students_limit
         self.institution_name        = institution_name
+        self.role                    = role
+        # Funcionalidades habilitadas por la matriz (rol + plan).
+        self.features                = features if features is not None else features_for_user(role, license_type)
+        self.super_modules           = super_modules if super_modules is not None else SUPER_MODULES.get(license_type, SUPER_MODULES["basica"])
 
     def to_dict(self) -> dict:
         return {
             "license_type":           self.license_type,
             "license_status":         self.license_status,
             "days_left":              self.days_left,
+            "role":                   self.role,
+            "features":               self.features,
+            "super_modules":          self.super_modules,
             "teacher_modules":        self.teacher_modules,
             "student_modules":        self.student_modules,
             "teacher_dashboard_kpis": self.teacher_dashboard_kpis,
@@ -155,6 +327,18 @@ class LicenseInfo:
             "students_limit":         self.students_limit,
             "institution_name":       self.institution_name,
         }
+
+    def has_feature(self, feature: str) -> bool:
+        """
+        Acceso a una funcionalidad según ROL + LICENCIA (matriz acumulativa).
+        Respeta el estado de la licencia (suspended/expired → bloquea).
+        """
+        if self.license_status == "suspended":
+            return False
+        if self.license_status == "expired":
+            # Solo lectura: sólo funcionalidades transversales mínimas.
+            return feature in ("perfil", "configuracion", "mensajes", "calendario")
+        return has_feature(self.role, self.license_type, feature)
 
     def has_teacher_module(self, module: str) -> bool:
         if self.license_status == "suspended":
@@ -219,6 +403,7 @@ def _get_license_for_user_inner(user: User, db: Session) -> LicenseInfo:
             groups_limit=GROUP_LIMITS["basica"],
             students_limit=STUDENT_LIMITS["basica"],
             institution_name="Sin institución",
+            role=user.role,
         )
 
     plan = institution.license_type  # "basica" | "premium" | "pro"
@@ -260,6 +445,7 @@ def _get_license_for_user_inner(user: User, db: Session) -> LicenseInfo:
         groups_limit=GROUP_LIMITS.get(plan, GROUP_LIMITS["basica"]),
         students_limit=STUDENT_LIMITS.get(plan, STUDENT_LIMITS["basica"]),
         institution_name=institution.name,
+        role=user.role,
     )
 
 
@@ -359,6 +545,31 @@ def require_chat_access():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="La licencia institucional ha expirado. El panel está en modo solo lectura.",
+            )
+        return license_info
+    return _check
+
+
+def require_feature(feature: str):
+    """
+    Dependency factory basada en la MATRIZ de funcionalidades (rol + licencia).
+
+    Uso:
+        @router.get("/analitica")
+        async def analytics(lic = Depends(require_feature("advanced_analytics"))):
+
+    Comprueba que el ROL tiene permiso Y que la LICENCIA de la institución
+    incluye la funcionalidad; rechaza con 403 en caso contrario.
+    """
+    def _check(license_info: LicenseInfo = Depends(get_license)):
+        if not license_info.has_feature(feature):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"La funcionalidad '{feature}' no está disponible para tu rol "
+                    f"({license_info.role}) con tu licencia ({license_info.license_type}). "
+                    "Actualiza tu plan para desbloquearla."
+                ),
             )
         return license_info
     return _check

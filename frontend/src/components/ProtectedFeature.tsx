@@ -3,18 +3,19 @@ import { useLicense } from '../context/LicenseContext';
 
 interface ProtectedFeatureProps {
   children: ReactNode;
-  /** Nombre del módulo a comprobar (ej: "cursos", "neurobots", "alertas", "reportes"). */
+  /** Nombre canónico de la funcionalidad (FEATURE_MATRIX), ej. "neurobots", "advanced_analytics". */
   feature: string;
   fallback?: ReactNode;
 }
 
 /**
- * Renderiza `children` solo si la licencia del usuario incluye el `feature`
- * (módulo) indicado. Usa la API síncrona de LicenseContext.
+ * Renderiza `children` solo si el usuario (rol + licencia de su institución)
+ * tiene la `feature` indicada. Usa la API centralizada `hasFeature` del
+ * LicenseContext (misma lógica que el backend usa en `require_feature`).
  *
  * Ejemplo:
- *   <ProtectedFeature feature="neurobots" fallback={<p>No disponible en tu plan</p>}>
- *     <NeuroBotsPanel />
+ *   <ProtectedFeature feature="advanced_analytics" fallback={<DisponibleEnPremium />}>
+ *     <AnalyticsPanel />
  *   </ProtectedFeature>
  */
 export default function ProtectedFeature({
@@ -22,17 +23,9 @@ export default function ProtectedFeature({
   feature,
   fallback = null
 }: ProtectedFeatureProps) {
-  const {
-    hasTeacherModule,
-    hasStudentModule,
-    licenseStatus,
-  } = useLicense();
+  const { hasFeature } = useLicense();
 
-  // Durante 'expiring_soon' seguimos mostrando; en 'suspended' bloqueamos todo.
-  const blocked = licenseStatus === 'suspended';
-  const hasAccess = !blocked && (hasTeacherModule(feature) || hasStudentModule(feature));
-
-  if (!hasAccess && fallback) {
+  if (!hasFeature(feature)) {
     return <>{fallback}</>;
   }
 

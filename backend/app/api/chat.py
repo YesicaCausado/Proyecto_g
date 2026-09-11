@@ -1744,6 +1744,50 @@ async def generate_cognitive_quiz(
         )
 
 
+def _normalize_text(value):
+    """Normaliza un texto para compararlo de forma tolerante:
+    minúsculas, sin acentos y espacios colapsados."""
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return " ".join(text.lower().strip().split())
+
+
+def _is_quiz_answer_correct(user_answer, correct_answer, options=None):
+    """Determina si la respuesta del usuario a una pregunta de quiz es correcta
+    de forma tolerante. Acepta la LETRA ('A','B','C','D') o el TEXTO completo,
+    comparando sin distinguir mayúsculas, acentos ni espacios extra.
+
+    El cliente de frontend suele enviar la letra de la opción seleccionada,
+    mientras que el backend guarda 'answer' como texto completo. Esta función
+    concilia ambos formatos para que la nota sea REAL y coincida con la que ve
+    el estudiante.
+    """
+    if user_answer is None or correct_answer is None:
+        return False
+
+    ua = str(user_answer).strip()
+    correct_norm = _normalize_text(correct_answer)
+    options = list(options or [])
+
+    # Índice de la opción correcta dentro de 'options'
+    correct_index = -1
+    for idx, opt in enumerate(options):
+        if isinstance(opt, str) and _normalize_text(opt) == correct_norm:
+            correct_index = idx
+            break
+
+    # Respuesta como LETRA (A/B/C/D) → debe coincidir con la letra de la opción correcta
+    if correct_index != -1:
+        correct_letter = chr(65 + correct_index)
+        if ua.upper() == correct_letter.upper():
+            return True
+
+    # Respuesta como TEXTO → comparación normalizada
+    return _normalize_text(ua) == correct_norm
+
+
 @router.post("/submit-quiz", response_model=QuizAnalysisResponse)
 async def submit_quiz_answers(
     submission: QuizSubmission,
@@ -1788,7 +1832,9 @@ async def submit_quiz_answers(
         if user_answer is None:
             user_answer = submission.user_answers.get(str(question_id))
 
-        if user_answer and user_answer.strip() == correct_answer.strip():
+        # Valida de forma robusta (letra o texto, case/acentos/espacios) para
+        # que la nota sea REAL y coincida con la que ve el estudiante.
+        if _is_quiz_answer_correct(user_answer, correct_answer, question.get("options")):
             correct += 1
         else:
             mistake_info = {
@@ -1954,7 +2000,9 @@ async def get_quiz_history(
                 "question": question.get("question", ""),
                 "selected_answer": selected,
                 "correct_answer": correct_answer,
-                "is_correct": selected == correct_answer,
+                "is_correct": _is_quiz_answer_correct(
+                    selected, correct_answer, question.get("options")
+                ),
                 "explanation": question.get("explanation", ""),
             })
 

@@ -9,29 +9,10 @@
  * ─────────────────────────────────────────────────────────────
  */
 import { useMemo } from 'react';
-import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing';
 import { useThree } from '@react-three/fiber';
+import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
-import type { WebGLRenderer } from 'three';
 import type { RobotState } from './RobotStates';
-
-/**
- * Comprueba si el renderer tiene un contexto WebGL usable.
- * postprocessing lee `renderer.getContext().getContextAttributes().alpha`
- * dentro de `EffectComposer.addPass`. Si el contexto se perdió o aún no está
- * disponible, `getContextAttributes()` devuelve `null` y addPass revienta con
- * "Cannot read properties of null (reading 'alpha')".
- * Esta pérdida de contexto es típica en dev con React <StrictMode>,
- * que monta/desmonta/monta el Canvas dos veces.
- */
-function hasUsableContext(gl: WebGLRenderer | undefined): boolean {
-  try {
-    const ctx: WebGLRenderingContext | WebGL2RenderingContext | void = gl?.getContext?.();
-    return !!ctx && !!ctx.getContextAttributes?.();
-  } catch {
-    return false;
-  }
-}
 // ── Tipos de configuración ────────────────────────────────────
 
 export interface BloomConfig {
@@ -98,19 +79,16 @@ export default function RobotEffects({
     [robotState, presets],
   );
 
-  const gl = useThree((state) => state.gl) as WebGLRenderer | undefined;
-  const contextAvailable = useMemo(() => hasUsableContext(gl), [gl]);
+  // ── Guard: el EffectComposer de postprocessing@6.x crashea con
+  // "Cannot read properties of null (reading 'alpha')" si se monta
+  // antes de que renderer/camera estén listos (p. ej. tras un
+  // WebGL Context Lost). Si no hay gl/camera válidos, desactivamos
+  // los efectos en vez de crashear el Canvas completo.
+  const gl = useThree((s) => s.gl);
+  const camera = useThree((s) => s.camera);
+  const ready = Boolean(gl && camera && gl.getContext && !gl.getContext().isContextLost?.());
 
-  if (disabled) return null;
-
-  // Contexto WebGL perdido/no disponible → omitimos el post-proceso
-  // (evita el crash de EffectComposer.addPass y deja la escena base renderizando).
-  if (!contextAvailable) {
-    if (import.meta.env.DEV) {
-      console.warn('[RobotEffects] Contexto WebGL no disponible; se omiten los efectos de post-proceso.');
-    }
-    return null;
-  }
+  if (disabled || !ready) return null;
 
   // Los efectos siempre se renderizan; la intensidad controla la visibilidad.
   // EffectComposer requiere hijos de tipo Effect — no acepta short-circuit (&&).

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { navItemStyle } from '../../styles/sidebar';
 import {
   LayoutDashboard,
   School,
@@ -118,21 +119,22 @@ export default function AdminDashboard() {
             to={item.to}
             end={item.end}
             onClick={() => setSidebarOpen(false)}
-            className={({ isActive }) =>
-              `group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
-                isActive
-                  ? 'bg-[#37352F] text-white'
-                  : 'text-[#9B9A97] hover:text-white hover:bg-[#2F2D2B]'
-              }`
-            }
+            style={({ isActive }) => navItemStyle('dark', isActive).style}
+            className={({ isActive }) => {
+              const t = navItemStyle('dark', isActive);
+              return `group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${t.stateClass}`;
+            }}
           >
-            {({ isActive }) => (
-              <>
-                <item.icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#787774] group-hover:text-[#9B9A97]'}`} />
-                <span className="flex-1 font-medium">{item.label}</span>
-                {isActive && <ChevronRight className="w-3 h-3 text-[#BFDFF0]" />}
-              </>
-            )}
+            {({ isActive }) => {
+              const t = navItemStyle('dark', isActive);
+              return (
+                <>
+                  <item.icon className={`w-4 h-4 shrink-0 ${t.iconClass}`} />
+                  <span className="flex-1 font-medium">{item.label}</span>
+                  {isActive && <ChevronRight className="w-3 h-3 text-[#BFDFF0]" />}
+                </>
+              );
+            }}
           </NavLink>
         ))}
       </nav>

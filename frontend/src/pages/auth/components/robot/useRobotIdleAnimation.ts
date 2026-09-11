@@ -143,7 +143,11 @@ export function useRobotIdleAnimation({
     }
   }, [scene])
 
-  // Capturar la posición base cuando se activa por primera vez
+  // Capturar la posición base cuando se activa por primera vez.
+  // Mientras está INACTIVO, no congelamos baseY: lo recalculamos en cada
+  // frame desde useFrame (ver abajo), para que cuando el idle se active
+  // tras el greeting (que anima rootGroup.position.y de -0.75 → -0.2),
+  // el baseY sea el de reposo correcto y no el del inicio del saludo.
   useEffect(() => {
     if (isActive && rootGroup && !s.current.initialized) {
       s.current.baseY       = rootGroup.position.y
@@ -164,6 +168,11 @@ export function useRobotIdleAnimation({
       st.blend = Math.min(1, st.blend + delta / 0.6)   // fade-in en ~600ms
     } else {
       st.blend = Math.max(0, st.blend - delta / 0.4)   // fade-out en ~400ms
+      // Mientras inactivo, seguimos la posición real del rootGroup
+      // (GSAP la anima, p. ej. en el greeting). Así, cuando el idle
+      // se active, baseY es el reposo correcto y no un valor viejo
+      // que empujaría al robot fuera de pantalla ("desaparece").
+      st.baseY = rootGroup.position.y
     }
 
     const b = st.blend

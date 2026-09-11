@@ -3,28 +3,33 @@ NeuroLearn AI — Control de Licenciamiento y Restricciones
 ===========================================================
 Endpoints para gestión de licencias y control de acceso según plan
 """
-import os
-from typing import Optional, List, Dict
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.institution import Institution
-from app.services.license_service import get_license_for_user
+from app.services.license_service import (
+    get_license_for_user,
+    TEACHER_LIMITS,
+    STUDENT_LIMITS,
+    TEACHER_MODULES,
+    STUDENT_MODULES,
+)
 
 router = APIRouter(prefix="/license", tags=["License Control"])
 
-# Límites de licencia (configurables)
-LICENSE_LIMITS = {
-    "basica": {"teachers": 10, "students": 100, "features": ["chat_basic", "basic_dashboard"]},
-    "premium": {"teachers": 50, "students": 500, "features": ["chat_basic", "chat_advanced", "bots_private", "advanced_reports"]},
-    "pro": {"teachers": 200, "students": 2000, "features": ["chat_basic", "chat_advanced", "bots_private", "advanced_reports", "ai_analysis", "voice_detection"]}
-}
+# Feature keys expuestos por /license/info (mapeo estable hacia la UI),
+# derivados de los módulos canónicos por plan en license_service.py.
+def _features_for_plan(plan: str) -> List[str]:
+    """Devuelve la unión de funcionalidades docentes+estudiante del plan."""
+    t = set(TEACHER_MODULES.get(plan, TEACHER_MODULES["basica"]))
+    s = set(STUDENT_MODULES.get(plan, STUDENT_MODULES["basica"]))
+    return sorted(t | s)
+
 
 def _check_feature_access(
     institution_id: int,
@@ -34,50 +39,16 @@ def _check_feature_access(
 ) -> bool:
     """
     Verifica si el usuario tiene acceso a una funcionalidad según su licencia.
-    
-    feature: "chat_basic", "chat_advanced", "bots_private", "advanced_reports", "ai_analysis", "voice_detection"
+
+    feature: nombre de módulo (p. ej. "neurobots", "tutor_ia", "reportes").
+    Consulta la licencia canónica del usuario vía license_service.
     """
-    institution = db.query(Institution).filter(
-        Institution.id == institution_id,
-        Institution.is_active == True
-    ).first()
-    
-    if not institution:
-        raise HTTPException(status_code=404, detail="Institución no encontrada")
-
-    # Verificar si institución está activa
-    if not institution.is_active:
-        raise HTTPException(status_code=403, detail="Institución no activa")
-
-    # Verificar si licencia ha vencido
-    if institution.expiry_date and institution.expiry_date < datetime.utcnow():
-        raise HTTPException(status_code=403, detail="Licencia vencida")
-
-    # Obtener límites actuales (pueden ser dinámicos)
-    limits = LICENSE_LIMITS.get(institution.license_type or "basica")
-    if not limits:
-        limits = LICENSE_LIMITS["basica"]
-
-    # Verificar si la feature está habilitada en la licencia
-    enabled_features = limits.get("features", [])
-    if feature not in enabled_features:
-        return False
-
-    # Verificar cupos
-    teachers = db.query(User).filter(
-        User.institution_id == institution_id,
-        User.role.in_([UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value])
-    ).count()
-
-    students = db.query(User).filter(
-        User.institution_id == institution_id,
-        User.role == UserRole.ESTUDIANTE.value
-    ).count()
-
-    if teachers > limits["teachers"] or students > limits["students"]:
-        return False
-
-    return True
+    lic = get_license_for_user(current_user, db)
+    # Los nombres de "features" legacy (chat_basic, chat_advanced, etc.) ya no
+    # se usan; ahora las funcionalidades son los módulos por plan/rol.
+    if feature in lic.teacher_modules or feature in lic.student_modules:
+        return True
+    return False
 
 
 class LicenseInfo(BaseModel):
@@ -152,9 +123,9 @@ async def get_license_info(
     if not institution:
         raise HTTPException(status_code=404, detail="Institución no encontrada")
 
-    limits = LICENSE_LIMITS.get(institution.license_type or "basica")
-    if not limits:
-        limits = LICENSE_LIMITS["basica"]
+    plan = institution.license_type or "basica"
+    teachers_limit = TEACHER_LIMITS.get(plan, TEACHER_LIMITS["basica"])
+    students_limit = STUDENT_LIMITS.get(plan, STUDENT_LIMITS["basica"])
 
     teachers = db.query(User).filter(
         User.institution_id == institution.id,
@@ -166,26 +137,26 @@ async def get_license_info(
         User.role == UserRole.ESTUDIANTE.value
     ).count()
 
-    enabled_features = limits.get("features", [])
+    enabled_features = _features_for_plan(plan)
     blocked_features = []
 
-    # Identificar funcionalidades bloqueadas según licencia
-    if institution.license_type == "basica":
-        blocked_features = [f for f in LICENSE_LIMITS["premium"]["features"] if f not in enabled_features]
-    elif institution.license_type == "premium":
-        blocked_features = [f for f in LICENSE_LIMITS["pro"]["features"] if f not in enabled_features]
+    # Identificar funcionalidades bloqueadas según licencia (acumulativo)
+    if plan == "basica":
+        blocked_features = sorted(set(_features_for_plan("pro")) - set(enabled_features))
+    elif plan == "premium":
+        blocked_features = sorted(set(_features_for_plan("pro")) - set(enabled_features))
 
-    total_cupos = limits["teachers"] + limits["students"]
+    total_cupos = teachers_limit + students_limit
     total_uso = teachers + students
     usage_percentage = (total_uso / total_cupos * 100) if total_cupos > 0 else 0
 
     return LicenseInfo(
         institution_id=institution.id,
-        license_type=institution.license_type or "basica",
+        license_type=plan,
         is_active=institution.is_active,
         expiry_date=institution.expiry_date.strftime("%Y-%m-%d") if institution.expiry_date else None,
-        teachers_limit=limits["teachers"],
-        students_limit=limits["students"],
+        teachers_limit=teachers_limit,
+        students_limit=students_limit,
         teachers_current=teachers,
         students_current=students,
         available_features=enabled_features,
@@ -201,10 +172,10 @@ async def check_feature_access(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Verifica si el usuario tiene acceso a una funcionalidad específica.
-    
-    Uso: GET /license/check-feature/chat_advanced
-    Devuelve: true/false
+    Verifica si el usuario tiene acceso a una funcionalidad (módulo) específica.
+
+    Uso: GET /license/check-feature/neurobots
+    Devuelve: {"has_access": true|false, "feature": "neurobots"}
     """
     try:
         has_access = _check_feature_access(
