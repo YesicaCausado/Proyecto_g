@@ -39,6 +39,3 @@ PLAN.md
 README.md
 generate_hashes.py
 pyrightconfig.json
-
-# ── Frontend extra (evitar que entre al contexto de la función) ─────────
-frontend/package-lock.json
