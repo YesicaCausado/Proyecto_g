@@ -31,17 +31,18 @@ createRoot(document.getElementById('root')!).render(
 )
 
 // ── Registro del Service Worker (PWA: instalable + offline) ─────
-// Solo en producción: en desarrollo el SW cachearía el servidor de Vite
-// e interferiría con el HMR.
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    // BASE_URL respeta el base de Vite (ej. '/Proyecto_g/' en GitHub Pages)
-    const swUrl = `${import.meta.env.BASE_URL}sw.js`;
-    navigator.serviceWorker
-      .register(swUrl)
-      .catch((err) => console.warn('[PWA] No se pudo registrar el service worker:', err));
-  });
-}
+import { registerSW } from 'virtual:pwa-register'
+
+const updateSW = registerSW({
+  onNeedRefresh() {
+    if (confirm('Nueva versión disponible. ¿Deseas actualizar?')) {
+      updateSW(true)
+    }
+  },
+  onOfflineReady() {
+    console.log('[PWA] Aplicación lista para trabajar sin conexión.')
+  },
+})
 
 // ── Prompt de instalación PWA (beforeinstallprompt) ──────────────
 // Guardamos el evento para poder disparar la instalación desde la UI.

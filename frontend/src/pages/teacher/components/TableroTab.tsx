@@ -63,10 +63,11 @@ const TYPE_CONFIG: Record<PostType, { label:string; color:string; bg:string; ico
 
 const REACTION_EMOJIS = ['👍','❤️','😊','😮','😂','💪'];
 
-export default function TableroTab() {
+export default function TableroTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const { user } = useAuth();
   const [posts,       setPosts]       = useState<Post[]>([]);
   const [classrooms,  setClassrooms]  = useState<Classroom[]>([]);
+  const [classroomsLoading, setClassroomsLoading] = useState(true);
   const [loading,     setLoading]     = useState(true);
   const [showCompose, setShowCompose] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState('all');
@@ -82,7 +83,8 @@ export default function TableroTab() {
   useEffect(() => {
     api.get('/classrooms/my-classes')
       .then(r => setClassrooms((r.data.classrooms ?? []).map((c: any) => ({ id: String(c.id), name: c.name }))))
-      .catch(() => setClassrooms([]));
+      .catch(() => setClassrooms([]))
+      .finally(() => setClassroomsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -93,7 +95,15 @@ export default function TableroTab() {
   }, []);
 
   const toggleComments = (id: string) => {
-    setExpandComments(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setExpandComments(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) {
+        n.delete(id);
+      } else {
+        n.add(id);
+      }
+      return n;
+    });
   };
 
   const addReaction = async (postId: string, emoji: string) => {
@@ -172,18 +182,34 @@ export default function TableroTab() {
       )}
 
       {/* Barra filtro + publicar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <select value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)}
-          className="px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm text-[#37352F] focus:outline-none focus:ring-1 focus:ring-[#2E6FDB] bg-white">
-          <option value="all">Todos los grupos</option>
-          {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <div className="flex-1" />
-        <button onClick={() => { setPublishError(''); setShowCompose(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm">
-          <Plus className="w-4 h-4" /> Nueva publicación
-        </button>
-      </div>
+      {!classroomsLoading && classrooms.length === 0 ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-3">
+          <BookOpen className="w-5 h-5 text-[#D9730D] flex-shrink-0" />
+          <div className="flex-1 min-w-[200px]">
+            <p className="text-sm font-medium text-[#37352F]">Necesitas un grupo para publicar</p>
+            <p className="text-xs text-[#787774]">Crea tu primer grupo y luego podrás publicar anuncios, tareas y recursos en él.</p>
+          </div>
+          <button
+            onClick={() => onNavigate?.('grupos')}
+            className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Crear grupo
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 flex-wrap">
+          <select value={selectedGroup} onChange={e => setSelectedGroup(e.target.value)}
+            className="px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm text-[#37352F] focus:outline-none focus:ring-1 focus:ring-[#2E6FDB] bg-white">
+            <option value="all">Todos los grupos</option>
+            {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <div className="flex-1" />
+          <button onClick={() => { setPublishError(''); setShowCompose(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm">
+            <Plus className="w-4 h-4" /> Nueva publicación
+          </button>
+        </div>
+      )}
 
       {/* Posts */}
       {filtered.length === 0 ? (
@@ -336,11 +362,21 @@ export default function TableroTab() {
               {/* Grupo */}
               <div>
                 <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Grupo *</label>
-                <select value={form.classroomId} onChange={e => setForm(p=>({...p,classroomId:e.target.value}))}
-                  className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB] bg-white">
-                  <option value="">Selecciona un grupo</option>
-                  {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                {classrooms.length === 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-[#787774]">
+                    No tienes grupos.{' '}
+                    <button onClick={() => onNavigate?.('grupos')} className="text-[#2E6FDB] font-medium hover:underline">
+                      Crea un grupo
+                    </button>{' '}
+                    para poder publicar.
+                  </div>
+                ) : (
+                  <select value={form.classroomId} onChange={e => setForm(p=>({...p,classroomId:e.target.value}))}
+                    className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB] bg-white">
+                    <option value="">Selecciona un grupo</option>
+                    {classrooms.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                )}
               </div>
               {/* Título */}
               <div>

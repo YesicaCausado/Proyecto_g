@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
+    # Timeout (segundos) de las llamadas HTTP a Groq/Gemini. Debe quedar por
+    # debajo del maxDuration de la función de Vercel para no morir en frío.
+    AI_HTTP_TIMEOUT: float = float(os.getenv("AI_HTTP_TIMEOUT", "15"))
+
     COGNITIVE_ANALYSIS_WINDOW: int = 30
     FATIGUE_THRESHOLD: float = 0.7
     OVERLOAD_THRESHOLD: float = 0.8

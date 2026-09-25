@@ -3,11 +3,16 @@ NeuroLearn AI - Proveedor de IA: Google Gemini
 API Gratuita: 1,500 peticiones/día
 https://aistudio.google.com/
 """
+import os
 import httpx
 from typing import Optional, List, Dict
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Timeout de la petición a Gemini. Debe quedar POR DEBAJO del maxDuration de
+# la función de Vercel (mismo criterio que GroqProvider).
+DEFAULT_HTTP_TIMEOUT = float(os.getenv("AI_HTTP_TIMEOUT", "15"))
 
 
 class GeminiProvider:
@@ -18,6 +23,7 @@ class GeminiProvider:
     def __init__(self, api_key: str, model: str = "gemini-3.6-flash"):
         self.api_key = api_key
         self.model = model
+        self.timeout = DEFAULT_HTTP_TIMEOUT
 
     async def generate(
         self,
@@ -75,7 +81,7 @@ class GeminiProvider:
         url = f"{self.BASE_URL}/{self.model}:generateContent?key={self.api_key}"
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 data = response.json()

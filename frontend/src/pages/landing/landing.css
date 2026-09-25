@@ -557,3 +557,54 @@
 @media (prefers-reduced-motion: reduce) {
   .pp-section, .pp-track { transform: none !important; }
 }
+
+/* ═════════════════════════════════════════════════════════════
+   LANDING · Instituciones (Neuron itinerante) + CTA final
+   Fondo claro · visión cinematográfica
+   ═════════════════════════════════════════════════════════════ */
+
+/* Rail vertical por el que Neurón desciende durante el scroll */
+.inst-neuron-rail {
+  position: relative;
+  height: 420px;
+  width: 220px;
+  margin-left: 0;
+}
+.inst-neuron-line {
+  position: absolute;
+  left: 78px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(37,99,235,0.4) 20%, rgba(37,99,235,0.14) 80%, transparent);
+}
+.inst-neuron-chip {
+  position: absolute;
+  left: 14px;
+  top: 0;
+  padding: 4px;
+  border-radius: 999px;
+  background: transparent;
+  will-change: transform;
+}
+/* Contenedor del robot.glb real dentro del chip */
+.inst-neuron-3d {
+  width: 130px;
+  height: 130px;
+  filter: drop-shadow(0 14px 34px -10px rgba(37,99,235,0.45));
+  will-change: transform;
+}
+
+/* Tarjetas de rol */
+.inst-role {
+  border: 1px solid rgba(5,5,5,0.08);
+  background: #ffffff;
+  box-shadow: 0 8px 30px -20px rgba(0,0,0,0.18);
+  cursor: default;
+  will-change: transform, opacity;
+}
+.inst-role:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37,99,235,0.3);
+  box-shadow: 0 18px 44px -24px rgba(37,99,235,0.4);
+}

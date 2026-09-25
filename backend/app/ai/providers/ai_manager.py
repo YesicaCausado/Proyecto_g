@@ -2,8 +2,8 @@
 NeuroLearn AI - Gestor de Proveedores de IA
 
 Cadena de fallback (sin costo):
-1. Groq openai/gpt-oss-120b  →  modelo chat principal de Groq Cloud (JSON estable)
-2. Google Gemini gemini-3.6-flash →  respaldo gratuito
+1. Groq llama3-70b-8192  →  modelo chat principal de Groq Cloud (JSON estable)
+2. Google Gemini gemini-1.5-flash →  respaldo gratuito
 3. Local                      → Templates + JSON curado (siempre funciona)
 
 El conocimiento curado (JSON de los bots) se inyecta como contexto

@@ -20,6 +20,7 @@ import IntegracionesTab     from './components/IntegracionesTab';
 import AutomatizacionesTab  from './components/AutomatizacionesTab';
 import LicenseBanner     from '../../components/LicenseBanner';
 import SuspendedScreen   from '../../components/SuspendedScreen';
+import ProtectedFeature  from '../../components/ProtectedFeature';
 
 import {
   LayoutDashboard, BookOpen, Bot, BrainCircuit, LayoutList,
@@ -376,16 +377,16 @@ export default function TeacherPanel() {
             {activeTab === 'grupos'       && <MisGruposTab license={license} />}
             {activeTab === 'neurobots'    && <NeuroBotsTab license={license} />}
             {activeTab === 'alertas'      && <NeuroAlertasTab />}
-            {activeTab === 'tablero'      && <TableroTab />}
+            {activeTab === 'tablero'      && <TableroTab onNavigate={setActiveTab} />}
             {activeTab === 'evaluaciones' && <EvaluacionesTab license={license} />}
             {activeTab === 'materiales'   && <MaterialesTab license={license} />}
             {activeTab === 'mensajes'     && <MensajesTab />}
             {activeTab === 'calendario'   && <CalendarioTab />}
             {activeTab === 'configuracion'&& <ConfiguracionTab user={user} />}
-            {activeTab === 'analitica'   && <AnaliticaTab onNavigate={setActiveTab} />}
-            {activeTab === 'ia'          && <IAGenerativaTab />}
-            {activeTab === 'integraciones'    && <IntegracionesTab onNavigate={setActiveTab} />}
-            {activeTab === 'automatizaciones' && <AutomatizacionesTab onNavigate={setActiveTab} />}
+            {activeTab === 'analitica'   && <ProtectedFeature feature="advanced_analytics"><AnaliticaTab onNavigate={setActiveTab} /></ProtectedFeature>}
+            {activeTab === 'ia'          && <ProtectedFeature feature="teacher_ai"><IAGenerativaTab /></ProtectedFeature>}
+            {activeTab === 'integraciones'    && <ProtectedFeature feature="integrations"><IntegracionesTab onNavigate={setActiveTab} /></ProtectedFeature>}
+            {activeTab === 'automatizaciones' && <ProtectedFeature feature="automation"><AutomatizacionesTab onNavigate={setActiveTab} /></ProtectedFeature>}
 
           </div>
         </main>

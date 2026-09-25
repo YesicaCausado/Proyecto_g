@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.api.auth import get_current_user
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment
 from app.models.expert_bot import ExpertBot
 from app.models.learning import LearningSession, QuizHistory
@@ -29,9 +29,6 @@ SESSION_COLORS = [
     "bg-[#2E6FDB]", "bg-[#0F7B6C]", "bg-[#D9730D]",
     "bg-[#6940A5]", "bg-[#0B6E99]", "bg-[#E03E3E]",
 ]
-
-# Días de lunes a sábado (6 celdas del mapa de calor semanal)
-WEEK_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
 
 
 def _teacher_classroom_ids(db: Session, teacher_id: int) -> list[int]:
@@ -61,6 +58,18 @@ def get_teacher_stats(
     db: Session = Depends(get_db),
 ):
     """Estadísticas reales y agregadas para el panel del profesor."""
+    # FIX de seguridad: el endpoint no validaba el rol — un ESTUDIANTE podía
+    # consultar /teacher/stats (devolvía sus propios vacíos, pero el canal
+    # quedaba abierto). Solo profesores, super profesores y admin pueden leerlo.
+    if current_user.role not in (
+        UserRole.PROFESOR.value,
+        UserRole.SUPER_PROFESOR.value,
+        UserRole.ADMIN.value,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Las estadísticas de docente solo están disponibles para profesores.",
+        )
     try:
         return _compute_teacher_stats(current_user, db)
     except HTTPException:
@@ -361,7 +370,10 @@ def _compute_teacher_stats(
         else:
             try:
                 d = datetime.strptime(ev_date, "%Y-%m-%d")
-                label_date = d.strftime("%-d %b").capitalize()
+                # FIX portable: "%-d" solo existe en Linux/glibc — en Windows
+                # Python lanza ValueError ("Invalid format string") y caía al
+                # fallback mostrando la fecha ISO cruda ("2026-09-25").
+                label_date = d.strftime("%d %b").lstrip("0").capitalize()
             except Exception:
                 label_date = ev_date
 

@@ -20,7 +20,7 @@ export default function ProgressRacha({ userId }: { userId: number }) {
 
   const fetchRacha = async () => {
     try {
-      const response = await api.get(`/student/racha/${userId}`);
+      const response = await api.get('/stats/performance');
       setRacha(response.data);
     } catch (error) {
       console.error('Error cargando racha:', error);

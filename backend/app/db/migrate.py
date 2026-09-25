@@ -9,6 +9,61 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 
+def _add_missing_sqlite_columns(engine) -> None:
+    """
+    SQLite no soporta `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Compara el
+    esquema actual con los modelos (Base.metadata) y añade las columnas que
+    falten.
+
+    Repara bases de desarrollo creadas con versiones anteriores de la app:
+    Base.metadata.create_all crea tablas NUEVAS pero nunca altera las que ya
+    existen, así que al añadir columnas a los modelos (p.ej. users.photo,
+    last_login, campos B2B) la base vieja quedaba desincronizada y cualquier
+    query fallaba con "no such column".
+    """
+    from sqlalchemy import inspect, text
+    from app.db.database import Base
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    added = 0
+    errors = 0
+
+    for table in Base.metadata.tables.values():
+        if table.name not in existing_tables:
+            continue  # tabla nueva: la crea Base.metadata.create_all
+        existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in existing_cols:
+                continue
+            try:
+                col_type = col.type.compile(engine.dialect)
+                ddl = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}'
+                if not col.nullable:
+                    # ALTER TABLE de SQLite exige DEFAULT para NOT NULL sobre
+                    # tablas con datos: se usa un valor neutro por tipo.
+                    base_type = col_type.split("(")[0].upper()
+                    neutral = {
+                        "BOOLEAN": "0",
+                        "INTEGER": "0",
+                        "BIGINT": "0",
+                        "FLOAT": "0.0",
+                        "REAL": "0.0",
+                        "NUMERIC": "0",
+                    }.get(base_type, "''")
+                    ddl += f" NOT NULL DEFAULT {neutral}"
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
+                added += 1
+                logger.info(f"SQLite: columna añadida {table.name}.{col.name}")
+            except Exception as e:
+                errors += 1
+                logger.error(f"SQLite: no se pudo añadir {table.name}.{col.name}: {e}")
+
+    if added or errors:
+        logger.info(f"SQLite schema drift: {added} columnas añadidas, {errors} errores.")
+
+
 def run_migrations(engine) -> None:
     """
     Aplica todas las migraciones B2B pendientes.
@@ -16,6 +71,15 @@ def run_migrations(engine) -> None:
     """
     if engine is None:
         logger.warning("run_migrations: engine es None, omitiendo.")
+        return
+
+    # Las migraciones B2B están escritas con sintaxis específica de PostgreSQL
+    # (SERIAL, JSONB, BYTEA, ALTER TABLE ... ADD COLUMN IF NOT EXISTS, índices
+    # parciales). En SQLite el esquema completo se crea desde los modelos con
+    # Base.metadata.create_all (las columnas B2B ya están en app/models), así
+    # que aquí no hay nada que aplicar y ejecutarlas solo generaría errores.
+    if engine.dialect.name != "postgresql":
+        _add_missing_sqlite_columns(engine)
         return
 
     migrations = [

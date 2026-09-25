@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useLicense } from '../../context/LicenseContext';
 import api from '../../services/api';
 import { findCompetency } from '../../data/competencies';
 import type { ExpertBot, Classroom } from '../../types';
@@ -82,6 +83,7 @@ const SUBJECT_TO_COMPETENCY: Record<string, string> = {
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+  const { hasFeature } = useLicense();
   const [, setBots] = useState<ExpertBot[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
@@ -438,6 +440,7 @@ export default function StudentDashboard() {
             </div>
 
             {/* NeuroInsights — indicadores cognitivos reales */}
+            {hasFeature('estadisticas') && (
             <div className="bg-white border border-[#E9E9E7] rounded-md p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-7 h-7 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
@@ -499,8 +502,10 @@ export default function StudentDashboard() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Recomendaciones AI — basadas en materias débiles reales */}
+            {hasFeature('tutor_ia') && (
             <div className="bg-white border border-[#E9E9E7] rounded-md p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-7 h-7 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
@@ -581,6 +586,7 @@ export default function StudentDashboard() {
                 );
               })()}
             </div>
+            )}
 
             {/* Motivacional con Neuron */}
             <div

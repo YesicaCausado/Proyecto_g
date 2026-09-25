@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LicenseProvider } from './context/LicenseContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // ── Carga diferida (code splitting) por ruta ───────────────────
 // Cada página solo se descarga cuando el usuario navega a ella,
@@ -163,6 +164,7 @@ export default function App() {
       <AuthProvider>
         <LicenseProvider>
           <AppRoutes />
+          <PWAInstallPrompt />
         </LicenseProvider>
       </AuthProvider>
     </HashRouter>

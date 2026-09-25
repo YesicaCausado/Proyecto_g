@@ -1,8 +1,8 @@
 # 🗺️ PLAN.md — Roadmap de Trabajo NeuroLearn AI
 
 > **Proyecto de Grado 2026** | PWA (Progressive Web App) | Colombia — Saber 11 ICFES  
-> **Última actualización:** Auditoría técnica integral #3 + reconciliación PLAN↔EDT (verificación sobre código real) — 2026  
-> **Estado general del proyecto:** ~80% funcionalidad MVP construida; ~70% avance global ponderado (faltan pruebas, despliegue y RAG)  
+> **Última actualización:** Auditoría técnica integral #4 — 22 Sep 2026  
+> **Estado general del proyecto:** ~80% funcionalidad MVP construida; ~70% avance global ponderado (faltan RAG, pruebas E2E, despliegue y docs de entrega)  
 > **Fuente:** Diccionario EDT + Requisitos Funcionales y No Funcionales v3  
 > **⚠️ AVISO DE AUDITORÍA:** Este PLAN refleja el estado REAL verificado directamente sobre el código (backend, frontend, migraciones, config, DBs). El backend está muy completo; gran parte del frontend ya está conectado al backend real. **Los bloqueantes de integración (endpoints de bots, admin, reportes, licencia, PWA, fallback local) ya están RESUELTOS en código.** El único bloqueante funcional real que queda es la **capa RAG** (carga de documentos + embeddings). Lee la **"SECCIÓN 7 — AUDITORÍA TÉCNICA Y BACKLOG PRIORIZADO"** para el detalle de lo pendiente.
 
@@ -883,9 +883,236 @@ Porcentaje ponderado por criticidad para el MVP (backend/IA pesan más porque so
 | Sesión actual | Restaurar fallback local de IA: `ai_manager._generate_local_response()` (tutor en español + quiz JSON de diagnóstico) y `generate()` ya **nunca** retorna `None`; `chat.py` quita los 503 de `start_session`/`send_message` y degrada a respuesta local; docstring corregido. Cierra 2.3.3.4, 4.1.3.3, riesgo 11 y P2-7 | Dev | ✅ Completa |
 | Sesión actual | Reconciliación PLAN ↔ EDT: marcar como ✅ las tareas ya resueltas que seguían como pendientes (PWA completa 5.1.1.2/5.1.2.x/5.1.3.x, servicios IA 5.3.4.x, code-splitting/lazy-loading 5.4.1.1-2, 1.3.3.5); añadir sección «Estado actual» con avance por fase y backlog priorizado | Dev | ✅ Completa |
 | Sesión actual | **Prioridad 1 — verificación sobre código real**: confirmado que los bloqueantes P1 ya estaban resueltos (router bots `/api/v1/bots` único, `/admin/bots`+`/admin/bots/pretrained` en `admin_bots.py`, `teacher_reports.py` con campos reales de `QuizHistory`, `quiz_title` único en `learning.py:150`, `ProtectedFeature.tsx` usa `hasFeature`, `/license/my-license` existe, `reportlab` en `requirements.txt`). Actualizado el PLAN para marcarlos cerrados; único pendiente P1 = verificación E2E en UI | Dev | ✅ Completa |
+| 2026-09-22 | **Auditoría #4 — lectura directa de código completo**: se identificaron nuevos hallazgos: bug `ProgressRacha.tsx` (endpoint muerto `/student/racha/{id}`), numeración duplicada en migraciones (dos 003/004/005), discrepancia de modelos en `ai_manager.py` vs `.env.example`, `UsersTabs.tsx` con 77KB (candidato a refactor), RLS de Supabase no aplica al backend (`BYPASSRLS`). RAG sigue en 0%. Estado global ajustado a ≈72%. | Dev | ✅ Completa |
+
+---
+
+## Sección 8 — AUDITORÍA TÉCNICA #4 (22 Sep 2026) — HALLAZGOS NUEVOS
+
+> Resultado de lectura directa de código: backend, frontend, migraciones, IA providers y configs.
+
+### 8.1 Bugs Activos Identificados
+
+| ID | Severidad | Archivo | Descripción | Acción |
+|----|-----------|---------|-------------|--------|
+| 🔴 B-01 | CRÍTICO | `frontend/src/components/ProgressRacha.tsx:23` | Llama a `/student/racha/{userId}` que **no existe** en ningún router backend. El dato correcto es `overview.streak_days` de `/stats/performance`. | Corregir a `GET /stats/performance` y leer `data.overview.streak_days` |
+| 🟠 B-02 | MEDIO | `backend/migrations/applied/` | **Numeración duplicada**: existen dos `003_*.sql`, dos `004_*.sql` y dos `005_*.sql`. El sistema de migraciones puede aplicarlas o ignorarlas de forma incorrecta. | Renombrar para garantizar unicidad: `003a`, `003b`, etc. o usar timestamps |
+| 🟠 B-03 | MEDIO | `backend/app/ai/providers/ai_manager.py:31-33` | Hardcodea modelos `openai/gpt-oss-120b` y `gemini-3.6-flash` en comentarios/docstrings, mientras `.env.example` indica `qwen/qwen3-32b` y `gemini-2.0-flash`. Los modelos reales se cargan de env vars, pero el código comentado crea confusión. | Actualizar docstring para reflejar los modelos reales del .env |
+| 🟡 B-04 | BAJO | `frontend/src/pages/super/components/UsersTabs.tsx` | 77,774 bytes — el componente más grande del proyecto. Alto acoplamiento, difícil de mantener y testear. | Dividir en sub-componentes (TeachersList, StudentsList, BulkUpload) |
+| 🟡 B-05 | BAJO | `backend/app/api/auth.py → root()` | El endpoint `GET /` retorna `"info": "Para autenticación, usa http://localhost:8002"`, referencia al auth-service deprecado. | Eliminar esa línea del root response |
+| 🟡 B-06 | BAJO | `005_rls_multitenant.sql:11-14` | Las políticas RLS de Supabase **no protegen las consultas del backend** porque usa `service_role` con `BYPASSRLS`. Solo protegen acceso vía PostgREST. Está documentado en la migración, pero el PLAN original lo marcó como ✅ sin esta aclaración. | Documentar limitación claramente; considerar `set_config('request.jwt.claims', ...)` si se quiere RLS real |
+
+### 8.2 Estado Real del Sistema de Migraciones
+
+```
+migrations/applied/
+├── 001_b2b_schema.sql          ✅ Fundacional (institutions, users B2B, audit_logs)
+├── 002_add_adaptive_quiz_columns.sql  ✅ (mistakes, weak_concepts, performance_score en quiz_history)
+├── 003_add_chat_patterns_tables.sql   ✅ (cognitive_session_state, learning_sessions, chat_messages)
+├── 003_last_login.sql          ⚠️ NUMERACIÓN DUPLICADA — añade last_login a users
+├── 004_add_chat_answers.sql    ✅ (chat_answers JSONB en cognitive_session_state)
+├── 004_password_reset_tokens.sql ⚠️ NUMERACIÓN DUPLICADA — tabla password_reset_tokens
+├── 005_adaptive_student_model.sql ✅ (student_mastery, conversations, conversation_messages)
+└── 005_rls_multitenant.sql    ⚠️ NUMERACIÓN DUPLICADA — RLS Supabase (solo PostgREST, no backend)
+```
+
+> ⚠️ **Impacto:** El script `migrate.py` ordena alfabéticamente; actualmente las `003_last_login` y `004_password_reset_tokens` se procesan correctamente porque el orden alfabético las ubica después del otro `003`/`004`. Verificar que `migrate.py` usa un mecanismo de deduplicación (hash/nombre) y no solo el número.
+
+### 8.3 Análisis del Motor de IA
+
+| Componente | Estado | Observación |
+|-----------|--------|-------------|
+| Groq (`qwen/qwen3-32b`) | ✅ Funcional | Provider real via HTTP. Timeout configurable (`AI_HTTP_TIMEOUT=15s`). |
+| Gemini (`gemini-2.0-flash`) | ✅ Funcional | Fallback secundario en `gemini_provider.py`. |
+| Fallback local | ✅ Funcional | `_generate_local_response()` en `ai_manager.py:111-161`. Retorna template pedagógico o quiz JSON. |
+| System prompt neuroconductual | ✅ Completo | `build_tutor_system_prompt()` inyecta estado cognitivo y 8 estados emocionales diferenciados. |
+| RAG sobre documentos | ❌ No existe | Cero dependencias de embeddings/vectores en `requirements.txt`. |
+
+### 8.4 Estado del Frontend — Páginas Stub o Incompletas
+
+| Página/Componente | Tamaño | Estado | Acción |
+|--|--|--|--|
+| `ProgressRacha.tsx` | 4 KB | 🔴 Bug: endpoint muerto | Corregir endpoint (ver B-01) |
+| `MessagesPage.tsx` | 512 B | ✅ OK — Wrappea `<Messaging>` | Funcional |
+| `SettingsPage.tsx` | 488 B | ⚠️ Stub vacío | Añadir contenido real (perfil o redirect a /dashboard) |
+| `ConfiguracionTab.tsx` (Teacher) | 273 B | ✅ OK — Wrappea `<ProfileSettings>` | Funcional |
+| `MensajesTab.tsx` (Teacher) | 263 B | ⚠️ Stub vacío | Añadir `<Messaging>` component |
+| `BotsPage.tsx` | 3 KB | ✅ Funcional (usa COMPETENCIES) | Ok para MVP — no consume backend dinámico |
+
+### 8.5 Discrepancias PLAN vs Código Real (actualizadas)
+
+| Item PLAN | Estado anterior | Estado real | Corrección |
+|-----------|----------------|-------------|------------|
+| `streak_days` en `ProgressRacha` | ✅ "calculado en /stats/performance" | 🔴 `ProgressRacha.tsx` llama a `/student/racha/{id}` inexistente | El streak sí está en `/stats/performance` → `overview.streak_days`; el componente es el que está roto |
+| RLS multi-tenant | ✅ "aplicado en Supabase" | ⚠️ Solo aplica a PostgREST; el backend usa `service_role` con BYPASSRLS | Documentar limitación |
+| Fallback local IA | ✅ "resuelto" | ✅ Confirmado funcionando en `ai_manager.py:111-161` | Sin cambios |
+| Numeración migraciones | No documentado | ⚠️ Duplicada (dos 003, dos 004, dos 005) | Verificar `migrate.py` y renombrar si es necesario |
+
+### 8.6 Avance Global Recalibrado (Auditoría #4)
+
+| Área | Peso MVP | Avance | Ponderado |
+|------|---------|--------|-----------|
+| Backend FastAPI (endpoints, auth, licencias, IA) | 30% | 95% | 28.5% |
+| Frontend (paneles, conexión, UX) | 25% | 80% | 20.0% |
+| IA Neuroconductual (motor, providers, fallback) | 15% | 85% | 12.8% |
+| RAG / Carga de documentos | 10% | 0% | 0.0% |
+| PWA (SW, offline, instalable) | 5% | 90% | 4.5% |
+| Pruebas (funcionales + seguridad + E2E) | 8% | 18% | 1.4% |
+| Despliegue (Vercel, vars entorno, dominio) | 7% | 40% | 2.8% |
+| **TOTAL** | **100%** | | **≈ 70%** |
+
+---
+
+## Sección 9 — TAREAS A COMPLETAR (Orden Crítico por Paquetes de Trabajo)
+
+> Fecha: 22 Sep 2026 | Auditoría #4 | Las tareas están ordenadas de mayor a menor impacto en la defensa del proyecto.
+
+---
+
+### 🔴 PAQUETE 0 — Bugs Críticos del Frontend (1–2 horas)
+
+**Impacto:** Sin estos fixes, funcionalidades ya existentes en backend NO son visibles/funcionales en la UI.
+
+| # | Tarea | Archivo | Esfuerzo |
+|---|-------|---------|----------|
+| 0.1 | **Corregir `ProgressRacha.tsx`**: cambiar `GET /student/racha/{userId}` → `GET /stats/performance` y leer `data.overview.streak_days`, `data.overview.total_quizzes`, `data.overview.consistency_pct` | `frontend/src/components/ProgressRacha.tsx` | 30 min |
+| 0.2 | **Completar `MensajesTab.tsx`** del panel Profesor: añadir `<Messaging>` igual que `MessagesPage.tsx` | `frontend/src/pages/teacher/components/MensajesTab.tsx` | 15 min |
+| 0.3 | **Completar `SettingsPage.tsx`**: añadir configuración de perfil del estudiante usando `<ProfileSettings role="estudiante">` | `frontend/src/pages/student/SettingsPage.tsx` | 15 min |
+| 0.4 | **Limpiar root response**: eliminar referencia a `http://localhost:8002` del endpoint `GET /` en `main.py` | `backend/app/main.py:174` | 5 min |
+| 0.5 | **Corregir discrepancia de modelos**: actualizar docstring de `ai_manager.py` para reflejar `qwen/qwen3-32b` y `gemini-2.0-flash` | `backend/app/ai/providers/ai_manager.py:30-35` | 10 min |
+
+---
+
+### 🔴 PAQUETE 1 — RAG / Carga Real de Documentos (2–4 días)
+
+**Impacto:** RF 1.2.1.17 (cargar documentos para bots) está pendiente al 0%. Es el único bloqueante funcional de fondo.
+
+| # | Tarea | Archivo(s) | Esfuerzo |
+|---|-------|-----------|----------|
+| 1.1 | Añadir dependencias RAG a `requirements.txt`: `sentence-transformers`, `chromadb` o `pgvector` | `backend/requirements.txt` | 30 min |
+| 1.2 | Crear pipeline de procesamiento de documentos: leer PDF/TXT del `content` (LargeBinary ya existe en `TeacherMaterial`), dividir en chunks, generar embeddings | `backend/app/ai/rag/` (nuevo módulo) | 1 día |
+| 1.3 | Configurar vector store: ChromaDB local (desarrollo) o `pgvector` extension en Supabase (producción) | Config + nueva tabla/colección | 1 día |
+| 1.4 | Integrar RAG en `chat.py`: al construir el prompt del bot, recuperar chunks relevantes del vector store del bot | `backend/app/api/chat.py` | 4 horas |
+| 1.5 | Actualizar `teacher_materials.py`: procesar el binario subido y lanzar pipeline de embeddings en background task | `backend/app/api/teacher_materials.py` | 3 horas |
+| 1.6 | Actualizar `NeuroBotsTab.tsx` para mostrar estado de procesamiento del documento (pendiente/procesado/error) | `frontend/src/pages/teacher/components/NeuroBotsTab.tsx` | 2 horas |
+
+---
+
+### 🟠 PAQUETE 2 — Verificación E2E de Flujos Completos (1 día)
+
+**Impacto:** Confirma que el backend y frontend ya construidos funcionan juntos de extremo a extremo.
+
+| # | Tarea | Descripción | Esfuerzo |
+|---|-------|-------------|----------|
+| 2.1 | **E2E: Flujo Estudiante** | Login → Chat con bot → Quiz → Ver progreso (`/stats/performance`) → Ver racha | 2 horas |
+| 2.2 | **E2E: Flujo Profesor** | Login → Crear clase → Generar código → Crear bot → Asignar bot a clase → Ver reportes → Exportar CSV | 2 horas |
+| 2.3 | **E2E: Flujo Súper Profesor** | Login → Ver dashboard institucional → Crear docente → Crear estudiante → Ver métricas de licencia | 1 hora |
+| 2.4 | **E2E: Flujo Admin** | Login → Moderar bots → Ver audit logs → Cambiar licencia de institución | 1 hora |
+| 2.5 | **E2E: Flujo RAG** (solo si P1 completado) | Subir PDF → Ver estado procesado → Chatear con bot y verificar que responde con contexto del documento | 1 hora |
+
+---
+
+### 🟠 PAQUETE 3 — Despliegue en Producción Vercel (1 día)
+
+**Impacto:** El proyecto de grado necesita URL pública para la defensa.
+
+| # | Tarea | Descripción | Esfuerzo |
+|---|-------|-------------|----------|
+| 3.1 | **Configurar variables de entorno en Vercel Dashboard** | `DATABASE_URL`, `SECRET_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`, etc. | 30 min |
+| 3.2 | **Deploy frontend** | `npm run build` → Vercel auto-deploy desde `frontend/dist` | 30 min |
+| 3.3 | **Deploy backend serverless** | Verificar `api/index.py` apunta a `app.main:app`; probar `GET /health` en URL de producción | 30 min |
+| 3.4 | **Verificar rewrites de Vercel** | `vercel.json` rewrites correctos; probar `/api/v1/auth/login` desde la URL pública | 1 hora |
+| 3.5 | **Configurar dominio personalizado** (opcional) | Añadir dominio o usar `.vercel.app` | 15 min |
+| 3.6 | **Rotar credenciales** | Generar nuevo `SECRET_KEY` (mínimo 64 chars), rotar API keys Groq/Gemini, actualizar `.env` y Vercel Dashboard | 30 min |
+
+---
+
+### 🟠 PAQUETE 4 — Licencias en UI (3–5 horas)
+
+**Impacto:** RF 1.2.1.48-50 (estudiante ve funciones según licencia) y RF 1.2.1.25 (profesor) pendientes.
+
+| # | Tarea | Archivo | Esfuerzo |
+|---|-------|---------|----------|
+| 4.1 | Adaptar `StudentDashboard.tsx`: mostrar/ocultar secciones según `license.features` retornadas por `LicenseContext` | `frontend/src/pages/student/StudentDashboard.tsx` | 1 hora |
+| 4.2 | Panel Profesor → mostrar módulos habilitados: aplicar `ProtectedFeature` o `hasFeature()` en pestañas Pro (Automatizaciones, Integraciones, IA Generativa) | `frontend/src/pages/teacher/TeacherPanel.tsx` | 1 hora |
+| 4.3 | Verificar que `BotsPage.tsx` muestra bots dinámicos del backend (actualmente usa COMPETENCIES estático) — evaluar si es suficiente para MVP | `frontend/src/pages/student/BotsPage.tsx` | 30 min |
+
+---
+
+### 🟡 PAQUETE 5 — Pruebas y Calidad (2–3 días)
+
+**Impacto:** Calidad de entrega y defensa del proyecto.
+
+| # | Tarea | Descripción | Esfuerzo |
+|---|-------|-------------|----------|
+| 5.1 | **Pruebas de seguridad completas**: ejecutar `pytest backend/tests/test_security.py` y confirmar 7/7 PASS en el entorno de producción | `backend/tests/test_security.py` | 30 min |
+| 5.2 | **Pruebas de integración backend**: ejecutar `test_full_flow.py`, `test_adaptive_system.py`, `test_patterns.py` | `backend/tests/` | 1 hora |
+| 5.3 | **Pruebas de carga**: simular 10–20 usuarios concurrentes con `locust` o `k6` sobre `/chat/message` y `/stats/performance` | Nuevo script | 1 día |
+| 5.4 | **Compatibilidad cross-browser**: verificar en Chrome, Firefox, Edge, Safari (PWA install) | Manual | 2 horas |
+| 5.5 | **Pruebas de rendimiento PWA**: Lighthouse score ≥ 80 en Performance, Accessibility y PWA | `frontend/dist` | 1 hora |
+| 5.6 | **Prueba de offline**: desconectar red, navegar por rutas cacheadas, verificar fallback del Service Worker | Manual | 30 min |
+
+---
+
+### 🟡 PAQUETE 6 — Migraciones y DB (2–3 horas)
+
+**Impacto:** Robustez del sistema en nuevo entorno de producción.
+
+| # | Tarea | Descripción | Esfuerzo |
+|---|-------|-------------|----------|
+| 6.1 | **Renombrar migraciones duplicadas**: `003_last_login.sql` → `003b_last_login.sql`, `004_password_reset_tokens.sql` → `004b_password_reset_tokens.sql`, `005_rls_multitenant.sql` → `005b_rls_multitenant.sql` | `backend/migrations/applied/` | 30 min |
+| 6.2 | **Verificar `migrate.py`**: confirmar que el script usa nombre de archivo (no número) como clave de deduplicación y que aplica migraciones en orden correcto | `backend/migrations/migrate.py` | 30 min |
+| 6.3 | **Aplicar migraciones en Supabase producción**: ejecutar todos los `.sql` de `migrations/applied/` en el SQL Editor de Supabase si no están aplicados | Supabase Dashboard | 1 hora |
+| 6.4 | **Índices de BD**: añadir índices a `cognitive_events.user_id`, `chat_messages.session_id`, `quiz_history.user_id` si no existen | Nueva migración `006_indexes.sql` | 1 hora |
+
+---
+
+### 🟢 PAQUETE 7 — Documentación y Entrega (1–2 días)
+
+**Impacto:** Entrega formal del proyecto de grado.
+
+| # | Tarea | Descripción | Esfuerzo |
+|---|-------|-------------|----------|
+| 7.1 | **Manual de usuario**: guía de uso por rol (Estudiante, Profesor, Súper Profesor, Admin) con capturas de pantalla | `docs/MANUAL_USUARIO.md` | 4 horas |
+| 7.2 | **API Documentation**: exportar OpenAPI spec desde `GET /api/docs` → guardar como `docs/api_spec.json` | `docs/` | 30 min |
+| 7.3 | **Actualizar README.md**: instrucciones de despliegue con Vercel actualizadas, remover referencias a auth-service deprecado | `README.md` | 1 hora |
+| 7.4 | **Actualizar `ARQUITECTURA_MICROSERVICIOS.md`**: reemplazar con arquitectura real actual (monolito FastAPI + React + Supabase + Vercel) | `docs/ARQUITECTURA_MICROSERVICIOS.md` | 1 hora |
+| 7.5 | **Cronograma de mantenimiento post-lanzamiento** (ítem 1.1.2.3 pendiente) | `docs/MANTENIMIENTO.md` | 30 min |
+| 7.6 | **Preparar presentación de defensa**: video demo de los 4 flujos de usuario (E2E verificados en P2) | Externo | 1 día |
+
+---
+
+### 🟢 PAQUETE 8 — Optimizaciones Opcionales (si hay tiempo)
+
+| # | Tarea | Impacto | Esfuerzo |
+|---|-------|---------|----------|
+| 8.1 | Refactorizar `UsersTabs.tsx` (77KB) en sub-componentes | Mantenibilidad | 4 horas |
+| 8.2 | JWT Refresh Tokens (ítem 5.3.2.2 pendiente) | Seguridad UX | 3 horas |
+| 8.3 | Streaming de respuestas del chat (ítem 4.1.1.2) | UX | 4 horas |
+| 8.4 | Índices estratégicos en BD (ítem 2.4.1.2) | Rendimiento | 2 horas |
+| 8.5 | Mapas de calor (ítem 3.3.5.3) | Analytics | 6 horas |
+| 8.6 | Capacitor/app híbrida Android (ítem 5.2.1.2) | Alcance | 2 días |
+
+---
+
+### 📊 Resumen de Esfuerzo Total Estimado
+
+| Paquete | Criticidad | Esfuerzo Est. | Entregable |
+|---------|-----------|--------------|-----------|
+| P0 — Bugs Frontend | 🔴 Urgente | 1.5 horas | Racha funcional, tabs sin stubs |
+| P1 — RAG | 🔴 Alta | 2–4 días | Bots con conocimiento de documentos |
+| P2 — Verificación E2E | 🟠 Alta | 1 día | Flujos completos verificados |
+| P3 — Despliegue Vercel | 🟠 Alta | 1 día | URL pública para defensa |
+| P4 — Licencias UI | 🟠 Media | 3–5 horas | Restricciones visibles en frontend |
+| P5 — Pruebas | 🟡 Media | 2–3 días | Suite de pruebas + Lighthouse |
+| P6 — Migraciones | 🟡 Media | 2–3 horas | DB limpia y robusta en producción |
+| P7 — Documentación | 🟢 Baja | 1–2 días | Manual + API docs + README |
+| P8 — Opcionales | 🟢 Baja | Variable | Nice-to-have |
+
+> **Ruta crítica para la defensa:** P0 → P3 → P2 → P1 → P5 → P7
 
 ---
 
 **Firma del responsable:** _______________________
 
-**Fecha de revisión:** _______________________
+**Fecha de revisión:** 2026-09-22

@@ -45,12 +45,36 @@ def _build_db_url(url: str) -> str:
 
 _db_url = _build_db_url(settings.DATABASE_URL)
 
-if not _db_url or not _db_url.startswith("postgres"):
-    logger.warning("⚠️ DATABASE_URL no configurada — arrancando sin base de datos.")
-    engine = None
-    SessionLocal = None
-    IS_DB_DISABLED = True
-else:
+# Sin DATABASE_URL (o vacía) se cae a SQLite local: la arquitectura documentada
+# es "SQLite (desarrollo) / PostgreSQL (producción)". Así la app funciona en
+# local sin Supabase (antes arrancaba sin base de datos y TODOS los endpoints
+# con DB devolvían 503, incluido el login).
+if not _db_url:
+    # FIX: ruta ABSOLUTA anclada a backend/. Con el default relativo
+    # ("neurolearn.db") la ubicación de la BD dependía del CWD desde el que se
+    # lanzara uvicorn/scripts: se creaban neurolearn.db distintos (root del
+    # proyecto vs backend/) y los datos "desaparecían" al cambiar el cwd.
+    # TRES dirname: app/db/database.py → app/db → app → backend/
+    _backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _sqlite_file = (
+        os.getenv("SQLITE_DB_PATH")
+        or os.path.join(_backend_dir, "neurolearn.db")
+    )
+    _db_url = "sqlite:///" + _sqlite_file.replace(os.sep, "/")
+    logger.info(f"🗄️ DATABASE_URL no configurada — usando SQLite local ({_sqlite_file}).")
+
+IS_DB_DISABLED = False
+
+if _db_url.startswith("sqlite"):
+    # SQLite local: check_same_thread=False permite usar la conexión desde los
+    # hilos de uvicorn (FastAPI ejecuta los endpoints en un threadpool).
+    engine = create_engine(
+        _db_url,
+        connect_args={"check_same_thread": False},
+        echo=settings.DEBUG,
+    )
+    logger.info("✅ Base de datos SQLite local configurada.")
+elif _db_url.startswith("postgres"):
     try:
         if IS_SERVERLESS:
             # NullPool: no mantiene conexiones persistentes entre invocaciones serverless
@@ -72,14 +96,23 @@ else:
                 connect_args=_build_connect_args(),
                 echo=settings.DEBUG,
             )
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-        IS_DB_DISABLED = False
         logger.info("✅ Conexión a Supabase configurada correctamente.")
     except Exception as e:
         logger.error(f"❌ Error configurando base de datos: {e}")
         engine = None
         SessionLocal = None
         IS_DB_DISABLED = True
+else:
+    logger.warning(
+        f"⚠️ DATABASE_URL no soportada (driver '{_db_url.split(':')[0]}') — arrancando sin base de datos."
+    )
+    engine = None
+    IS_DB_DISABLED = True
+
+if engine is not None:
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+else:
+    SessionLocal = None
 
 Base = declarative_base()
 

@@ -24,7 +24,7 @@ from app.core.security import (
     SecurityHeadersMiddleware,
     HSTSHeaderMiddleware,
 )
-from app.db.database import engine, Base
+from app.db.database import engine, Base, IS_SERVERLESS
 from app.api import auth, chat, expert_bot, classroom, stats
 from app.api import conversations  # Conversaciones del tutor IA (memoria de chats)
 from app.api import credentials  # B2B credential system
@@ -56,24 +56,60 @@ import app.models.integration               # noqa: F401 — Integrations/Automa
 import app.api.teacher_materials            # noqa: F401 — registers TeacherFolder + TeacherMaterial
 import app.api.teacher_evaluations          # noqa: F401 — registers TeacherEvaluation
 
-# Crear tablas (funciona en SQLite local y PostgreSQL en Vercel)
-try:
-    if engine is not None:
-        Base.metadata.create_all(bind=engine)
-    else:
-        import logging
-        logging.getLogger(__name__).warning("⚠️ engine es None — tablas no creadas. Verifica DATABASE_URL.")
-except Exception as e:
-    import logging
-    logging.getLogger(__name__).error(f"⚠️ No se pudo crear las tablas: {e}. El backend arrancará sin DB.")
+# ─── Inicialización de esquema (tablas + migraciones B2B) ─────────────────
+#
+# En Vercel (serverless) esto se ejecutaba en CADA cold start y, junto con
+# los imports pesados (numpy/pandas/sklearn) y la conexión a Supabase,
+# agotaba el maxDuration de la función Hobby (~10s) ANTES de que la IA
+# llegara a responder. Por eso el chat fallaba "a veces" (primera petición
+# tras inactividad) y funcionaba al recargar (instancia ya caliente).
+#
+# La estrategia correcta:
+#   - Local / servidor persistente: aplicamos esquema + migraciones al boot
+#     como siempre (es instantáneo y deja todo listo).
+#   - Serverless (Vercel): NO bloqueamos el arranque con round-trips a
+#     Supabase. El esquema ya está creado en la base (las migraciones son
+#     idempotentes), y si falta algún paso se aplica de forma perezosa en
+#     segundo plano para no retrasar la primera request del usuario.
+import logging as _logging
+_log = _logging.getLogger(__name__)
 
-# ─── Migraciones B2B (columnas nuevas en tablas existentes) ──────────────────
-try:
-    from app.db.migrate import run_migrations
-    run_migrations(engine)
-except Exception as e:
-    import logging
-    logging.getLogger(__name__).error(f"⚠️ Error en migraciones B2B: {e}")
+
+def _apply_schema_and_migrations():
+    """Aplica create_all + migraciones B2B. En serverless no bloquea el import."""
+    try:
+        if engine is not None:
+            Base.metadata.create_all(bind=engine)
+        else:
+            _log.warning("⚠️ engine es None — tablas no creadas. Verifica DATABASE_URL.")
+            return
+    except Exception as e:
+        _log.error(f"⚠️ No se pudo crear las tablas: {e}. El backend arrancará sin DB.")
+        return
+
+    try:
+        from app.db.migrate import run_migrations
+        run_migrations(engine)
+    except Exception as e:
+        _log.error(f"⚠️ Error en migraciones B2B: {e}")
+
+
+if IS_SERVERLESS:
+    # No retrasar la primera request: lanzar el esquema en un hilo daemon.
+    # El chat igual conecta a Supabase por su cuenta (get_db usa NullPool y
+    # abre su propia conexión por request), así que no dependemos de esto.
+    try:
+        import threading
+        _thread = threading.Thread(
+            target=_apply_schema_and_migrations,
+            name="schema-init",
+            daemon=True,
+        )
+        _thread.start()
+    except Exception as e:
+        _log.error(f"⚠️ No se pudo lanzar la init diferida del esquema: {e}")
+else:
+    _apply_schema_and_migrations()
 
 # Crear aplicación
 app = FastAPI(
@@ -135,7 +171,7 @@ async def root():
         "version": settings.APP_VERSION,
         "status": "running",
         "docs": "/docs",
-        "info": "Para autenticación, usa http://localhost:8002",
+        "info": "Autenticación manejada por el sistema B2B",
         "endpoints": {
             "chat": "/api/v1/chat (Chat Adaptativo)",
             "bots": "/api/v1/bots (Gestión de Bots)",

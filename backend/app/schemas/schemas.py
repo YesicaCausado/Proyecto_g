@@ -249,14 +249,20 @@ class QuizResponse(BaseModel):
     questions: List[QuizQuestion]
 
 class SessionStatsResponse(BaseModel):
-    session_id: int
-    topic: str
-    duration_minutes: float
+    """Estadísticas de actividad del usuario en el chat (datos reales).
+
+    FIX: el response_model anterior (session_id/topic/duration_minutes/
+    avg_response_time/mastery_level/concepts_learned/cognitive_evolution) NO
+    correspondía a lo que el endpoint /chat/stats devuelve realmente, lo que
+    causaba un ValidationError de Pydantic (7 campos faltantes) y un 500 en
+    cada consulta. Ahora el esquema refleja la respuesta real del endpoint.
+    """
     total_messages: int
-    avg_response_time: float
-    mastery_level: float
-    concepts_learned: List[str]
-    cognitive_evolution: List[Dict[str, Any]]
+    correct_answers: int
+    wrong_answers: int
+    average_response_time: float
+    topics_covered: List[str]
+    session_duration: float
 
 # ===== BOT EXPERTO =====
 

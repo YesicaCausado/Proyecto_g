@@ -10,7 +10,6 @@ import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import { useVoiceTutor } from "../../hooks/useVoiceTutor";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
 import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
-import LiveModeView from "../../components/LiveModeView";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
 import BotMessageWithActions from "../../components/BotMessageWithActions";
 import NeuronAvatar from "../../components/NeuronAvatar";
@@ -72,6 +71,197 @@ const detectSkillFromText = (text: string): string => {
   if (/social|ciudadan|democraci|histori|colombia|polític|gobierno|derecho|económ/.test(t)) return "ciudadanas";
   return "matematicas";
 };
+
+// ─── Helpers para el historial de conversaciones (tipo ChatGPT) ───────────────
+const fmtRelativeTime = (iso: string | null): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+  if (diffDays === 0) return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 1) return "Ayer";
+  if (diffDays < 7) return d.toLocaleDateString("es-CO", { weekday: "long" });
+  return d.toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+};
+
+const SUBJECT_ICONS: Record<string, string> = {
+  matematicas: "📐", logico: "📐", lectura: "📖", lectora: "📖",
+  ingles: "🌎", english: "🌎", cientifico: "🔬", ciencias: "🔬",
+  ciudadanas: "🏛️", social: "🏛️",
+};
+
+function subjectIcon(conv: any): string {
+  const key = (conv.skill || conv.subject || "").toLowerCase();
+  for (const [k, icon] of Object.entries(SUBJECT_ICONS)) {
+    if (key.includes(k)) return icon;
+  }
+  return "💬";
+}
+
+// ─── Sidebar de historial de chats (estilo ChatGPT) ─────────────────────────
+function ChatHistorySidebar({
+  conversations,
+  activeId,
+  loading,
+  onSelect,
+  onNew,
+  onDelete,
+  onRefresh,
+  collapsed,
+  onToggleCollapse,
+}: {
+  conversations: any[];
+  activeId: number | null;
+  loading: boolean;
+  onSelect: (id: number) => void;
+  onNew: () => void;
+  onDelete: (id: number) => void;
+  onRefresh: () => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const filtered = conversations.filter((c: any) =>
+    (c.title || c.subject || c.topic || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center w-14 flex-shrink-0 border-r border-[#E9E9E7] bg-[#FBFBFA] py-3 gap-2">
+        <button
+          onClick={onToggleCollapse}
+          title="Mostrar historial"
+          className="p-2 rounded-lg text-[#787774] hover:bg-[#EEF4F0] hover:text-[#0B6E99] transition-colors"
+        >
+          <History className="w-5 h-5" />
+        </button>
+        <button
+          onClick={onNew}
+          title="Nueva conversación"
+          className="p-2 rounded-lg text-[#787774] hover:bg-[#EEF4F0] hover:text-[#0B6E99] transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-64 md:w-72 flex-shrink-0 border-r border-[#E9E9E7] bg-white flex flex-col">
+      {/* Encabezado */}
+      <div className="px-3 pt-3 pb-2 border-b border-[#E9E9E7]">
+        <div className="flex items-center justify-between mb-2.5">
+          <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-1.5">
+            <History className="w-4 h-4 text-[#0B6E99]" />
+            Historial de chats
+          </h3>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onRefresh}
+              title="Recargar"
+              className="p-1.5 rounded-md text-[#9B9A97] hover:text-[#0B6E99] hover:bg-[#E5F3FF] transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              onClick={onToggleCollapse}
+              title="Ocultar historial"
+              className="p-1.5 rounded-md text-[#9B9A97] hover:text-[#191919] hover:bg-[#F7F6F3] transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Botón nueva conversación — prominente */}
+        <button
+          onClick={onNew}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[#0B6E99]/30 bg-[#E5F3FF] text-[#0B6E99] text-sm font-semibold hover:bg-[#D4EAF8] transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Nueva conversación
+        </button>
+
+        {/* Búsqueda */}
+        <div className="relative mt-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar conversaciones..."
+            className="w-full pl-8 pr-3 py-1.5 border border-[#E9E9E7] rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#0B6E99] focus:border-[#0B6E99] bg-[#FBFBFA]"
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#AEADAB] text-sm">🔍</span>
+        </div>
+      </div>
+
+      {/* Lista */}
+      <div className="flex-1 overflow-y-auto py-2">
+        {loading && conversations.length === 0 ? (
+          <div className="flex items-center justify-center py-10 text-xs text-[#9B9A97]">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" /> Cargando...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+            <MessageSquare className="w-7 h-7 mb-2 text-[#E9E9E7]" />
+            <p className="text-xs text-[#9B9A97]">
+              {search ? "Sin resultados" : "Aún no hay conversaciones"}
+            </p>
+            {!search && (
+              <button
+                onClick={onNew}
+                className="mt-2 text-xs font-semibold text-[#0B6E99] hover:underline"
+              >
+                Inicia tu primera conversación
+              </button>
+            )}
+          </div>
+        ) : (
+          filtered.map((c: any) => {
+            const isActive = c.id === activeId;
+            return (
+              <div
+                key={c.id}
+                onClick={() => onSelect(c.id)}
+                className={`group mx-1.5 mb-1 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+                  isActive
+                    ? "bg-[#E5F3FF] border border-[#BFDFF0]"
+                    : "border border-transparent hover:bg-[#F7F6F3]"
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <span className="w-8 h-8 rounded-md bg-[#F4EFFB] flex items-center justify-center text-base flex-shrink-0">
+                    {subjectIcon(c)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className={`text-sm truncate ${isActive ? "font-semibold text-[#0B6E99]" : "font-medium text-[#37352F]"}`}>
+                        {c.title || "Conversación"}
+                      </p>
+                      <span className="text-[10px] text-[#AEADAB] flex-shrink-0">
+                        {fmtRelativeTime(c.last_interaction || c.updated_at)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#787774] truncate mt-0.5">
+                      {c.subject || c.skill || c.topic || "Neuro-Chat"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}
+                    title="Eliminar conversación"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-[#9B9A97] hover:text-[#E03E3E] hover:bg-[#FDEEEE] transition-all flex-shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
 
 type FacialSnapshotLike = {
   valence: number;
@@ -135,9 +325,11 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<any[]>([]);
-  const [showConvList, setShowConvList] = useState(false);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<string>(skillParam || routeCompetency?.key || "");
+  const [showNewChatPicker, setShowNewChatPicker] = useState(false);
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
   const [showDashboard, setShowDashboard] = useState(!isCustomBot);
   const [quizSuggested, setQuizSuggested] = useState(false);
@@ -146,7 +338,6 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const vrmRef = useRef<VRMTutorHandle>(null);
-  const [showLiveMode, setShowLiveMode] = useState(false);
   const [currentQuiz, setCurrentQuiz] = useState<QuizData | null>(null);
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
@@ -499,15 +690,28 @@ export default function ChatPage() {
     setMessages([]);
     setLastResponse(null);
     setSelectedSkill("");
+    // Importante: si se termina la sesión mientras un mensaje está en vuelo,
+    // hay que liberar `sending`; de lo contrario la pantalla inicial queda
+    // con las preguntas sugeridas y el input deshabilitados para siempre.
+    setSending(false);
     metrics.reset();
   };
 
   // ─── Gestión de conversaciones (memoria de chats) ─────────────────────────
   const loadConversations = async () => {
+    setConversationsLoading(true);
     try {
-      const res = await api.get<any>("/chat/conversations");
-      setConversations(res.data?.conversations ?? []);
-    } catch (e) { /* destruye silenciosamente */ }
+      // Cache-busting: el adapter de GET cachea también listas vacías durante
+      // 15s, lo que hacía que el historial saliera vacío justo después de crear
+      // una conversación. `_t` fuerza una lectura fresca del servidor.
+      const res = await api.get<any>("/chat/conversations", { params: { _t: Date.now() } });
+      const list = res.data?.conversations ?? res.data ?? [];
+      setConversations(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.warn("No se pudo cargar el historial de conversaciones:", e);
+      setConversations([]);
+    }
+    finally { setConversationsLoading(false); }
   };
 
   const loadConversation = async (id: number) => {
@@ -523,22 +727,43 @@ export default function ChatPage() {
       setConversationId(id);
       setMessages(msgs);
       setSessionActive(true);
-      if (conv?.skill) {
-        setSelectedSkill(conv.skill);
+      if (conv?.skill || conv?.subject || conv?.topic) {
+        // El backend guarda el nombre de la competencia como 'skill';
+        // lo resolvemos a su clave estable para que el chat continúe en la
+        // materia correcta (p. ej. "Lectura Crítica" → "lectora").
+        const skillName = conv.skill || conv.subject || conv.topic || "";
+        const found = findCompetency(skillName) || findCompetency(conv.topic) || findCompetency(conv.subject);
+        if (found) setSelectedSkill(found.key);
+        else if (conv.skill) setSelectedSkill(conv.skill);
       }
-      setShowConvList(false);
       metrics.reset();
       if (msgs.length) metrics.onBotMessageReceived();
     } catch (e) { /* ignore */ }
   };
 
-  const newConversation = () => {
+  // Reinicia el estado del chat sin abrir el selector (tras eliminar, p. ej.).
+  const resetChatState = () => {
     setConversationId(null);
     setSessionActive(false);
     setMessages([]);
     setLastResponse(null);
-    setShowConvList(false);
+    setCurrentQuiz(null);
+    setQuizSuggested(false);
+    setSending(false);
     metrics.reset();
+  };
+
+  // Abre el selector de competencias para iniciar un chat nuevo.
+  const newConversation = () => {
+    resetChatState();
+    setShowNewChatPicker(true);
+  };
+
+  // El usuario eligió una competencia del selector → inicia la sesión.
+  const startNewConversationWithSkill = (skillKey: string) => {
+    setShowNewChatPicker(false);
+    setSelectedSkill(skillKey);
+    startSession(skillKey);
   };
 
   // Si llegó por subruta /chat/:slug, entra directo a esa competencia.
@@ -572,8 +797,8 @@ export default function ChatPage() {
   const deleteConversation = async (id: number) => {
     try {
       await api.delete(`/chat/conversations/${id}`);
-      if (conversationId === id) newConversation();
-      else loadConversations();
+      if (conversationId === id) resetChatState();
+      loadConversations();
     } catch (e) { /* ignore */ }
   };
 
@@ -582,6 +807,50 @@ export default function ChatPage() {
 
   const stateKey = lastResponse?.cognitive_state || "";
   const stateInfo = STATE_LABELS[stateKey] || { label: stateKey, color: "bg-[#F7F6F3] text-[#787774]" };
+
+  // ─── Modal para elegir competencia al iniciar un chat nuevo ────────────────
+  const newChatPicker = showNewChatPicker && (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl w-full max-w-md shadow-2xl flex flex-col max-h-[80vh] animate-fadeIn">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E9E9E7]">
+          <h3 className="font-semibold text-[#191919] text-base">Nueva conversación</h3>
+          <button
+            onClick={() => setShowNewChatPicker(false)}
+            className="p-1.5 rounded-md text-[#787774] hover:text-[#191919] hover:bg-[#F7F6F3] transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <p className="px-5 pt-4 text-xs text-[#787774]">
+          Elige la competencia sobre la que quieres que tu tutor te ayude:
+        </p>
+        <div className="px-5 py-4 space-y-2 overflow-y-auto">
+          {COMPETENCIES.map((c) => (
+            <button
+              key={c.key}
+              onClick={() => startNewConversationWithSkill(c.key)}
+              disabled={sending}
+              className="w-full flex items-center gap-3 bg-[#F7F6F3] hover:bg-[#E5F3FF] rounded-lg px-4 py-3.5 text-left border border-transparent hover:border-[#BFDFF0] transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span
+                className="w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0"
+                style={{ background: c.bg, color: c.color }}
+              >
+                {c.iconEmoji}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-[#191919] group-hover:text-[#0B6E99] transition-colors">
+                  {c.name}
+                </span>
+                <span className="block text-[11px] text-[#9B9A97] truncate mt-0.5">{c.desc}</span>
+              </span>
+              <span className="text-[#AEADAB] group-hover:text-[#0B6E99] transition-colors">→</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   // ===== PANTALLA INICIAL (antes de iniciar sesión) =====
   if (!sessionActive) {
@@ -600,8 +869,22 @@ export default function ChatPage() {
     };
 
     return (
-      <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3] justify-center">
-        <div className="flex flex-col w-full max-w-2xl">
+      <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
+        {newChatPicker}
+        {/* Sidebar historial de chats */}
+        <ChatHistorySidebar
+          conversations={conversations}
+          activeId={conversationId}
+          loading={conversationsLoading}
+          onSelect={loadConversation}
+          onNew={newConversation}
+          onDelete={deleteConversation}
+          onRefresh={loadConversations}
+          collapsed={historyCollapsed}
+          onToggleCollapse={() => setHistoryCollapsed(!historyCollapsed)}
+        />
+        <div className="flex flex-col flex-1 min-w-0 justify-center">
+        <div className="flex flex-col w-full max-w-2xl mx-auto">
           {/* ── Header ── */}
           <div className="bg-white border-b border-[#E9E9E7] px-5 py-4 flex items-center gap-3">
             <NeuronAvatar size={44} online variant="dark" />
@@ -708,6 +991,7 @@ export default function ChatPage() {
             </p>
           </div>
         </div>
+        </div>
       </div>
     );
   }
@@ -715,6 +999,19 @@ export default function ChatPage() {
   // ===== CHAT VIEW =====
   return (
     <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
+      {newChatPicker}
+      {/* Sidebar historial de chats (estilo ChatGPT) */}
+      <ChatHistorySidebar
+        conversations={conversations}
+        activeId={conversationId}
+        loading={conversationsLoading}
+        onSelect={loadConversation}
+        onNew={newConversation}
+        onDelete={deleteConversation}
+        onRefresh={loadConversations}
+        collapsed={historyCollapsed}
+        onToggleCollapse={() => setHistoryCollapsed(!historyCollapsed)}
+      />
       {/* Chat Panel */}
       <div className="flex flex-col flex-1 min-w-0 relative">
         {/* Header */}
@@ -847,20 +1144,6 @@ export default function ChatPage() {
                 <Captions className="w-4 h-4" />
               </button>
             )}
-            {/* Botón avatar VRM — eliminado, usa Modo Live */}
-            {/* Botón Modo Live — compacto en el header */}
-            <button
-              onClick={() => setShowLiveMode(true)}
-              disabled={!voice.hardwareAvailable}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                voice.hardwareAvailable
-                  ? 'bg-[#6940A5] text-white hover:bg-[#6940A5]'
-                  : 'bg-[#F7F6F3] text-[#9B9A97] cursor-not-allowed'
-              }`}
-              title={voice.hardwareAvailable ? 'Modo Live con tutor animado' : 'Requiere micrófono'}
-            >
-              🎬 Live
-            </button>
             <button
               onClick={() => setShowDashboard(!showDashboard)}
               className={`p-2 rounded-lg transition-colors ${showDashboard ? "bg-accent-50 text-accent-600" : "text-[#9B9A97] hover:text-accent-500 hover:bg-accent-50"}`}
@@ -869,11 +1152,11 @@ export default function ChatPage() {
               <BarChart2 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => { loadConversations(); setShowConvList(!showConvList); }}
-              className={`p-2 rounded-lg transition-colors ${showConvList ? "bg-[#E5F3FF] text-[#0B6E99]" : "text-[#9B9A97] hover:text-[#0B6E99] hover:bg-[#E5F3FF]"}`}
+              onClick={() => { loadConversations(); setHistoryCollapsed(!historyCollapsed); }}
+              className={`p-2 rounded-lg transition-colors ${!historyCollapsed ? "bg-[#E5F3FF] text-[#0B6E99]" : "text-[#9B9A97] hover:text-[#0B6E99] hover:bg-[#E5F3FF]"}`}
               title="Historial de conversaciones"
             >
-              📚
+              <History className="w-4 h-4" />
             </button>
             <button
               onClick={endSession}
@@ -907,54 +1190,6 @@ export default function ChatPage() {
               </button>
             </div>
             <p className="text-center text-[10px] text-[#9B9A97] mt-1">Análisis facial activo</p>
-          </div>
-        )}
-
-        {/* Panel de conversaciones (historial de chats) */}
-        {showConvList && (
-          <div className="px-4 py-3 border-b border-[#E9E9E7] bg-white">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-[#9B9A97] uppercase tracking-wide">
-                Conversaciones
-              </p>
-              <button
-                onClick={newConversation}
-                className="text-[11px] font-semibold text-[#0B6E99] hover:underline"
-              >
-                + Nueva
-              </button>
-            </div>
-            <div className="space-y-1.5 max-h-56 overflow-y-auto">
-              {conversations.length === 0 && (
-                <p className="text-xs text-[#9B9A97]">Aún no hay conversaciones guardadas.</p>
-              )}
-              {conversations.map((c: any) => (
-                <div
-                  key={c.id}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer border transition-colors ${
-                    conversationId === c.id
-                      ? "bg-[#E5F3FF] border-[#BFDFF0]"
-                      : "bg-[#F7F6F3] border-transparent hover:bg-[#EEF4F0]"
-                  }`}
-                  onClick={() => loadConversation(c.id)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[#37352F] truncate">{c.title || "Conversación"}</p>
-                    <p className="text-[10px] text-[#9B9A97]">
-                      {c.subject || c.skill || c.topic || ""} ·{" "}
-                      {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : ""}
-                    </p>
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
-                    className="text-[10px] text-[#9B9A97] hover:text-[#E03E3E] px-1.5 flex-shrink-0"
-                    title="Eliminar conversación"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 
@@ -1188,21 +1423,7 @@ export default function ChatPage() {
         voiceActive={voice.isStreaming}
       />
 
-      {/* Modo Live — overlay full-screen */}
-      {showLiveMode && (
-        <LiveModeView
-          vrmRef={vrmRef}
-          voiceTutor={voiceTutor}
-          lastResponse={lastResponse}
-          onSendMessage={sendMessageWithText}
-          facial={facial}
-          voice={voice}
-          onExit={() => {
-            voiceTutor.stopVoiceMode();
-            setShowLiveMode(false);
-          }}
-        />
-      )}
+
     </div>
   );
 }

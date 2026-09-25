@@ -29,6 +29,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import HeroRobot, { type HeroRobotHandle } from './HeroRobot';
 import NeuronField    from './NeuronField';
 import { useHeroMouseParallax } from '../hooks/useHeroMouseParallax';
+import useInViewport from '../hooks/useInViewport';
 import {
   HERO_AESTHETIC,
   HERO_BRAND,
@@ -54,6 +55,13 @@ export default function Hero() {
 
   // Refs
   const sectionRef    = useRef<HTMLElement>(null);
+  // Lazily mount the 3D robot: libera el contexto WebGL al salir del
+  // viewport, para que solo exista 1 Canvas activo en toda la landing
+  // (evita "Context Lost" por saturación de GPU).
+  const { inView: heroInView } = useInViewport<HTMLElement>({
+    rootMargin: '0px 0px 200px 0px',
+    defaultInView: true,
+  });
   const bgLightRef    = useRef<HTMLDivElement>(null);
   const bgDarkRef     = useRef<HTMLDivElement>(null);
   const gridRef       = useRef<HTMLDivElement>(null);
@@ -104,6 +112,9 @@ export default function Hero() {
   useLayoutEffect(() => {
     const section   = sectionRef.current;
     if (!section) return;
+    // Si el robot aún no está montado (hero fuera de viewport), no
+    // construimos animaciones; se reconstruirán al volver a entrar.
+    if (!heroInView) return;
 
     const robot    = robotWrapRef.current?.wrapper ?? null;
     const robotFloat = robotWrapRef.current?.float ?? null;
@@ -260,7 +271,7 @@ export default function Hero() {
       scrollTl?.kill();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [heroInView]);
 
   return (
     <section
@@ -329,11 +340,13 @@ export default function Hero() {
       />
 
       {/* ── Neurón real (wrapper animado por GSAP) ───────────── */}
-      <HeroRobot
-        ref={robotWrapRef}
-        top={isMobile ? HERO_RESPONSIVE.mobileTop : HERO_ROBOT.top}
-        scale={isMobile ? HERO_RESPONSIVE.mobileRobotScale : HERO_ROBOT.scale}
-      />
+      {heroInView && (
+        <HeroRobot
+          ref={robotWrapRef}
+          top={isMobile ? HERO_RESPONSIVE.mobileTop : HERO_ROBOT.top}
+          scale={isMobile ? HERO_RESPONSIVE.mobileRobotScale : HERO_ROBOT.scale}
+        />
+      )}
 
       {/* Halo monocromo sutil tras Neurón */}
       <div

@@ -11,12 +11,19 @@ La clase reintenta automáticamente 1 vez si recibe 429,
 esperando el tiempo indicado por Retry-After (máx. 8 s).
 """
 import asyncio
+import os
 import re
 import httpx
 from typing import Optional, List, Dict
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Timeout de la petición a Groq. Debe quedar POR DEBAJO del maxDuration de la
+# función de Vercel para que, si Groq se cuelga, devolvamos un fallback limpio
+# en vez de que Vercel mate la función por tiempo (que era lo que causaba el
+# "error en el tutor IA" intermitente en cold start).
+DEFAULT_HTTP_TIMEOUT = float(os.getenv("AI_HTTP_TIMEOUT", "15"))
 
 
 class GroqProvider:
@@ -31,6 +38,7 @@ class GroqProvider:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        self.timeout = DEFAULT_HTTP_TIMEOUT
 
     async def generate(
         self,
@@ -72,7 +80,7 @@ class GroqProvider:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
                     self.BASE_URL,
                     json=payload,

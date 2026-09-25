@@ -980,7 +980,16 @@ async def start_session(
     )
 
     if not result["response"]:
-        raise HTTPException(status_code=503, detail="La IA no respondió. Verifica GROQ_API_KEY.")
+        # Defensa en profundidad: generate() ya retorna un template local,
+        # pero no rompemos el arranque del chat con un 503 (que es engañoso,
+        # porque la clave sí está configurada). Devolvemos una bienvenida útil.
+        logger.warning("⚠️ start_session: respuesta vacía, usando bienvenida local.")
+        result["response"] = (
+            f"¡Hola! 👋 Soy tu tutor de {request.topic or 'este tema'}.\n\n"
+            f"Estoy listo para acompañarte. ¿Qué sabes ya sobre este tema "
+            f"o por dónde te gustaría empezar?"
+        )
+        result["provider"] = "local"
 
     session = _get_or_create_learning_session(db, current_user.id, request.topic, request.bot_id)
     _save_chat_message(
