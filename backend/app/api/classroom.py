@@ -152,6 +152,7 @@ async def create_classroom(
 
 
 @router.get("/", response_model=ClassroomListResponse)
+@router.get("/my-classes", response_model=ClassroomListResponse)
 async def list_my_classrooms(
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("cursos")),
