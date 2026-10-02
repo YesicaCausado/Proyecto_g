@@ -1,22 +1,61 @@
 {
   "version": 2,
+
   "buildCommand": "cd frontend && npm ci && npm run build",
+
   "outputDirectory": "frontend/dist",
+
   "functions": {
     "api/index.py": {
       "maxDuration": 30,
       "memory": 1024,
-      "includeFiles": "{api/**/*.py,backend/app/**/*.py,backend/data/**/*.json}"
+      "includeFiles": "api/**/*.py,backend/app/**/*.py,backend/data/**/*.json"
     }
   },
-  "rewrites": [
+
+  "routes": [
     {
-      "source": "/api/v1/:path*",
-      "destination": "/api/index.py"
+      "src": "/api/v1/(.*)",
+      "dest": "/api/index.py"
     },
     {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "src": "/api/docs",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/api/redoc",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/api/openapi.json",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/docs",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/redoc",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/openapi.json",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/health",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/",
+      "dest": "/index.html"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
