@@ -432,7 +432,7 @@ def _save_conversation_message(db: Session, conversation_id: Optional[int],
             role=role,
             content=content,
             timestamp=datetime.utcnow(),
-            metadata=meta or {},
+            meta=meta or {},
         ))
         conv.last_interaction = datetime.utcnow()
         conv.updated_at = datetime.utcnow()

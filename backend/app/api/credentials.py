@@ -313,9 +313,11 @@ async def delete_teacher(
     if teacher.id == current_user.id:
         raise HTTPException(400, "No puedes eliminar tu propia cuenta de profesor")
 
-    db.delete(teacher)
+    # Soft-delete: desactiva la cuenta en lugar de eliminarla.
+    # Preserva el historial académico y evita IntegrityError por FKs en PostgreSQL.
+    teacher.is_active = False
     db.commit()
-    return {"ok": True, "message": "Profesor eliminado correctamente"}
+    return {"ok": True, "message": "Profesor desactivado correctamente"}
 
 
 @router.post("/super/teachers/bulk-delete")
@@ -336,13 +338,15 @@ async def bulk_delete_teachers(
         User.role == UserRole.PROFESOR.value,
     ).all()
 
+    deleted = 0
     for teacher in teachers:
         if teacher.id == current_user.id:
             continue
-        db.delete(teacher)
+        teacher.is_active = False
+        deleted += 1
 
     db.commit()
-    return {"ok": True, "deleted": len(teachers), "message": "Profesores eliminados correctamente"}
+    return {"ok": True, "deleted": deleted, "message": "Profesores desactivados correctamente"}
 
 
 @router.post("/super/teachers", response_model=CredentialItem, status_code=201)
@@ -695,9 +699,11 @@ async def delete_student(
     if student.id == current_user.id:
         raise HTTPException(400, "No puedes eliminar tu propia cuenta de estudiante")
 
-    db.delete(student)
+    # Soft-delete: desactiva la cuenta en lugar de eliminarla.
+    # Preserva el historial académico y evita IntegrityError por FKs en PostgreSQL.
+    student.is_active = False
     db.commit()
-    return {"ok": True, "message": "Estudiante eliminado correctamente"}
+    return {"ok": True, "message": "Estudiante desactivado correctamente"}
 
 
 @router.post("/super/students/bulk-delete")
@@ -718,13 +724,15 @@ async def bulk_delete_students(
         User.role == UserRole.ESTUDIANTE.value,
     ).all()
 
+    deleted = 0
     for student in students:
         if student.id == current_user.id:
             continue
-        db.delete(student)
+        student.is_active = False
+        deleted += 1
 
     db.commit()
-    return {"ok": True, "deleted": len(students), "message": "Estudiantes eliminados correctamente"}
+    return {"ok": True, "deleted": deleted, "message": "Estudiantes desactivados correctamente"}
 
 
 @router.post("/super/students", response_model=CredentialItem, status_code=201)

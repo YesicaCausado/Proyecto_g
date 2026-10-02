@@ -26,6 +26,27 @@ from app.services.license_service import get_license, require_active_license, Li
 router = APIRouter(prefix="/posts", tags=["Tablero - Posts"])
 
 
+def _check_post_access(post: Post, current_user: User, db: Session) -> None:
+    """Verifica que el usuario tiene acceso al aula del post (anti cross-tenant).
+    Lanza 403 si el usuario no es dueño del aula ni está inscrito activamente en ella.
+    """
+    if current_user.role in (UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value):
+        return  # Super y admin tienen acceso completo
+    if current_user.role == UserRole.PROFESOR.value:
+        classroom = db.query(Classroom).filter(Classroom.id == post.classroom_id).first()
+        if not classroom or classroom.teacher_id != current_user.id:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este post")
+    else:
+        # Estudiante: debe estar inscrito en el aula
+        enrolled = db.query(Enrollment).filter(
+            Enrollment.classroom_id == post.classroom_id,
+            Enrollment.student_id == current_user.id,
+            Enrollment.is_active == True,
+        ).first()
+        if not enrolled:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este post")
+
+
 # ── Schemas internos ────────────────────────────────────────────────────────
 
 class PostCreate(BaseModel):
@@ -211,6 +232,7 @@ async def get_post(
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
     return _post_to_dict(post, current_user.id, db)
 
 
@@ -232,6 +254,7 @@ async def toggle_reaction(
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
 
     existing = db.query(PostReaction).filter(
         PostReaction.post_id == post_id,
@@ -267,6 +290,7 @@ async def list_comments(
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
 
     comments = db.query(PostComment).filter(
         PostComment.post_id == post_id,
@@ -306,6 +330,7 @@ async def add_comment(
     post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
 
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
