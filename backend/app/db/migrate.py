@@ -282,7 +282,24 @@ def run_migrations(engine) -> None:
         #       la personalización entre cold starts serverless. El modelo
         #       `CognitiveSessionState.neural_state` ya lo espera. ──────────
         "ALTER TABLE cognitive_session_state ADD COLUMN IF NOT EXISTS neural_state JSONB DEFAULT '{}'::jsonb",
-
+                # ── 10b. Sincronización de expert_bots ─────────────────────────────
+        # El modelo ExpertBot contiene columnas que no existían en versiones
+        # anteriores de la base de datos de producción.
+        #
+        # IMPORTANTE:
+        # SQLAlchemy selecciona TODAS las columnas del modelo cuando ejecuta
+        # db.query(ExpertBot). Por eso una sola columna faltante (por ejemplo
+        # language) puede romper cualquier consulta de ExpertBot.
+        # ── Sincronización de expert_bots ─────────────────────────────────────
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'es'",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS difficulty_range JSONB DEFAULT '{\"min\":\"beginner\",\"max\":\"expert\"}'::jsonb",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS system_prompt TEXT DEFAULT ''",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS personality JSONB DEFAULT '{\"teaching_style\":\"balanced\",\"verbosity\":\"medium\",\"use_examples\":true,\"use_analogies\":true}'::jsonb",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS knowledge_base JSONB DEFAULT '{\"steps\":[],\"warnings\":[],\"rules\":[],\"tips\":[],\"scenarios\":[],\"faq\":[]}'::jsonb",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS total_users INTEGER NOT NULL DEFAULT 0",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS avg_rating DOUBLE PRECISION NOT NULL DEFAULT 0.0",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS total_sessions INTEGER NOT NULL DEFAULT 0",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS effectiveness_score DOUBLE PRECISION NOT NULL DEFAULT 0.0",
         # ── 14. Índices secundarios de rendimiento ──────────────────────────
         # Las consultas agregadas (count/avg/group_by) sobre columnas calientes
         # hacían seq scan sobre tablas completas en PostgreSQL. Estos índices

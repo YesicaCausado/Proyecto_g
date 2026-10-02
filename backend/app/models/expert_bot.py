@@ -36,15 +36,14 @@ class ExpertBot(Base):
     })
     
     # Conocimiento estructurado
-    knowledge_base = Column(JSON, default={
-        "steps": [],           # Pasos del proceso
-        "warnings": [],        # Advertencias críticas
-        "rules": [],           # Reglas operativas
-        "tips": [],            # Recomendaciones prácticas
-        "scenarios": [],       # Escenarios de simulación
-        "faq": [],             # Preguntas frecuentes
-    })
-    
+    knowledge_base=payload.knowledge_base or {
+    "steps": [],
+    "warnings": [],
+    "rules": [],
+    "tips": [],
+    "scenarios": [],
+    "faq": [],
+},
     # Métricas del bot
     total_users = Column(Integer, default=0)
     avg_rating = Column(Float, default=0.0)
