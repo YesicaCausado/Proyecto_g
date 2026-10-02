@@ -74,9 +74,16 @@ function buildNavSections(hasFeature: (f: string) => boolean) {
   const sections: { label: string; items: typeof ALL_NAV_ITEMS[string][] }[] = [];
 
   // PRINCIPAL — siempre visible si tiene la funcionalidad
-  const principal = ['dashboard', 'grupos'].filter(id =>
-    hasFeature(ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module)
+  const principal = ['dashboard', 'grupos'].filter(id => {
+  // Dashboard y Mis Grupos son funciones básicas del profesor
+  if (id === 'dashboard' || id === 'grupos') {
+    return true;
+  }
+
+  return hasFeature(
+    ALL_NAV_ITEMS[id].feature ?? ALL_NAV_ITEMS[id].module
   );
+  });
   if (principal.length) {
     sections.push({ label: 'PRINCIPAL', items: principal.map(id => ({ ...ALL_NAV_ITEMS[id], id })) });
   }
