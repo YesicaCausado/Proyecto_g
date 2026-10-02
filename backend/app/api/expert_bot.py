@@ -74,14 +74,17 @@ async def list_bots(
 
     # Restringir acceso según rol
     if current_user.role != UserRole.SUPER_PROFESOR.value and current_user.role != UserRole.ADMIN.value:
-        # Solo mostrar bots públicos o creados por el usuario
-        if is_public is None:
-            is_public = True
-        query = query.filter(ExpertBot.is_public == is_public)
+        # Profesores y estudiantes: solo ven bots públicos O los que ellos mismos crearon.
+        # Se ignora el parámetro is_public del cliente para evitar enumeración de bots privados ajenos.
+        query = query.filter(
+            or_(ExpertBot.is_public == True, ExpertBot.creator_id == current_user.id)
+        )
         if creator_id is not None:
             query = query.filter(ExpertBot.creator_id == creator_id)
     else:
         # Admin/Super pueden ver todos
+        if is_public is not None:
+            query = query.filter(ExpertBot.is_public == is_public)
         if creator_id is not None:
             query = query.filter(ExpertBot.creator_id == creator_id)
 
@@ -431,6 +434,13 @@ async def delete_bot(
     if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Solo el creador o admin puede eliminar el bot")
 
+    # Limpiar referencias FK antes de eliminar para evitar IntegrityError en PostgreSQL.
+    # 1. Desasignar el bot de todas las aulas donde esté asignado.
+    db.query(ClassroomBot).filter(ClassroomBot.bot_id == bot_id).delete(synchronize_session=False)
+    # 2. Desvincular las sesiones de aprendizaje (se conserva el historial, solo se suelta la FK).
+    db.query(LearningSession).filter(LearningSession.bot_id == bot_id).update(
+        {"bot_id": None}, synchronize_session=False
+    )
     db.delete(bot)
     db.commit()
 

@@ -18,6 +18,7 @@ class ExpertBot(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text)
     category = Column(String(50))  # tecnología, medicina, cocina, etc.
+    language = Column(String(10), default="es")  # Idioma del bot (es, en, etc.)
     difficulty_range = Column(JSON, default={"min": "beginner", "max": "expert"})
     is_public = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)

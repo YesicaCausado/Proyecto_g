@@ -483,8 +483,17 @@ async def remove_student(
     active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
-    """Remover un estudiante de la clase (solo el profesor)"""
+    """Remover un estudiante de la clase (solo el profesor dueño)"""
     require_teacher(current_user)
+
+    # Verificar que el aula pertenece al profesor que hace la petición.
+    classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Clase no encontrada")
+    if classroom.teacher_id != current_user.id and current_user.role not in (
+        UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value
+    ):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clase")
 
     enrollment = db.query(Enrollment).filter(
         Enrollment.classroom_id == classroom_id,
@@ -632,8 +641,17 @@ async def remove_bot_from_classroom(
     active_license: LicenseInfo = Depends(require_active_license()),
     db: Session = Depends(get_db),
 ):
-    """Remover un bot de la clase"""
+    """Remover un bot de la clase (solo el profesor dueño)"""
     require_teacher(current_user)
+
+    # Verificar que el aula pertenece al profesor que hace la petición.
+    classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Clase no encontrada")
+    if classroom.teacher_id != current_user.id and current_user.role not in (
+        UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value
+    ):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clase")
 
     assignment = db.query(ClassroomBot).filter(
         ClassroomBot.classroom_id == classroom_id,
@@ -747,6 +765,15 @@ async def get_student_progress(
 ):
     """Progreso detallado de un estudiante en la clase"""
     require_teacher(current_user)
+
+    # Verificar que el aula pertenece al profesor que hace la petición.
+    classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Clase no encontrada")
+    if classroom.teacher_id != current_user.id and current_user.role not in (
+        UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value
+    ):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta clase")
 
     enrollment = db.query(Enrollment).filter(
         Enrollment.classroom_id == classroom_id,
