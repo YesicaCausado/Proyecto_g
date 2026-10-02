@@ -1,21 +1,3 @@
-"""
-NeuroLearn Bot Service - Punto de Entrada Principal
-
-Servicio dedicado a gestión de bots y chat adaptativo
-
-Ejecutar con (desarrollo local):
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-"""
-import sys
-import os
-
-# Garantiza que el directorio 'backend/' esté en sys.path.
-# Necesario cuando Vercel ejecuta la lambda desde /var/task con
-# el entrypoint en /var/task/backend/app/main.py.
-_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -24,179 +6,351 @@ from app.core.security import (
     SecurityHeadersMiddleware,
     HSTSHeaderMiddleware,
 )
-from app.db.database import engine, Base, IS_SERVERLESS
-from app.api import auth, chat, expert_bot, classroom, stats
-from app.api import conversations  # Conversaciones del tutor IA (memoria de chats)
-from app.api import credentials  # B2B credential system
-from app.api import posts, events, messages  # Tablero, Calendario, Mensajes
-from app.api import super_stats               # Super Profesor stats institucionales
-from app.api import teacher_stats            # Teacher dashboard stats
-from app.api import teacher_materials        # Teacher materials (carpetas + archivos)
-from app.api import teacher_evaluations      # Teacher evaluations (evaluaciones)
-from app.api import teacher_reports          # Teacher reports (export PDF/CSV)
-from app.api import teacher_ai               # Teacher IA Generativa (contenido)
-from app.api import license                  # License system
-from app.api import admin_users              # Admin: gestión de usuarios
-from app.api import notifications            # Sistema de notificaciones
-from app.api import admin_bots               # Admin: moderación de bots
-from app.api import integrations            # Integraciones y Automatizaciones (Docente Pro)
+from app.db.database import (
+    engine,
+    Base,
+    IS_SERVERLESS,
+)
 
-# Importar modelos para que SQLAlchemy los registre
-import app.models.user          # noqa: F401
-import app.models.learning      # noqa: F401
-import app.models.adaptive      # noqa: F401  — Student Model / memoria / conversaciones
-import app.models.expert_bot    # noqa: F401
-import app.models.classroom     # noqa: F401
-import app.models.institution   # noqa: F401
-import app.models.posts         # noqa: F401
-import app.models.events        # noqa: F401
-import app.models.messages      # noqa: F401
-import app.models.password_reset            # noqa: F401 — PasswordResetToken
-import app.models.integration               # noqa: F401 — Integrations/Automations tables
-import app.api.teacher_materials            # noqa: F401 — registers TeacherFolder + TeacherMaterial
-import app.api.teacher_evaluations          # noqa: F401 — registers TeacherEvaluation
+# ============================================================
+# ROUTERS
+# ============================================================
 
-# ─── Inicialización de esquema (tablas + migraciones B2B) ─────────────────
-#
-# En Vercel (serverless) esto se ejecutaba en CADA cold start y, junto con
-# los imports pesados (numpy/pandas/sklearn) y la conexión a Supabase,
-# agotaba el maxDuration de la función Hobby (~10s) ANTES de que la IA
-# llegara a responder. Por eso el chat fallaba "a veces" (primera petición
-# tras inactividad) y funcionaba al recargar (instancia ya caliente).
-#
-# La estrategia correcta:
-#   - Local / servidor persistente: aplicamos esquema + migraciones al boot
-#     como siempre (es instantáneo y deja todo listo).
-#   - Serverless (Vercel): NO bloqueamos el arranque con round-trips a
-#     Supabase. El esquema ya está creado en la base (las migraciones son
-#     idempotentes), y si falta algún paso se aplica de forma perezosa en
-#     segundo plano para no retrasar la primera request del usuario.
-import logging as _logging
-_log = _logging.getLogger(__name__)
+from app.api import auth
+from app.api import chat
+from app.api import expert_bot
+from app.api import classroom
+from app.api import stats
+from app.api import conversations
+from app.api import credentials
+from app.api import posts
+from app.api import events
+from app.api import messages
+from app.api import super_stats
+from app.api import teacher_stats
+from app.api import teacher_materials
+from app.api import teacher_evaluations
+from app.api import teacher_reports
+from app.api import teacher_ai
+from app.api import license
+from app.api import admin_users
+from app.api import notifications
+from app.api import admin_bots
+from app.api import integrations
 
 
-def _apply_schema_and_migrations():
-    """Aplica create_all + migraciones B2B. En serverless no bloquea el import."""
-    try:
-        if engine is not None:
-            Base.metadata.create_all(bind=engine)
-        else:
-            _log.warning("⚠️ engine es None — tablas no creadas. Verifica DATABASE_URL.")
-            return
-    except Exception as e:
-        _log.error(f"⚠️ No se pudo crear las tablas: {e}. El backend arrancará sin DB.")
-        return
+# ============================================================
+# APLICACIÓN FASTAPI
+# ============================================================
 
-    try:
-        from app.db.migrate import run_migrations
-        run_migrations(engine)
-    except Exception as e:
-        _log.error(f"⚠️ Error en migraciones B2B: {e}")
-
-
-if IS_SERVERLESS:
-    # No retrasar la primera request: lanzar el esquema en un hilo daemon.
-    # El chat igual conecta a Supabase por su cuenta (get_db usa NullPool y
-    # abre su propia conexión por request), así que no dependemos de esto.
-    try:
-        import threading
-        _thread = threading.Thread(
-            target=_apply_schema_and_migrations,
-            name="schema-init",
-            daemon=True,
-        )
-        _thread.start()
-    except Exception as e:
-        _log.error(f"⚠️ No se pudo lanzar la init diferida del esquema: {e}")
-else:
-    _apply_schema_and_migrations()
-
-# Crear aplicación
 app = FastAPI(
     title=settings.APP_NAME,
     description=(
-        "Servicio de bots inteligentes con IA adaptativa. "
-        "Gestión de bots expertos y chat adaptativo basado en "
-        "modelado neuroconductual digital."
+        "API backend de NeuroLearn AI"
     ),
     version=settings.APP_VERSION,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
 
+
+# ============================================================
 # CORS
+# ============================================================
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=[
+        "https://neurolearnym.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ─── Seguridad HTTP (cabeceras de seguridad + mitigación XSS/clickjacking) ──
-# OJO: Starlette invoca los middlewares en orden INVERSO de registro.
-# Los registramos primero para que la capa de seguridad sea la más externa.
-app.add_middleware(HSTSHeaderMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
 
-# Rutas — prefijo /api/v1 tanto en local como en Vercel
-app.include_router(auth.router,          prefix="/api/v1")
-app.include_router(chat.router,          prefix="/api/v1")
-app.include_router(conversations.router, prefix="/api/v1")
-app.include_router(expert_bot.router,    prefix="/api/v1/bots")
-app.include_router(classroom.router,     prefix="/api/v1")
-app.include_router(stats.router,         prefix="/api/v1/stats")
-app.include_router(credentials.router,   prefix="/api/v1")
-app.include_router(posts.router,         prefix="/api/v1")
-app.include_router(events.router,        prefix="/api/v1")
-app.include_router(messages.router,      prefix="/api/v1")
-app.include_router(super_stats.router,         prefix="/api/v1")
-app.include_router(teacher_stats.router,       prefix="/api/v1")
-app.include_router(teacher_materials.router,   prefix="/api/v1")
-app.include_router(teacher_evaluations.router, prefix="/api/v1")
-app.include_router(teacher_ai.router,          prefix="/api/v1")
-app.include_router(teacher_reports.router,     prefix="/api/v1")
-app.include_router(license.router,             prefix="/api/v1")
-app.include_router(admin_users.router,         prefix="/api/v1")
-app.include_router(notifications.router,       prefix="/api/v1")
-app.include_router(admin_bots.router,          prefix="/api/v1")
-app.include_router(integrations.router,        prefix="/api/v1")
+# ============================================================
+# MIDDLEWARES DE SEGURIDAD
+# ============================================================
 
+app.add_middleware(
+    SecurityHeadersMiddleware
+)
+
+app.add_middleware(
+    HSTSHeaderMiddleware
+)
+
+
+# ============================================================
+# SCHEMA / MIGRACIONES
+# ============================================================
+
+def _apply_schema_and_migrations():
+    """
+    Inicializa el schema cuando corresponde.
+
+    Esta función utiliza la lógica de base de datos
+    definida en el proyecto.
+    """
+
+    try:
+        Base.metadata.create_all(
+            bind=engine
+        )
+    except Exception as exc:
+        print(
+            "[DB] Error inicializando schema:",
+            exc,
+        )
+
+
+if IS_SERVERLESS:
+
+    import threading
+
+    _thread = threading.Thread(
+        target=_apply_schema_and_migrations,
+        name="schema-init",
+        daemon=True,
+    )
+
+    _thread.start()
+
+else:
+
+    _apply_schema_and_migrations()
+
+
+# ============================================================
+# ROUTERS API V1
+# ============================================================
+
+app.include_router(
+    auth.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    chat.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    conversations.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    expert_bot.router,
+    prefix="/api/v1/bots",
+)
+
+# ------------------------------------------------------------
+# CLASSROOMS
+#
+# classroom.py:
+# router = APIRouter(prefix="/classrooms")
+#
+# @router.post("/")
+#
+# Resultado:
+# POST /api/v1/classrooms/
+# ------------------------------------------------------------
+
+app.include_router(
+    classroom.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    stats.router,
+    prefix="/api/v1/stats",
+)
+
+app.include_router(
+    credentials.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    posts.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    events.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    messages.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    super_stats.router,
+    prefix="/api/v1",
+)
+
+# ------------------------------------------------------------
+# TEACHER STATS
+#
+# teacher_stats.py:
+# router = APIRouter(prefix="/teacher")
+#
+# @router.get("/stats")
+#
+# Resultado:
+# GET /api/v1/teacher/stats
+# ------------------------------------------------------------
+
+app.include_router(
+    teacher_stats.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    teacher_materials.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    teacher_evaluations.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    teacher_ai.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    teacher_reports.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    license.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    admin_users.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    notifications.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    admin_bots.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    integrations.router,
+    prefix="/api/v1",
+)
+
+
+# ============================================================
+# ROOT
+# ============================================================
 
 @app.get("/")
-async def root():
-    """Endpoint raíz"""
+def root():
     return {
-        "service": settings.APP_NAME,
+        "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running",
-        "docs": "/docs",
-        "info": "Autenticación manejada por el sistema B2B",
-        "endpoints": {
-            "chat": "/api/v1/chat (Chat Adaptativo)",
-            "bots": "/api/v1/bots (Gestión de Bots)",
-            "classrooms": "/api/v1/classrooms (Gestión de Clases)",
-        },
+        "status": "online",
+        "api": "/api/v1",
+        "docs": "/api/docs",
     }
 
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
 
 @app.get("/health")
-async def health_check():
-    """Verificación de salud del sistema"""
-    from app.db.database import engine, IS_DB_DISABLED
-    from app.api.chat import ai_manager
+def health_check():
 
-    db_status = "disabled"
-    if not IS_DB_DISABLED and engine is not None:
-        try:
-            with engine.connect() as conn:
-                conn.execute(__import__("sqlalchemy").text("SELECT 1"))
-            db_status = "connected"
-        except Exception as e:
-            db_status = f"error: {str(e)}"
+    db_status = "unknown"
+
+    try:
+        from sqlalchemy import text
+
+        with engine.connect() as connection:
+            connection.execute(
+                text("SELECT 1")
+            )
+
+        db_status = "connected"
+
+    except Exception as exc:
+
+        db_status = (
+            f"error: {str(exc)[:200]}"
+        )
 
     return {
-        "status": "healthy",
+        "status": "ok",
         "database": db_status,
-        "ai_providers": ai_manager.get_status(),
+        "serverless": IS_SERVERLESS,
+        "version": settings.APP_VERSION,
     }
+
+
+# ============================================================
+# DEBUG DE RUTAS
+# ============================================================
+#
+# Esto sirve para confirmar que Vercel realmente cargó
+# classroom.py y teacher_stats.py.
+#
+# Puedes eliminarlo después de verificar el deploy.
+# ============================================================
+
+print(
+    "========================================"
+)
+
+print(
+    "NEUROLEARN - RUTAS REGISTRADAS"
+)
+
+print(
+    "========================================"
+)
+
+for route in app.routes:
+
+    path = getattr(
+        route,
+        "path",
+        "",
+    )
+
+    methods = getattr(
+        route,
+        "methods",
+        set(),
+    )
+
+    if (
+        "/teacher" in path
+        or "/classrooms" in path
+    ):
+
+        print(
+            f"{sorted(methods)} {path}"
+        )
+
+print(
+    "========================================"
+)

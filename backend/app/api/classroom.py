@@ -19,7 +19,7 @@ from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment, ClassroomBot
 from app.models.expert_bot import ExpertBot
-from app.models.learning import LearningSession
+
 from app.services.license_service import (
     get_license,
     require_active_license,
@@ -27,6 +27,7 @@ from app.services.license_service import (
     require_teacher_module,
     LicenseInfo,
 )
+
 from app.schemas.schemas import (
     ClassroomCreate,
     ClassroomResponse,
@@ -40,7 +41,11 @@ from app.schemas.schemas import (
     ClassroomStudentDetailResponse,
 )
 
-router = APIRouter(prefix="/classrooms", tags=["Clases - Rol Profesor"])
+
+router = APIRouter(
+    prefix="/classrooms",
+    tags=["Clases - Rol Profesor"],
+)
 
 
 # ============================================================
@@ -48,12 +53,20 @@ router = APIRouter(prefix="/classrooms", tags=["Clases - Rol Profesor"])
 # ============================================================
 
 def require_teacher(user: User):
-    """Verifica que el usuario sea profesor, super profesor o admin."""
-    if user.role not in (
+    """
+    Verifica que el usuario sea:
+    - Profesor
+    - Super Profesor
+    - Administrador
+    """
+
+    allowed_roles = (
         UserRole.PROFESOR.value,
         UserRole.SUPER_PROFESOR.value,
-        "admin",
-    ):
+        UserRole.ADMIN.value,
+    )
+
+    if user.role not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo los profesores pueden realizar esta acción",
@@ -62,11 +75,66 @@ def require_teacher(user: User):
 
 def require_student(user: User):
     """Verifica que el usuario sea estudiante."""
+
     if user.role != UserRole.ESTUDIANTE.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo los estudiantes pueden realizar esta acción",
         )
+
+
+def can_manage_classroom(
+    current_user: User,
+    classroom: Classroom,
+) -> bool:
+    """
+    Determina si el usuario puede administrar una clase.
+
+    Puede hacerlo:
+    - El profesor propietario.
+    - Un Super Profesor.
+    - Un Administrador.
+    """
+
+    if classroom.teacher_id == current_user.id:
+        return True
+
+    if current_user.role in (
+        UserRole.SUPER_PROFESOR.value,
+        UserRole.ADMIN.value,
+    ):
+        return True
+
+    return False
+
+
+def classroom_response(
+    classroom: Classroom,
+    student_count: int = 0,
+) -> ClassroomResponse:
+    """
+    Construye una respuesta ClassroomResponse
+    de forma centralizada.
+    """
+
+    return ClassroomResponse(
+        id=classroom.id,
+        teacher_id=classroom.teacher_id,
+        name=classroom.name,
+        description=classroom.description or "",
+        subject=classroom.subject,
+        grade=classroom.grade,
+        invite_code=classroom.invite_code,
+        is_active=classroom.is_active,
+        max_students=classroom.max_students,
+        color=getattr(
+            classroom,
+            "color",
+            "#2E6FDB",
+        ) or "#2E6FDB",
+        student_count=student_count,
+        created_at=classroom.created_at,
+    )
 
 
 # ============================================================
@@ -81,16 +149,20 @@ def require_student(user: User):
 async def create_classroom(
     request: ClassroomCreate,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("cursos")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    license_info: LicenseInfo = Depends(
+        require_teacher_module("cursos")
+    ),
+    active_license: LicenseInfo = Depends(
+        require_active_license()
+    ),
     db: Session = Depends(get_db),
 ):
-    """Crear una nueva clase (solo profesores)."""
+    """Crear una nueva clase."""
 
     require_teacher(current_user)
 
     # --------------------------------------------------------
-    # Verificar límite de clases según la licencia
+    # Verificar límite de grupos
     # --------------------------------------------------------
 
     total_classes = (
@@ -123,46 +195,56 @@ async def create_classroom(
         subject=request.subject,
         grade=request.grade,
         max_students=request.max_students,
-        color=getattr(request, "color", "#2E6FDB"),
+        color=getattr(
+            request,
+            "color",
+            "#2E6FDB",
+        ) or "#2E6FDB",
         invite_code=Classroom.generate_invite_code(),
     )
 
-    db.add(classroom)
-    db.commit()
-    db.refresh(classroom)
+    try:
+        db.add(classroom)
+        db.commit()
+        db.refresh(classroom)
 
-    # --------------------------------------------------------
-    # Respuesta
-    # --------------------------------------------------------
+    except Exception:
+        db.rollback()
 
-    return ClassroomResponse(
-        id=classroom.id,
-        teacher_id=classroom.teacher_id,
-        name=classroom.name,
-        description=classroom.description or "",
-        subject=classroom.subject,
-        grade=classroom.grade,
-        invite_code=classroom.invite_code,
-        is_active=classroom.is_active,
-        max_students=classroom.max_students,
-        color=classroom.color or "#2E6FDB",
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No fue posible crear la clase",
+        )
+
+    return classroom_response(
+        classroom,
         student_count=0,
-        created_at=classroom.created_at,
     )
 
 
-@router.get("/", response_model=ClassroomListResponse)
-@router.get("/my-classes", response_model=ClassroomListResponse)
+# ============================================================
+# LISTAR CLASES DEL PROFESOR
+# ============================================================
+
+@router.get(
+    "/",
+    response_model=ClassroomListResponse,
+)
+@router.get(
+    "/my-classes",
+    response_model=ClassroomListResponse,
+)
 async def list_my_classrooms(
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("cursos")),
+    license_info: LicenseInfo = Depends(
+        require_teacher_module("cursos")
+    ),
     db: Session = Depends(get_db),
 ):
     """Listar todas las clases activas del profesor actual."""
 
     require_teacher(current_user)
 
-    # Obtener todas las clases del profesor en una sola consulta
     classrooms = (
         db.query(Classroom)
         .filter(
@@ -172,22 +254,19 @@ async def list_my_classrooms(
         .all()
     )
 
-    # Si no hay clases, responder rápidamente
     if not classrooms:
         return ClassroomListResponse(
             classrooms=[],
             total=0,
         )
 
-    # --------------------------------------------------------
-    # Obtener IDs de las clases
-    # --------------------------------------------------------
+    classroom_ids = [
+        classroom.id
+        for classroom in classrooms
+    ]
 
-    classroom_ids = [c.id for c in classrooms]
-
     # --------------------------------------------------------
-    # Obtener cantidad de estudiantes por clase
-    # en una sola consulta
+    # Contar estudiantes
     # --------------------------------------------------------
 
     counts = (
@@ -199,7 +278,9 @@ async def list_my_classrooms(
             Enrollment.classroom_id.in_(classroom_ids),
             Enrollment.is_active == True,
         )
-        .group_by(Enrollment.classroom_id)
+        .group_by(
+            Enrollment.classroom_id
+        )
         .all()
     )
 
@@ -212,32 +293,16 @@ async def list_my_classrooms(
     # Construir respuesta
     # --------------------------------------------------------
 
-    result = []
-
-    for classroom in classrooms:
-        student_count = counts_map.get(classroom.id, 0)
-
-        result.append(
-            ClassroomResponse(
-                id=classroom.id,
-                teacher_id=classroom.teacher_id,
-                name=classroom.name,
-                description=classroom.description or "",
-                subject=classroom.subject,
-                grade=classroom.grade,
-                invite_code=classroom.invite_code,
-                is_active=classroom.is_active,
-                max_students=classroom.max_students,
-                color=getattr(
-                    classroom,
-                    "color",
-                    "#2E6FDB",
-                )
-                or "#2E6FDB",
-                student_count=student_count,
-                created_at=classroom.created_at,
-            )
+    result = [
+        classroom_response(
+            classroom,
+            counts_map.get(
+                classroom.id,
+                0,
+            ),
         )
+        for classroom in classrooms
+    ]
 
     return ClassroomListResponse(
         classrooms=result,
@@ -260,11 +325,10 @@ async def list_enrolled_classrooms(
     ),
     db: Session = Depends(get_db),
 ):
-    """Listar las clases en las que está inscrito el estudiante actual."""
+    """Listar las clases del estudiante actual."""
 
     require_student(current_user)
 
-    # Obtener inscripciones
     enrollments = (
         db.query(Enrollment)
         .filter(
@@ -285,10 +349,6 @@ async def list_enrolled_classrooms(
         for enrollment in enrollments
     ]
 
-    # --------------------------------------------------------
-    # Obtener clases
-    # --------------------------------------------------------
-
     classrooms = (
         db.query(Classroom)
         .filter(
@@ -304,7 +364,7 @@ async def list_enrolled_classrooms(
     }
 
     # --------------------------------------------------------
-    # Obtener cantidad de estudiantes
+    # Contar estudiantes por clase
     # --------------------------------------------------------
 
     counts = (
@@ -316,7 +376,9 @@ async def list_enrolled_classrooms(
             Enrollment.classroom_id.in_(classroom_ids),
             Enrollment.is_active == True,
         )
-        .group_by(Enrollment.classroom_id)
+        .group_by(
+            Enrollment.classroom_id
+        )
         .all()
     )
 
@@ -332,6 +394,7 @@ async def list_enrolled_classrooms(
     result = []
 
     for enrollment in enrollments:
+
         classroom = classrooms_by_id.get(
             enrollment.classroom_id
         )
@@ -340,27 +403,12 @@ async def list_enrolled_classrooms(
             continue
 
         result.append(
-            ClassroomResponse(
-                id=classroom.id,
-                teacher_id=classroom.teacher_id,
-                name=classroom.name,
-                description=classroom.description or "",
-                subject=classroom.subject,
-                grade=classroom.grade,
-                invite_code=classroom.invite_code,
-                is_active=classroom.is_active,
-                max_students=classroom.max_students,
-                color=getattr(
-                    classroom,
-                    "color",
-                    "#2E6FDB",
-                )
-                or "#2E6FDB",
-                student_count=counts_map.get(
+            classroom_response(
+                classroom,
+                counts_map.get(
                     classroom.id,
                     0,
                 ),
-                created_at=classroom.created_at,
             )
         )
 
@@ -388,53 +436,76 @@ async def get_classroom(
 
     classroom = (
         db.query(Classroom)
-        .filter(Classroom.id == classroom_id)
+        .filter(
+            Classroom.id == classroom_id
+        )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
         )
 
     # --------------------------------------------------------
-    # Verificar acceso
+    # Profesor propietario / Super Profesor / Admin
     # --------------------------------------------------------
 
-    if classroom.teacher_id != current_user.id:
-
-        if (
-            current_user.role == UserRole.ESTUDIANTE.value
-            and not license_info.has_student_module("mis_cursos")
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "El módulo 'mis_cursos' no está disponible "
-                    f"en tu licencia ({license_info.license_type})."
-                ),
-            )
-
-        enrollment = (
+    if can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        student_count = (
             db.query(Enrollment)
             .filter(
-                Enrollment.classroom_id == classroom_id,
-                Enrollment.student_id == current_user.id,
+                Enrollment.classroom_id == classroom.id,
                 Enrollment.is_active == True,
             )
-            .first()
+            .count()
         )
 
-        if not enrollment:
-            raise HTTPException(
-                status_code=403,
-                detail="No tienes acceso a esta clase",
-            )
+        return classroom_response(
+            classroom,
+            student_count,
+        )
 
     # --------------------------------------------------------
-    # Contar estudiantes
+    # Estudiante
     # --------------------------------------------------------
+
+    if current_user.role != UserRole.ESTUDIANTE.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
+        )
+
+    if not license_info.has_student_module(
+        "mis_cursos"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "El módulo 'mis_cursos' no está disponible "
+                f"en tu licencia ({license_info.license_type})."
+            ),
+        )
+
+    enrollment = (
+        db.query(Enrollment)
+        .filter(
+            Enrollment.classroom_id == classroom_id,
+            Enrollment.student_id == current_user.id,
+            Enrollment.is_active == True,
+        )
+        .first()
+    )
+
+    if not enrollment:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
+        )
 
     student_count = (
         db.query(Enrollment)
@@ -445,19 +516,9 @@ async def get_classroom(
         .count()
     )
 
-    return ClassroomResponse(
-        id=classroom.id,
-        teacher_id=classroom.teacher_id,
-        name=classroom.name,
-        description=classroom.description or "",
-        subject=classroom.subject,
-        grade=classroom.grade,
-        invite_code=classroom.invite_code,
-        is_active=classroom.is_active,
-        max_students=classroom.max_students,
-        color=classroom.color or "#2E6FDB",
-        student_count=student_count,
-        created_at=classroom.created_at,
+    return classroom_response(
+        classroom,
+        student_count,
     )
 
 
@@ -477,23 +538,20 @@ async def get_student_classroom_detail(
 ):
     """
     Detalle de una clase para el estudiante inscrito.
-
-    Devuelve:
-    - Información de la clase
-    - Profesor
-    - Bots asignados
-    - Progreso del estudiante
     """
 
-    if current_user.role != UserRole.ESTUDIANTE.value:
-        raise HTTPException(
-            status_code=403,
-            detail="Solo los estudiantes pueden ver esta vista",
-        )
+    require_student(current_user)
 
-    # --------------------------------------------------------
-    # Buscar clase
-    # --------------------------------------------------------
+    if not license_info.has_student_module(
+        "mis_cursos"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "El módulo 'mis_cursos' no está disponible "
+                f"en tu licencia ({license_info.license_type})."
+            ),
+        )
 
     classroom = (
         db.query(Classroom)
@@ -506,13 +564,9 @@ async def get_student_classroom_detail(
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
         )
-
-    # --------------------------------------------------------
-    # Verificar inscripción
-    # --------------------------------------------------------
 
     enrollment = (
         db.query(Enrollment)
@@ -526,29 +580,23 @@ async def get_student_classroom_detail(
 
     if not enrollment:
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="No estás inscrito en esta clase",
         )
 
-    # --------------------------------------------------------
-    # Obtener profesor
-    # --------------------------------------------------------
-
     teacher = (
         db.query(User)
-        .filter(User.id == classroom.teacher_id)
+        .filter(
+            User.id == classroom.teacher_id
+        )
         .first()
     )
 
     teacher_name = (
-        (teacher.full_name or teacher.username)
+        teacher.full_name or teacher.username
         if teacher
         else ""
     )
-
-    # --------------------------------------------------------
-    # Contar estudiantes
-    # --------------------------------------------------------
 
     student_count = (
         db.query(Enrollment)
@@ -560,7 +608,7 @@ async def get_student_classroom_detail(
     )
 
     # --------------------------------------------------------
-    # Obtener bots asignados
+    # Bots asignados
     # --------------------------------------------------------
 
     assignments = (
@@ -568,7 +616,9 @@ async def get_student_classroom_detail(
         .filter(
             ClassroomBot.classroom_id == classroom_id
         )
-        .order_by(ClassroomBot.order_index)
+        .order_by(
+            ClassroomBot.order_index
+        )
         .all()
     )
 
@@ -585,7 +635,9 @@ async def get_student_classroom_detail(
             bot.id: bot
             for bot in (
                 db.query(ExpertBot)
-                .filter(ExpertBot.id.in_(bot_ids))
+                .filter(
+                    ExpertBot.id.in_(bot_ids)
+                )
                 .all()
             )
         }
@@ -620,10 +672,10 @@ async def get_student_classroom_detail(
         created_at=classroom.created_at,
         teacher_name=teacher_name,
         invite_code=classroom.invite_code,
-        overall_progress=enrollment.overall_progress,
-        total_sessions=enrollment.total_sessions,
-        total_time_minutes=enrollment.total_time_minutes,
-        average_score=enrollment.average_score,
+        overall_progress=enrollment.overall_progress or 0,
+        total_sessions=enrollment.total_sessions or 0,
+        total_time_minutes=enrollment.total_time_minutes or 0,
+        average_score=enrollment.average_score or 0,
         risk_level=enrollment.risk_level,
         last_activity=enrollment.last_activity,
         bots=bots,
@@ -634,7 +686,9 @@ async def get_student_classroom_detail(
 # ELIMINAR / DESACTIVAR CLASE
 # ============================================================
 
-@router.delete("/{classroom_id}")
+@router.delete(
+    "/{classroom_id}"
+)
 async def delete_classroom(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
@@ -653,21 +707,38 @@ async def delete_classroom(
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_user.id,
+            Classroom.id == classroom_id
         )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
+        )
+
+    if not can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
         )
 
     classroom.is_active = False
 
-    db.commit()
+    try:
+        db.commit()
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No fue posible desactivar la clase",
+        )
 
     return {
         "message": f"Clase '{classroom.name}' desactivada"
@@ -693,18 +764,24 @@ async def join_classroom(
     ),
     db: Session = Depends(get_db),
 ):
-    """Inscribirse en una clase con código de invitación."""
+    """Inscribirse en una clase con código."""
 
     require_student(current_user)
 
-    # --------------------------------------------------------
-    # Buscar clase
-    # --------------------------------------------------------
+    invite_code = (
+        request.invite_code or ""
+    ).strip().upper()
+
+    if not invite_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debes ingresar un código de invitación",
+        )
 
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.invite_code == request.invite_code.upper(),
+            Classroom.invite_code == invite_code,
             Classroom.is_active == True,
         )
         .first()
@@ -712,7 +789,7 @@ async def join_classroom(
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Código de invitación no válido",
         )
 
@@ -733,14 +810,23 @@ async def join_classroom(
 
         if existing.is_active:
             raise HTTPException(
-                status_code=400,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Ya estás inscrito en esta clase",
             )
 
         existing.is_active = True
 
-        db.commit()
-        db.refresh(existing)
+        try:
+            db.commit()
+            db.refresh(existing)
+
+        except Exception:
+            db.rollback()
+
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="No fue posible reactivar la inscripción",
+            )
 
         return _enrollment_to_response(
             existing,
@@ -762,7 +848,7 @@ async def join_classroom(
 
     if current_count >= classroom.max_students:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="La clase está llena",
         )
 
@@ -775,12 +861,21 @@ async def join_classroom(
         classroom_id=classroom.id,
     )
 
-    db.add(enrollment)
-    db.commit()
-    db.refresh(enrollment)
+    try:
+        db.add(enrollment)
+        db.commit()
+        db.refresh(enrollment)
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No fue posible inscribirte en la clase",
+        )
 
     # --------------------------------------------------------
-    # Automatización: nuevo estudiante
+    # Automatización
     # --------------------------------------------------------
 
     try:
@@ -803,6 +898,8 @@ async def join_classroom(
         )
 
     except Exception:
+        # La inscripción ya fue guardada.
+        # No debemos deshacerla si falla la automatización.
         db.rollback()
 
     return _enrollment_to_response(
@@ -834,16 +931,24 @@ async def list_students(
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_user.id,
+            Classroom.id == classroom_id
         )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
+        )
+
+    if not can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
         )
 
     enrollments = (
@@ -855,35 +960,34 @@ async def list_students(
         .all()
     )
 
-    result = []
+    if not enrollments:
+        return []
 
-    if enrollments:
+    student_ids = [
+        enrollment.student_id
+        for enrollment in enrollments
+    ]
 
-        student_ids = [
-            enrollment.student_id
-            for enrollment in enrollments
-        ]
-
-        students_by_id = {
-            user.id: user
-            for user in (
-                db.query(User)
-                .filter(User.id.in_(student_ids))
-                .all()
+    students_by_id = {
+        user.id: user
+        for user in (
+            db.query(User)
+            .filter(
+                User.id.in_(student_ids)
             )
-        }
+            .all()
+        )
+    }
 
-        for enrollment in enrollments:
-            result.append(
-                _enrollment_to_response(
-                    enrollment,
-                    students_by_id.get(
-                        enrollment.student_id
-                    ),
-                )
-            )
-
-    return result
+    return [
+        _enrollment_to_response(
+            enrollment,
+            students_by_id.get(
+                enrollment.student_id
+            ),
+        )
+        for enrollment in enrollments
+    ]
 
 
 # ============================================================
@@ -911,26 +1015,24 @@ async def remove_student(
 
     classroom = (
         db.query(Classroom)
-        .filter(Classroom.id == classroom_id)
+        .filter(
+            Classroom.id == classroom_id
+        )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
         )
 
-    if (
-        classroom.teacher_id != current_user.id
-        and current_user.role
-        not in (
-            UserRole.SUPER_PROFESOR.value,
-            UserRole.ADMIN.value,
-        )
+    if not can_manage_classroom(
+        current_user,
+        classroom,
     ):
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes acceso a esta clase",
         )
 
@@ -946,13 +1048,22 @@ async def remove_student(
 
     if not enrollment:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Estudiante no encontrado en la clase",
         )
 
     enrollment.is_active = False
 
-    db.commit()
+    try:
+        db.commit()
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No fue posible remover al estudiante",
+        )
 
     return {
         "message": "Estudiante removido de la clase"
@@ -963,7 +1074,9 @@ async def remove_student(
 # ASIGNACIÓN DE BOTS
 # ============================================================
 
-@router.post("/{classroom_id}/bots")
+@router.post(
+    "/{classroom_id}/bots"
+)
 async def assign_bot_to_classroom(
     classroom_id: int,
     request: AssignBotRequest,
@@ -976,34 +1089,44 @@ async def assign_bot_to_classroom(
     ),
     db: Session = Depends(get_db),
 ):
-    """Asignar un bot a la clase."""
+    """Asignar un bot a una clase."""
 
     require_teacher(current_user)
 
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_user.id,
+            Classroom.id == classroom_id
         )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
+        )
+
+    if not can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
         )
 
     bot = (
         db.query(ExpertBot)
-        .filter(ExpertBot.id == request.bot_id)
+        .filter(
+            ExpertBot.id == request.bot_id
+        )
         .first()
     )
 
     if not bot:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Bot no encontrado",
         )
 
@@ -1022,7 +1145,7 @@ async def assign_bot_to_classroom(
 
     if existing:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Este bot ya está asignado a la clase",
         )
 
@@ -1037,8 +1160,17 @@ async def assign_bot_to_classroom(
         order_index=request.order_index,
     )
 
-    db.add(assignment)
-    db.commit()
+    try:
+        db.add(assignment)
+        db.commit()
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No fue posible asignar el bot",
+        )
 
     return {
         "message": (
@@ -1064,8 +1196,8 @@ async def list_available_bots(
     db: Session = Depends(get_db),
 ):
     """
-    Lista los bots creados por el profesor que pueden
-    compartirse con la clase.
+    Lista los bots creados por el profesor
+    que pueden compartirse con la clase.
     """
 
     require_teacher(current_user)
@@ -1073,21 +1205,25 @@ async def list_available_bots(
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_user.id,
+            Classroom.id == classroom_id
         )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
         )
 
-    # --------------------------------------------------------
-    # Bots ya asignados
-    # --------------------------------------------------------
+    if not can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
+        )
 
     assigned_ids = {
         row[0]
@@ -1101,7 +1237,8 @@ async def list_available_bots(
     }
 
     # --------------------------------------------------------
-    # Bots creados por el profesor
+    # Para profesor normal: sus propios bots.
+    # Para Super Profesor/Admin: también sus propios bots.
     # --------------------------------------------------------
 
     bots = (
@@ -1109,13 +1246,16 @@ async def list_available_bots(
         .filter(
             ExpertBot.creator_id == current_user.id
         )
-        .order_by(ExpertBot.created_at.desc())
+        .order_by(
+            ExpertBot.created_at.desc()
+        )
         .all()
     )
 
     result = []
 
     for bot in bots:
+
         result.append(
             {
                 "bot_id": bot.id,
@@ -1135,7 +1275,9 @@ async def list_available_bots(
 # BOTS DE UNA CLASE
 # ============================================================
 
-@router.get("/{classroom_id}/bots")
+@router.get(
+    "/{classroom_id}/bots"
+)
 async def list_classroom_bots(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
@@ -1146,12 +1288,39 @@ async def list_classroom_bots(
 ):
     """Listar bots asignados a una clase."""
 
+    require_teacher(current_user)
+
+    classroom = (
+        db.query(Classroom)
+        .filter(
+            Classroom.id == classroom_id
+        )
+        .first()
+    )
+
+    if not classroom:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clase no encontrada",
+        )
+
+    if not can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
+        )
+
     assignments = (
         db.query(ClassroomBot)
         .filter(
             ClassroomBot.classroom_id == classroom_id
         )
-        .order_by(ClassroomBot.order_index)
+        .order_by(
+            ClassroomBot.order_index
+        )
         .all()
     )
 
@@ -1168,7 +1337,9 @@ async def list_classroom_bots(
             bot.id: bot
             for bot in (
                 db.query(ExpertBot)
-                .filter(ExpertBot.id.in_(bot_ids))
+                .filter(
+                    ExpertBot.id.in_(bot_ids)
+                )
                 .all()
             )
         }
@@ -1184,7 +1355,7 @@ async def list_classroom_bots(
                     {
                         "bot_id": bot.id,
                         "name": bot.name,
-                        "description": bot.description,
+                        "description": bot.description or "",
                         "category": bot.category,
                         "is_required": assignment.is_required,
                         "order_index": assignment.order_index,
@@ -1222,26 +1393,24 @@ async def remove_bot_from_classroom(
 
     classroom = (
         db.query(Classroom)
-        .filter(Classroom.id == classroom_id)
+        .filter(
+            Classroom.id == classroom_id
+        )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
         )
 
-    if (
-        classroom.teacher_id != current_user.id
-        and current_user.role
-        not in (
-            UserRole.SUPER_PROFESOR.value,
-            UserRole.ADMIN.value,
-        )
+    if not can_manage_classroom(
+        current_user,
+        classroom,
     ):
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes acceso a esta clase",
         )
 
@@ -1256,12 +1425,21 @@ async def remove_bot_from_classroom(
 
     if not assignment:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Bot no asignado a esta clase",
         )
 
-    db.delete(assignment)
-    db.commit()
+    try:
+        db.delete(assignment)
+        db.commit()
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No fue posible remover el bot",
+        )
 
     return {
         "message": "Bot removido de la clase"
@@ -1291,16 +1469,24 @@ async def get_classroom_stats(
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_user.id,
+            Classroom.id == classroom_id
         )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
+        )
+
+    if not can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
         )
 
     enrollments = (
@@ -1324,13 +1510,18 @@ async def get_classroom_stats(
             avg_score=0.0,
             total_sessions=0,
             students_at_risk=0,
+            top_performers=[],
+            struggling_students=[],
         )
 
     # --------------------------------------------------------
     # Métricas
     # --------------------------------------------------------
 
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = (
+        datetime.utcnow()
+        - timedelta(days=7)
+    )
 
     active_students = sum(
         1
@@ -1343,7 +1534,7 @@ async def get_classroom_stats(
 
     avg_progress = (
         sum(
-            enrollment.overall_progress
+            enrollment.overall_progress or 0
             for enrollment in enrollments
         )
         / total_students
@@ -1351,21 +1542,22 @@ async def get_classroom_stats(
 
     avg_score = (
         sum(
-            enrollment.average_score
+            enrollment.average_score or 0
             for enrollment in enrollments
         )
         / total_students
     )
 
     total_sessions = sum(
-        enrollment.total_sessions
+        enrollment.total_sessions or 0
         for enrollment in enrollments
     )
 
     students_at_risk = sum(
         1
         for enrollment in enrollments
-        if enrollment.risk_level in ("medium", "high")
+        if enrollment.risk_level
+        in ("medium", "high")
     )
 
     # --------------------------------------------------------
@@ -1381,7 +1573,9 @@ async def get_classroom_stats(
         user.id: user
         for user in (
             db.query(User)
-            .filter(User.id.in_(student_ids))
+            .filter(
+                User.id.in_(student_ids)
+            )
             .all()
         )
     }
@@ -1392,7 +1586,9 @@ async def get_classroom_stats(
 
     sorted_by_score = sorted(
         enrollments,
-        key=lambda enrollment: enrollment.average_score,
+        key=lambda enrollment: (
+            enrollment.average_score or 0
+        ),
         reverse=True,
     )
 
@@ -1405,14 +1601,21 @@ async def get_classroom_stats(
         )
 
         if student:
+
             top_performers.append(
                 {
                     "name": (
                         student.full_name
                         or student.username
                     ),
-                    "score": enrollment.average_score,
-                    "progress": enrollment.overall_progress,
+                    "score": (
+                        enrollment.average_score
+                        or 0
+                    ),
+                    "progress": (
+                        enrollment.overall_progress
+                        or 0
+                    ),
                 }
             )
 
@@ -1424,13 +1627,17 @@ async def get_classroom_stats(
 
     for enrollment in enrollments:
 
-        if enrollment.risk_level in ("medium", "high"):
+        if enrollment.risk_level in (
+            "medium",
+            "high",
+        ):
 
             student = students_by_id.get(
                 enrollment.student_id
             )
 
             if student:
+
                 struggling.append(
                     {
                         "name": (
@@ -1439,9 +1646,13 @@ async def get_classroom_stats(
                         ),
                         "risk_level": enrollment.risk_level,
                         "risk_factors": (
-                            enrollment.risk_factors or []
+                            enrollment.risk_factors
+                            or []
                         ),
-                        "progress": enrollment.overall_progress,
+                        "progress": (
+                            enrollment.overall_progress
+                            or 0
+                        ),
                     }
                 )
 
@@ -1450,8 +1661,14 @@ async def get_classroom_stats(
         classroom_name=classroom.name,
         total_students=total_students,
         active_students=active_students,
-        avg_progress=round(avg_progress, 1),
-        avg_score=round(avg_score, 1),
+        avg_progress=round(
+            avg_progress,
+            1,
+        ),
+        avg_score=round(
+            avg_score,
+            1,
+        ),
         total_sessions=total_sessions,
         students_at_risk=students_at_risk,
         top_performers=top_performers,
@@ -1476,32 +1693,30 @@ async def get_student_progress(
     ),
     db: Session = Depends(get_db),
 ):
-    """Progreso detallado de un estudiante en una clase."""
+    """Progreso detallado de un estudiante."""
 
     require_teacher(current_user)
 
     classroom = (
         db.query(Classroom)
-        .filter(Classroom.id == classroom_id)
+        .filter(
+            Classroom.id == classroom_id
+        )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
         )
 
-    if (
-        classroom.teacher_id != current_user.id
-        and current_user.role
-        not in (
-            UserRole.SUPER_PROFESOR.value,
-            UserRole.ADMIN.value,
-        )
+    if not can_manage_classroom(
+        current_user,
+        classroom,
     ):
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes acceso a esta clase",
         )
 
@@ -1517,19 +1732,21 @@ async def get_student_progress(
 
     if not enrollment:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Estudiante no encontrado en la clase",
         )
 
     student = (
         db.query(User)
-        .filter(User.id == student_id)
+        .filter(
+            User.id == student_id
+        )
         .first()
     )
 
     if not student:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Estudiante no encontrado",
         )
 
@@ -1540,10 +1757,18 @@ async def get_student_progress(
             or student.username
         ),
         username=student.username,
-        overall_progress=enrollment.overall_progress,
-        total_sessions=enrollment.total_sessions,
-        total_time_minutes=enrollment.total_time_minutes,
-        average_score=enrollment.average_score,
+        overall_progress=(
+            enrollment.overall_progress or 0
+        ),
+        total_sessions=(
+            enrollment.total_sessions or 0
+        ),
+        total_time_minutes=(
+            enrollment.total_time_minutes or 0
+        ),
+        average_score=(
+            enrollment.average_score or 0
+        ),
         risk_level=enrollment.risk_level,
         last_activity=enrollment.last_activity,
         cognitive_profile=student.cognitive_profile,
@@ -1554,7 +1779,9 @@ async def get_student_progress(
 # ALERTAS
 # ============================================================
 
-@router.get("/{classroom_id}/alerts")
+@router.get(
+    "/{classroom_id}/alerts"
+)
 async def get_classroom_alerts(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
@@ -1570,16 +1797,24 @@ async def get_classroom_alerts(
     classroom = (
         db.query(Classroom)
         .filter(
-            Classroom.id == classroom_id,
-            Classroom.teacher_id == current_user.id,
+            Classroom.id == classroom_id
         )
         .first()
     )
 
     if not classroom:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Clase no encontrada",
+        )
+
+    if not can_manage_classroom(
+        current_user,
+        classroom,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes acceso a esta clase",
         )
 
     enrollments = (
@@ -1591,10 +1826,6 @@ async def get_classroom_alerts(
         .all()
     )
 
-    # --------------------------------------------------------
-    # Obtener estudiantes
-    # --------------------------------------------------------
-
     student_ids = [
         enrollment.student_id
         for enrollment in enrollments
@@ -1605,17 +1836,15 @@ async def get_classroom_alerts(
             user.id: user
             for user in (
                 db.query(User)
-                .filter(User.id.in_(student_ids))
+                .filter(
+                    User.id.in_(student_ids)
+                )
                 .all()
             )
         }
         if student_ids
         else {}
     )
-
-    # --------------------------------------------------------
-    # Generar alertas
-    # --------------------------------------------------------
 
     alerts = []
 
@@ -1663,7 +1892,7 @@ async def get_classroom_alerts(
                     }
                 )
 
-        elif enrollment.total_sessions == 0:
+        elif (enrollment.total_sessions or 0) == 0:
 
             alerts.append(
                 {
@@ -1681,9 +1910,17 @@ async def get_classroom_alerts(
         # Alerta: bajo rendimiento
         # ----------------------------------------------------
 
+        average_score = (
+            enrollment.average_score or 0
+        )
+
+        total_sessions = (
+            enrollment.total_sessions or 0
+        )
+
         if (
-            enrollment.total_sessions >= 3
-            and enrollment.average_score < 40
+            total_sessions >= 3
+            and average_score < 40
         ):
 
             alerts.append(
@@ -1694,7 +1931,7 @@ async def get_classroom_alerts(
                     "student_id": student.id,
                     "message": (
                         f"Promedio muy bajo: "
-                        f"{enrollment.average_score:.0f}%"
+                        f"{average_score:.0f}%"
                     ),
                 }
             )
@@ -1762,7 +1999,10 @@ def _enrollment_to_response(
         id=enrollment.id,
         student_id=enrollment.student_id,
         student_name=(
-            student.full_name or student.username
+            (
+                student.full_name
+                or student.username
+            )
             if student
             else ""
         ),
@@ -1778,10 +2018,18 @@ def _enrollment_to_response(
         ),
         classroom_id=enrollment.classroom_id,
         enrolled_at=enrollment.enrolled_at,
-        overall_progress=enrollment.overall_progress,
-        total_sessions=enrollment.total_sessions,
-        total_time_minutes=enrollment.total_time_minutes,
-        average_score=enrollment.average_score,
+        overall_progress=(
+            enrollment.overall_progress or 0
+        ),
+        total_sessions=(
+            enrollment.total_sessions or 0
+        ),
+        total_time_minutes=(
+            enrollment.total_time_minutes or 0
+        ),
+        average_score=(
+            enrollment.average_score or 0
+        ),
         risk_level=enrollment.risk_level,
         last_activity=enrollment.last_activity,
     )
