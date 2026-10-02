@@ -35,7 +35,7 @@ class Classroom(Base):
 
     # Configuración
     max_students = Column(Integer, default=40)
-    settings = Column(JSON, default={
+    settings = Column(JSON, default=lambda: {
         "allow_self_enrollment": True,
         "show_leaderboard": False,
         "auto_assign_bots": True,
@@ -72,7 +72,7 @@ class Enrollment(Base):
 
     # Estado de alerta
     risk_level = Column(String(20), default="none")  # none, low, medium, high
-    risk_factors = Column(JSON, default=[])
+    risk_factors = Column(JSON, default=list)
 
     # Relaciones
     student = relationship("User", backref="enrollments")

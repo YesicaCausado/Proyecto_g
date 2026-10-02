@@ -352,7 +352,7 @@ class ClassroomResponse(BaseModel):
     id: int
     teacher_id: int
     name: str
-    description: str
+    description: str = ""
     subject: str
     grade: str
     invite_code: str
@@ -380,6 +380,7 @@ class EnrollmentResponse(BaseModel):
     student_id: int
     student_name: str = ""
     student_username: str = ""
+    student_email: Optional[str] = None
     classroom_id: int
     enrolled_at: datetime
     overall_progress: float
@@ -421,8 +422,8 @@ class ClassroomStatsResponse(BaseModel):
     avg_score: float
     total_sessions: int
     students_at_risk: int
-    top_performers: List[Dict] = []
-    struggling_students: List[Dict] = []
+    top_performers: List[Dict] = Field(default_factory=list)
+    struggling_students: List[Dict] = Field(default_factory=list)
 
 
 class ClassroomBotResponse(BaseModel):
@@ -455,7 +456,7 @@ class ClassroomStudentDetailResponse(BaseModel):
     risk_level: str = "none"
     last_activity: Optional[datetime] = None
     # Bots asignados a la clase (tutores)
-    bots: List[ClassroomBotResponse] = []
+    bots: List[ClassroomBotResponse] = Field(default_factory=list)
 
 
 # ===== SISTEMA B2B — INSTITUCIONES Y CREDENCIALES =====
