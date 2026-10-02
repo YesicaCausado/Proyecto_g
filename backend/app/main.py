@@ -45,12 +45,13 @@ from app.api import integrations
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description=(
-        "API backend de NeuroLearn AI"
-    ),
+    description="API backend de NeuroLearn AI",
     version=settings.APP_VERSION,
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
+
+    # Documentación
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 
@@ -85,30 +86,47 @@ app.add_middleware(
 
 
 # ============================================================
-# SCHEMA / MIGRACIONES
+# SCHEMA / BASE DE DATOS
 # ============================================================
 
 def _apply_schema_and_migrations():
     """
-    Inicializa el schema cuando corresponde.
+    Inicializa las tablas necesarias.
 
-    Esta función utiliza la lógica de base de datos
-    definida en el proyecto.
+    En producción, las migraciones reales deberían ejecutarse
+    mediante el sistema de migraciones del proyecto.
+
+    create_all() solamente crea tablas que no existen;
+    no modifica columnas existentes.
     """
 
     try:
+        print("[DB] Iniciando inicialización del schema...")
+
         Base.metadata.create_all(
             bind=engine
         )
+
+        print("[DB] Schema inicializado correctamente.")
+
     except Exception as exc:
+
         print(
-            "[DB] Error inicializando schema:",
-            exc,
+            "[DB] ERROR inicializando schema:",
+            repr(exc),
         )
 
 
+# ============================================================
+# INICIALIZACIÓN
+# ============================================================
+
 if IS_SERVERLESS:
 
+    print("[DB] Entorno serverless detectado.")
+
+    # No bloqueamos el import de FastAPI.
+    # Vercel puede continuar cargando la aplicación.
     import threading
 
     _thread = threading.Thread(
@@ -121,6 +139,8 @@ if IS_SERVERLESS:
 
 else:
 
+    print("[DB] Entorno local detectado.")
+
     _apply_schema_and_migrations()
 
 
@@ -128,35 +148,69 @@ else:
 # ROUTERS API V1
 # ============================================================
 
+# ------------------------------------------------------------
+# AUTH
+# ------------------------------------------------------------
+
 app.include_router(
     auth.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# CHAT
+#
+# Resultado esperado:
+#
+# POST /api/v1/chat/message
+# ------------------------------------------------------------
 
 app.include_router(
     chat.router,
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# CONVERSATIONS
+# ------------------------------------------------------------
+
 app.include_router(
     conversations.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# EXPERT BOTS
+#
+# expert_bot.py:
+# router = APIRouter(...)
+#
+# Resultado:
+# /api/v1/bots/...
+# ------------------------------------------------------------
 
 app.include_router(
     expert_bot.router,
     prefix="/api/v1/bots",
 )
 
+
 # ------------------------------------------------------------
 # CLASSROOMS
 #
 # classroom.py:
-# router = APIRouter(prefix="/classrooms")
 #
-# @router.post("/")
+# router = APIRouter(
+#     prefix="/classrooms"
+# )
+#
+# POST /
 #
 # Resultado:
+#
 # POST /api/v1/classrooms/
 # ------------------------------------------------------------
 
@@ -165,45 +219,76 @@ app.include_router(
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# STATS
+# ------------------------------------------------------------
+
 app.include_router(
     stats.router,
     prefix="/api/v1/stats",
 )
+
+
+# ------------------------------------------------------------
+# CREDENTIALS
+# ------------------------------------------------------------
 
 app.include_router(
     credentials.router,
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# POSTS
+# ------------------------------------------------------------
+
 app.include_router(
     posts.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# EVENTS
+# ------------------------------------------------------------
 
 app.include_router(
     events.router,
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# MESSAGES
+# ------------------------------------------------------------
+
 app.include_router(
     messages.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# SUPER STATS
+# ------------------------------------------------------------
 
 app.include_router(
     super_stats.router,
     prefix="/api/v1",
 )
 
+
 # ------------------------------------------------------------
 # TEACHER STATS
 #
 # teacher_stats.py:
+#
 # router = APIRouter(prefix="/teacher")
 #
-# @router.get("/stats")
-#
 # Resultado:
+#
 # GET /api/v1/teacher/stats
 # ------------------------------------------------------------
 
@@ -212,45 +297,90 @@ app.include_router(
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# TEACHER MATERIALS
+# ------------------------------------------------------------
+
 app.include_router(
     teacher_materials.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# TEACHER EVALUATIONS
+# ------------------------------------------------------------
 
 app.include_router(
     teacher_evaluations.router,
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# TEACHER AI
+# ------------------------------------------------------------
+
 app.include_router(
     teacher_ai.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# TEACHER REPORTS
+# ------------------------------------------------------------
 
 app.include_router(
     teacher_reports.router,
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# LICENSE
+# ------------------------------------------------------------
+
 app.include_router(
     license.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# ADMIN USERS
+# ------------------------------------------------------------
 
 app.include_router(
     admin_users.router,
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# NOTIFICATIONS
+# ------------------------------------------------------------
+
 app.include_router(
     notifications.router,
     prefix="/api/v1",
 )
 
+
+# ------------------------------------------------------------
+# ADMIN BOTS
+# ------------------------------------------------------------
+
 app.include_router(
     admin_bots.router,
     prefix="/api/v1",
 )
+
+
+# ------------------------------------------------------------
+# INTEGRATIONS
+# ------------------------------------------------------------
 
 app.include_router(
     integrations.router,
@@ -264,12 +394,29 @@ app.include_router(
 
 @app.get("/")
 def root():
+
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "status": "online",
         "api": "/api/v1",
-        "docs": "/api/docs",
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+    }
+
+
+# ============================================================
+# TEST SIMPLE DEL BACKEND
+# ============================================================
+
+@app.get("/api/v1/test")
+def test_backend():
+
+    return {
+        "status": "ok",
+        "message": "NeuroLearn backend funcionando correctamente",
+        "version": settings.APP_VERSION,
+        "serverless": IS_SERVERLESS,
     }
 
 
@@ -283,9 +430,11 @@ def health_check():
     db_status = "unknown"
 
     try:
+
         from sqlalchemy import text
 
         with engine.connect() as connection:
+
             connection.execute(
                 text("SELECT 1")
             )
@@ -298,6 +447,51 @@ def health_check():
             f"error: {str(exc)[:200]}"
         )
 
+        print(
+            "[HEALTH] Error conectando a BD:",
+            repr(exc),
+        )
+
+    return {
+        "status": "ok",
+        "database": db_status,
+        "serverless": IS_SERVERLESS,
+        "version": settings.APP_VERSION,
+    }
+
+
+# ============================================================
+# HEALTH CHECK API V1
+# ============================================================
+
+@app.get("/api/v1/health")
+def api_health_check():
+
+    db_status = "unknown"
+
+    try:
+
+        from sqlalchemy import text
+
+        with engine.connect() as connection:
+
+            connection.execute(
+                text("SELECT 1")
+            )
+
+        db_status = "connected"
+
+    except Exception as exc:
+
+        db_status = (
+            f"error: {str(exc)[:200]}"
+        )
+
+        print(
+            "[API HEALTH] Error conectando a BD:",
+            repr(exc),
+        )
+
     return {
         "status": "ok",
         "database": db_status,
@@ -308,12 +502,6 @@ def health_check():
 
 # ============================================================
 # DEBUG DE RUTAS
-# ============================================================
-#
-# Esto sirve para confirmar que Vercel realmente cargó
-# classroom.py y teacher_stats.py.
-#
-# Puedes eliminarlo después de verificar el deploy.
 # ============================================================
 
 print(
@@ -345,6 +533,9 @@ for route in app.routes:
     if (
         "/teacher" in path
         or "/classrooms" in path
+        or "/chat" in path
+        or "/test" in path
+        or "/health" in path
     ):
 
         print(
@@ -353,4 +544,16 @@ for route in app.routes:
 
 print(
     "========================================"
+)
+
+print(
+    f"[APP] NeuroLearn AI {settings.APP_VERSION}"
+)
+
+print(
+    f"[APP] Serverless: {IS_SERVERLESS}"
+)
+
+print(
+    "[APP] FastAPI inicializado correctamente."
 )
