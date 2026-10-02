@@ -97,7 +97,7 @@ async def create_classroom(
         id=classroom.id,
         teacher_id=classroom.teacher_id,
         name=classroom.name,
-        description=classroom.description,
+        description=classroom.description or "",
         subject=classroom.subject,
         grade=classroom.grade,
         invite_code=classroom.invite_code,
@@ -106,16 +106,16 @@ async def create_classroom(
         color=classroom.color or '#2E6FDB',
         student_count=0,
         created_at=classroom.created_at,
-    )
-
-
-@router.get("/my-classes", response_model=ClassroomListResponse)
-async def list_my_classrooms(
-    current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("cursos")),
-    db: Session = Depends(get_db),
-):
-    """Listar las clases del profesor actual"""
+        classroom = Classroom(
+            teacher_id=current_user.id,
+            name=request.name,
+            description=request.description or "",
+            subject=request.subject,
+            grade=request.grade,
+            max_students=request.max_students,
+            color=getattr(request, 'color', '#2E6FDB'),
+            invite_code=Classroom.generate_invite_code(),
+        )
     require_teacher(current_user)
     # Obtener todas las clases del profesor en una sola consulta
     classrooms = db.query(Classroom).filter(
@@ -143,7 +143,7 @@ async def list_my_classrooms(
             id=c.id,
             teacher_id=c.teacher_id,
             name=c.name,
-            description=c.description,
+                description=c.description or "",
             subject=c.subject,
             grade=c.grade,
             invite_code=c.invite_code,
@@ -201,7 +201,7 @@ async def list_enrolled_classrooms(
             id=c.id,
             teacher_id=c.teacher_id,
             name=c.name,
-            description=c.description,
+            description=c.description or "",
             subject=c.subject,
             grade=c.grade,
             invite_code=c.invite_code,
@@ -251,12 +251,13 @@ async def get_classroom(
         id=classroom.id,
         teacher_id=classroom.teacher_id,
         name=classroom.name,
-        description=classroom.description,
+            description=classroom.description or "",
         subject=classroom.subject,
         grade=classroom.grade,
         invite_code=classroom.invite_code,
         is_active=classroom.is_active,
         max_students=classroom.max_students,
+        color=classroom.color or "#2E6FDB",
         student_count=student_count,
         created_at=classroom.created_at,
     )
@@ -330,7 +331,7 @@ async def get_student_classroom_detail(
     return ClassroomStudentDetailResponse(
         id=classroom.id,
         name=classroom.name,
-        description=classroom.description,
+        description=classroom.description or "",
         subject=classroom.subject,
         grade=classroom.grade,
         color=classroom.color or "#2E6FDB",
@@ -884,13 +885,14 @@ async def get_classroom_alerts(
 
 # ===== UTILIDADES INTERNAS =====
 
-def _enrollment_to_response(enrollment: Enrollment, student: User) -> EnrollmentResponse:
+def _enrollment_to_response(enrollment: Enrollment, student: Optional[User]) -> EnrollmentResponse:
     """Convierte un enrollment a respuesta"""
     return EnrollmentResponse(
         id=enrollment.id,
         student_id=enrollment.student_id,
         student_name=student.full_name or student.username if student else "",
         student_username=student.username if student else "",
+        student_email=student.email if student else None,
         classroom_id=enrollment.classroom_id,
         enrolled_at=enrollment.enrolled_at,
         overall_progress=enrollment.overall_progress,
