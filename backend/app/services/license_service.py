@@ -115,7 +115,13 @@ FEATURE_MATRIX: dict[str, dict[str, list[str]]] = {
     # ── Gestión institucional (Súper Profesor) ──
     "gestion_profesores": {"basica": ["super_profesor"], "premium": ["super_profesor"], "pro": ["super_profesor"]},
     "gestion_estudiantes": {"basica": ["super_profesor"], "premium": ["super_profesor"], "pro": ["super_profesor"]},
-    "gestion_grupos":     {"basica": ["super_profesor"], "premium": ["super_profesor"], "pro": ["super_profesor"]},
+    # gestion_grupos ("mis aulas") también pertenece al PROFESOR en todos los
+    # planes (docs/MATRIZ_LICENCIAS.md §4 Profesor: ✅ BASIC/PREMIUM/PRO):
+    # el profesor crea y gestiona SUS PROPIOS grupos/aulas (endpoints de
+    # classroom con require_teacher_module("cursos")). Sin "profesor" aquí, el
+    # frontend oculta la pestaña "Mis Grupos" del panel docente (regresión
+    # introducida al pasar el sidebar de gating por módulo a gating por feature).
+    "gestion_grupos":     {"basica": ["super_profesor", "profesor"], "premium": ["super_profesor", "profesor"], "pro": ["super_profesor", "profesor"]},
 
     # ── Analítica / estadísticas (acumulativo) ──
     "basic_analytics":       {"basica": ["super_profesor", "profesor", "estudiante"], "premium": ["super_profesor", "profesor", "estudiante"], "pro": ["super_profesor", "profesor", "estudiante"]},
