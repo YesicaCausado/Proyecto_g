@@ -154,7 +154,16 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     // derivar de teacher/student modules para mantener compatibilidad.
     if (info.license_status === 'suspended') return false;
     if (info.license_status === 'expired') {
-      return ['perfil', 'configuracion', 'mensajes', 'calendario'].includes(feature);
+      // Modo solo lectura: mismo criterio que hasTeacherModule en expired
+      // (READONLY = dashboard, cursos/grupos, estudiantes, recursos) más las
+      // transversales. Sin esto, el sidebar del profesor oculta TAMBIÉN el
+      // Dashboard y Mis Grupos cuando la licencia vence — la matriz no se
+      // consulta en este estado, así que el arreglo de gestion_grupos no
+      // aplicaba aquí.
+      return [
+        'perfil', 'configuracion', 'mensajes', 'calendario',
+        'dashboard', 'gestion_grupos', 'recursos',
+      ].includes(feature);
     }
     if (info.features?.length) return info.features.includes(feature);
 

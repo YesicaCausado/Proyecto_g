@@ -591,20 +591,6 @@ export default function TeacherPanel() {
     buildNavSections(hasFeature);
 
   // ----------------------------------------------------------
-  // LICENCIA SUSPENDIDA
-  // ----------------------------------------------------------
-
-  if (
-    licenseStatus === 'suspended'
-  ) {
-    return (
-      <SuspendedScreen
-        role="profesor"
-      />
-    );
-  }
-
-  // ----------------------------------------------------------
   // ESTADÍSTICAS Y MENSAJES
   // ----------------------------------------------------------
 
@@ -729,6 +715,25 @@ export default function TeacherPanel() {
     searchParams,
     setSearchParams,
   ]);
+
+  // ----------------------------------------------------------
+  // LICENCIA SUSPENDIDA
+  //
+  // Este return anticipado va DESPUÉS de todos los hooks (useState/useEffect):
+  // si estuviera antes, un cambio de licencia suspendida→activa cambiaba el
+  // número de hooks entre renders y React crasheaba el árbol completo
+  // ("Rendered fewer hooks..."), dejando el panel del profesor en blanco.
+  // ----------------------------------------------------------
+
+  if (
+    licenseStatus === 'suspended'
+  ) {
+    return (
+      <SuspendedScreen
+        role="profesor"
+      />
+    );
+  }
 
   // ----------------------------------------------------------
   // LOGOUT
