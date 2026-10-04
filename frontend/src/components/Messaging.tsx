@@ -229,8 +229,12 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   const downloadAttachment = async (msg: Message) => {
     if (!msg.attachment?.url) return;
     try {
-      const res = await api.get(msg.attachment.url, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      // attachment.url ya incluye el prefijo /api/v1 (viene del backend).
+      // Usamos fetch nativo para evitar que axios duplique el baseURL.
+      const res = await fetch(msg.attachment.url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = msg.attachment.name || 'archivo';

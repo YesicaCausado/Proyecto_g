@@ -334,6 +334,8 @@ export default function ChatPage() {
   const [showDashboard, setShowDashboard] = useState(!isCustomBot);
   const [quizSuggested, setQuizSuggested] = useState(false);
   const [freeInput, setFreeInput] = useState("");
+  // Feedback visual de mensajes (like/dislike) — sin llamada al backend
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, "like" | "dislike">>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -685,7 +687,8 @@ export default function ChatPage() {
   };
 
   const endSession = async () => {
-    try { await api.post("/chat/end"); } catch { /* ignore */ }
+    // No existe endpoint /chat/end en el backend; el estado de sesión es
+    // puramente local. Solo reseteamos el estado del componente.
     setSessionActive(false);
     setMessages([]);
     setLastResponse(null);
@@ -1202,8 +1205,8 @@ export default function ChatPage() {
                   ? <BotMessageWithActions 
                       content={msg.content}
                       messageId={msg.id}
-                      onLike={(id) => sendMessageWithText(`✅ Tu respuesta "me gusta" ha sido registrada para ${id}`)}
-                      onDislike={(id) => sendMessageWithText(`❌ Tu respuesta "no me gusta" ha sido registrada para ${id}`)}
+                      onLike={(id) => setMessageFeedback(prev => ({ ...prev, [id]: "like" }))}
+                      onDislike={(id) => setMessageFeedback(prev => ({ ...prev, [id]: "dislike" }))}
                       onSpeak={(text, onEnd) => voiceTutor.speakText(text, onEnd)}
                       onStopSpeak={() => voiceTutor.stopSpeaking()}
                       onReport={(id) => console.log(`Reporte de mensaje: ${id}`)}
@@ -1336,13 +1339,13 @@ export default function ChatPage() {
             <div className="flex items-center gap-3 mt-2 max-w-4xl mx-auto">
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Engagement:</span>
-                {lastResponse.engagement_score != null ? (
+                {lastResponse.metadata?.engagement_score != null ? (
                   <>
                     <div className="w-16 h-1 bg-[#F7F6F3] rounded-full overflow-hidden">
                       <div className="h-full bg-[#0B6E99] rounded-full transition-all duration-700"
-                        style={{ width: `${Math.round(lastResponse.engagement_score * 100)}%` }} />
+                        style={{ width: `${Math.round((lastResponse.metadata.engagement_score as number) * 100)}%` }} />
                     </div>
-                    <span>{Math.round(lastResponse.engagement_score * 100)}%</span>
+                    <span>{Math.round((lastResponse.metadata.engagement_score as number) * 100)}%</span>
                   </>
                 ) : (
                   <span className="text-[#E9E9E7]">—</span>
@@ -1350,9 +1353,9 @@ export default function ChatPage() {
               </div>
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Riesgo error:</span>
-                {lastResponse.error_risk != null ? (
-                  <span className={`font-medium ${lastResponse.error_risk > 0.5 ? "text-[#E03E3E]" : "text-[#0F7B6C]"}`}>
-                    {Math.round(lastResponse.error_risk * 100)}%
+                {lastResponse.metadata?.error_risk != null ? (
+                  <span className={`font-medium ${(lastResponse.metadata.error_risk as number) > 0.5 ? "text-[#E03E3E]" : "text-[#0F7B6C]"}`}>
+                    {Math.round((lastResponse.metadata.error_risk as number) * 100)}%
                   </span>
                 ) : (
                   <span className="text-[#E9E9E7]">—</span>
@@ -1360,7 +1363,7 @@ export default function ChatPage() {
               </div>
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span className="text-[#9B9A97]">|</span>
-                <span>{(lastResponse.active_modalities ?? []).length}/5 patrones activos</span>
+                <span>{((lastResponse.metadata?.active_modalities as string[]) ?? []).length}/5 patrones activos</span>
               </div>
             </div>
           )}

@@ -252,11 +252,22 @@ export default function TableroPage() {
                   {post.attachments.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {post.attachments.map(a => (
-                        <button key={a}
-                          className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#787774] hover:bg-[#E9E9E7] transition-colors">
-                          <Paperclip className="w-3 h-3" />
-                          {a.startsWith('http') ? 'Abrir enlace' : a}
-                        </button>
+                        a.startsWith('http') ? (
+                          <a key={a}
+                            href={a}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#787774] hover:bg-[#E9E9E7] transition-colors">
+                            <Paperclip className="w-3 h-3" />
+                            Abrir enlace
+                          </a>
+                        ) : (
+                          <span key={a}
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#787774]">
+                            <Paperclip className="w-3 h-3" />
+                            {a}
+                          </span>
+                        )
                       ))}
                     </div>
                   )}
