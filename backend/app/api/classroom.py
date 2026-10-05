@@ -153,7 +153,7 @@ async def create_classroom(
         require_teacher_module("cursos")
     ),
     active_license: LicenseInfo = Depends(
-        require_active_license()
+        require_active_license
     ),
     db: Session = Depends(get_db),
 ):
@@ -696,7 +696,7 @@ async def delete_classroom(
         require_teacher_module("cursos")
     ),
     active_license: LicenseInfo = Depends(
-        require_active_license()
+        require_active_license
     ),
     db: Session = Depends(get_db),
 ):
@@ -760,7 +760,7 @@ async def join_classroom(
         require_student_module("mis_cursos")
     ),
     active_license: LicenseInfo = Depends(
-        require_active_license()
+        require_active_license
     ),
     db: Session = Depends(get_db),
 ):
@@ -1005,7 +1005,7 @@ async def remove_student(
         require_teacher_module("cursos")
     ),
     active_license: LicenseInfo = Depends(
-        require_active_license()
+        require_active_license
     ),
     db: Session = Depends(get_db),
 ):
@@ -1085,7 +1085,7 @@ async def assign_bot_to_classroom(
         require_teacher_module("neurobots")
     ),
     active_license: LicenseInfo = Depends(
-        require_active_license()
+        require_active_license
     ),
     db: Session = Depends(get_db),
 ):
@@ -1383,7 +1383,7 @@ async def remove_bot_from_classroom(
         require_teacher_module("neurobots")
     ),
     active_license: LicenseInfo = Depends(
-        require_active_license()
+        require_active_license
     ),
     db: Session = Depends(get_db),
 ):
