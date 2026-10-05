@@ -47,7 +47,7 @@ def _to_meta(conv: Conversation) -> ConversationMeta:
 @router.get("", response_model=ConversationListResponse)
 async def list_conversations(
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """Lista las conversaciones del estudiante (más recientes primero)."""
@@ -65,7 +65,7 @@ async def list_conversations(
 async def create_conversation(
     body: ConversationCreate,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """Crea una conversación nueva (no reutiliza cargas previas: solo la).
@@ -88,7 +88,7 @@ async def create_conversation(
 async def get_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """Devuelve una conversación con sus mensajes (para continuarla)."""
@@ -124,7 +124,7 @@ async def rename_conversation(
     conversation_id: int,
     body: ConversationRename,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     conv = db.query(Conversation).filter(
@@ -145,7 +145,7 @@ async def rename_conversation(
 async def delete_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     conv = db.query(Conversation).filter(

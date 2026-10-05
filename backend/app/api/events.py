@@ -220,7 +220,7 @@ async def create_event(
     body: EventCreate,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Crear un evento en el calendario (solo profesores)."""
@@ -267,7 +267,7 @@ async def update_event(
     body: EventUpdate,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Editar un evento (solo el profesor que lo creó o un super de su institución)."""
@@ -300,7 +300,7 @@ async def delete_event(
     event_id: int,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Eliminar un evento (solo el profesor que lo creó o un super de su institución)."""

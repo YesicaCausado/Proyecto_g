@@ -74,7 +74,7 @@ async def create_evaluation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("evaluaciones")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Crea una nueva evaluación con sus preguntas."""
     title = (data.get("title") or "").strip()
@@ -108,7 +108,7 @@ async def toggle_evaluation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("evaluaciones")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Activa o desactiva una evaluación."""
     ev = db.query(TeacherEvaluation).filter(
@@ -129,7 +129,7 @@ async def delete_evaluation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("evaluaciones")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Elimina una evaluación."""
     ev = db.query(TeacherEvaluation).filter(

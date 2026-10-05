@@ -53,7 +53,7 @@ async def export_reports(
     license_info: LicenseInfo = Depends(
         require_feature("reportes_avanzados") if format == "pdf" else require_feature("reportes")
     ),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """
     Exporta reportes académicos.

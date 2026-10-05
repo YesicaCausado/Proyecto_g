@@ -455,7 +455,7 @@ async def send_message(
     file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Envía un mensaje al otro usuario según las reglas de rol (con adjunto opcional)."""
@@ -513,7 +513,7 @@ async def mark_as_read(
     other_user_id: int,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Marca como leídos todos los mensajes de other_user_id recibidos por el usuario actual."""

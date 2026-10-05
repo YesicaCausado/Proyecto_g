@@ -141,7 +141,7 @@ async def update_institution(
 @router.get("/stats/dashboard")
 async def get_super_dashboard(
     current_user: User = Depends(get_current_user),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)

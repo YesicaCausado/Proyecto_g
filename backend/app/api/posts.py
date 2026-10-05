@@ -162,7 +162,7 @@ async def create_post(
     body: PostCreate,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Crear un post en el tablero (solo profesores dueños de la clase)."""
@@ -241,7 +241,7 @@ async def toggle_reaction(
     post_id: int,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Toggle de reacción 👍 del usuario actual en un post."""
@@ -317,7 +317,7 @@ async def add_comment(
     body: CommentCreate,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Añadir comentario a un post (profesores y estudiantes pueden comentar)."""
@@ -359,7 +359,7 @@ async def delete_post(
     post_id: int,
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Desactivar un post (solo el profesor que lo creó)."""

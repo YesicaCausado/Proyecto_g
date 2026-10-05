@@ -179,7 +179,7 @@ async def connect_google(
     request: "Request",
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Inicia el flujo OAuth de Google devolviendo la URL de autorización."""
@@ -295,7 +295,7 @@ async def disconnect_integration(
     provider: str,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Desconecta una integración (elimina credenciales almacenadas)."""
@@ -392,7 +392,7 @@ async def drive_select_folder(
     body: dict,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Guarda la carpeta de Drive seleccionada en la configuración de la integración."""
@@ -415,7 +415,7 @@ async def drive_import_files(
     body: dict,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """
@@ -480,7 +480,7 @@ async def calendar_select(
     body: dict,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Guarda el calendario de Google seleccionado."""
@@ -503,7 +503,7 @@ async def calendar_create_event(
     body: CalendarEventCreate,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Crea un evento real en el calendario de Google seleccionado."""
@@ -562,7 +562,7 @@ async def save_webhook(
     body: WebhookConfig,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Guarda o crea la configuración de webhook de la institución."""
@@ -638,7 +638,7 @@ async def toggle_webhook(
     body: dict,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Activa/desactiva el webhook configurado."""
@@ -680,7 +680,7 @@ async def create_automation(
     body: AutomationCreate,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -713,7 +713,7 @@ async def update_automation(
     body: AutomationUpdate,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -743,7 +743,7 @@ async def delete_automation(
     automation_id: int,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -764,7 +764,7 @@ async def toggle_automation(
     body: dict,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -817,7 +817,7 @@ async def run_automation_manual(
     automation_id: int,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Ejecuta una automatización manualmente (útil para probar)."""
@@ -838,7 +838,7 @@ async def check_low_performance(
     body: dict,
     current_user: User = Depends(get_current_user),
     lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """

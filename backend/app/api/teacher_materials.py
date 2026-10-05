@@ -145,7 +145,7 @@ async def create_folder(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("recursos")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Crea una nueva carpeta de materiales."""
     name = (data.get("name") or "").strip()
@@ -168,7 +168,7 @@ async def delete_folder(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("recursos")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Elimina una carpeta y todos sus archivos."""
     folder = db.query(TeacherFolder).filter(
@@ -191,7 +191,7 @@ async def upload_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("recursos")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Sube un archivo real a una carpeta y guarda su binario en la DB."""
     folder = db.query(TeacherFolder).filter(
@@ -282,7 +282,7 @@ async def download_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("recursos")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Descarga el archivo real con su contenido y formato original."""
     mat = db.query(TeacherMaterial).filter(
@@ -316,7 +316,7 @@ async def update_file_sharing(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("recursos")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Actualiza los grupos con quienes se comparte un archivo."""
     mat = db.query(TeacherMaterial).filter(
@@ -338,7 +338,7 @@ async def delete_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     license_info: LicenseInfo = Depends(require_teacher_module("recursos")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Elimina un archivo de una carpeta."""
     mat = db.query(TeacherMaterial).filter(

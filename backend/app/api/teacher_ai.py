@@ -229,7 +229,7 @@ def _matches_schema(kind: str, parsed) -> bool:
 async def generate_content(
     req: GenerateRequest,
     license_info: LicenseInfo = Depends(require_feature("teacher_ai")),
-    active_license: LicenseInfo = Depends(require_active_license()),
+    active_license: LicenseInfo = Depends(require_active_license),
     current_user: User = Depends(get_current_user),
 ):
     """Genera contenido educativo con IA (o fallback local) para el docente."""
