@@ -192,19 +192,17 @@ function buildNavSections(
 
   // ----------------------------------------------------------
   // PRINCIPAL
-  // Dashboard y Mis Grupos son funciones básicas.
   // ----------------------------------------------------------
 
-  const principal = ['dashboard', 'grupos'].filter((id) => {
-    if (id === 'dashboard' || id === 'grupos') {
-      return true;
-    }
-
-    return hasFeature(
+  const principal = [
+    'dashboard',
+    'grupos',
+  ].filter((id) =>
+    hasFeature(
       ALL_NAV_ITEMS[id].feature ??
         ALL_NAV_ITEMS[id].module
-    );
-  });
+    )
+  );
 
   if (principal.length > 0) {
     sections.push({
@@ -220,7 +218,10 @@ function buildNavSections(
   // INTELIGENCIA IA
   // ----------------------------------------------------------
 
-  const ia = ['neurobots', 'alertas'].filter((id) =>
+  const ia = [
+    'neurobots',
+    'alertas',
+  ].filter((id) =>
     hasFeature(
       ALL_NAV_ITEMS[id].feature ??
         ALL_NAV_ITEMS[id].module
@@ -266,7 +267,10 @@ function buildNavSections(
   // ANALÍTICA E IA
   // ----------------------------------------------------------
 
-  const analytics = ['analitica', 'ia'].filter((id) =>
+  const analytics = [
+    'analitica',
+    'ia',
+  ].filter((id) =>
     hasFeature(
       ALL_NAV_ITEMS[id].feature ??
         ALL_NAV_ITEMS[id].module
@@ -467,9 +471,6 @@ export default function TeacherPanel() {
 
   // ----------------------------------------------------------
   // PESTAÑA INICIAL
-  //
-  // Por defecto siempre Dashboard.
-  // Solo cambia si la URL trae ?tab=...
   // ----------------------------------------------------------
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -490,81 +491,6 @@ export default function TeacherPanel() {
   });
 
   // ----------------------------------------------------------
-  // INFORMACIÓN DE LICENCIA
-  // ----------------------------------------------------------
-
-  const info =
-    licenseInfo ?? {
-      license_type:
-        'basica' as const,
-
-      license_status:
-        'active' as const,
-
-      days_left: null,
-
-      teacher_modules: [
-        'dashboard',
-        'cursos',
-        'grupos',
-        'estudiantes',
-        'evaluaciones',
-        'recursos',
-        'calendario',
-        'mensajes',
-        'perfil',
-      ],
-
-      student_modules: [
-        'inicio',
-        'mis_cursos',
-        'mis_tareas',
-        'evaluaciones',
-        'recursos',
-        'calendario',
-        'mensajes',
-        'perfil',
-        'tutor_ia',
-        'estadisticas',
-      ],
-
-      teacher_dashboard_kpis: [
-        'cursos_activos',
-        'estudiantes',
-        'evaluaciones_creadas',
-        'actividades_pendientes',
-      ],
-
-      neurobot_limit: 1,
-      groups_limit: 10,
-      students_limit: 300,
-
-      export_formats: ['csv'],
-
-      institution_name: '',
-    };
-
-  const license: TeacherLicense = {
-    plan: licenseType,
-
-    groups_limit:
-      info.groups_limit,
-
-    students_limit:
-      info.students_limit,
-
-    bots_limit:
-      info.neurobot_limit === 999999
-        ? 'unlimited'
-        : info.neurobot_limit,
-
-    expiry_date:
-      info.days_left === null
-        ? 'Sin fecha'
-        : `${info.days_left} días`,
-  };
-
-  // ----------------------------------------------------------
   // ESTADOS
   // ----------------------------------------------------------
 
@@ -582,13 +508,6 @@ export default function TeacherPanel() {
     sidebarOpen,
     setSidebarOpen,
   ] = useState(false);
-
-  // ----------------------------------------------------------
-  // MENÚ
-  // ----------------------------------------------------------
-
-  const navSections =
-    buildNavSections(hasFeature);
 
   // ----------------------------------------------------------
   // ESTADÍSTICAS Y MENSAJES
@@ -718,11 +637,6 @@ export default function TeacherPanel() {
 
   // ----------------------------------------------------------
   // LICENCIA SUSPENDIDA
-  //
-  // Este return anticipado va DESPUÉS de todos los hooks (useState/useEffect):
-  // si estuviera antes, un cambio de licencia suspendida→activa cambiaba el
-  // número de hooks entre renders y React crasheaba el árbol completo
-  // ("Rendered fewer hooks..."), dejando el panel del profesor en blanco.
   // ----------------------------------------------------------
 
   if (
@@ -734,6 +648,98 @@ export default function TeacherPanel() {
       />
     );
   }
+
+  // ----------------------------------------------------------
+  // LICENCIA TODAVÍA NO RESUELTA
+  //
+  // NO usamos "basica" como fallback.
+  // La licencia debe venir del backend.
+  // ----------------------------------------------------------
+
+  if (
+    !licenseInfo ||
+    !licenseType
+  ) {
+    return (
+      <div
+        className="
+          min-h-screen
+          bg-[#F7F6F3]
+          flex
+          items-center
+          justify-center
+        "
+      >
+        <div className="text-center">
+          <div
+            className="
+              w-8
+              h-8
+              border-2
+              border-[#D9D9D6]
+              border-t-[#2E6FDB]
+              rounded-full
+              animate-spin
+              mx-auto
+              mb-3
+            "
+          />
+
+          <p
+            className="
+              text-sm
+              font-medium
+              text-[#37352F]
+            "
+          >
+            Cargando licencia...
+          </p>
+
+          <p
+            className="
+              text-xs
+              text-[#787774]
+              mt-1
+            "
+          >
+            Verificando los permisos de tu institución
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------------
+  // INFORMACIÓN REAL DE LICENCIA
+  // ----------------------------------------------------------
+
+  const info = licenseInfo;
+
+  // ----------------------------------------------------------
+  // LICENCIA PARA LOS COMPONENTES
+  //
+  // Después del guard anterior, licenseType ya no puede ser null.
+  // ----------------------------------------------------------
+
+  const license: TeacherLicense = {
+    plan: licenseType,
+
+    groups_limit:
+      info.groups_limit,
+
+    students_limit:
+      info.students_limit,
+
+    bots_limit:
+      info.neurobot_limit === 999999
+        ? 'unlimited'
+        : info.neurobot_limit,
+
+    expiry_date:
+      info.days_left === null
+        ? 'Sin fecha'
+        : `${info.days_left} días`,
+  };
 
   // ----------------------------------------------------------
   // LOGOUT
@@ -756,6 +762,13 @@ export default function TeacherPanel() {
 
   const planStyle =
     planColor(licenseType);
+
+  // ----------------------------------------------------------
+  // MENÚ
+  // ----------------------------------------------------------
+
+  const navSections =
+    buildNavSections(hasFeature);
 
   // ----------------------------------------------------------
   // NAVEGACIÓN
@@ -826,7 +839,13 @@ export default function TeacherPanel() {
           `}
         />
 
-        <span className="flex-1 text-left truncate">
+        <span
+          className="
+            flex-1
+            text-left
+            truncate
+          "
+        >
           {label}
         </span>
 
@@ -1416,34 +1435,41 @@ export default function TeacherPanel() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              setActiveTab('alertas')
-            }
-            className="
-              hidden
-              sm:flex
-              items-center
-              gap-2
-              px-3
-              py-1.5
-              bg-[#EEF3FD]
-              text-[#2E6FDB]
-              border
-              border-[#C5D9F7]
-              rounded-lg
-              text-xs
-              font-medium
-              hover:bg-[#2E6FDB]
-              hover:text-white
-              transition-colors
-            "
-          >
-            <Zap className="w-3.5 h-3.5" />
+          {/* ------------------------------------------------
+              NEUROINSIGHTS
+              Solo se muestra si el plan tiene NeuroAlertas.
+          ------------------------------------------------ */}
 
-            NeuroInsights
-          </button>
+          {hasFeature('neuroalertas') && (
+            <button
+              type="button"
+              onClick={() =>
+                setActiveTab('alertas')
+              }
+              className="
+                hidden
+                sm:flex
+                items-center
+                gap-2
+                px-3
+                py-1.5
+                bg-[#EEF3FD]
+                text-[#2E6FDB]
+                border
+                border-[#C5D9F7]
+                rounded-lg
+                text-xs
+                font-medium
+                hover:bg-[#2E6FDB]
+                hover:text-white
+                transition-colors
+              "
+            >
+              <Zap className="w-3.5 h-3.5" />
+
+              NeuroInsights
+            </button>
+          )}
         </header>
 
         {/* ==================================================
@@ -1478,59 +1504,67 @@ export default function TeacherPanel() {
 
             {/* GRUPOS */}
 
-            {activeTab === 'grupos' && (
-              <MisGruposTab
-                license={license}
-              />
-            )}
+            {activeTab === 'grupos' &&
+              hasFeature('gestion_grupos') && (
+                <MisGruposTab
+                  license={license}
+                />
+              )}
 
             {/* NEUROBOTS */}
 
-            {activeTab === 'neurobots' && (
-              <NeuroBotsTab
-                license={license}
-              />
-            )}
+            {activeTab === 'neurobots' &&
+              hasFeature('neurobots') && (
+                <NeuroBotsTab
+                  license={license}
+                />
+              )}
 
             {/* ALERTAS */}
 
-            {activeTab === 'alertas' && (
-              <NeuroAlertasTab />
-            )}
+            {activeTab === 'alertas' &&
+              hasFeature('neuroalertas') && (
+                <NeuroAlertasTab />
+              )}
 
             {/* TABLERO */}
 
-            {activeTab === 'tablero' && (
-              <TableroTab />
-            )}
+            {activeTab === 'tablero' &&
+              hasFeature('anuncios') && (
+                <TableroTab />
+              )}
 
             {/* EVALUACIONES */}
 
-            {activeTab === 'evaluaciones' && (
-              <EvaluacionesTab
-                license={license}
-              />
-            )}
+            {activeTab === 'evaluaciones' &&
+              hasFeature('evaluaciones') && (
+                <EvaluacionesTab
+                  license={license}
+                />
+              )}
 
             {/* MATERIALES */}
 
-            {activeTab === 'materiales' && (
-              <MaterialesTab
-                license={license}
-              />
-            )}
+            {activeTab === 'materiales' &&
+              hasFeature('recursos') && (
+                <MaterialesTab
+                  license={license}
+                />
+              )}
 
             {/* MENSAJES */}
 
-            {activeTab === 'mensajes' && (
-              <MensajesTab />
-            )}
+            {activeTab === 'mensajes' &&
+              hasFeature('mensajes') && (
+                <MensajesTab />
+              )}
 
             {/* CALENDARIO */}
 
-            {activeTab === 'calendario' && (
-              <CalendarioTab />
-            )}
+            {activeTab === 'calendario' &&
+              hasFeature('calendario') && (
+                <CalendarioTab />
+              )}
 
             {/* CONFIGURACIÓN */}
 
@@ -1542,33 +1576,37 @@ export default function TeacherPanel() {
 
             {/* ANALÍTICA */}
 
-            {activeTab === 'analitica' && (
-              <AnaliticaTab
-                onNavigate={setActiveTab}
-              />
-            )}
+            {activeTab === 'analitica' &&
+              hasFeature('advanced_analytics') && (
+                <AnaliticaTab
+                  onNavigate={setActiveTab}
+                />
+              )}
 
             {/* IA */}
 
-            {activeTab === 'ia' && (
-              <IAGenerativaTab />
-            )}
+            {activeTab === 'ia' &&
+              hasFeature('teacher_ai') && (
+                <IAGenerativaTab />
+              )}
 
             {/* INTEGRACIONES */}
 
-            {activeTab === 'integraciones' && (
-              <IntegracionesTab
-                onNavigate={setActiveTab}
-              />
-            )}
+            {activeTab === 'integraciones' &&
+              hasFeature('integrations') && (
+                <IntegracionesTab
+                  onNavigate={setActiveTab}
+                />
+              )}
 
             {/* AUTOMATIZACIONES */}
 
-            {activeTab === 'automatizaciones' && (
-              <AutomatizacionesTab
-                onNavigate={setActiveTab}
-              />
-            )}
+            {activeTab === 'automatizaciones' &&
+              hasFeature('automation') && (
+                <AutomatizacionesTab
+                  onNavigate={setActiveTab}
+                />
+              )}
           </div>
         </main>
       </div>
