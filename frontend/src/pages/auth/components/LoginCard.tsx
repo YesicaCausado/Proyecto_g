@@ -38,6 +38,38 @@ interface CardInputProps {
   onFocus?: () => void; onBlur?: () => void; required?: boolean;
 }
 
+// Forma mínima de un error de axios (sin importar axios aquí).
+interface LoginError {
+  response?: { status?: number; data?: { detail?: string } };
+  request?: unknown;
+  message?: string;
+}
+
+// ── Traducción de errores de login a mensajes para el usuario ──
+
+function getLoginErrorMessage(err: unknown): string {
+  const ex = (err ?? {}) as LoginError;
+  const status = ex.response?.status;
+  const detail = ex.response?.data?.detail;
+
+  // El servidor respondió con un error HTTP
+  if (ex.response) {
+    if (status === 401) return 'Usuario o contraseña incorrectos';
+    if (status === 403) return detail || 'Tu cuenta no tiene acceso. Contacta a tu institución.';
+    if (status === 429) return 'Demasiados intentos. Espera unos minutos e intenta de nuevo.';
+    if (status && status >= 500) return 'Error del servidor. Intenta de nuevo en un momento.';
+    return typeof detail === 'string' && detail ? detail : 'Error al iniciar sesión';
+  }
+
+  // Se envió la petición pero no hubo respuesta (red caída, CORS, timeout)
+  if (ex.request) {
+    return 'No se pudo conectar con el servidor. Revisa tu conexión.';
+  }
+
+  // Error propio (por ejemplo, token inválido en AuthContext)
+  return ex.message || 'Error al iniciar sesión';
+}
+
 // ── Input neumorphism ─────────────────────────────────────────
 
 function NeuInput({ id, label, type = 'text', placeholder, value, onChange, onFocus, onBlur, required = true }: CardInputProps) {
@@ -117,11 +149,9 @@ export default function LoginCard({ className = '' }: LoginCardProps) {
       await login(form);
       navigate('/dashboard');
     } catch (err: unknown) {
-      const msg = err instanceof Error
-        ? err.message
-        : (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-          ?? 'Error al iniciar sesión';
-      setError(msg);
+      setError(getLoginErrorMessage(err));
+      // Se relanza para que driver.onSubmit pueda reaccionar al fallo
+      // (animación del robot). Quítalo si no lo necesitas.
       throw err;
     } finally {
       setLoading(false);
@@ -153,12 +183,15 @@ export default function LoginCard({ className = '' }: LoginCardProps) {
 
       {/* ── Error ─────────────────────────────────────── */}
       {error && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '9px',
-          padding: '10px 14px', marginBottom: '18px',
-          background: C.errorBg, border: `1px solid ${C.errorBorder}`,
-          borderRadius: '10px',
-        }}>
+        <div
+          role="alert"
+          style={{
+            display: 'flex', alignItems: 'center', gap: '9px',
+            padding: '10px 14px', marginBottom: '18px',
+            background: C.errorBg, border: `1px solid ${C.errorBorder}`,
+            borderRadius: '10px',
+          }}
+        >
           <AlertCircle size={13} color={C.error} style={{ flexShrink: 0 }}/>
           <p style={{ fontSize: '12.5px', color: C.error, margin: 0 }}>{error}</p>
         </div>

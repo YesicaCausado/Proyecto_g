@@ -210,6 +210,7 @@ export function AuthProvider({
         }
 
         clearStoredSession();
+        delete api.defaults.headers.common.Authorization;
 
         setToken(null);
         setUser(null);
@@ -245,6 +246,8 @@ export function AuthProvider({
     loginData: LoginRequest,
   ): Promise<void> => {
 
+    // Los errores de axios (401, 403, red, etc.) se propagan intactos
+    // con su `response` para que LoginCard pueda interpretarlos.
     const {
       data: tokenData,
     } = await api.post<Token>(
@@ -260,6 +263,24 @@ export function AuthProvider({
     if (!tokenData?.access_token) {
       throw new Error(
         'El servidor no devolvió un token válido.',
+      );
+    }
+
+
+    // ------------------------------------------------------------------------
+    // Validar ID (antes de guardar nada, para no dejar sesión a medias)
+    // ------------------------------------------------------------------------
+
+    if (
+      tokenData.user_id === undefined ||
+      tokenData.user_id === null
+    ) {
+      clearStoredSession();
+      setToken(null);
+      delete api.defaults.headers.common.Authorization;
+
+      throw new Error(
+        'La respuesta de autenticación no contiene el ID del usuario.',
       );
     }
 
@@ -289,25 +310,6 @@ export function AuthProvider({
 
     api.defaults.headers.common.Authorization =
       `Bearer ${accessToken}`;
-
-
-    // ------------------------------------------------------------------------
-    // Validar ID
-    // ------------------------------------------------------------------------
-
-    if (
-      tokenData.user_id === undefined ||
-      tokenData.user_id === null
-    ) {
-
-      clearStoredSession();
-
-      setToken(null);
-
-      throw new Error(
-        'La respuesta de autenticación no contiene el ID del usuario.',
-      );
-    }
 
 
     // ------------------------------------------------------------------------
