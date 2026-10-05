@@ -967,7 +967,7 @@ async def get_pattern_history(
 async def start_session(
     request: StartSessionRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """Inicia sesión: la IA genera un mensaje de bienvenida al tema."""
