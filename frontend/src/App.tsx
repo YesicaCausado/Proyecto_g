@@ -62,8 +62,9 @@ function AppRoutes() {
       <Routes>
         {/* Landing en construcción: accesible en /landing mientras tanto.
         La raíz / apunta al login (página principal actual). */}
-        <Route path="/landing" element={<LandingPage />} />
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/landing" element={<Navigate to="/" replace />} />
+
         {/* Rutas públicas */}
         <Route path="/login"           element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
