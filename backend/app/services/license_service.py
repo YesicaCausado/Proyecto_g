@@ -25,13 +25,18 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.institution import Institution
 from app.models.user import User
+from app.api.auth import get_current_user
 
 
 # ============================================================================
 # CONFIGURACIÓN GENERAL
 # ============================================================================
 
-PLANS = ("basica", "premium", "pro")
+PLANS = (
+    "basica",
+    "premium",
+    "pro",
+)
 
 ALL_ROLES = (
     "super_profesor",
@@ -45,10 +50,6 @@ LICENSE_DURATION_DAYS = 365
 
 # ============================================================================
 # LÍMITES POR PLAN
-# ============================================================================
-#
-# PRO es el plan completo.
-# Los valores muy altos representan "sin límite práctico".
 # ============================================================================
 
 TEACHER_LIMITS: Dict[str, int] = {
@@ -76,9 +77,19 @@ GROUP_LIMITS: Dict[str, int] = {
 }
 
 EXPORT_FORMATS: Dict[str, List[str]] = {
-    "basica": ["csv"],
-    "premium": ["csv", "pdf", "excel"],
-    "pro": ["csv", "pdf", "excel"],
+    "basica": [
+        "csv",
+    ],
+    "premium": [
+        "csv",
+        "pdf",
+        "excel",
+    ],
+    "pro": [
+        "csv",
+        "pdf",
+        "excel",
+    ],
 }
 
 
@@ -126,17 +137,6 @@ TEACHER_DASHBOARD_KPIS: Dict[str, List[str]] = {
 # ============================================================================
 # MATRIZ CENTRAL DE FUNCIONALIDADES
 # ============================================================================
-#
-# Esta es la fuente principal de funcionalidades.
-#
-# La lógica es:
-#
-# PRO      = todas las funcionalidades
-# PREMIUM  = funcionalidades de PRO menos las exclusivas de PRO
-# BÁSICA   = funcionalidades de PREMIUM menos las exclusivas de PREMIUM
-#
-# No se crean matrices independientes para cada plan.
-# ============================================================================
 
 FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
 
@@ -145,21 +145,57 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
     # ------------------------------------------------------------------------
 
     "perfil": {
-        "basica": {"super_profesor", "profesor", "estudiante"},
-        "premium": {"super_profesor", "profesor", "estudiante"},
-        "pro": {"super_profesor", "profesor", "estudiante"},
+        "basica": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "premium": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
     },
 
     "mensajes": {
-        "basica": {"super_profesor", "profesor", "estudiante"},
-        "premium": {"super_profesor", "profesor", "estudiante"},
-        "pro": {"super_profesor", "profesor", "estudiante"},
+        "basica": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "premium": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
     },
 
     "calendario": {
-        "basica": {"super_profesor", "profesor", "estudiante"},
-        "premium": {"super_profesor", "profesor", "estudiante"},
-        "pro": {"super_profesor", "profesor", "estudiante"},
+        "basica": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "premium": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -167,33 +203,66 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
     # ------------------------------------------------------------------------
 
     "configuracion": {
-        "basica": {"super_profesor"},
-        "premium": {"super_profesor"},
-        "pro": {"super_profesor"},
+        "basica": {
+            "super_profesor",
+        },
+        "premium": {
+            "super_profesor",
+        },
+        "pro": {
+            "super_profesor",
+        },
     },
 
     "licencia": {
-        "basica": {"super_profesor"},
-        "premium": {"super_profesor"},
-        "pro": {"super_profesor"},
+        "basica": {
+            "super_profesor",
+        },
+        "premium": {
+            "super_profesor",
+        },
+        "pro": {
+            "super_profesor",
+        },
     },
 
     "gestion_profesores": {
-        "basica": {"super_profesor"},
-        "premium": {"super_profesor"},
-        "pro": {"super_profesor"},
+        "basica": {
+            "super_profesor",
+        },
+        "premium": {
+            "super_profesor",
+        },
+        "pro": {
+            "super_profesor",
+        },
     },
 
     "gestion_estudiantes": {
-        "basica": {"super_profesor"},
-        "premium": {"super_profesor"},
-        "pro": {"super_profesor"},
+        "basica": {
+            "super_profesor",
+        },
+        "premium": {
+            "super_profesor",
+        },
+        "pro": {
+            "super_profesor",
+        },
     },
 
     "gestion_grupos": {
-        "basica": {"super_profesor", "profesor"},
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "basica": {
+            "super_profesor",
+            "profesor",
+        },
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -201,39 +270,84 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
     # ------------------------------------------------------------------------
 
     "dashboard": {
-        "basica": {"super_profesor", "profesor", "estudiante"},
-        "premium": {"super_profesor", "profesor", "estudiante"},
-        "pro": {"super_profesor", "profesor", "estudiante"},
+        "basica": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "premium": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
     },
 
     "basic_analytics": {
-        "basica": {"super_profesor", "profesor", "estudiante"},
-        "premium": {"super_profesor", "profesor", "estudiante"},
-        "pro": {"super_profesor", "profesor", "estudiante"},
+        "basica": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "premium": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+            "estudiante",
+        },
     },
 
     "advanced_analytics": {
         "basica": set(),
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     "predictive_analytics": {
         "basica": set(),
         "premium": set(),
-        "pro": {"super_profesor", "profesor"},
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     "groups_compare": {
         "basica": set(),
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     "risk_indicators": {
         "basica": set(),
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -241,27 +355,57 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
     # ------------------------------------------------------------------------
 
     "recursos": {
-        "basica": {"profesor", "estudiante"},
-        "premium": {"profesor", "estudiante"},
-        "pro": {"profesor", "estudiante"},
+        "basica": {
+            "profesor",
+            "estudiante",
+        },
+        "premium": {
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "profesor",
+            "estudiante",
+        },
     },
 
     "evaluaciones": {
-        "basica": {"profesor", "estudiante"},
-        "premium": {"profesor", "estudiante"},
-        "pro": {"profesor", "estudiante"},
+        "basica": {
+            "profesor",
+            "estudiante",
+        },
+        "premium": {
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "profesor",
+            "estudiante",
+        },
     },
 
     "tareas": {
-        "basica": {"estudiante"},
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "basica": {
+            "estudiante",
+        },
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "anuncios": {
-        "basica": {"profesor"},
-        "premium": {"profesor"},
-        "pro": {"profesor"},
+        "basica": {
+            "profesor",
+        },
+        "premium": {
+            "profesor",
+        },
+        "pro": {
+            "profesor",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -270,20 +414,38 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
 
     "neurobots": {
         "basica": set(),
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     "neurobots_advanced": {
         "basica": set(),
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     "neuroalertas": {
         "basica": set(),
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -292,8 +454,14 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
 
     "neurodigital": {
         "basica": set(),
-        "premium": {"profesor", "estudiante"},
-        "pro": {"profesor", "estudiante"},
+        "premium": {
+            "profesor",
+            "estudiante",
+        },
+        "pro": {
+            "profesor",
+            "estudiante",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -302,14 +470,23 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
 
     "reportes": {
         "basica": set(),
-        "premium": {"super_profesor", "profesor"},
-        "pro": {"super_profesor", "profesor"},
+        "premium": {
+            "super_profesor",
+            "profesor",
+        },
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     "reportes_avanzados": {
         "basica": set(),
         "premium": set(),
-        "pro": {"super_profesor", "profesor"},
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -318,74 +495,114 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
 
     "tutor_ia": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "tutor_ia_adaptive": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "chat_history": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "recommendations": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "adaptive_feedback": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "difficulty_detection": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "skill_tracking": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "learning_analytics": {
         "basica": set(),
-        "premium": {"estudiante"},
-        "pro": {"estudiante"},
+        "premium": {
+            "estudiante",
+        },
+        "pro": {
+            "estudiante",
+        },
     },
 
     "tutor_ia_advanced": {
         "basica": set(),
         "premium": set(),
-        "pro": {"estudiante"},
+        "pro": {
+            "estudiante",
+        },
     },
 
     "personal_reports": {
         "basica": set(),
         "premium": set(),
-        "pro": {"estudiante"},
+        "pro": {
+            "estudiante",
+        },
     },
 
     "personal_analytics": {
         "basica": set(),
         "premium": set(),
-        "pro": {"estudiante"},
+        "pro": {
+            "estudiante",
+        },
     },
 
     "personalized_plans": {
         "basica": set(),
         "premium": set(),
-        "pro": {"estudiante"},
+        "pro": {
+            "estudiante",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -394,8 +611,12 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
 
     "teacher_ai": {
         "basica": set(),
-        "premium": {"profesor"},
-        "pro": {"profesor"},
+        "premium": {
+            "profesor",
+        },
+        "pro": {
+            "profesor",
+        },
     },
 
     # ------------------------------------------------------------------------
@@ -405,22 +626,25 @@ FEATURE_MATRIX: Dict[str, Dict[str, Set[str]]] = {
     "automation": {
         "basica": set(),
         "premium": set(),
-        "pro": {"super_profesor", "profesor"},
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 
     "integrations": {
         "basica": set(),
         "premium": set(),
-        "pro": {"super_profesor", "profesor"},
+        "pro": {
+            "super_profesor",
+            "profesor",
+        },
     },
 }
 
 
 # ============================================================================
 # ALIAS DE MÓDULOS
-# ============================================================================
-#
-# Se mantienen para no romper el frontend existente.
 # ============================================================================
 
 MODULE_ALIASES: Dict[str, str] = {
@@ -450,9 +674,14 @@ MODULE_ALIASES: Dict[str, str] = {
 def _module_feature(module: str) -> str:
     """
     Convierte un nombre de módulo frontend a la funcionalidad real.
-    Si no existe alias, se utiliza el mismo nombre.
     """
-    return MODULE_ALIASES.get(module, module)
+
+    module = (module or "").strip().lower()
+
+    return MODULE_ALIASES.get(
+        module,
+        module,
+    )
 
 
 # ============================================================================
@@ -464,17 +693,20 @@ def features_for_user(
     license_type: str,
 ) -> List[str]:
     """
-    Devuelve las funcionalidades permitidas para un rol y plan.
-
-    PRO funciona como conjunto completo.
-    PREMIUM y BÁSICA se restringen mediante FEATURE_MATRIX.
+    Devuelve las funcionalidades permitidas
+    para un rol y plan.
     """
 
-    role = (role or "").lower()
-    license_type = (license_type or "").lower()
+    role = (role or "").strip().lower()
+    license_type = (
+        license_type or ""
+    ).strip().lower()
 
+    # Admin no depende de una licencia institucional.
     if role == "admin":
-        return sorted(FEATURE_MATRIX.keys())
+        return sorted(
+            FEATURE_MATRIX.keys()
+        )
 
     if role not in ALL_ROLES:
         return []
@@ -485,7 +717,11 @@ def features_for_user(
     features: List[str] = []
 
     for feature, plans in FEATURE_MATRIX.items():
-        allowed_roles = plans.get(license_type, set())
+
+        allowed_roles = plans.get(
+            license_type,
+            set(),
+        )
 
         if role in allowed_roles:
             features.append(feature)
@@ -494,7 +730,7 @@ def features_for_user(
 
 
 # ============================================================================
-# GENERACIÓN DE MÓDULOS COMPATIBLES
+# GENERACIÓN DE MÓDULOS
 # ============================================================================
 
 def _modules_for_role(
@@ -502,15 +738,20 @@ def _modules_for_role(
     license_type: str,
 ) -> List[str]:
     """
-    Genera los módulos que puede utilizar un rol.
-
-    Se mantienen los nombres antiguos para compatibilidad con el frontend.
+    Genera los módulos compatibles con un rol y plan.
     """
 
-    features = set(features_for_user(role, license_type))
+    features = set(
+        features_for_user(
+            role,
+            license_type,
+        )
+    )
+
     modules: Set[str] = set()
 
     for module, feature in MODULE_ALIASES.items():
+
         if feature in features:
             modules.add(module)
 
@@ -522,23 +763,32 @@ def _modules_for_role(
 # ============================================================================
 
 TEACHER_MODULES: Dict[str, List[str]] = {
-    plan: _modules_for_role("profesor", plan)
+    plan: _modules_for_role(
+        "profesor",
+        plan,
+    )
     for plan in PLANS
 }
 
 STUDENT_MODULES: Dict[str, List[str]] = {
-    plan: _modules_for_role("estudiante", plan)
+    plan: _modules_for_role(
+        "estudiante",
+        plan,
+    )
     for plan in PLANS
 }
 
 SUPER_MODULES: Dict[str, List[str]] = {
-    plan: _modules_for_role("super_profesor", plan)
+    plan: _modules_for_role(
+        "super_profesor",
+        plan,
+    )
     for plan in PLANS
 }
 
 
 # ============================================================================
-# FUNCIONES DE ESTADO
+# FUNCIONALIDADES DE SOLO LECTURA
 # ============================================================================
 
 READONLY_FEATURES: Set[str] = {
@@ -561,6 +811,7 @@ READONLY_MODULES: Dict[str, Set[str]] = {
         "perfil",
         "estadisticas",
     },
+
     "student": {
         "inicio",
         "mis_cursos",
@@ -570,6 +821,7 @@ READONLY_MODULES: Dict[str, Set[str]] = {
         "perfil",
         "estadisticas",
     },
+
     "super": {
         "dashboard",
         "reportes",
@@ -596,16 +848,17 @@ def _invalidate_institution_cache(
     institution_id: Optional[int] = None,
 ) -> None:
     """
-    Invalida el cache.
-
-    Si institution_id es None, limpia todo.
+    Invalida el cache de instituciones.
     """
 
     if institution_id is None:
         _INSTITUTION_CACHE.clear()
         return
 
-    _INSTITUTION_CACHE.pop(institution_id, None)
+    _INSTITUTION_CACHE.pop(
+        institution_id,
+        None,
+    )
 
 
 def _get_cached_institution(
@@ -613,31 +866,46 @@ def _get_cached_institution(
     db: Session,
 ) -> Optional[Institution]:
     """
-    Obtiene una institución del cache o de la base de datos.
+    Obtiene una institución desde cache o DB.
     """
 
     import time
 
     now = time.time()
 
-    cached = _INSTITUTION_CACHE.get(institution_id)
+    cached = _INSTITUTION_CACHE.get(
+        institution_id
+    )
 
     if cached:
+
         timestamp, institution = cached
 
-        if now - timestamp < _CACHE_TTL_SECONDS:
+        if (
+            now - timestamp
+            < _CACHE_TTL_SECONDS
+        ):
             return institution
 
-        _INSTITUTION_CACHE.pop(institution_id, None)
+        _INSTITUTION_CACHE.pop(
+            institution_id,
+            None,
+        )
 
     institution = (
         db.query(Institution)
-        .filter(Institution.id == institution_id)
+        .filter(
+            Institution.id
+            == institution_id
+        )
         .first()
     )
 
     if institution:
-        _INSTITUTION_CACHE[institution_id] = (
+
+        _INSTITUTION_CACHE[
+            institution_id
+        ] = (
             now,
             institution,
         )
@@ -655,72 +923,87 @@ def _effective_expiry(
     """
     Devuelve la fecha efectiva de vencimiento.
 
-    IMPORTANTE:
-    Si expiry_date es None, se interpreta como SIN VENCIMIENTO.
-
-    Si quieres una licencia anual, la creación de la institución
-    debe guardar explícitamente expiry_date.
+    None significa SIN VENCIMIENTO.
     """
 
-    if institution.expiry_date is not None:
-        expiry = institution.expiry_date
+    expiry = getattr(
+        institution,
+        "expiry_date",
+        None,
+    )
 
-        if expiry.tzinfo is None:
-            return expiry.replace(tzinfo=timezone.utc)
+    if expiry is None:
+        return None
 
-        return expiry
+    if expiry.tzinfo is None:
+        return expiry.replace(
+            tzinfo=timezone.utc
+        )
 
-    return None
+    return expiry
 
 
 def _resolve_license_state(
     institution: Institution,
 ) -> tuple[str, Optional[int]]:
     """
-    Devuelve:
+    Determina el estado:
 
-        active
-        expiring_soon
-        expired
-        suspended
-
-    junto con los días restantes.
+    active
+    expiring_soon
+    expired
+    suspended
     """
 
     if not institution.is_active:
         return "suspended", None
 
-    expiry = _effective_expiry(institution)
+    expiry = _effective_expiry(
+        institution
+    )
 
-    # None = sin vencimiento
+    # Sin fecha = sin vencimiento.
     if expiry is None:
         return "active", None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     if expiry <= now:
         return "expired", 0
 
-    seconds_left = (expiry - now).total_seconds()
+    seconds_left = (
+        expiry - now
+    ).total_seconds()
 
     days_left = max(
         1,
-        int(seconds_left / 86400),
+        int(
+            seconds_left / 86400
+        ),
     )
 
     if days_left <= 30:
-        return "expiring_soon", days_left
+        return (
+            "expiring_soon",
+            days_left,
+        )
 
-    return "active", days_left
+    return (
+        "active",
+        days_left,
+    )
 
 
 # ============================================================================
-# LICENCE INFO
+# LICENSE INFO
 # ============================================================================
 
 class LicenseInfo:
     """
-    Objeto central que representa la licencia efectiva del usuario.
+    Representa la licencia efectiva
+    del usuario autenticado.
     """
 
     def __init__(
@@ -743,36 +1026,70 @@ class LicenseInfo:
         institution_name: str,
         institution_id: Optional[int] = None,
     ):
+
         self.license_type = license_type
-        self.license_status = license_status
-        self.days_left = days_left
-        self.role = role
 
-        self.features = sorted(set(features))
-
-        self.super_modules = sorted(set(super_modules))
-        self.teacher_modules = sorted(set(teacher_modules))
-        self.student_modules = sorted(set(student_modules))
-
-        self.teacher_dashboard_kpis = sorted(
-            set(teacher_dashboard_kpis)
+        self.license_status = (
+            license_status
         )
 
-        self.neurobot_limit = neurobot_limit
-        self.groups_limit = groups_limit
-        self.students_limit = students_limit
-        self.teachers_limit = teachers_limit
+        self.days_left = days_left
+
+        self.role = role
+
+        self.features = sorted(
+            set(features)
+        )
+
+        self.super_modules = sorted(
+            set(super_modules)
+        )
+
+        self.teacher_modules = sorted(
+            set(teacher_modules)
+        )
+
+        self.student_modules = sorted(
+            set(student_modules)
+        )
+
+        self.teacher_dashboard_kpis = sorted(
+            set(
+                teacher_dashboard_kpis
+            )
+        )
+
+        self.neurobot_limit = (
+            neurobot_limit
+        )
+
+        self.groups_limit = (
+            groups_limit
+        )
+
+        self.students_limit = (
+            students_limit
+        )
+
+        self.teachers_limit = (
+            teachers_limit
+        )
 
         self.export_formats = sorted(
             set(export_formats)
         )
 
-        self.institution_name = institution_name
-        self.institution_id = institution_id
+        self.institution_name = (
+            institution_name
+        )
 
-    # ------------------------------------------------------------------------
-    # Estado
-    # ------------------------------------------------------------------------
+        self.institution_id = (
+            institution_id
+        )
+
+    # ========================================================================
+    # ESTADO
+    # ========================================================================
 
     @property
     def is_active(self) -> bool:
@@ -783,28 +1100,28 @@ class LicenseInfo:
 
     @property
     def is_expired(self) -> bool:
-        return self.license_status == "expired"
+        return (
+            self.license_status
+            == "expired"
+        )
 
     @property
     def is_suspended(self) -> bool:
-        return self.license_status == "suspended"
+        return (
+            self.license_status
+            == "suspended"
+        )
 
-    # ------------------------------------------------------------------------
-    # Funcionalidades efectivas
-    # ------------------------------------------------------------------------
+    # ========================================================================
+    # FUNCIONALIDADES EFECTIVAS
+    # ========================================================================
 
-    def effective_features(self) -> Set[str]:
+    def effective_features(
+        self,
+    ) -> Set[str]:
         """
-        Funcionalidades realmente disponibles según el estado.
-
-        active / expiring_soon:
-            funcionalidades normales del plan.
-
-        expired:
-            solamente lectura.
-
-        suspended:
-            ninguna.
+        Devuelve las funcionalidades
+        realmente disponibles.
         """
 
         if self.is_suspended:
@@ -815,85 +1132,130 @@ class LicenseInfo:
                 READONLY_FEATURES
             )
 
-        return set(self.features)
+        return set(
+            self.features
+        )
 
-    # ------------------------------------------------------------------------
-    # Verificar funcionalidad
-    # ------------------------------------------------------------------------
+    # ========================================================================
+    # VERIFICAR FUNCIONALIDAD
+    # ========================================================================
 
     def has_feature(
         self,
         feature: str,
     ) -> bool:
 
+        feature = _module_feature(
+            feature
+        )
+
         if not feature:
             return False
 
-        feature = _module_feature(feature)
+        return (
+            feature
+            in self.effective_features()
+        )
 
-        return feature in self.effective_features()
-
-    # ------------------------------------------------------------------------
-    # Verificar módulos
-    # ------------------------------------------------------------------------
+    # ========================================================================
+    # VERIFICAR MÓDULO PROFESOR
+    # ========================================================================
 
     def has_teacher_module(
         self,
         module: str,
     ) -> bool:
 
+        # El rol SIEMPRE debe ser profesor.
+        if self.role != "profesor":
+            return False
+
         if self.is_suspended:
             return False
 
-        if self.is_expired:
-            return module in READONLY_MODULES["teacher"]
+        module = (
+            module or ""
+        ).strip().lower()
 
-        return (
-            self.role == "profesor"
-            and self.has_feature(
-                _module_feature(module)
+        if self.is_expired:
+            return (
+                module
+                in READONLY_MODULES[
+                    "teacher"
+                ]
             )
+
+        return self.has_feature(
+            _module_feature(module)
         )
+
+    # ========================================================================
+    # VERIFICAR MÓDULO ESTUDIANTE
+    # ========================================================================
 
     def has_student_module(
         self,
         module: str,
     ) -> bool:
 
+        # El rol SIEMPRE debe ser estudiante.
+        if self.role != "estudiante":
+            return False
+
         if self.is_suspended:
             return False
 
-        if self.is_expired:
-            return module in READONLY_MODULES["student"]
+        module = (
+            module or ""
+        ).strip().lower()
 
-        return (
-            self.role == "estudiante"
-            and self.has_feature(
-                _module_feature(module)
+        if self.is_expired:
+            return (
+                module
+                in READONLY_MODULES[
+                    "student"
+                ]
             )
+
+        return self.has_feature(
+            _module_feature(module)
         )
+
+    # ========================================================================
+    # VERIFICAR MÓDULO SUPER PROFESOR
+    # ========================================================================
 
     def has_super_module(
         self,
         module: str,
     ) -> bool:
 
+        # El rol SIEMPRE debe ser super_profesor.
+        if self.role != "super_profesor":
+            return False
+
         if self.is_suspended:
             return False
 
-        if self.is_expired:
-            return module in READONLY_MODULES["super"]
+        module = (
+            module or ""
+        ).strip().lower()
 
-        return (
-            self.role == "super_profesor"
-            and self.has_feature(
-                _module_feature(module)
+        if self.is_expired:
+            return (
+                module
+                in READONLY_MODULES[
+                    "super"
+                ]
             )
+
+        return self.has_feature(
+            _module_feature(module)
         )
 
-    # ------------------------------------------------------------------------
+    # ========================================================================
     # KPI
-    # ------------------------------------------------------------------------
+    # ========================================================================
 
     def has_kpi(
         self,
@@ -903,11 +1265,14 @@ class LicenseInfo:
         if not self.is_active:
             return False
 
-        return kpi in self.teacher_dashboard_kpis
+        return (
+            kpi
+            in self.teacher_dashboard_kpis
+        )
 
-    # ------------------------------------------------------------------------
-    # Exportaciones
-    # ------------------------------------------------------------------------
+    # ========================================================================
+    # EXPORTACIONES
+    # ========================================================================
 
     def has_export(
         self,
@@ -917,89 +1282,167 @@ class LicenseInfo:
         if not self.is_active:
             return False
 
+        export_format = (
+            export_format or ""
+        ).strip().lower()
+
         return (
-            export_format.lower()
+            export_format
             in {
                 item.lower()
                 for item in self.export_formats
             }
         )
 
-    # ------------------------------------------------------------------------
-    # Diccionario para API
-    # ------------------------------------------------------------------------
+    # ========================================================================
+    # API
+    # ========================================================================
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(
+        self,
+    ) -> Dict[str, Any]:
         """
-        Convierte la licencia en el formato que consume el frontend.
+        Serializa la licencia para el frontend.
 
-        IMPORTANTE:
-        No se envían las funcionalidades originales cuando la licencia
-        está vencida o suspendida.
-
-        Así evitamos que el frontend crea que tiene permisos que el
-        backend realmente no le concede.
+        Nunca se envían permisos efectivos
+        que el backend no conceda.
         """
 
         effective_features = sorted(
             self.effective_features()
         )
 
-        effective_teacher_modules = (
-            self.teacher_modules
-            if self.is_active
-            else sorted(
-                READONLY_MODULES["teacher"]
-            )
-            if self.is_expired
-            else []
-        )
-
-        effective_student_modules = (
-            self.student_modules
-            if self.is_active
-            else sorted(
-                READONLY_MODULES["student"]
-            )
-            if self.is_expired
-            else []
-        )
-
-        effective_super_modules = (
-            self.super_modules
-            if self.is_active
-            else sorted(
-                READONLY_MODULES["super"]
-            )
-            if self.is_expired
-            else []
-        )
+        # --------------------------------------------------------------------
+        # MÓDULOS
+        # --------------------------------------------------------------------
 
         if self.is_active:
-            neurobot_limit = self.neurobot_limit
-            groups_limit = self.groups_limit
-            students_limit = self.students_limit
-            teachers_limit = self.teachers_limit
-            export_formats = self.export_formats
+
+            effective_teacher_modules = (
+                self.teacher_modules
+            )
+
+            effective_student_modules = (
+                self.student_modules
+            )
+
+            effective_super_modules = (
+                self.super_modules
+            )
+
+        elif self.is_expired:
+
+            if self.role == "profesor":
+
+                effective_teacher_modules = sorted(
+                    READONLY_MODULES[
+                        "teacher"
+                    ]
+                )
+
+                effective_student_modules = []
+                effective_super_modules = []
+
+            elif self.role == "estudiante":
+
+                effective_teacher_modules = []
+                effective_student_modules = sorted(
+                    READONLY_MODULES[
+                        "student"
+                    ]
+                )
+                effective_super_modules = []
+
+            elif self.role == "super_profesor":
+
+                effective_teacher_modules = []
+                effective_student_modules = []
+                effective_super_modules = sorted(
+                    READONLY_MODULES[
+                        "super"
+                    ]
+                )
+
+            else:
+
+                effective_teacher_modules = []
+                effective_student_modules = []
+                effective_super_modules = []
+
         else:
+
+            effective_teacher_modules = []
+            effective_student_modules = []
+            effective_super_modules = []
+
+        # --------------------------------------------------------------------
+        # LÍMITES Y EXPORTACIONES
+        # --------------------------------------------------------------------
+
+        if self.is_active:
+
+            neurobot_limit = (
+                self.neurobot_limit
+            )
+
+            groups_limit = (
+                self.groups_limit
+            )
+
+            students_limit = (
+                self.students_limit
+            )
+
+            teachers_limit = (
+                self.teachers_limit
+            )
+
+            export_formats = (
+                self.export_formats
+            )
+
+        else:
+
             neurobot_limit = 0
             groups_limit = 0
             students_limit = 0
             teachers_limit = 0
             export_formats = []
 
+        # --------------------------------------------------------------------
+        # RESPUESTA
+        # --------------------------------------------------------------------
+
         return {
-            "license_type": self.license_type,
-            "license_status": self.license_status,
-            "days_left": self.days_left,
+            "license_type": (
+                self.license_type
+            ),
+
+            "license_status": (
+                self.license_status
+            ),
+
+            "days_left": (
+                self.days_left
+            ),
 
             "role": self.role,
 
-            "features": effective_features,
+            "features": (
+                effective_features
+            ),
 
-            "super_modules": effective_super_modules,
-            "teacher_modules": effective_teacher_modules,
-            "student_modules": effective_student_modules,
+            "super_modules": (
+                effective_super_modules
+            ),
+
+            "teacher_modules": (
+                effective_teacher_modules
+            ),
+
+            "student_modules": (
+                effective_student_modules
+            ),
 
             "teacher_dashboard_kpis": (
                 self.teacher_dashboard_kpis
@@ -1007,20 +1450,38 @@ class LicenseInfo:
                 else []
             ),
 
-            "neurobot_limit": neurobot_limit,
-            "groups_limit": groups_limit,
-            "students_limit": students_limit,
-            "teachers_limit": teachers_limit,
+            "neurobot_limit": (
+                neurobot_limit
+            ),
 
-            "export_formats": export_formats,
+            "groups_limit": (
+                groups_limit
+            ),
 
-            "institution_name": self.institution_name,
-            "institution_id": self.institution_id,
+            "students_limit": (
+                students_limit
+            ),
+
+            "teachers_limit": (
+                teachers_limit
+            ),
+
+            "export_formats": (
+                export_formats
+            ),
+
+            "institution_name": (
+                self.institution_name
+            ),
+
+            "institution_id": (
+                self.institution_id
+            ),
         }
 
 
 # ============================================================================
-# LICENCIA POR DEFECTO PARA USUARIOS SIN INSTITUCIÓN
+# LICENCIA POR DEFECTO
 # ============================================================================
 
 def _default_license_for_user(
@@ -1029,9 +1490,7 @@ def _default_license_for_user(
     """
     Usuario sin institución.
 
-    NO se asigna una Básica artificial.
-
-    Se devuelve una licencia suspendida y sin permisos.
+    No se asigna una Básica artificial.
     """
 
     return LicenseInfo(
@@ -1062,7 +1521,7 @@ def _default_license_for_user(
 
 
 # ============================================================================
-# OBTENER LICENCIA DEL USUARIO
+# OBTENER LICENCIA
 # ============================================================================
 
 def get_license_for_user(
@@ -1071,11 +1530,10 @@ def get_license_for_user(
 ) -> LicenseInfo:
     """
     Obtiene la licencia efectiva del usuario.
-
-    Los errores de base de datos se convierten en HTTP 503.
     """
 
     try:
+
         return _get_license_for_user_inner(
             user,
             db,
@@ -1085,9 +1543,15 @@ def get_license_for_user(
         raise
 
     except SQLAlchemyError as exc:
+
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No fue posible consultar la licencia.",
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=(
+                "No fue posible consultar "
+                "la licencia."
+            ),
         ) from exc
 
 
@@ -1097,9 +1561,13 @@ def _get_license_for_user_inner(
 ) -> LicenseInfo:
 
     role = (
-        getattr(user, "role", "")
+        getattr(
+            user,
+            "role",
+            "",
+        )
         or ""
-    ).lower()
+    ).strip().lower()
 
     # ========================================================================
     # ADMIN
@@ -1136,15 +1604,40 @@ def _get_license_for_user_inner(
             ),
 
             teacher_dashboard_kpis=(
-                TEACHER_DASHBOARD_KPIS["pro"]
+                TEACHER_DASHBOARD_KPIS[
+                    "pro"
+                ]
             ),
 
-            neurobot_limit=NEUROBOT_LIMITS["pro"],
-            groups_limit=GROUP_LIMITS["pro"],
-            students_limit=STUDENT_LIMITS["pro"],
-            teachers_limit=TEACHER_LIMITS["pro"],
+            neurobot_limit=(
+                NEUROBOT_LIMITS[
+                    "pro"
+                ]
+            ),
 
-            export_formats=EXPORT_FORMATS["pro"],
+            groups_limit=(
+                GROUP_LIMITS[
+                    "pro"
+                ]
+            ),
+
+            students_limit=(
+                STUDENT_LIMITS[
+                    "pro"
+                ]
+            ),
+
+            teachers_limit=(
+                TEACHER_LIMITS[
+                    "pro"
+                ]
+            ),
+
+            export_formats=(
+                EXPORT_FORMATS[
+                    "pro"
+                ]
+            ),
 
             institution_name="Administración",
             institution_id=None,
@@ -1161,22 +1654,37 @@ def _get_license_for_user_inner(
     )
 
     if institution_id is None:
-        return _default_license_for_user(user)
+
+        return _default_license_for_user(
+            user
+        )
 
     # ========================================================================
-    # INSTITUCIÓN
+    # BUSCAR INSTITUCIÓN
     # ========================================================================
 
-    institution = _get_cached_institution(
-        institution_id,
-        db,
+    institution = (
+        _get_cached_institution(
+            institution_id,
+            db,
+        )
     )
 
     if institution is None:
+
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="La institución asociada al usuario no existe.",
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=(
+                "La institución asociada "
+                "al usuario no existe."
+            ),
         )
+
+    # ========================================================================
+    # PLAN
+    # ========================================================================
 
     plan = (
         getattr(
@@ -1185,17 +1693,14 @@ def _get_license_for_user_inner(
             None,
         )
         or ""
-    ).lower()
+    ).strip().lower()
 
-    # ------------------------------------------------------------------------
-    # Plan inválido
-    # ------------------------------------------------------------------------
-    #
-    # No hacemos downgrade silencioso a Básica.
-    # Si la base de datos tiene un plan inválido, se bloquea.
-    # ------------------------------------------------------------------------
+    # ========================================================================
+    # PLAN INVÁLIDO
+    # ========================================================================
 
     if plan not in PLANS:
+
         return LicenseInfo(
             license_type="basica",
             license_status="suspended",
@@ -1218,16 +1723,23 @@ def _get_license_for_user_inner(
 
             export_formats=[],
 
-            institution_name=institution.name,
-            institution_id=institution.id,
+            institution_name=(
+                institution.name
+            ),
+
+            institution_id=(
+                institution.id
+            ),
         )
 
     # ========================================================================
-    # ESTADO
+    # ESTADO DE LICENCIA
     # ========================================================================
 
-    license_status, days_left = _resolve_license_state(
-        institution
+    license_status, days_left = (
+        _resolve_license_state(
+            institution
+        )
     )
 
     # ========================================================================
@@ -1270,7 +1782,7 @@ def _get_license_for_user_inner(
     )
 
     # ========================================================================
-    # LÍMITES
+    # LICENCIA FINAL
     # ========================================================================
 
     return LicenseInfo(
@@ -1286,17 +1798,37 @@ def _get_license_for_user_inner(
         teacher_modules=teacher_modules,
         student_modules=student_modules,
 
-        teacher_dashboard_kpis=teacher_dashboard_kpis,
+        teacher_dashboard_kpis=(
+            teacher_dashboard_kpis
+        ),
 
-        neurobot_limit=NEUROBOT_LIMITS[plan],
-        groups_limit=GROUP_LIMITS[plan],
-        students_limit=STUDENT_LIMITS[plan],
-        teachers_limit=TEACHER_LIMITS[plan],
+        neurobot_limit=(
+            NEUROBOT_LIMITS[plan]
+        ),
 
-        export_formats=EXPORT_FORMATS[plan],
+        groups_limit=(
+            GROUP_LIMITS[plan]
+        ),
 
-        institution_name=institution.name,
-        institution_id=institution.id,
+        students_limit=(
+            STUDENT_LIMITS[plan]
+        ),
+
+        teachers_limit=(
+            TEACHER_LIMITS[plan]
+        ),
+
+        export_formats=(
+            EXPORT_FORMATS[plan]
+        ),
+
+        institution_name=(
+            institution.name
+        ),
+
+        institution_id=(
+            institution.id
+        ),
     )
 
 
@@ -1305,15 +1837,16 @@ def _get_license_for_user_inner(
 # ============================================================================
 
 def get_license(
-    current_user: User = Depends(...),
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ) -> LicenseInfo:
     """
-    Dependencia para obtener la licencia del usuario actual.
-
-    NOTA:
-    El proyecto puede reemplazar Depends(...) por la dependencia
-    real de autenticación que ya tenga implementada.
+    Dependencia para obtener la licencia
+    del usuario autenticado.
     """
 
     return get_license_for_user(
@@ -1331,21 +1864,34 @@ def require_feature(
 ) -> Callable:
 
     def dependency(
-        current_user: User = Depends(...),
-        db: Session = Depends(get_db),
+        current_user: User = Depends(
+            get_current_user
+        ),
+        db: Session = Depends(
+            get_db
+        ),
     ) -> LicenseInfo:
 
-        license_info = get_license_for_user(
-            current_user,
-            db,
+        license_info = (
+            get_license_for_user(
+                current_user,
+                db,
+            )
         )
 
-        if not license_info.has_feature(feature):
+        if not license_info.has_feature(
+            feature
+        ):
+
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=(
+                    status.HTTP_403_FORBIDDEN
+                ),
                 detail=(
-                    f"La funcionalidad '{feature}' "
-                    f"no está disponible para tu licencia."
+                    f"La funcionalidad "
+                    f"'{feature}' "
+                    "no está disponible "
+                    "para tu licencia."
                 ),
             )
 
@@ -1363,22 +1909,32 @@ def require_teacher_module(
 ) -> Callable:
 
     def dependency(
-        current_user: User = Depends(...),
-        db: Session = Depends(get_db),
+        current_user: User = Depends(
+            get_current_user
+        ),
+        db: Session = Depends(
+            get_db
+        ),
     ) -> LicenseInfo:
 
-        license_info = get_license_for_user(
-            current_user,
-            db,
+        license_info = (
+            get_license_for_user(
+                current_user,
+                db,
+            )
         )
 
         if not license_info.has_teacher_module(
             module
         ):
+
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=(
+                    status.HTTP_403_FORBIDDEN
+                ),
                 detail=(
-                    f"El módulo '{module}' "
+                    f"El módulo "
+                    f"'{module}' "
                     "no está disponible."
                 ),
             )
@@ -1397,22 +1953,32 @@ def require_student_module(
 ) -> Callable:
 
     def dependency(
-        current_user: User = Depends(...),
-        db: Session = Depends(get_db),
+        current_user: User = Depends(
+            get_current_user
+        ),
+        db: Session = Depends(
+            get_db
+        ),
     ) -> LicenseInfo:
 
-        license_info = get_license_for_user(
-            current_user,
-            db,
+        license_info = (
+            get_license_for_user(
+                current_user,
+                db,
+            )
         )
 
         if not license_info.has_student_module(
             module
         ):
+
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=(
+                    status.HTTP_403_FORBIDDEN
+                ),
                 detail=(
-                    f"El módulo '{module}' "
+                    f"El módulo "
+                    f"'{module}' "
                     "no está disponible."
                 ),
             )
@@ -1427,21 +1993,31 @@ def require_student_module(
 # ============================================================================
 
 def require_active_license(
-    current_user: User = Depends(...),
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ) -> LicenseInfo:
 
-    license_info = get_license_for_user(
-        current_user,
-        db,
+    license_info = (
+        get_license_for_user(
+            current_user,
+            db,
+        )
     )
 
     if not license_info.is_active:
+
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=(
+                status.HTTP_403_FORBIDDEN
+            ),
             detail=(
                 "La licencia no está activa. "
-                "Esta operación requiere una licencia vigente."
+                "Esta operación requiere "
+                "una licencia vigente."
             ),
         )
 
@@ -1453,8 +2029,12 @@ def require_active_license(
 # ============================================================================
 
 def require_chat_access(
-    current_user: User = Depends(...),
-    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        get_current_user
+    ),
+    db: Session = Depends(
+        get_db
+    ),
 ) -> LicenseInfo:
 
     role = (
@@ -1464,43 +2044,82 @@ def require_chat_access(
             "",
         )
         or ""
-    ).lower()
+    ).strip().lower()
 
-    # Admin tiene acceso administrativo.
+    # ------------------------------------------------------------------------
+    # ADMIN
+    # ------------------------------------------------------------------------
+
     if role == "admin":
+
         return get_license_for_user(
             current_user,
             db,
         )
 
+    # ------------------------------------------------------------------------
+    # ESTUDIANTE
+    # ------------------------------------------------------------------------
+
     if role == "estudiante":
-        required_feature = "tutor_ia"
+
+        required_feature = (
+            "tutor_ia"
+        )
+
+    # ------------------------------------------------------------------------
+    # PROFESOR / SUPER PROFESOR
+    # ------------------------------------------------------------------------
 
     elif role in {
         "profesor",
         "super_profesor",
     }:
-        required_feature = "teacher_ai"
 
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="El rol del usuario no permite utilizar el chat.",
+        required_feature = (
+            "teacher_ai"
         )
 
-    license_info = get_license_for_user(
-        current_user,
-        db,
+    else:
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_403_FORBIDDEN
+            ),
+            detail=(
+                "El rol del usuario "
+                "no permite utilizar "
+                "el chat."
+            ),
+        )
+
+    # ------------------------------------------------------------------------
+    # LICENCIA
+    # ------------------------------------------------------------------------
+
+    license_info = (
+        get_license_for_user(
+            current_user,
+            db,
+        )
     )
+
+    # ------------------------------------------------------------------------
+    # COMPROBAR FUNCIONALIDAD
+    # ------------------------------------------------------------------------
 
     if not license_info.has_feature(
         required_feature
     ):
+
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=(
+                status.HTTP_403_FORBIDDEN
+            ),
             detail=(
-                "El acceso al asistente de IA "
-                "no está disponible para tu licencia."
+                "El acceso al asistente "
+                "de IA no está disponible "
+                "para tu licencia."
             ),
         )
 
@@ -1520,8 +2139,6 @@ def invalidate_license_cache(
     - license_type
     - is_active
     - expiry_date
-
-    de una institución.
     """
 
     _invalidate_institution_cache(
