@@ -529,6 +529,7 @@ async def admin_get_config(
     _require_admin(current_user)
 
     from app.core.config import settings
+    from app.services.mail.factory import is_email_configured
     from app.models.institution import LICENSE_LIMITS
     import os
 
@@ -568,7 +569,8 @@ async def admin_get_config(
         "token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
         "algorithm":            settings.ALGORITHM,
         # ── Email ────────────────────────────────────────────────
-        "email_configured": bool(os.getenv("RESEND_API_KEY")),
+        "email_configured": is_email_configured(),
+        "email_provider":   settings.EMAIL_PROVIDER,
         "email_from":       settings.EMAIL_FROM,
         # ── IA ───────────────────────────────────────────────────
         "ai_providers": ai_providers,

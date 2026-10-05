@@ -52,8 +52,13 @@ function ForgotPasswordCard() {
     try {
       await api.post('/auth/forgot-password', { username: username.trim() });
       setSent(true);
-    } catch {
-      setError('Error al procesar la solicitud. Intenta de nuevo.');
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setError(
+        status === 429
+          ? 'Demasiados intentos. Espera unos minutos antes de solicitar otro enlace.'
+          : 'Error al procesar la solicitud. Intenta de nuevo.'
+      );
       driver.notifyError();
     } finally {
       setLoading(false);
@@ -79,9 +84,9 @@ function ForgotPasswordCard() {
           Revisa tu correo
         </h1>
         <p style={{ fontSize: 13, color: C.textSub, lineHeight: 1.6, margin: '0 0 24px' }}>
-          Si los datos son correctos, recibirás las instrucciones para
-          restablecer tu contraseña. El enlace expira en{' '}
-          <strong style={{ color: C.text }}>15 minutos</strong>.
+          Si los datos corresponden a una cuenta con correo registrado,
+          recibirás un enlace para restablecer tu contraseña. El enlace expira en{' '}
+          <strong style={{ color: C.text }}>15 minutos</strong> y solo funciona una vez.
         </p>
 
         <div style={{
@@ -89,7 +94,8 @@ function ForgotPasswordCard() {
           background: '#F7F6F3', border: `1px solid ${C.border}`,
           fontSize: 11.5, color: C.textMute, lineHeight: 1.5, marginBottom: 28,
         }}>
-          ¿No ves el correo? Revisa tu carpeta de spam o espera unos minutos.
+          ¿No ves el correo? Revisa tu carpeta de spam o correo no deseado y espera unos minutos.
+          Si tu cuenta no tiene un correo registrado, pide a tu institución que restablezca tu contraseña.
         </div>
 
         <Link to="/login" style={{

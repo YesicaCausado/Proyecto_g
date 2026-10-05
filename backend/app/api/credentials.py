@@ -33,6 +33,7 @@ from app.schemas.schemas import (
 )
 
 from app.services.email_service import send_credentials_email
+from app.services.mail.addresses import placeholder_email_for
 
 router = APIRouter(tags=["Credenciales B2B"])
 
@@ -754,7 +755,7 @@ async def create_student(
     temp_pwd = _gen_temp_password()
     student = User(
         username=payload.document_number,
-        email=payload.email or f"{payload.document_number}@neurolearn.local",
+        email=payload.email or placeholder_email_for(payload.document_number),
         full_name=payload.full_name,
         hashed_password=get_password_hash(temp_pwd),
         role=UserRole.ESTUDIANTE.value,
@@ -909,7 +910,7 @@ async def bulk_create_students(
             errors.append({"row": i, "error": "Límite de licencia alcanzado", "data": row})
             continue
 
-        email = row.get("correo") or f"{row['numero_documento']}@neurolearn.local"
+        email = row.get("correo") or placeholder_email_for(row["numero_documento"])
         temp_pwd = _gen_temp_password()
         student = User(
             username=row["numero_documento"],

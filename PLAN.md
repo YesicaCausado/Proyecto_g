@@ -1018,7 +1018,7 @@ migrations/applied/
 
 | # | Tarea | Descripción | Esfuerzo |
 |---|-------|-------------|----------|
-| 3.1 | **Configurar variables de entorno en Vercel Dashboard** | `DATABASE_URL`, `SECRET_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`, etc. | 30 min |
+| 3.1 | **Configurar variables de entorno en Vercel Dashboard** | `DATABASE_URL`, `SECRET_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `BREVO_API_KEY`, `EMAIL_FROM`, `FRONTEND_URL`, `GOOGLE_CLIENT_ID`, etc. | 30 min |
 | 3.2 | **Deploy frontend** | `npm run build` → Vercel auto-deploy desde `frontend/dist` | 30 min |
 | 3.3 | **Deploy backend serverless** | Verificar `api/index.py` apunta a `app.main:app`; probar `GET /health` en URL de producción | 30 min |
 | 3.4 | **Verificar rewrites de Vercel** | `vercel.json` rewrites correctos; probar `/api/v1/auth/login` desde la URL pública | 1 hora |

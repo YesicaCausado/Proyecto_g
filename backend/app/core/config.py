@@ -27,9 +27,28 @@ class Settings(BaseSettings):
 
     AUTH_SERVICE_URL: str = "http://localhost:8000"
 
-    # Email — Resend
+    # ── Email transaccional — Brevo ──────────────────────────────────────
+    # brevo   → envío real (requiere BREVO_API_KEY y EMAIL_FROM verificado en Brevo)
+    # console → solo desarrollo: imprime el correo en el log
+    EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "brevo")
+    BREVO_API_KEY: Optional[str] = os.getenv("BREVO_API_KEY")
+    # Nombre heredado: el proyecto ya guardaba la API key de Brevo en
+    # RESEND_API_KEY. Se acepta como respaldo si BREVO_API_KEY no existe.
     RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY")
-    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "NeuroLearn IA <noreply@neurolearn.app>")
+    # Formato "Nombre <correo>". El correo debe ser un remitente verificado en Brevo.
+    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "")
+    # Debe quedar por debajo del maxDuration (30 s) de la función de Vercel.
+    EMAIL_HTTP_TIMEOUT: float = float(os.getenv("EMAIL_HTTP_TIMEOUT", "10"))
+
+    # ── CU-03 Recuperar contraseña ───────────────────────────────────────
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = int(os.getenv("PASSWORD_RESET_TOKEN_TTL_MINUTES", "15"))
+    PASSWORD_RESET_COOLDOWN_SECONDS: int = int(os.getenv("PASSWORD_RESET_COOLDOWN_SECONDS", "60"))
+    PASSWORD_RESET_MAX_PER_HOUR: int = int(os.getenv("PASSWORD_RESET_MAX_PER_HOUR", "3"))
+    # Tiempo mínimo de respuesta de /auth/forgot-password: iguala la duración
+    # entre cuentas existentes e inexistentes (evita enumerar usuarios).
+    PASSWORD_RESET_MIN_RESPONSE_SECONDS: float = float(
+        os.getenv("PASSWORD_RESET_MIN_RESPONSE_SECONDS", "1.5")
+    )
 
     OPENAI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
@@ -88,8 +107,16 @@ class Settings(BaseSettings):
         "https://www.googleapis.com/auth/calendar.readonly "
         "openid",
     )
-    # Origen del frontend al que se redirige tras terminar el flujo OAuth.
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # URL pública del frontend. Se usa para redirigir tras el flujo OAuth y
+    # para construir los enlaces de los correos (p. ej. /reset-password).
+    # Nunca se toma del encabezado Host/Origin de la petición (evita que un
+    # atacante envíe enlaces a su propio dominio). En Vercel, si no se define,
+    # se usa el dominio de producción del proyecto.
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL") or (
+        f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}"
+        if os.getenv("VERCEL_PROJECT_PRODUCTION_URL")
+        else "http://localhost:5173"
+    )
 
     class Config:
         env_file = str(_ENV_FILE)

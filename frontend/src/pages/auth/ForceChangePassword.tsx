@@ -3,14 +3,7 @@ import { KeyRound, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-
-const RULES = [
-  { id: 'len',     label: 'Mínimo 8 caracteres',       test: (p: string) => p.length >= 8 },
-  { id: 'upper',   label: 'Una letra mayúscula',        test: (p: string) => /[A-Z]/.test(p) },
-  { id: 'lower',   label: 'Una letra minúscula',        test: (p: string) => /[a-z]/.test(p) },
-  { id: 'digit',   label: 'Un número',                  test: (p: string) => /\d/.test(p) },
-  { id: 'special', label: 'Un carácter especial (!@#…)',test: (p: string) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
-];
+import { PASSWORD_RULES as RULES } from '../../data/passwordRules';
 
 export default function ForceChangePassword() {
   const navigate  = useNavigate();

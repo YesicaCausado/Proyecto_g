@@ -229,7 +229,7 @@ export default function SystemConfig() {
                 {config?.db_connected ? 'Conectada' : 'Sin conexión'}
               </span>
             } />
-            <InfoRow label="Email (Resend)" value={
+            <InfoRow label="Email (Brevo)" value={
               config?.email_configured
                 ? <span className="text-xs text-[#0F7B6C] font-medium">Configurado ✓</span>
                 : <span className="text-xs text-[#D44C47] font-medium">Sin configurar</span>
