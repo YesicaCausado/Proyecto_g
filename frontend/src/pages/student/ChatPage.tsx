@@ -334,8 +334,7 @@ export default function ChatPage() {
   const [showDashboard, setShowDashboard] = useState(!isCustomBot);
   const [quizSuggested, setQuizSuggested] = useState(false);
   const [freeInput, setFreeInput] = useState("");
-  // Feedback visual de mensajes (like/dislike) — sin llamada al backend
-  const [messageFeedback, setMessageFeedback] = useState<Record<string, "like" | "dislike">>({});
+
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1205,8 +1204,6 @@ export default function ChatPage() {
                   ? <BotMessageWithActions 
                       content={msg.content}
                       messageId={msg.id}
-                      onLike={(id) => setMessageFeedback(prev => ({ ...prev, [id]: "like" }))}
-                      onDislike={(id) => setMessageFeedback(prev => ({ ...prev, [id]: "dislike" }))}
                       onSpeak={(text, onEnd) => voiceTutor.speakText(text, onEnd)}
                       onStopSpeak={() => voiceTutor.stopSpeaking()}
                       onReport={(id) => console.log(`Reporte de mensaje: ${id}`)}
