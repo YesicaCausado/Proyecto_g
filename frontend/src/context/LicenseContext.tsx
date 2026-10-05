@@ -1,19 +1,22 @@
 /**
  * LicenseContext — NeuroLearn AI
- * ================================
- * Carga la licencia institucional del usuario autenticado desde el backend.
- * Expone:
- *   - licenseInfo: datos completos
- *   - hasTeacherModule(mod): boolean
- *   - hasStudentModule(mod): boolean
- *   - licenseStatus: "active" | "expiring_soon" | "expired" | "suspended"
- *   - daysLeft: number | null
- *   - loading: boolean
+ * =================================
  *
- * Uso:
- *   const { hasTeacherModule, licenseStatus } = useLicense();
- *   if (!hasTeacherModule("neurobots")) return null;
+ * El frontend NO calcula la licencia.
+ *
+ * El backend es la única fuente de verdad para:
+ * - Rol
+ * - Tipo de licencia
+ * - Estado de licencia
+ * - Features
+ * - Módulos
+ * - KPIs
+ * - Límites
+ * - Exportaciones
+ *
+ * El frontend únicamente consume esos permisos.
  */
+
 import {
   createContext,
   useContext,
@@ -21,180 +24,490 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+
 import api from '../services/api';
 import { useAuth } from './AuthContext';
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// ============================================================
+// TIPOS
+// ============================================================
 
-export type LicenseType   = 'basica' | 'premium' | 'pro';
-export type LicenseStatus = 'active' | 'expiring_soon' | 'expired' | 'suspended';
+export type LicenseType = 'basica' | 'premium' | 'pro';
+
+export type LicenseStatus =
+  | 'active'
+  | 'expiring_soon'
+  | 'expired'
+  | 'suspended';
+
+export type UserRole =
+  | 'estudiante'
+  | 'profesor'
+  | 'super_profesor'
+  | 'admin';
+
+// ============================================================
+// INFORMACIÓN DE LICENCIA
+// ============================================================
 
 export interface LicenseInfo {
-  license_type:           LicenseType;
-  license_status:         LicenseStatus;
-  days_left:              number | null;
-  role?:                  string;
-  features?:              string[];
-  super_modules?:         string[];
-  teacher_modules:        string[];
-  student_modules:        string[];
+  license_type: LicenseType;
+
+  license_status: LicenseStatus;
+
+  days_left: number | null;
+
+  role?: UserRole;
+
+  features: string[];
+
+  super_modules: string[];
+
+  teacher_modules: string[];
+
+  student_modules: string[];
+
   teacher_dashboard_kpis: string[];
-  neurobot_limit:         number;
-  groups_limit:           number;
-  students_limit:         number;
-  export_formats:         string[];
-  institution_name:       string;
+
+  neurobot_limit: number;
+
+  groups_limit: number;
+
+  students_limit: number;
+
+  export_formats: string[];
+
+  institution_name: string;
 }
+
+// ============================================================
+// CONTEXTO
+// ============================================================
 
 interface LicenseContextType {
-  licenseInfo:       LicenseInfo | null;
-  loading:           boolean;
-  licenseType:       LicenseType;
-  licenseStatus:     LicenseStatus;
-  daysLeft:          number | null;
-  hasFeature:        (feature: string) => boolean;
-  hasTeacherModule:  (mod: string) => boolean;
-  hasStudentModule:  (mod: string) => boolean;
-  hasKpi:            (kpi: string) => boolean;
-  hasExport:         (fmt: string) => boolean;
-  neurobotLimit:     number;
-  institutionName:   string;
-  refetch:           () => void;
+  licenseInfo: LicenseInfo | null;
+
+  loading: boolean;
+
+  error: string | null;
+
+  licenseType: LicenseType | null;
+
+  licenseStatus: LicenseStatus | null;
+
+  daysLeft: number | null;
+
+  role: UserRole | null;
+
+  hasFeature: (feature: string) => boolean;
+
+  hasPermission: (permission: string) => boolean;
+
+  hasTeacherModule: (module: string) => boolean;
+
+  hasStudentModule: (module: string) => boolean;
+
+  hasSuperModule: (module: string) => boolean;
+
+  hasKpi: (kpi: string) => boolean;
+
+  hasExport: (format: string) => boolean;
+
+  neurobotLimit: number;
+
+  groupsLimit: number;
+
+  studentsLimit: number;
+
+  institutionName: string;
+
+  refetch: () => Promise<void>;
 }
 
-// ─── Fallback: licencia básica activa ─────────────────────────────────────────
+// ============================================================
+// VALORES VACÍOS
+// ============================================================
 
-const BASIC_ACTIVE: LicenseInfo = {
-  license_type:           'basica',
-  license_status:         'active',
-  days_left:              null,
-  features: [
-    'perfil', 'configuracion', 'mensajes', 'calendario', 'dashboard',
-    'recursos', 'evaluaciones', 'tareas', 'anuncios', 'licencia',
-    'gestion_profesores', 'gestion_estudiantes', 'gestion_grupos',
-    'basic_analytics', 'neurobots', 'reportes', 'tutor_ia',
-  ],
-  super_modules: [
-    'dashboard', 'profesores', 'estudiantes', 'grupos',
-    'mensajeria', 'calendario', 'auditoria',
-    'configuracion', 'licencia', 'seguridad', 'perfil',
-  ],
-  teacher_modules:        [
-    'dashboard', 'cursos', 'grupos', 'estudiantes',
-    'evaluaciones', 'recursos', 'calendario', 'mensajes', 'perfil',
-  ],
-  student_modules:        [
-    'inicio', 'mis_cursos', 'mis_tareas', 'evaluaciones',
-    'recursos', 'calendario', 'mensajes', 'perfil', 'tutor_ia', 'estadisticas',
-  ],
-  teacher_dashboard_kpis: [
-    'cursos_activos', 'estudiantes', 'evaluaciones_creadas', 'actividades_pendientes',
-  ],
-  neurobot_limit:         1,
-  groups_limit:           10,
-  students_limit:         300,
-  export_formats:         ['csv'],
-  institution_name:       '',
+const EMPTY_LICENSE: LicenseInfo = {
+  license_type: 'basica',
+
+  license_status: 'suspended',
+
+  days_left: null,
+
+  role: undefined,
+
+  features: [],
+
+  super_modules: [],
+
+  teacher_modules: [],
+
+  student_modules: [],
+
+  teacher_dashboard_kpis: [],
+
+  neurobot_limit: 0,
+
+  groups_limit: 0,
+
+  students_limit: 0,
+
+  export_formats: [],
+
+  institution_name: '',
 };
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+// ============================================================
+// CONTEXTO
+// ============================================================
 
-const LicenseContext = createContext<LicenseContextType | null>(null);
+const LicenseContext =
+  createContext<LicenseContextType | null>(null);
 
-export function LicenseProvider({ children }: { children: ReactNode }) {
+// ============================================================
+// PROVIDER
+// ============================================================
+
+export function LicenseProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const { user, token } = useAuth();
-  const [licenseInfo, setLicenseInfo] = useState<LicenseInfo | null>(null);
-  const [loading, setLoading]         = useState(false);
 
-  const fetchLicense = async () => {
-    if (!token || !user) return;
-    // Admin no tiene institución — usar básica activa
-    if (user.role === 'admin') {
-      setLicenseInfo(BASIC_ACTIVE);
+  const [licenseInfo, setLicenseInfo] =
+    useState<LicenseInfo | null>(null);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  // ==========================================================
+  // OBTENER LICENCIA
+  // ==========================================================
+
+  const fetchLicense = async (): Promise<void> => {
+    /*
+     * Si no hay sesión:
+     * no existe licencia que consultar.
+     */
+
+    if (!token || !user) {
+      setLicenseInfo(null);
+      setError(null);
+      setLoading(false);
+
       return;
     }
+
     setLoading(true);
+    setError(null);
+
     try {
-      const res = await api.get<LicenseInfo>('/license/my-license');
-      setLicenseInfo(res.data);
-    } catch {
-      // Si el endpoint falla (backend sin licencia implementada) → básica activa
-      setLicenseInfo(BASIC_ACTIVE);
+      const response =
+        await api.get<LicenseInfo>(
+          '/license/my-license'
+        );
+
+      const data = response.data;
+
+      /*
+       * El backend es la fuente de verdad.
+       *
+       * No hacemos fallback a una licencia Básica real.
+       * EMPTY_LICENSE solamente sirve para mantener
+       * una estructura segura.
+       */
+
+      setLicenseInfo({
+        ...EMPTY_LICENSE,
+
+        ...data,
+
+        features: Array.isArray(data.features)
+          ? data.features
+          : [],
+
+        super_modules: Array.isArray(
+          data.super_modules
+        )
+          ? data.super_modules
+          : [],
+
+        teacher_modules: Array.isArray(
+          data.teacher_modules
+        )
+          ? data.teacher_modules
+          : [],
+
+        student_modules: Array.isArray(
+          data.student_modules
+        )
+          ? data.student_modules
+          : [],
+
+        teacher_dashboard_kpis:
+          Array.isArray(
+            data.teacher_dashboard_kpis
+          )
+            ? data.teacher_dashboard_kpis
+            : [],
+
+        export_formats: Array.isArray(
+          data.export_formats
+        )
+          ? data.export_formats
+          : [],
+      });
+    } catch (err) {
+      /*
+       * FAIL CLOSED
+       *
+       * Si el backend no puede verificar la licencia,
+       * NO otorgamos permisos.
+       */
+
+      console.error(
+        'Error obteniendo licencia institucional:',
+        err
+      );
+
+      setLicenseInfo(null);
+
+      setError(
+        'No se pudo verificar la licencia institucional.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // ==========================================================
+  // CARGA INICIAL / CAMBIO DE SESIÓN
+  // ==========================================================
+
   useEffect(() => {
-    fetchLicense();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    void fetchLicense();
+
+    /*
+     * user.id identifica al usuario.
+     * token identifica la sesión.
+     */
+
   }, [token, user?.id]);
 
-  const info = licenseInfo ?? BASIC_ACTIVE;
+  // ==========================================================
+  // INFORMACIÓN ACTUAL
+  // ==========================================================
 
-  const hasTeacherModule = (mod: string): boolean => {
-    if (info.license_status === 'suspended') return false;
-    if (info.license_status === 'expired') {
-      return ['dashboard', 'cursos', 'grupos', 'estudiantes', 'recursos'].includes(mod);
+  const info = licenseInfo;
+
+  /*
+   * Estados que permiten consultar información.
+   *
+   * La decisión exacta de qué funcionalidades siguen
+   * disponibles debe venir del backend.
+   */
+
+  const canUseLicenseFeatures = (): boolean => {
+    if (!info) {
+      return false;
     }
-    return info.teacher_modules.includes(mod);
+
+    if (info.license_status === 'suspended') {
+      return false;
+    }
+
+    return true;
   };
 
-  const hasStudentModule = (mod: string): boolean => {
-    if (info.license_status === 'suspended') return false;
-    if (info.license_status === 'expired') {
-      return ['inicio', 'mis_cursos', 'recursos'].includes(mod);
+  // ==========================================================
+  // FEATURES
+  // ==========================================================
+
+  const hasFeature = (
+    feature: string
+  ): boolean => {
+    if (!canUseLicenseFeatures()) {
+      return false;
     }
-    return info.student_modules.includes(mod);
+
+    return info!.features.includes(feature);
   };
 
-  const hasFeature = (feature: string): boolean => {
-    // La fuente de verdad es la lista `features` devuelta por el backend
-    // (calculada desde la matriz rol+licencia). Fallback: si no vino,
-    // derivar de teacher/student modules para mantener compatibilidad.
-    if (info.license_status === 'suspended') return false;
-    if (info.license_status === 'expired') {
-      // Modo solo lectura: mismo criterio que hasTeacherModule en expired
-      // (READONLY = dashboard, cursos/grupos, estudiantes, recursos) más las
-      // transversales. Sin esto, el sidebar del profesor oculta TAMBIÉN el
-      // Dashboard y Mis Grupos cuando la licencia vence — la matriz no se
-      // consulta en este estado, así que el arreglo de gestion_grupos no
-      // aplicaba aquí.
-      return [
-        'perfil', 'configuracion', 'mensajes', 'calendario',
-        'dashboard', 'gestion_grupos', 'recursos',
-      ].includes(feature);
-    }
-    if (info.features?.length) return info.features.includes(feature);
+  // ==========================================================
+  // PERMISOS
+  // ==========================================================
 
-    // Fallback por módulos (versión antigua del backend sin `features`).
-    const translacionales = ['perfil', 'configuracion', 'mensajes', 'calendario'];
-    if (translacionales.includes(feature)) return true;
-    return info.teacher_modules.includes(feature) || info.student_modules.includes(feature);
+  const hasPermission = (
+    permission: string
+  ): boolean => {
+    return hasFeature(permission);
   };
 
-  const hasKpi = (kpi: string): boolean =>
-    info.teacher_dashboard_kpis.includes(kpi);
+  // ==========================================================
+  // MÓDULOS PROFESOR
+  // ==========================================================
 
-  const hasExport = (fmt: string): boolean =>
-    info.export_formats.includes(fmt);
+  const hasTeacherModule = (
+    module: string
+  ): boolean => {
+    if (!canUseLicenseFeatures()) {
+      return false;
+    }
+
+    return info!.teacher_modules.includes(module);
+  };
+
+  // ==========================================================
+  // MÓDULOS ESTUDIANTE
+  // ==========================================================
+
+  const hasStudentModule = (
+    module: string
+  ): boolean => {
+    if (!canUseLicenseFeatures()) {
+      return false;
+    }
+
+    return info!.student_modules.includes(module);
+  };
+
+  // ==========================================================
+  // MÓDULOS SUPER PROFESOR
+  // ==========================================================
+
+  const hasSuperModule = (
+    module: string
+  ): boolean => {
+    if (!canUseLicenseFeatures()) {
+      return false;
+    }
+
+    return info!.super_modules.includes(module);
+  };
+
+  // ==========================================================
+  // KPIs
+  // ==========================================================
+
+  const hasKpi = (
+    kpi: string
+  ): boolean => {
+    if (!canUseLicenseFeatures()) {
+      return false;
+    }
+
+    return info!.teacher_dashboard_kpis.includes(kpi);
+  };
+
+  // ==========================================================
+  // EXPORTACIONES
+  // ==========================================================
+
+  const hasExport = (
+    format: string
+  ): boolean => {
+    if (!canUseLicenseFeatures()) {
+      return false;
+    }
+
+    return info!.export_formats.includes(format);
+  };
+
+  // ==========================================================
+  // VALORES SEGUROS
+  // ==========================================================
+
+  /*
+   * IMPORTANTE:
+   *
+   * No utilizamos EMPTY_LICENSE para decir que el usuario
+   * realmente tiene licencia Básica.
+   *
+   * Cuando no hay licencia:
+   *
+   * licenseType = null
+   * licenseStatus = null
+   *
+   * Esto evita que la UI muestre accidentalmente:
+   *
+   * "Plan Básico"
+   *
+   * cuando en realidad todavía no se ha podido verificar.
+   */
+
+  const licenseType =
+    info?.license_type ?? null;
+
+  const licenseStatus =
+    info?.license_status ?? null;
+
+  const daysLeft =
+    info?.days_left ?? null;
+
+  const role =
+    info?.role ?? null;
+
+  const neurobotLimit =
+    info?.neurobot_limit ?? 0;
+
+  const groupsLimit =
+    info?.groups_limit ?? 0;
+
+  const studentsLimit =
+    info?.students_limit ?? 0;
+
+  const institutionName =
+    info?.institution_name ?? '';
+
+  // ==========================================================
+  // PROVIDER
+  // ==========================================================
 
   return (
     <LicenseContext.Provider
       value={{
-        licenseInfo:     info,
+        licenseInfo: info,
+
         loading,
-        licenseType:     info.license_type,
-        licenseStatus:   info.license_status,
-        daysLeft:        info.days_left,
+
+        error,
+
+        licenseType,
+
+        licenseStatus,
+
+        daysLeft,
+
+        role,
+
         hasFeature,
+
+        hasPermission,
+
         hasTeacherModule,
+
         hasStudentModule,
+
+        hasSuperModule,
+
         hasKpi,
+
         hasExport,
-        neurobotLimit:   info.neurobot_limit,
-        institutionName: info.institution_name,
-        refetch:         fetchLicense,
+
+        neurobotLimit,
+
+        groupsLimit,
+
+        studentsLimit,
+
+        institutionName,
+
+        refetch: fetchLicense,
       }}
     >
       {children}
@@ -202,10 +515,19 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// ============================================================
+// HOOK
+// ============================================================
 
 export function useLicense(): LicenseContextType {
-  const ctx = useContext(LicenseContext);
-  if (!ctx) throw new Error('useLicense must be used inside <LicenseProvider>');
-  return ctx;
+  const context =
+    useContext(LicenseContext);
+
+  if (!context) {
+    throw new Error(
+      'useLicense must be used inside <LicenseProvider>'
+    );
+  }
+
+  return context;
 }

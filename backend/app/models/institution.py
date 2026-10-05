@@ -1,75 +1,333 @@
 """
 NeuroLearn AI - Modelos de Institución, Licencia y Auditoría
-Sistema B2B: Administrador → Super Profesor → Profesor → Estudiante
+
+Sistema B2B:
+Administrador
+    ↓
+Super Profesor
+    ↓
+Profesor
+    ↓
+Estudiante
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Enum as SAEnum
-from sqlalchemy.orm import relationship
-from datetime import datetime
+
 import enum
+from datetime import datetime
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Boolean,
+    ForeignKey,
+    Text,
+)
+from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
 
-class LicenseType(str, enum.Enum):
-    BASICA   = "basica"
-    PREMIUM  = "premium"
-    PRO      = "pro"
+# =========================================================
+# TIPOS DE LICENCIA
+# =========================================================
 
+class LicenseType(str, enum.Enum):
+    BASICA = "basica"
+    PREMIUM = "premium"
+    PRO = "pro"
+
+
+# =========================================================
+# LÍMITES DE LICENCIA
+# =========================================================
 
 LICENSE_LIMITS = {
-    "basica":  {"teachers": 20,   "students": 300},
-    "premium": {"teachers": 60,   "students": 1500},
-    "pro":     {"teachers": 9999, "students": 999999},
+    LicenseType.BASICA.value: {
+        "teachers": 20,
+        "students": 300,
+    },
+
+    LicenseType.PREMIUM.value: {
+        "teachers": 60,
+        "students": 1500,
+    },
+
+    LicenseType.PRO.value: {
+        "teachers": 9999,
+        "students": 999999,
+    },
 }
 
+
+# =========================================================
+# INSTITUCIÓN
+# =========================================================
 
 class Institution(Base):
     __tablename__ = "institutions"
 
-    id           = Column(Integer, primary_key=True, index=True)
-    name         = Column(String(200), nullable=False)
-    dane_code    = Column(String(20),  unique=True, index=True, nullable=False)
-    license_type = Column(String(20),  default=LicenseType.BASICA.value, nullable=False)
-    is_active    = Column(Boolean, default=True)
-    expiry_date  = Column(DateTime, nullable=True)   # None = sin vencimiento
-    email        = Column(String(200), nullable=True)
-    phone        = Column(String(50), nullable=True)
-    address      = Column(String(255), nullable=True)
-    website      = Column(String(255), nullable=True)
-    timezone     = Column(String(80), default="America/Bogota", nullable=True)
-    language     = Column(String(20), default="es", nullable=True)
-    primary_color = Column(String(20), default="#6940A5", nullable=True)
-    logo_url     = Column(Text, nullable=True)
-    created_at   = Column(DateTime, default=datetime.utcnow)
-    created_by   = Column(Integer, ForeignKey("users.id"), nullable=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
-    # Relaciones
-    users    = relationship("User", back_populates="institution",
-                            primaryjoin="User.institution_id == Institution.id",
-                            foreign_keys="User.institution_id")
-    creator  = relationship("User", foreign_keys=[created_by])
+    name = Column(
+        String(200),
+        nullable=False,
+    )
+
+    # Código DANE de la institución
+    dane_code = Column(
+        String(20),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+
+    # =====================================================
+    # LICENCIA
+    # =====================================================
+
+    license_type = Column(
+        String(20),
+        default=LicenseType.BASICA.value,
+        nullable=False,
+        index=True,
+    )
+
+    is_active = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    # None = sin vencimiento
+    expiry_date = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    # =====================================================
+    # INFORMACIÓN DE CONTACTO
+    # =====================================================
+
+    email = Column(
+        String(200),
+        nullable=True,
+    )
+
+    phone = Column(
+        String(50),
+        nullable=True,
+    )
+
+    address = Column(
+        String(255),
+        nullable=True,
+    )
+
+    website = Column(
+        String(255),
+        nullable=True,
+    )
+
+    # =====================================================
+    # CONFIGURACIÓN
+    # =====================================================
+
+    timezone = Column(
+        String(80),
+        default="America/Bogota",
+        nullable=False,
+    )
+
+    language = Column(
+        String(20),
+        default="es",
+        nullable=False,
+    )
+
+    primary_color = Column(
+        String(20),
+        default="#6940A5",
+        nullable=True,
+    )
+
+    logo_url = Column(
+        Text,
+        nullable=True,
+    )
+
+    # =====================================================
+    # AUDITORÍA
+    # =====================================================
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    # Usuario administrador que creó la institución
+    created_by = Column(
+        Integer,
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+
+    # =====================================================
+    # RELACIONES
+    # =====================================================
+
+    users = relationship(
+        "User",
+        back_populates="institution",
+        foreign_keys="User.institution_id",
+    )
+
+    creator = relationship(
+        "User",
+        foreign_keys=[created_by],
+    )
+
+    # =====================================================
+    # PROPIEDADES DE LICENCIA
+    # =====================================================
 
     @property
     def max_teachers(self) -> int:
-        return LICENSE_LIMITS.get(self.license_type, LICENSE_LIMITS["basica"])["teachers"]
+        """
+        Número máximo de profesores permitidos
+        según el tipo de licencia.
+        """
+        limits = LICENSE_LIMITS.get(
+            self.license_type,
+            LICENSE_LIMITS[LicenseType.BASICA.value],
+        )
+
+        return limits["teachers"]
 
     @property
     def max_students(self) -> int:
-        return LICENSE_LIMITS.get(self.license_type, LICENSE_LIMITS["basica"])["students"]
+        """
+        Número máximo de estudiantes permitidos
+        según el tipo de licencia.
+        """
+        limits = LICENSE_LIMITS.get(
+            self.license_type,
+            LICENSE_LIMITS[LicenseType.BASICA.value],
+        )
 
+        return limits["students"]
+
+
+# =========================================================
+# AUDITORÍA
+# =========================================================
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
-    id               = Column(Integer, primary_key=True, index=True)
-    action           = Column(String(100), nullable=False)          # ej: "create_teacher"
-    performed_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
-    target_user_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
-    institution_id   = Column(Integer, ForeignKey("institutions.id"), nullable=True)
-    user_type        = Column(String(30), nullable=True)            # "profesor", "estudiante", …
-    ip_address       = Column(String(45), nullable=True)
-    notes            = Column(Text, nullable=True)
-    created_at       = Column(DateTime, default=datetime.utcnow)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
-    performed_by = relationship("User", foreign_keys=[performed_by_id])
-    target_user  = relationship("User", foreign_keys=[target_user_id])
+    # Ejemplo:
+    # create_teacher
+    # create_student
+    # delete_teacher
+    # change_license
+    # login
+    # logout
+    action = Column(
+        String(100),
+        nullable=False,
+        index=True,
+    )
+
+    # Usuario que realizó la acción
+    performed_by_id = Column(
+        Integer,
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+
+    # Usuario afectado por la acción
+    target_user_id = Column(
+        Integer,
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+
+    # Institución relacionada
+    institution_id = Column(
+        Integer,
+        ForeignKey(
+            "institutions.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    # Tipo del usuario afectado
+    #
+    # profesor
+    # estudiante
+    # super_profesor
+    # admin
+    user_type = Column(
+        String(30),
+        nullable=True,
+    )
+
+    ip_address = Column(
+        String(45),
+        nullable=True,
+    )
+
+    notes = Column(
+        Text,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True,
+    )
+
+    # =====================================================
+    # RELACIONES
+    # =====================================================
+
+    performed_by = relationship(
+        "User",
+        foreign_keys=[performed_by_id],
+        back_populates="audit_logs_performed",
+    )
+
+    target_user = relationship(
+        "User",
+        foreign_keys=[target_user_id],
+        back_populates="audit_logs_target",
+    )
+
+    institution = relationship(
+        "Institution",
+        foreign_keys=[institution_id],
+    )
