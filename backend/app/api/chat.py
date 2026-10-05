@@ -872,7 +872,7 @@ def _quiz_suggested(response_text: str) -> bool:
 async def save_pattern_data(
     payload: ChatPatternPayload,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """Guarda los datos de los 5 patrones por usuario y tema."""
@@ -920,7 +920,7 @@ async def get_pattern_history(
     topic: Optional[str] = None,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """Trae los patrones guardados del usuario por tema."""
@@ -1022,7 +1022,7 @@ async def start_session(
 async def send_message(
     request: ChatMessageRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """
@@ -1526,7 +1526,7 @@ async def send_message(
 @router.get("/stats", response_model=SessionStatsResponse)
 async def get_session_stats(
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db),
 ):
     """
@@ -1595,7 +1595,7 @@ async def get_session_stats(
 async def generate_cognitive_quiz(
     request: QuizRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db)
 ):
     """
@@ -1892,7 +1892,7 @@ def _is_quiz_answer_correct(user_answer, correct_answer, options=None):
 async def submit_quiz_answers(
     submission: QuizSubmission,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access()),
+    license_info: LicenseInfo = Depends(require_chat_access),
     db: Session = Depends(get_db)
 ):
     """
