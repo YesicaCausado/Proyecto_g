@@ -22,7 +22,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.db.database import get_db
 from app.models.institution import Institution
 from app.models.user import User
 
