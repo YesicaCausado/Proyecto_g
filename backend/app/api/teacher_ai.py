@@ -1,7 +1,7 @@
 """
 NeuroLearn AI — Generación de Contenido IA para el Docente
 =============================================================
-Endpoints de IA Generativa para el panel del profesor (plan Pro / módulo `ia`).
+Endpoints de IA Generativa para el panel del profesor (permiso USAR_IA_DOCENTE).
 
 Usa el gestor central de proveedores (Groq → Gemini) mediante `ai_manager`.
 Si la IA no está configurada o falla, devuelve contenido local estructurado
@@ -15,9 +15,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_permission
+from app.core.permissions import Permission
 from app.models.user import User
-from app.services.license_service import require_feature, require_active_license, LicenseInfo
 from app.core.config import settings
 
 # Reutilizar el mismo gestor que usa el chat (Groq → Gemini → local).
@@ -228,8 +228,7 @@ def _matches_schema(kind: str, parsed) -> bool:
 @router.post("/generate")
 async def generate_content(
     req: GenerateRequest,
-    license_info: LicenseInfo = Depends(require_feature("teacher_ai")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.USAR_IA_DOCENTE)),
     current_user: User = Depends(get_current_user),
 ):
     """Genera contenido educativo con IA (o fallback local) para el docente."""

@@ -91,11 +91,6 @@ function storeUser(user: User): void {
 function clearStoredSession(): void {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-
-  // La licencia pertenece a la sesión del usuario.
-  // Si LicenseContext utiliza cache local en el futuro,
-  // este espacio evita que una licencia anterior se reutilice.
-  localStorage.removeItem('license');
 }
 
 
@@ -379,20 +374,6 @@ export function AuthProvider({
     setUser(userData);
 
 
-    // ------------------------------------------------------------------------
-    // IMPORTANTE:
-    //
-    // NO cargamos aquí la licencia.
-    //
-    // AuthContext = identidad.
-    // LicenseContext = permisos/licencia.
-    //
-    // LicenseContext debe consultar:
-    //
-    //     GET /license/my-license
-    //
-    // después de que el usuario esté autenticado.
-    // ------------------------------------------------------------------------
   };
 
 

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useLicense } from '../../context/LicenseContext';
 import api from '../../services/api';
 
 import DashboardTab from './components/DashboardTab';
@@ -19,8 +18,6 @@ import IAGenerativaTab from './components/IAGenerativaTab';
 import IntegracionesTab from './components/IntegracionesTab';
 import AutomatizacionesTab from './components/AutomatizacionesTab';
 
-import LicenseBanner from '../../components/LicenseBanner';
-import SuspendedScreen from '../../components/SuspendedScreen';
 
 import {
   LayoutDashboard,
@@ -46,28 +43,17 @@ import {
 } from 'lucide-react';
 
 import { navItemStyle } from '../../styles/sidebar';
-import { planColor } from '../../styles/plan';
+import { THEME } from '../../styles/theme';
 
 // ============================================================
 // TIPOS
 // ============================================================
-
-type LicensePlan = 'basica' | 'premium' | 'pro';
-
-interface TeacherLicense {
-  plan: LicensePlan;
-  groups_limit: number;
-  students_limit: number;
-  bots_limit: number | 'unlimited';
-  expiry_date: string;
-}
 
 interface NavItemDef {
   label: string;
   icon: any;
   badge?: string;
   module: string;
-  feature?: string;
   id?: string;
 }
 
@@ -80,21 +66,18 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
     label: 'Dashboard',
     icon: LayoutDashboard,
     module: 'dashboard',
-    feature: 'dashboard',
   },
 
   grupos: {
     label: 'Mis Grupos',
     icon: BookOpen,
     module: 'grupos',
-    feature: 'gestion_grupos',
   },
 
   neurobots: {
     label: 'NeuroBots',
     icon: Bot,
     module: 'neurobots',
-    feature: 'neurobots',
     badge: 'alert',
   },
 
@@ -102,7 +85,6 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
     label: 'NeuroAlertas',
     icon: BrainCircuit,
     module: 'alertas',
-    feature: 'neuroalertas',
     badge: 'alert',
   },
 
@@ -110,28 +92,24 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
     label: 'Tablero',
     icon: LayoutList,
     module: 'cursos',
-    feature: 'anuncios',
   },
 
   evaluaciones: {
     label: 'Evaluaciones',
     icon: ClipboardList,
     module: 'evaluaciones',
-    feature: 'evaluaciones',
   },
 
   materiales: {
     label: 'Materiales',
     icon: FolderOpen,
     module: 'recursos',
-    feature: 'recursos',
   },
 
   mensajes: {
     label: 'Mensajes',
     icon: MessageSquare,
     module: 'mensajes',
-    feature: 'mensajes',
     badge: 'msg',
   },
 
@@ -139,42 +117,36 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
     label: 'Calendario',
     icon: Calendar,
     module: 'calendario',
-    feature: 'calendario',
   },
 
   analitica: {
     label: 'Analítica',
     icon: BarChart2,
     module: 'analitica',
-    feature: 'advanced_analytics',
   },
 
   ia: {
     label: 'IA Generativa',
     icon: Cpu,
     module: 'ia',
-    feature: 'teacher_ai',
   },
 
   integraciones: {
     label: 'Integraciones',
     icon: Link2,
     module: 'integraciones',
-    feature: 'integrations',
   },
 
   automatizaciones: {
     label: 'Automatizaciones',
     icon: FlaskConical,
     module: 'automatizaciones',
-    feature: 'automation',
   },
 
   configuracion: {
     label: 'Configuración',
     icon: Settings,
     module: 'configuracion',
-    feature: 'perfil',
   },
 };
 
@@ -182,174 +154,25 @@ const ALL_NAV_ITEMS: Record<string, NavItemDef> = {
 // CONSTRUCCIÓN DEL MENÚ
 // ============================================================
 
-function buildNavSections(
-  hasFeature: (feature: string) => boolean
-) {
-  const sections: {
-    label: string;
-    items: NavItemDef[];
-  }[] = [];
+/**
+ * Menú del profesor. Todas las secciones están disponibles para el rol
+ * profesor (el acceso depende solo del rol; no hay planes ni licencias).
+ */
+const NAV_LAYOUT: { label: string; ids: string[] }[] = [
+  { label: 'PRINCIPAL', ids: ['dashboard', 'grupos'] },
+  { label: 'INTELIGENCIA IA', ids: ['neurobots', 'alertas'] },
+  { label: 'AULA', ids: ['tablero', 'evaluaciones', 'materiales'] },
+  { label: 'ANALÍTICA & IA', ids: ['analitica', 'ia'] },
+  { label: 'AVANZADO', ids: ['integraciones', 'automatizaciones'] },
+  { label: 'COMUNICACIÓN', ids: ['mensajes', 'calendario'] },
+  { label: 'CUENTA', ids: ['configuracion'] },
+];
 
-  // ----------------------------------------------------------
-  // PRINCIPAL
-  // ----------------------------------------------------------
-
-  const principal = [
-    'dashboard',
-    'grupos',
-  ].filter((id) =>
-    hasFeature(
-      ALL_NAV_ITEMS[id].feature ??
-        ALL_NAV_ITEMS[id].module
-    )
-  );
-
-  if (principal.length > 0) {
-    sections.push({
-      label: 'PRINCIPAL',
-      items: principal.map((id) => ({
-        ...ALL_NAV_ITEMS[id],
-        id,
-      })),
-    });
-  }
-
-  // ----------------------------------------------------------
-  // INTELIGENCIA IA
-  // ----------------------------------------------------------
-
-  const ia = [
-    'neurobots',
-    'alertas',
-  ].filter((id) =>
-    hasFeature(
-      ALL_NAV_ITEMS[id].feature ??
-        ALL_NAV_ITEMS[id].module
-    )
-  );
-
-  if (ia.length > 0) {
-    sections.push({
-      label: 'INTELIGENCIA IA',
-      items: ia.map((id) => ({
-        ...ALL_NAV_ITEMS[id],
-        id,
-      })),
-    });
-  }
-
-  // ----------------------------------------------------------
-  // AULA
-  // ----------------------------------------------------------
-
-  const aula = [
-    'tablero',
-    'evaluaciones',
-    'materiales',
-  ].filter((id) =>
-    hasFeature(
-      ALL_NAV_ITEMS[id].feature ??
-        ALL_NAV_ITEMS[id].module
-    )
-  );
-
-  if (aula.length > 0) {
-    sections.push({
-      label: 'AULA',
-      items: aula.map((id) => ({
-        ...ALL_NAV_ITEMS[id],
-        id,
-      })),
-    });
-  }
-
-  // ----------------------------------------------------------
-  // ANALÍTICA E IA
-  // ----------------------------------------------------------
-
-  const analytics = [
-    'analitica',
-    'ia',
-  ].filter((id) =>
-    hasFeature(
-      ALL_NAV_ITEMS[id].feature ??
-        ALL_NAV_ITEMS[id].module
-    )
-  );
-
-  if (analytics.length > 0) {
-    sections.push({
-      label: 'ANALÍTICA & IA',
-      items: analytics.map((id) => ({
-        ...ALL_NAV_ITEMS[id],
-        id,
-      })),
-    });
-  }
-
-  // ----------------------------------------------------------
-  // AVANZADO
-  // ----------------------------------------------------------
-
-  const advanced = [
-    'integraciones',
-    'automatizaciones',
-  ].filter((id) =>
-    hasFeature(
-      ALL_NAV_ITEMS[id].feature ??
-        ALL_NAV_ITEMS[id].module
-    )
-  );
-
-  if (advanced.length > 0) {
-    sections.push({
-      label: 'AVANZADO',
-      items: advanced.map((id) => ({
-        ...ALL_NAV_ITEMS[id],
-        id,
-      })),
-    });
-  }
-
-  // ----------------------------------------------------------
-  // COMUNICACIÓN
-  // ----------------------------------------------------------
-
-  const comms = [
-    'mensajes',
-    'calendario',
-  ].filter((id) =>
-    hasFeature(
-      ALL_NAV_ITEMS[id].feature ??
-        ALL_NAV_ITEMS[id].module
-    )
-  );
-
-  if (comms.length > 0) {
-    sections.push({
-      label: 'COMUNICACIÓN',
-      items: comms.map((id) => ({
-        ...ALL_NAV_ITEMS[id],
-        id,
-      })),
-    });
-  }
-
-  // ----------------------------------------------------------
-  // CUENTA
-  // ----------------------------------------------------------
-
-  sections.push({
-    label: 'CUENTA',
-    items: [
-      {
-        ...ALL_NAV_ITEMS.configuracion,
-        id: 'configuracion',
-      },
-    ],
-  });
-
-  return sections;
+function buildNavSections(): { label: string; items: NavItemDef[] }[] {
+  return NAV_LAYOUT.map(({ label, ids }) => ({
+    label,
+    items: ids.map((id) => ({ ...ALL_NAV_ITEMS[id], id })),
+  }));
 }
 
 // ============================================================
@@ -454,13 +277,6 @@ const TAB_TITLES: Record<
 
 export default function TeacherPanel() {
   const { user, logout } = useAuth();
-
-  const {
-    licenseInfo,
-    licenseStatus,
-    licenseType,
-    hasFeature,
-  } = useLicense();
 
   const navigate = useNavigate();
 
@@ -636,112 +452,6 @@ export default function TeacherPanel() {
   ]);
 
   // ----------------------------------------------------------
-  // LICENCIA SUSPENDIDA
-  // ----------------------------------------------------------
-
-  if (
-    licenseStatus === 'suspended'
-  ) {
-    return (
-      <SuspendedScreen
-        role="profesor"
-      />
-    );
-  }
-
-  // ----------------------------------------------------------
-  // LICENCIA TODAVÍA NO RESUELTA
-  //
-  // NO usamos "basica" como fallback.
-  // La licencia debe venir del backend.
-  // ----------------------------------------------------------
-
-  if (
-    !licenseInfo ||
-    !licenseType
-  ) {
-    return (
-      <div
-        className="
-          min-h-screen
-          bg-[#F7F6F3]
-          flex
-          items-center
-          justify-center
-        "
-      >
-        <div className="text-center">
-          <div
-            className="
-              w-8
-              h-8
-              border-2
-              border-[#D9D9D6]
-              border-t-[#2E6FDB]
-              rounded-full
-              animate-spin
-              mx-auto
-              mb-3
-            "
-          />
-
-          <p
-            className="
-              text-sm
-              font-medium
-              text-[#37352F]
-            "
-          >
-            Cargando licencia...
-          </p>
-
-          <p
-            className="
-              text-xs
-              text-[#787774]
-              mt-1
-            "
-          >
-            Verificando los permisos de tu institución
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ----------------------------------------------------------
-  // INFORMACIÓN REAL DE LICENCIA
-  // ----------------------------------------------------------
-
-  const info = licenseInfo;
-
-  // ----------------------------------------------------------
-  // LICENCIA PARA LOS COMPONENTES
-  //
-  // Después del guard anterior, licenseType ya no puede ser null.
-  // ----------------------------------------------------------
-
-  const license: TeacherLicense = {
-    plan: licenseType,
-
-    groups_limit:
-      info.groups_limit,
-
-    students_limit:
-      info.students_limit,
-
-    bots_limit:
-      info.neurobot_limit === 999999
-        ? 'unlimited'
-        : info.neurobot_limit,
-
-    expiry_date:
-      info.days_left === null
-        ? 'Sin fecha'
-        : `${info.days_left} días`,
-  };
-
-  // ----------------------------------------------------------
   // LOGOUT
   // ----------------------------------------------------------
 
@@ -760,15 +470,12 @@ export default function TeacherPanel() {
       subtitle: '',
     };
 
-  const planStyle =
-    planColor(licenseType);
-
   // ----------------------------------------------------------
   // MENÚ
   // ----------------------------------------------------------
 
   const navSections =
-    buildNavSections(hasFeature);
+    buildNavSections();
 
   // ----------------------------------------------------------
   // NAVEGACIÓN
@@ -803,10 +510,6 @@ export default function TeacherPanel() {
       navItemStyle(
         'light',
         isActive,
-        {
-          planType:
-            licenseType,
-        }
       );
 
     return (
@@ -1050,19 +753,6 @@ export default function TeacherPanel() {
             </p>
           </div>
 
-          <span
-            className={`
-              text-[9px]
-              font-bold
-              px-1.5
-              py-0.5
-              rounded
-              ${planStyle.className}
-              flex-shrink-0
-            `}
-          >
-            {planStyle.label}
-          </span>
         </div>
       </div>
 
@@ -1219,7 +909,7 @@ export default function TeacherPanel() {
         "
         style={{
           background:
-            planStyle.background,
+            THEME.background,
         }}
       >
         <SidebarContent />
@@ -1364,7 +1054,7 @@ export default function TeacherPanel() {
             "
             style={{
               background:
-                planStyle.background,
+                THEME.background,
             }}
             onClick={(event) =>
               event.stopPropagation()
@@ -1389,10 +1079,6 @@ export default function TeacherPanel() {
         "
       >
         {/* BANNER */}
-
-        <LicenseBanner
-          showContactButton={true}
-        />
 
         {/* HEADER DESKTOP */}
 
@@ -1436,40 +1122,37 @@ export default function TeacherPanel() {
           </div>
 
           {/* ------------------------------------------------
-              NEUROINSIGHTS
-              Solo se muestra si el plan tiene NeuroAlertas.
+              NEUROINSIGHTS (acceso directo a NeuroAlertas)
           ------------------------------------------------ */}
 
-          {hasFeature('neuroalertas') && (
-            <button
-              type="button"
-              onClick={() =>
-                setActiveTab('alertas')
-              }
-              className="
-                hidden
-                sm:flex
-                items-center
-                gap-2
-                px-3
-                py-1.5
-                bg-[#EEF3FD]
-                text-[#2E6FDB]
-                border
-                border-[#C5D9F7]
-                rounded-lg
-                text-xs
-                font-medium
-                hover:bg-[#2E6FDB]
-                hover:text-white
-                transition-colors
-              "
-            >
-              <Zap className="w-3.5 h-3.5" />
+          <button
+            type="button"
+            onClick={() =>
+              setActiveTab('alertas')
+            }
+            className="
+              hidden
+              sm:flex
+              items-center
+              gap-2
+              px-3
+              py-1.5
+              bg-[#EEF3FD]
+              text-[#2E6FDB]
+              border
+              border-[#C5D9F7]
+              rounded-lg
+              text-xs
+              font-medium
+              hover:bg-[#2E6FDB]
+              hover:text-white
+              transition-colors
+            "
+          >
+            <Zap className="w-3.5 h-3.5" />
 
-              NeuroInsights
-            </button>
-          )}
+            NeuroInsights
+          </button>
         </header>
 
         {/* ==================================================
@@ -1497,74 +1180,57 @@ export default function TeacherPanel() {
 
             {activeTab === 'dashboard' && (
               <DashboardTab
-                license={license}
                 onNavigate={setActiveTab}
               />
             )}
 
             {/* GRUPOS */}
 
-            {activeTab === 'grupos' &&
-              hasFeature('gestion_grupos') && (
-                <MisGruposTab
-                  license={license}
-                />
-              )}
+            {activeTab === 'grupos' && (
+              <MisGruposTab />
+            )}
 
             {/* NEUROBOTS */}
 
-            {activeTab === 'neurobots' &&
-              hasFeature('neurobots') && (
-                <NeuroBotsTab
-                  license={license}
-                />
-              )}
+            {activeTab === 'neurobots' && (
+              <NeuroBotsTab />
+            )}
 
             {/* ALERTAS */}
 
-            {activeTab === 'alertas' &&
-              hasFeature('neuroalertas') && (
-                <NeuroAlertasTab />
-              )}
+            {activeTab === 'alertas' && (
+              <NeuroAlertasTab />
+            )}
 
             {/* TABLERO */}
 
-            {activeTab === 'tablero' &&
-              hasFeature('anuncios') && (
-                <TableroTab />
-              )}
+            {activeTab === 'tablero' && (
+              <TableroTab />
+            )}
 
             {/* EVALUACIONES */}
 
-            {activeTab === 'evaluaciones' &&
-              hasFeature('evaluaciones') && (
-                <EvaluacionesTab
-                  license={license}
-                />
-              )}
+            {activeTab === 'evaluaciones' && (
+              <EvaluacionesTab />
+            )}
 
             {/* MATERIALES */}
 
-            {activeTab === 'materiales' &&
-              hasFeature('recursos') && (
-                <MaterialesTab
-                  license={license}
-                />
-              )}
+            {activeTab === 'materiales' && (
+              <MaterialesTab />
+            )}
 
             {/* MENSAJES */}
 
-            {activeTab === 'mensajes' &&
-              hasFeature('mensajes') && (
-                <MensajesTab />
-              )}
+            {activeTab === 'mensajes' && (
+              <MensajesTab />
+            )}
 
             {/* CALENDARIO */}
 
-            {activeTab === 'calendario' &&
-              hasFeature('calendario') && (
-                <CalendarioTab />
-              )}
+            {activeTab === 'calendario' && (
+              <CalendarioTab />
+            )}
 
             {/* CONFIGURACIÓN */}
 
@@ -1576,37 +1242,33 @@ export default function TeacherPanel() {
 
             {/* ANALÍTICA */}
 
-            {activeTab === 'analitica' &&
-              hasFeature('advanced_analytics') && (
-                <AnaliticaTab
-                  onNavigate={setActiveTab}
-                />
-              )}
+            {activeTab === 'analitica' && (
+              <AnaliticaTab
+                onNavigate={setActiveTab}
+              />
+            )}
 
             {/* IA */}
 
-            {activeTab === 'ia' &&
-              hasFeature('teacher_ai') && (
-                <IAGenerativaTab />
-              )}
+            {activeTab === 'ia' && (
+              <IAGenerativaTab />
+            )}
 
             {/* INTEGRACIONES */}
 
-            {activeTab === 'integraciones' &&
-              hasFeature('integrations') && (
-                <IntegracionesTab
-                  onNavigate={setActiveTab}
-                />
-              )}
+            {activeTab === 'integraciones' && (
+              <IntegracionesTab
+                onNavigate={setActiveTab}
+              />
+            )}
 
             {/* AUTOMATIZACIONES */}
 
-            {activeTab === 'automatizaciones' &&
-              hasFeature('automation') && (
-                <AutomatizacionesTab
-                  onNavigate={setActiveTab}
-                />
-              )}
+            {activeTab === 'automatizaciones' && (
+              <AutomatizacionesTab
+                onNavigate={setActiveTab}
+              />
+            )}
           </div>
         </main>
       </div>

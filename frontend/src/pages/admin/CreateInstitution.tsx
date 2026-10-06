@@ -7,26 +7,19 @@ import {
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 
-type LicenseType = 'basica' | 'premium' | 'pro';
 type DocType = 'CC' | 'TI' | 'CE' | 'PA';
 
 interface FormState {
-  name: string; dane_code: string; license_type: LicenseType;
+  name: string; dane_code: string;
   sp_full_name: string; sp_document_type: DocType;
   sp_document_number: string; sp_email: string;
 }
 interface Credential { full_name: string; username: string; temp_password: string; role: string; }
-interface CreatedInstitution { id: number; name: string; dane_code: string; license_type: string; credential: Credential; }
+interface CreatedInstitution { id: number; name: string; dane_code: string; credential: Credential; }
 
 const EMPTY: FormState = {
-  name: '', dane_code: '', license_type: 'basica',
+  name: '', dane_code: '',
   sp_full_name: '', sp_document_type: 'CC', sp_document_number: '', sp_email: '',
-};
-
-const LICENSE_INFO = {
-  basica:  { label: 'Basica',   teachers: 20,    students: 300,    desc: 'Instituciones pequeñas' },
-  premium: { label: 'Premium',  teachers: 60,    students: 1500,   desc: 'Colegios medianos' },
-  pro:     { label: 'Pro',      teachers: '∞',   students: '∞',    desc: 'Sin restricciones' },
 };
 
 export default function CreateInstitution() {
@@ -85,11 +78,6 @@ export default function CreateInstitution() {
             </div>
             <h2 className="text-xl font-bold text-[#191919]">Institución creada correctamente</h2>
             <p className="text-sm text-[#787774] mt-1">{created.name} · DANE {created.dane_code}</p>
-          </div>
-
-          <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-4 py-3 mb-5 flex items-center gap-3 text-sm">
-            <ShieldCheck className="w-4 h-4 text-[#6940A5] shrink-0" />
-            <span className="text-[#787774]">Licencia <span className="font-semibold text-[#37352F] capitalize">{created.license_type}</span> asignada</span>
           </div>
 
           <div className="border border-[#E9E9E7] rounded-md p-5 space-y-4 mb-5">
@@ -167,19 +155,6 @@ export default function CreateInstitution() {
               onChange={set('name')} placeholder="Ej: Colegio Nacional San Francisco" error={errors.name} />
             <InputField label="Código DANE *" icon={Hash} value={form.dane_code}
               onChange={set('dane_code')} placeholder="Ej: 154001000149" error={errors.dane_code} />
-            <div>
-              <label className="block text-xs font-medium text-[#37352F] mb-2">Tipo de licencia</label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(Object.entries(LICENSE_INFO) as [LicenseType, typeof LICENSE_INFO.basica][]).map(([key, info]) => (
-                  <button key={key} type="button" onClick={() => setForm(f => ({ ...f, license_type: key }))}
-                    className={`p-3 border-2 rounded-md text-left transition-all ${form.license_type === key ? 'border-[#37352F] bg-[#F7F6F3]' : 'border-[#E9E9E7] hover:border-[#9B9A97]'}`}>
-                    <p className="font-semibold text-sm text-[#191919]">{info.label}</p>
-                    <p className="text-[10px] text-[#787774] mt-0.5">{info.desc}</p>
-                    <p className="text-[10px] text-[#9B9A97] mt-1">{info.teachers} prof · {info.students} est</p>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </section>
 

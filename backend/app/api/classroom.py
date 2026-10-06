@@ -15,18 +15,12 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 
 from app.db.database import get_db
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_permission
+from app.core.permissions import Permission
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment, ClassroomBot
 from app.models.expert_bot import ExpertBot
 
-from app.services.license_service import (
-    get_license,
-    require_active_license,
-    require_student_module,
-    require_teacher_module,
-    LicenseInfo,
-)
 
 from app.schemas.schemas import (
     ClassroomCreate,
@@ -149,40 +143,12 @@ def classroom_response(
 async def create_classroom(
     request: ClassroomCreate,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
-    active_license: LicenseInfo = Depends(
-        require_active_license
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Crear una nueva clase."""
 
     require_teacher(current_user)
-
-    # --------------------------------------------------------
-    # Verificar límite de grupos
-    # --------------------------------------------------------
-
-    total_classes = (
-        db.query(Classroom)
-        .filter(
-            Classroom.teacher_id == current_user.id,
-            Classroom.is_active == True,
-        )
-        .count()
-    )
-
-    if total_classes >= license_info.groups_limit:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"Has alcanzado el límite de "
-                f"{license_info.groups_limit} grupos para tu plan "
-                f"({license_info.license_type})."
-            ),
-        )
 
     # --------------------------------------------------------
     # Crear clase
@@ -236,9 +202,7 @@ async def create_classroom(
 )
 async def list_my_classrooms(
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Listar todas las clases activas del profesor actual."""
@@ -320,9 +284,7 @@ async def list_my_classrooms(
 )
 async def list_enrolled_classrooms(
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_student_module("mis_cursos")
-    ),
+    _authorized: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Listar las clases del estudiante actual."""
@@ -429,7 +391,6 @@ async def list_enrolled_classrooms(
 async def get_classroom(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
     """Obtener detalle de una clase."""
@@ -480,17 +441,6 @@ async def get_classroom(
             detail="No tienes acceso a esta clase",
         )
 
-    if not license_info.has_student_module(
-        "mis_cursos"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "El módulo 'mis_cursos' no está disponible "
-                f"en tu licencia ({license_info.license_type})."
-            ),
-        )
-
     enrollment = (
         db.query(Enrollment)
         .filter(
@@ -533,7 +483,6 @@ async def get_classroom(
 async def get_student_classroom_detail(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
     """
@@ -541,17 +490,6 @@ async def get_student_classroom_detail(
     """
 
     require_student(current_user)
-
-    if not license_info.has_student_module(
-        "mis_cursos"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "El módulo 'mis_cursos' no está disponible "
-                f"en tu licencia ({license_info.license_type})."
-            ),
-        )
 
     classroom = (
         db.query(Classroom)
@@ -692,12 +630,7 @@ async def get_student_classroom_detail(
 async def delete_classroom(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
-    active_license: LicenseInfo = Depends(
-        require_active_license
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Desactivar una clase."""
@@ -756,12 +689,7 @@ async def delete_classroom(
 async def join_classroom(
     request: EnrollByCodeRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_student_module("mis_cursos")
-    ),
-    active_license: LicenseInfo = Depends(
-        require_active_license
-    ),
+    _authorized: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Inscribirse en una clase con código."""
@@ -919,9 +847,7 @@ async def join_classroom(
 async def list_students(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Listar estudiantes inscritos en una clase."""
@@ -1001,12 +927,7 @@ async def remove_student(
     classroom_id: int,
     student_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
-    active_license: LicenseInfo = Depends(
-        require_active_license
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Remover un estudiante de una clase."""
@@ -1081,12 +1002,7 @@ async def assign_bot_to_classroom(
     classroom_id: int,
     request: AssignBotRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("neurobots")
-    ),
-    active_license: LicenseInfo = Depends(
-        require_active_license
-    ),
+    _authorized: User = Depends(require_permission(Permission.ASIGNAR_BOTS_AULA)),
     db: Session = Depends(get_db),
 ):
     """Asignar un bot a una clase."""
@@ -1190,9 +1106,7 @@ async def assign_bot_to_classroom(
 async def list_available_bots(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("neurobots")
-    ),
+    _authorized: User = Depends(require_permission(Permission.ASIGNAR_BOTS_AULA)),
     db: Session = Depends(get_db),
 ):
     """
@@ -1281,9 +1195,7 @@ async def list_available_bots(
 async def list_classroom_bots(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("neurobots")
-    ),
+    _authorized: User = Depends(require_permission(Permission.ASIGNAR_BOTS_AULA)),
     db: Session = Depends(get_db),
 ):
     """Listar bots asignados a una clase."""
@@ -1379,12 +1291,7 @@ async def remove_bot_from_classroom(
     classroom_id: int,
     bot_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("neurobots")
-    ),
-    active_license: LicenseInfo = Depends(
-        require_active_license
-    ),
+    _authorized: User = Depends(require_permission(Permission.ASIGNAR_BOTS_AULA)),
     db: Session = Depends(get_db),
 ):
     """Remover un bot de una clase."""
@@ -1457,9 +1364,7 @@ async def remove_bot_from_classroom(
 async def get_classroom_stats(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Estadísticas generales de la clase."""
@@ -1688,9 +1593,7 @@ async def get_student_progress(
     classroom_id: int,
     student_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Progreso detallado de un estudiante."""
@@ -1785,9 +1688,7 @@ async def get_student_progress(
 async def get_classroom_alerts(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_teacher_module("cursos")
-    ),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
     """Alertas de estudiantes en riesgo."""

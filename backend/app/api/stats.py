@@ -7,16 +7,12 @@ from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.models.learning import QuizHistory, LearningSession, CognitiveEvent
 from app.api.auth import get_current_user
-from app.services.license_service import get_license, LicenseInfo
 
 router = APIRouter()
 
 @router.get("/dashboard")
-def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), license_info: LicenseInfo = Depends(get_license)):
+def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     user_id = current_user.id
-    # Bloquear si la licencia está suspendida
-    if license_info.license_status == "suspended":
-        raise HTTPException(status_code=403, detail="La licencia institucional está suspendida.")
     
     # Filtro común para todas las métricas de quizzes completados.
     _completed_filter = (
@@ -147,7 +143,6 @@ def _build_cognitive_summary_from_events(events) -> dict:
 def get_performance_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(get_license),
 ):
     """
     Análisis detallado de desempeño para la sección Desempeño:
@@ -155,10 +150,6 @@ def get_performance_stats(
     indicadores cognitivos derivados, logros y distribución horaria.
     """
     user_id = current_user.id
-    # Verificar acceso a estadísticas para estudiantes
-    if current_user.role == UserRole.ESTUDIANTE.value:
-        if not license_info.has_student_module("estadisticas"):
-            raise HTTPException(status_code=403, detail=f"El módulo 'estadisticas' no está disponible en tu licencia ({license_info.license_type}).")
     now = datetime.utcnow()
     today = now.date()
 

@@ -1,7 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { LicenseProvider } from './context/LicenseContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
@@ -163,10 +162,8 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
-        <LicenseProvider>
-          <AppRoutes />
-          <PWAInstallPrompt />
-        </LicenseProvider>
+        <AppRoutes />
+        <PWAInstallPrompt />
       </AuthProvider>
     </HashRouter>
   );

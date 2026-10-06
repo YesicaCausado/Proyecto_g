@@ -46,8 +46,6 @@ Test-Endpoint "GET /bots/" "GET" "/bots/" $tStudent | Out-Null
 Test-Endpoint "GET /bots/my-bots" "GET" "/bots/my-bots" $tStudent | Out-Null
 Test-Endpoint "GET /bots/shared-with-me" "GET" "/bots/shared-with-me" $tStudent | Out-Null
 Test-Endpoint "GET /classrooms/my-enrolled" "GET" "/classrooms/my-enrolled" $tStudent | Out-Null
-Test-Endpoint "GET /license/my-license" "GET" "/license/my-license" $tStudent | Out-Null
-Test-Endpoint "GET /license/check-feature/chat" "GET" "/license/check-feature/chat" $tStudent | Out-Null
 Test-Endpoint "GET /chat/stats" "GET" "/chat/stats" $tStudent | Out-Null
 Test-Endpoint "GET /chat/quiz-history" "GET" "/chat/quiz-history" $tStudent | Out-Null
 Test-Endpoint "GET /chat/patterns" "GET" "/chat/patterns" $tStudent | Out-Null
@@ -66,7 +64,6 @@ Test-Endpoint "GET /teacher/stats" "GET" "/teacher/stats" $tTeacher | Out-Null
 Test-Endpoint "GET /classrooms/my-classes" "GET" "/classrooms/my-classes" $tTeacher | Out-Null
 Test-Endpoint "GET /teacher/evaluations" "GET" "/teacher/evaluations" $tTeacher | Out-Null
 Test-Endpoint "GET /teacher/materials" "GET" "/teacher/materials" $tTeacher | Out-Null
-Test-Endpoint "GET /license/my-license" "GET" "/license/my-license" $tTeacher | Out-Null
 Test-Endpoint "GET /bots/my-bots" "GET" "/bots/my-bots" $tTeacher | Out-Null
 Test-Endpoint "GET /notifications" "GET" "/notifications" $tTeacher | Out-Null
 
@@ -78,12 +75,10 @@ Test-Endpoint "GET /super/stats/alerts" "GET" "/super/stats/alerts" $tSuper | Ou
 Test-Endpoint "GET /super/stats/security" "GET" "/super/stats/security" $tSuper | Out-Null
 Test-Endpoint "GET /super/teachers" "GET" "/super/teachers" $tSuper | Out-Null
 Test-Endpoint "GET /super/students" "GET" "/super/students" $tSuper | Out-Null
-Test-Endpoint "GET /super/license-usage" "GET" "/super/license-usage" $tSuper | Out-Null
 Test-Endpoint "GET /super/classrooms" "GET" "/super/classrooms" $tSuper | Out-Null
 Test-Endpoint "GET /super/bots" "GET" "/super/bots" $tSuper | Out-Null
 Test-Endpoint "GET /super/broadcasts" "GET" "/super/broadcasts" $tSuper | Out-Null
 Test-Endpoint "GET /super/audit" "GET" "/super/audit" $tSuper | Out-Null
-Test-Endpoint "GET /license/my-license" "GET" "/license/my-license" $tSuper | Out-Null
 
 Write-Host ""
 Write-Host "====== ADMIN ======"

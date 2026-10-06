@@ -454,7 +454,7 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function NeuroBotsTab({ license }: { license: any }) {
+export default function NeuroBotsTab() {
   const [bots,       setBots]       = useState<NeuroBot[]>([]);
   const [selected,   setSelected]   = useState<NeuroBot | null>(null);
   const [showModal,  setShowModal]  = useState(false);
@@ -479,9 +479,6 @@ export default function NeuroBotsTab({ license }: { license: any }) {
       }))))
       .catch(() => setBots([]));
   }, []);
-
-  const maxBots = license?.bots_limit === 'unlimited' ? Infinity : (license?.bots_limit ?? 1);
-  const usedBots = bots.length;
 
   const handleCreate = async () => {
     if (!form.name.trim() || creating) return;
@@ -568,8 +565,7 @@ export default function NeuroBotsTab({ license }: { license: any }) {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          disabled={usedBots >= maxBots}
-          className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" /> Crear NeuroBot
         </button>

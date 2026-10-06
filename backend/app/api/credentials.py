@@ -7,7 +7,6 @@ Endpoints:
   POST  /super/teachers/bulk          → carga masiva CSV profesores
   POST  /super/students               → crea estudiante individual
   POST  /super/students/bulk          → carga masiva CSV estudiantes
-  GET   /super/license-usage          → uso de la licencia
   POST  /auth/change-password         → cambio de contraseña (primer login)
 """
 import csv
@@ -15,7 +14,7 @@ import io
 import re
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
@@ -24,12 +23,12 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.api.auth import get_current_user, get_password_hash
 from app.models.user import User, UserRole
-from app.models.institution import Institution, AuditLog, LICENSE_LIMITS
+from app.models.institution import Institution, AuditLog
 from app.schemas.schemas import (
     InstitutionCreate, InstitutionResponse,
     TeacherCreate, TeacherUpdate, TeacherListItem,
     StudentCreate, StudentUpdate, StudentListItem,
-    BulkCreateResponse, CredentialItem, LicenseUsage, AdminStats,
+    BulkCreateResponse, CredentialItem, AdminStats,
 )
 
 from app.services.email_service import send_credentials_email
@@ -37,15 +36,6 @@ from app.services.mail.addresses import placeholder_email_for
 
 router = APIRouter(tags=["Credenciales B2B"])
 
-# ─── Módulos permitidos del panel Súper Profesor según licencia ──────────────
-# Importados desde license_service.py (única fuente de verdad). Modelo
-# acumulativo y con "perfil" siempre habilitado en todos los planes.
-from app.services.license_service import (  # noqa: E402
-    SUPER_MODULES,
-    UNLIMITED,
-    _resolve_license_state,
-    licensing_enabled,
-)
 
 
 # ─── Utilidades ──────────────────────────────────────────────────────────────
@@ -106,56 +96,6 @@ def _client_ip(request: Request) -> str:
             getattr(request.client, "host", "unknown"))
 
 
-# ─── Licencia ─────────────────────────────────────────────────────────────────
-
-def _license_limits(institution: Institution) -> dict:
-    """
-    Cupos de docentes y estudiantes de la institución.
-
-    Sin licencias (LICENSING_ENABLED=false) no hay cupos: devuelve UNLIMITED.
-    """
-    if not licensing_enabled():
-        return {"teachers": UNLIMITED, "students": UNLIMITED}
-    return LICENSE_LIMITS.get(institution.license_type, LICENSE_LIMITS["basica"])
-
-
-def _check_license(db: Session, institution: Institution, role: str):
-    """Lanza 403 si se supera el límite de la licencia (solo con licencias activas)."""
-    if not licensing_enabled():
-        return
-    limits = _license_limits(institution)
-    if role == UserRole.PROFESOR.value:
-        count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.PROFESOR.value,
-            User.is_active == True,
-        ).count()
-        if count >= limits["teachers"]:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    f"Has alcanzado el límite de profesores de tu licencia "
-                    f"({limits['teachers']}/{limits['teachers']}). "
-                    "Actualiza tu licencia para continuar."
-                ),
-            )
-    elif role == UserRole.ESTUDIANTE.value:
-        count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.ESTUDIANTE.value,
-            User.is_active == True,
-        ).count()
-        if count >= limits["students"]:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    f"Has alcanzado el límite de estudiantes de tu licencia "
-                    f"({limits['students']}/{limits['students']}). "
-                    "Actualiza tu licencia para continuar."
-                ),
-            )
-
-
 # ─── Admin: Instituciones ─────────────────────────────────────────────────────
 
 @router.post("/admin/institutions", response_model=InstitutionResponse, status_code=201)
@@ -181,7 +121,6 @@ async def create_institution(
     institution = Institution(
         name=payload.name,
         dane_code=payload.dane_code,
-        license_type=payload.license_type,
         created_by=current_user.id,
     )
     db.add(institution)
@@ -221,7 +160,6 @@ async def create_institution(
         "id": institution.id,
         "name": institution.name,
         "dane_code": institution.dane_code,
-        "license_type": institution.license_type,
         "is_active": institution.is_active,
         "created_at": institution.created_at,
         "credential": CredentialItem(
@@ -267,13 +205,13 @@ async def get_admin_stats(
     )
 
 
-# NOTE: La ruta GET /admin/institutions (listado de instituciones con paginación,
-# uso de licencia, límites y estados) se define de forma canónica en
+# NOTE: La ruta GET /admin/institutions (listado de instituciones con paginación
+# y estados) se define de forma canónica en
 # app/api/admin_users.py (admin_list_institutions). ESTE módulo NO la redefine:
 # definirla aquí duplicaba el path y, al montar credentials antes que admin_users
 # en main.py, la versión simple de este archivo sombreaba la rica de admin_users,
 # rompiendo páginas que esperan el contrato {total, page, page_size, institutions}
-# (p.ej. LicenseManagement.tsx). La creación (POST /admin/institutions) sí vive
+# (p.ej. InstitutionList.tsx). La creación (POST /admin/institutions) sí vive
 # aquí porque es parte del flujo B2B de registro de institución + super profesor.
 
 
@@ -377,7 +315,6 @@ async def create_teacher(
 ):
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
-    _check_license(db, institution, UserRole.PROFESOR.value)
 
     if db.query(User).filter(User.document_number == payload.document_number).first():
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
@@ -536,16 +473,6 @@ async def bulk_create_teachers(
             errors.append({"row": i, "error": err, "data": row})
             continue
 
-        # Verificar límite
-        limits = _license_limits(institution)
-        t_count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.PROFESOR.value,
-        ).count()
-        if t_count + len(created) >= limits["teachers"]:
-            errors.append({"row": i, "error": "Límite de licencia alcanzado", "data": row})
-            continue
-
         temp_pwd = _gen_temp_password()
         teacher = User(
             username=row["numero_documento"],
@@ -643,15 +570,6 @@ async def preview_bulk_create_teachers(
             err = "Documento duplicado en el sistema"
         elif db.query(User).filter(User.email == row["correo"]).first():
             err = "Correo duplicado en el sistema"
-        else:
-            # Verificar límite de licencia sobre la proyección del plan
-            limits = _license_limits(institution)
-            t_count = db.query(User).filter(
-                User.institution_id == institution.id,
-                User.role == UserRole.PROFESOR.value,
-            ).count()
-            if t_count + valid_count >= limits["teachers"]:
-                err = "Límite de licencia alcanzado"
 
         if err:
             errors.append({"row": i, "error": err, "data": row})
@@ -763,7 +681,6 @@ async def create_student(
 ):
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
-    _check_license(db, institution, UserRole.ESTUDIANTE.value)
 
     if db.query(User).filter(User.document_number == payload.document_number).first():
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
@@ -919,15 +836,6 @@ async def bulk_create_students(
             errors.append({"row": i, "error": err, "data": row})
             continue
 
-        limits = _license_limits(institution)
-        s_count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.ESTUDIANTE.value,
-        ).count()
-        if s_count + len(created) >= limits["students"]:
-            errors.append({"row": i, "error": "Límite de licencia alcanzado", "data": row})
-            continue
-
         email = row.get("correo") or placeholder_email_for(row["numero_documento"])
         temp_pwd = _gen_temp_password()
         student = User(
@@ -1018,14 +926,6 @@ async def preview_bulk_create_students(
             err = "Documento vacío"
         elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
             err = "Documento duplicado en el sistema"
-        else:
-            limits = _license_limits(institution)
-            s_count = db.query(User).filter(
-                User.institution_id == institution.id,
-                User.role == UserRole.ESTUDIANTE.value,
-            ).count()
-            if s_count + valid_count >= limits["students"]:
-                err = "Límite de licencia alcanzado"
 
         if err:
             errors.append({"row": i, "error": err, "data": row})
@@ -1044,68 +944,6 @@ async def preview_bulk_create_students(
         ),
     }
 
-
-# ─── Uso de licencia ──────────────────────────────────────────────────────────
-
-@router.get("/super/license-usage", response_model=LicenseUsage)
-async def get_license_usage(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    _require_role(current_user, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value)
-    institution = _get_my_institution(db, current_user)
-    t_count = db.query(User).filter(
-        User.institution_id == institution.id,
-        User.role == UserRole.PROFESOR.value, User.is_active == True,
-    ).count()
-    s_count = db.query(User).filter(
-        User.institution_id == institution.id,
-        User.role == UserRole.ESTUDIANTE.value, User.is_active == True,
-    ).count()
-
-    if not licensing_enabled():
-        # Sin licencias: sin cupos ni vencimiento; todos los módulos del rol.
-        return LicenseUsage(
-            license_type="sin_licencia",
-            license_status="active",
-            max_teachers=UNLIMITED,
-            current_teachers=t_count,
-            max_students=UNLIMITED,
-            current_students=s_count,
-            expiry_date=None,
-            days_left=None,
-            institution_name=institution.name,
-            super_modules=SUPER_MODULES["pro"],
-        )
-
-    limits = _license_limits(institution)
-    if not institution.is_active:
-        license_status = "suspended"
-        days_left = None
-    else:
-        # Licencia anual: vence a los 365 días de su fecha de inicio
-        # (created_at) a menos que haya una fecha de vencimiento explícita.
-        license_status, days_left = _resolve_license_state(institution)
-
-    # Fecha de vencimiento efectiva: la explícita o created_at + 365 días.
-    effective_expiry = None
-    if institution.expiry_date is not None:
-        effective_expiry = institution.expiry_date
-    elif institution.created_at is not None:
-        effective_expiry = institution.created_at + timedelta(days=365)
-
-    return LicenseUsage(
-        license_type=institution.license_type,
-        license_status=license_status,
-        max_teachers=limits["teachers"],
-        current_teachers=t_count,
-        max_students=limits["students"],
-        current_students=s_count,
-        expiry_date=effective_expiry.isoformat() if effective_expiry else None,
-        days_left=days_left,
-        institution_name=institution.name,
-        super_modules=SUPER_MODULES.get(institution.license_type, SUPER_MODULES["basica"]),
-    )
 
 
 # NOTE: El cambio de contraseña (incluido el forzado en primer login) se

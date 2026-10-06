@@ -8,7 +8,6 @@ import { useAuth } from '../../../context/AuthContext';
 import NeuronWelcome from '../../../components/NeuronWelcome';
 
 interface Props {
-  license: any;
   onNavigate: (tab: string) => void;
 }
 

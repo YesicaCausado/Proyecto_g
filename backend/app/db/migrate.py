@@ -89,7 +89,6 @@ def run_migrations(engine) -> None:
             id           SERIAL PRIMARY KEY,
             name         VARCHAR(200) NOT NULL,
             dane_code    VARCHAR(20)  NOT NULL,
-            license_type VARCHAR(20)  NOT NULL DEFAULT 'basica',
             is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
             created_at   TIMESTAMP    NOT NULL DEFAULT NOW(),
             created_by   INTEGER
@@ -170,7 +169,6 @@ def run_migrations(engine) -> None:
         """,
 
         # ── 5. Columnas de configuración institucional ─────────────────────
-        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS expiry_date TIMESTAMP",
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS email VARCHAR(200)",
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS address VARCHAR(255)",
@@ -183,7 +181,6 @@ def run_migrations(engine) -> None:
 
         # ── 6. Columnas que pueden faltar en institutions si la tabla fue
         #      creada antes de agregar estos campos ────────────────────────
-        "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS license_type VARCHAR(20) NOT NULL DEFAULT 'basica'",
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
 
         # ── 7. Columnas legacy en institutions: hacerlas NULLABLE y quitar
@@ -198,9 +195,8 @@ def run_migrations(engine) -> None:
                 FROM information_schema.columns
                 WHERE table_name = 'institutions'
                   AND table_schema = 'public'
-                  AND column_name NOT IN ('id','name','dane_code','license_type',
-                                          'is_active','created_at','created_by',
-                                          'expiry_date')
+                  AND column_name NOT IN ('id','name','dane_code',
+                                          'is_active','created_at','created_by')
                   AND data_type IN ('character varying','text','character','integer',
                                     'bigint','boolean','numeric')
             LOOP

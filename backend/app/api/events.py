@@ -15,10 +15,10 @@ from datetime import datetime
 
 from app.db.database import get_db
 from app.api.auth import get_current_user
+from app.core.permissions import FORBIDDEN_MESSAGE, Permission, has_permission
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment
 from app.models.events import ClassroomEvent
-from app.services.license_service import get_license, require_active_license, LicenseInfo
 
 router = APIRouter(prefix="/events", tags=["Calendario - Eventos"])
 
@@ -71,14 +71,10 @@ def _can_manage_event(user: User, ev: ClassroomEvent) -> bool:
     return False
 
 
-def _require_calendar_module(user: User, license_info: LicenseInfo):
-    """Valida el módulo de calendario según el rol (profesor vs super)."""
-    if user.role == UserRole.SUPER_PROFESOR.value:
-        if not license_info.has_super_module("calendario"):
-            raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
-    else:
-        if not license_info.has_teacher_module("calendario"):
-            raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
+def _require_calendar_manager(user: User) -> None:
+    """Solo súper profesores y profesores crean, editan o eliminan eventos."""
+    if not has_permission(user.role, Permission.GESTIONAR_CALENDARIO):
+        raise HTTPException(status_code=403, detail=FORBIDDEN_MESSAGE)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -88,7 +84,6 @@ async def list_events(
     classroom_id: Optional[int] = Query(None),
     month: Optional[str]        = Query(None, description="YYYY-MM para filtrar por mes"),
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
     """
@@ -103,13 +98,6 @@ async def list_events(
     """
     inst_id = getattr(current_user, "institution_id", None)
 
-    # Verificar acceso al módulo 'calendario'
-    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("calendario"):
-        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
-    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("calendario"):
-        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
-    if current_user.role == UserRole.SUPER_PROFESOR.value and not license_info.has_super_module("calendario"):
-        raise HTTPException(status_code=403, detail=f"El módulo 'calendario' no está disponible en tu licencia ({license_info.license_type}).")
 
     from sqlalchemy import or_, and_
 
@@ -219,16 +207,13 @@ async def list_events(
 async def create_event(
     body: EventCreate,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Crear un evento en el calendario (solo profesores)."""
     if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
         raise HTTPException(status_code=403, detail="Solo profesores pueden crear eventos")
 
-    # Verificar módulo calendario
-    _require_calendar_module(current_user, license_info)
+    _require_calendar_manager(current_user)
 
     # Verificar que la clase le pertenece (si se especificó).
     if body.classroom_id:
@@ -266,8 +251,6 @@ async def update_event(
     event_id: int,
     body: EventUpdate,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Editar un evento (solo el profesor que lo creó o un super de su institución)."""
@@ -281,8 +264,7 @@ async def update_event(
     if not ev or not _can_manage_event(current_user, ev):
         raise HTTPException(status_code=404, detail="Evento no encontrado o sin permiso")
 
-    # Verificar módulo calendario
-    _require_calendar_module(current_user, license_info)
+    _require_calendar_manager(current_user)
 
     if body.title is not None:       ev.title = body.title
     if body.event_type is not None:  ev.event_type = body.event_type
@@ -299,8 +281,6 @@ async def update_event(
 async def delete_event(
     event_id: int,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(get_license),
-    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Eliminar un evento (solo el profesor que lo creó o un super de su institución)."""
@@ -314,8 +294,7 @@ async def delete_event(
     if not ev or not _can_manage_event(current_user, ev):
         raise HTTPException(status_code=404, detail="Evento no encontrado o sin permiso")
 
-    # Verificar módulo calendario
-    _require_calendar_module(current_user, license_info)
+    _require_calendar_manager(current_user)
 
     ev.is_active = False
     db.commit()

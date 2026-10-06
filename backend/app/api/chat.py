@@ -45,10 +45,10 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from app.db.database import get_db
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_permission
+from app.core.permissions import Permission
 from app.models.user import User
 from app.models.learning import LearningSession, CognitiveState
-from app.services.license_service import require_chat_access, LicenseInfo
 from app.schemas.schemas import (
     StartSessionRequest,
     ChatMessageRequest,
@@ -872,7 +872,7 @@ def _quiz_suggested(response_text: str) -> bool:
 async def save_pattern_data(
     payload: ChatPatternPayload,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """Guarda los datos de los 5 patrones por usuario y tema."""
@@ -920,7 +920,7 @@ async def get_pattern_history(
     topic: Optional[str] = None,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """Trae los patrones guardados del usuario por tema."""
@@ -967,7 +967,7 @@ async def get_pattern_history(
 async def start_session(
     request: StartSessionRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """Inicia sesión: la IA genera un mensaje de bienvenida al tema."""
@@ -1022,7 +1022,7 @@ async def start_session(
 async def send_message(
     request: ChatMessageRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """
@@ -1526,7 +1526,7 @@ async def send_message(
 @router.get("/stats", response_model=SessionStatsResponse)
 async def get_session_stats(
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """
@@ -1595,7 +1595,7 @@ async def get_session_stats(
 async def generate_cognitive_quiz(
     request: QuizRequest,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db)
 ):
     """
@@ -1892,7 +1892,7 @@ def _is_quiz_answer_correct(user_answer, correct_answer, options=None):
 async def submit_quiz_answers(
     submission: QuizSubmission,
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db)
 ):
     """

@@ -33,7 +33,8 @@ El sistema analiza 5 patrones de comportamiento digital mediante **fusión bayes
 |-----|-------------|
 | **Estudiante** | Aprende con el tutor IA adaptativo, visualiza su progreso cognitivo |
 | **Profesor** | Crea bots expertos con su material, monitorea alertas neuroconductuales |
-| **Súper Profesor (Rector)** | Gestiona licencias institucionales, dashboards macro del colegio |
+| **Súper Profesor (Rector)** | Gestiona docentes y estudiantes de su institución, dashboards macro del colegio |
+| **Administrador** | Gestiona instituciones (crear, activar/desactivar), usuarios, configuración del sistema y auditoría |
 | **Sistema IA** | Motor neuroconductual automatizado — analiza y adapta en tiempo real |
 
 ---

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Users, GraduationCap, BookOpen, Bot, TrendingUp, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2, LineChart,
-  PieChart, Trophy, Lock
+  PieChart, Trophy
 } from 'lucide-react';
 import api from '../../../services/api';
 import NeuronAvatar from '../../../components/NeuronAvatar';
@@ -21,14 +21,12 @@ interface DashStats {
 const AREA_COLORS = ['#0B6E99','#0F7B6C','#6940A5','#D9730D','#E03E3E','#AEADAB','#2E6FDB','#37352F'];
 
 export default function DashboardGeneral({
-  license, onNavigate, modules,
+  onNavigate,
 }: {
-  license: any;
   onNavigate?: (tab: string) => void;
-  modules?: { licenseType: string | null; enabled: string[]; locked: string[] };
 }) {
   const [stats, setStats] = useState<DashStats | null>(null);
-  const [institution, setInstitution] = useState<{ name: string } | null>(null);
+  const [institution, setInstitution] = useState<{ name: string; dane_code?: string } | null>(null);
 
   const loadDashboardData = async () => {
     const [statsData, institutionData] = await Promise.all([
@@ -51,120 +49,36 @@ export default function DashboardGeneral({
     };
   }, []);
 
-  const institutionName = institution?.name ?? license?.institution_name ?? '—';
+  const institutionName = institution?.name ?? '—';
 
   const metrics = [
-    { label: 'Profesores activos', value: stats?.total_teachers != null ? String(stats.total_teachers) : (license?.current_teachers != null ? String(license.current_teachers) : '—'), status: 'good', icon: Users, tab: 'profesores' },
-    { label: 'Estudiantes', value: stats?.total_students != null ? String(stats.total_students) : (license?.current_students != null ? String(license.current_students) : '—'), status: 'good', icon: GraduationCap, tab: 'estudiantes' },
+    { label: 'Profesores activos', value: stats?.total_teachers != null ? String(stats.total_teachers) : '—', status: 'good', icon: Users, tab: 'profesores' },
+    { label: 'Estudiantes', value: stats?.total_students != null ? String(stats.total_students) : '—', status: 'good', icon: GraduationCap, tab: 'estudiantes' },
     { label: 'Grupos', value: stats?.total_groups != null ? String(stats.total_groups) : '—', status: 'neutral', icon: BookOpen, tab: 'grupos' },
     { label: 'NeuroBots', value: '—', status: 'neutral', icon: Bot, tab: 'neurobots' },
     { label: 'Promedio general', value: stats?.avg_score != null ? `${stats.avg_score}/10` : '—', status: stats && stats.avg_score >= 7 ? 'good' : 'neutral', icon: TrendingUp, tab: null },
     { label: 'En riesgo', value: stats?.at_risk_count != null ? String(stats.at_risk_count) : '—', status: 'danger', icon: AlertTriangle, tab: 'alertas' },
   ];
 
-  const daysLeft   = license?.days_left ?? null;
-  const isExpiring = daysLeft !== null && daysLeft <= 30 && daysLeft > 0;
-
-  // ── Límite de la licencia (máximo de docentes / estudiantes permitidos) ──
-  const maxTeachers  = license?.max_teachers ?? 0;
-  const maxStudents  = license?.max_students ?? 0;
-  const unlimited    = (n: number) => n > 90000;
-  const limitText    = (n: number) => (unlimited(n) ? 'Ilimitado' : n.toLocaleString('es-CO'));
-
   return (
     <div className="space-y-6">
 
-      {!license && !stats && (
+      {!stats && (
         <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-4 py-2.5 text-xs text-[#787774] font-medium">
           Cargando datos reales de la institución…
         </div>
       )}
 
-      {/* ── Alerta de licencia ── */}
-      {isExpiring && (
-        <div className="bg-[#FCF6E5] border border-[#EDD88A] rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-[#D9730D] flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-semibold text-[#D9730D] text-sm">Tu licencia vence en {daysLeft} días</p>
-            <p className="text-xs text-[#D9730D]/80 mt-0.5">Renueva pronto para evitar interrupciones del servicio.</p>
-          </div>
-          <button
-            onClick={() => onNavigate?.('licencia')}
-            className="text-xs font-semibold text-[#D9730D] hover:text-[#B85C00] flex items-center gap-1 flex-shrink-0"
-          >
-            Gestionar <ExternalLink className="w-3 h-3" />
-          </button>
+      {/* ── Institución ── */}
+      <div className="bg-white border border-[#E9E9E7] rounded-lg px-5 py-4 flex items-center gap-3">
+        <ShieldCheck className="w-6 h-6 text-[#6940A5] flex-shrink-0" />
+        <div className="min-w-0">
+          <p className="text-xs text-[#787774]">Institución</p>
+          <p className="text-base font-bold text-[#191919] truncate">{institutionName}</p>
         </div>
-      )}
-
-      {/* ── Licencia Card ── */}
-      <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden flex flex-col md:flex-row">
-        <div className="bg-gradient-to-br from-[#6940A5] to-[#5A358F] text-white p-6 md:w-56 flex-shrink-0 flex flex-col justify-between">
-          <div>
-            <ShieldCheck className="w-7 h-7 opacity-70 mb-3" />
-            <h2 className="text-lg font-bold">Licencia {license?.license_type || '—'}</h2>
-            <div className="inline-flex items-center gap-1.5 mt-2 bg-white/20 px-2.5 py-1 rounded-full text-xs font-semibold">
-              <span className={`w-1.5 h-1.5 rounded-full ${license?.license_status === 'expired' ? 'bg-red-400' : license?.license_status === 'suspended' ? 'bg-gray-400' : 'bg-green-400'} animate-pulse`} />
-              {license?.license_status ? (license.license_status === 'active' ? 'Activa' : license.license_status === 'expiring_soon' ? 'Próxima a vencer' : license.license_status === 'expired' ? 'Vencida' : 'Suspendida') : 'Sin datos'}
-            </div>
-          </div>
-          <div className="mt-5 space-y-3">
-            {/* Límite de la licencia */}
-            <div className="border-t border-white/20 pt-3">
-              <p className="text-xs opacity-70 mb-2">Límite de la licencia</p>
-              <div className="space-y-1 text-sm">
-                <p className="flex justify-between gap-2">
-                  <span className="opacity-80">Docentes</span>
-                  <span className="font-bold">{limitText(maxTeachers)}</span>
-                </p>
-                <p className="flex justify-between gap-2">
-                  <span className="opacity-80">Estudiantes</span>
-                  <span className="font-bold">{limitText(maxStudents)}</span>
-                </p>
-              </div>
-            </div>
-
-            {daysLeft !== null ? (
-              <>
-                <p className="text-xs opacity-70 mb-0.5">Vence en</p>
-                <p className="text-3xl font-bold">{daysLeft}</p>
-                <p className="text-xs opacity-70">días</p>
-              </>
-            ) : (
-              <>
-                <p className="text-xs opacity-70 mb-0.5">Vigencia</p>
-                <p className="text-lg font-bold">Anual</p>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="p-6 flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[
-            { label: 'Docentes', current: license?.current_teachers ?? 0, max: license?.max_teachers ?? 0, color: '#0B6E99' },
-            { label: 'Estudiantes', current: license?.current_students ?? 0, max: license?.max_students ?? 0, color: '#0F7B6C' },
-          ].map(item => {
-            const pct = item.max > 0 ? Math.round((item.current / item.max) * 100) : 0;
-            return (
-              <div key={item.label}>
-                <div className="flex justify-between text-sm mb-1.5">
-                  <span className="font-semibold text-[#191919]">{item.label}</span>
-                  <span className="text-[#787774]">{item.current} de {item.max > 90000 ? 'Ilimitado' : item.max}</span>
-                </div>
-                <div className="h-2 bg-[#F7F6F3] rounded-full overflow-hidden border border-[#E9E9E7]">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: item.color }} />
-                </div>
-                <p className="text-[10px] text-[#AEADAB] mt-0.5 text-right">{item.max > 0 ? `${pct}%` : 'Sin límite'}</p>
-              </div>
-            );
-          })}
-          <div className="md:col-span-2 pt-4 border-t border-[#E9E9E7] flex justify-between items-center">
-            <p className="text-xs text-[#787774]">Institución: <span className="font-semibold text-[#37352F]">{institutionName}</span></p>
-            <button onClick={() => onNavigate?.('licencia')} className="text-xs font-medium text-[#6940A5] hover:underline flex items-center gap-1">
-              Administrar Licencia <ExternalLink className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
+        {institution?.dane_code && (
+          <span className="ml-auto text-xs text-[#787774] flex-shrink-0">DANE {institution.dane_code}</span>
+        )}
       </div>
 
       {/* ── KPIs ── */}
@@ -334,26 +248,6 @@ export default function DashboardGeneral({
           <NeuronAvatar size={80} online variant="gradient" />
         </div>
       </div>
-
-      {/* ── Módulos disponibles por licencia (solo al final del dashboard) ── */}
-      {modules?.enabled?.length ? (
-        <div className="bg-white border border-[#E9E9E7] rounded-lg px-4 py-3 flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold text-[#191919] flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-[#6940A5]" />
-            Módulos de tu licencia {modules.licenseType ?? 'actual'}:
-          </span>
-          {modules.enabled.map(id => (
-            <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium capitalize">
-              {id}
-            </span>
-          ))}
-          {modules.locked.map(id => (
-            <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F7F6F3] text-[#AEADAB] font-medium capitalize" title="No disponible en tu plan">
-              <Lock className="w-3 h-3" /> {id}
-            </span>
-          ))}
-        </div>
-      ) : null}
 
     </div>
   );

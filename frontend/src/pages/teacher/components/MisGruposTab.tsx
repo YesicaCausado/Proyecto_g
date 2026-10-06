@@ -210,7 +210,7 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function MisGruposTab({ license }: { license: any }) {
+export default function MisGruposTab() {
   const [groups,      setGroups]      = useState<Group[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [createError, setCreateError] = useState('');
@@ -233,7 +233,6 @@ export default function MisGruposTab({ license }: { license: any }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const maxGroups  = license?.groups_limit  ?? 10;
   const usedGroups = groups.length;
 
   const copyCode = (id: string, code: string) => {
@@ -300,16 +299,12 @@ export default function MisGruposTab({ license }: { license: any }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-[#787774]">
-            <span className="font-semibold text-[#191919]">{usedGroups}</span> de {maxGroups} grupos — plan {license?.plan ?? 'básica'}
+            <span className="font-semibold text-[#191919]">{usedGroups}</span> {usedGroups === 1 ? 'grupo' : 'grupos'}
           </p>
-          <div className="mt-1 w-40 h-1.5 bg-[#E9E9E7] rounded-full overflow-hidden">
-            <div className="h-full bg-[#2E6FDB] rounded-full" style={{ width: `${Math.min((usedGroups / maxGroups) * 100, 100)}%` }} />
-          </div>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          disabled={usedGroups >= maxGroups}
-          className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" /> Crear Grupo
         </button>

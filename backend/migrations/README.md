@@ -32,6 +32,7 @@ migrations/
 | 003 | `003_last_login.sql` | Columna last_login en users | Jul 2026 |
 | 004 | `004_password_reset_tokens.sql` | Tabla password_reset_tokens | Jul 2026 |
 | 005 | `005_rls_multitenant.sql` | **RLS multi-tenant**: políticas de fila (institutions, users, classrooms, expert_bots, enrollments) | — |
+| 007 | `007_eliminar_licencias.sql` | **Pendiente de ejecutar.** Elimina `institutions.license_type` y `institutions.expiry_date` (modelo de licencias retirado). Ejecutar después de desplegar el código; ver instrucciones en el archivo. | Oct 2026 |
 
 ## RLS multi-tenant (005)
 

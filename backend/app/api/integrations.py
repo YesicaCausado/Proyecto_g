@@ -1,7 +1,7 @@
 """
 NeuroLearn AI — API de Integraciones y Automatizaciones
 =========================================================
-Endpoints para Docente Pro:
+Endpoints del módulo de Integraciones (Administrador, Súper Profesor y Profesor):
   - Google Drive  (OAuth 2.0 real: conectar, listar carpetas, archivos, importar)
   - Google Calendar (OAuth: conectar, listar calendarios, crear eventos)
   - Webhooks          (configurar, probar, activar/desactivar, ejecución real)
@@ -11,7 +11,8 @@ Seguridad:
   - Todos los endpoints requieren JWT autenticado (get_current_user).
   - Proceso multi-tenant: se valida que institution_id del usuario coincida
     con los registros. Los tokens de Google se cifran y nunca viajan al frontend.
-  - Acceso de módulo: require_feature("integrations") / --- "automatizaciones".
+  - Acceso por rol: require_permission(Permission.GESTIONAR_INTEGRACIONES) /
+    require_permission(Permission.GESTIONAR_AUTOMATIZACIONES) (app/core/permissions.py).
 """
 from __future__ import annotations
 
@@ -23,7 +24,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_permission
+from app.core.permissions import Permission
 from app.models.user import User, UserRole
 from app.models.institution import Institution
 from app.models.integration import (
@@ -31,9 +33,6 @@ from app.models.integration import (
     Automation, AutomationTrigger, AutomationAction, AutomationExecution,
 )
 from app.models.classroom import Classroom, Enrollment
-from app.services.license_service import (
-    require_active_license, require_feature, LicenseInfo,
-)
 from app.services import integration_service as isvc
 
 router = APIRouter(tags=["Integraciones y Automatizaciones"])
@@ -112,7 +111,7 @@ def _serialize_automation(a: Automation) -> dict:
 @router.get("/integrations")
 async def list_integrations(
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Lista las integraciones de la institución del usuario (sin tokens)."""
@@ -135,7 +134,7 @@ async def list_integrations(
 @router.get("/automation-options")
 async def automation_options(
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     """Devuelve qué acciones están disponibles según integraciones conectadas."""
@@ -178,8 +177,7 @@ async def connect_google(
     provider: str,
     request: "Request",
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Inicia el flujo OAuth de Google devolviendo la URL de autorización."""
@@ -294,8 +292,7 @@ async def google_callback(
 async def disconnect_integration(
     provider: str,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Desconecta una integración (elimina credenciales almacenadas)."""
@@ -359,7 +356,7 @@ def _get_connected(db: Session, inst_id: int, provider: str) -> Integration:
 @router.get("/integrations/google/drive/folders")
 async def drive_folders(
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -376,7 +373,7 @@ async def drive_folders(
 async def drive_files(
     folder_id: str,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -391,8 +388,7 @@ async def drive_files(
 async def drive_select_folder(
     body: dict,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Guarda la carpeta de Drive seleccionada en la configuración de la integración."""
@@ -414,8 +410,7 @@ async def drive_select_folder(
 async def drive_import_files(
     body: dict,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """
@@ -464,7 +459,7 @@ async def drive_import_files(
 @router.get("/integrations/google/calendar/calendars")
 async def calendar_calendars(
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -479,8 +474,7 @@ async def calendar_calendars(
 async def calendar_select(
     body: dict,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Guarda el calendario de Google seleccionado."""
@@ -502,8 +496,7 @@ async def calendar_select(
 async def calendar_create_event(
     body: CalendarEventCreate,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Crea un evento real en el calendario de Google seleccionado."""
@@ -531,7 +524,7 @@ async def calendar_create_event(
 @router.get("/integrations/webhook")
 async def get_webhook(
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Devuelve la integración webhook de la institución (sin secretos)."""
@@ -561,8 +554,7 @@ async def get_webhook(
 async def save_webhook(
     body: WebhookConfig,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Guarda o crea la configuración de webhook de la institución."""
@@ -610,7 +602,7 @@ async def save_webhook(
 async def test_webhook_endpoint(
     body: dict,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Envía un POST real de prueba al webhook configurado y captura la respuesta."""
@@ -637,8 +629,7 @@ async def test_webhook_endpoint(
 async def toggle_webhook(
     body: dict,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("integrations")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Activa/desactiva el webhook configurado."""
@@ -662,7 +653,7 @@ async def toggle_webhook(
 @router.get("/automations")
 async def list_automations(
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -679,8 +670,7 @@ async def list_automations(
 async def create_automation(
     body: AutomationCreate,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -712,8 +702,7 @@ async def update_automation(
     automation_id: int,
     body: AutomationUpdate,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -742,8 +731,7 @@ async def update_automation(
 async def delete_automation(
     automation_id: int,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -763,8 +751,7 @@ async def toggle_automation(
     automation_id: int,
     body: dict,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -784,7 +771,7 @@ async def toggle_automation(
 async def automation_history(
     automation_id: int,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     inst_id = _require_institution(current_user)
@@ -816,8 +803,7 @@ async def automation_history(
 async def run_automation_manual(
     automation_id: int,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     """Ejecuta una automatización manualmente (útil para probar)."""
@@ -837,8 +823,7 @@ async def run_automation_manual(
 async def check_low_performance(
     body: dict,
     current_user: User = Depends(get_current_user),
-    lic: LicenseInfo = Depends(require_feature("automation")),
-    active_license: LicenseInfo = Depends(require_active_license),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
     """

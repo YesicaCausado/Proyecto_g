@@ -44,7 +44,7 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   match:     'Emparejamiento',
 };
 
-export default function EvaluacionesTab({ license }: { license: any }) {
+export default function EvaluacionesTab() {
   const [evals,       setEvals]       = useState<Evaluation[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showModal,   setShowModal]   = useState(false);
@@ -131,8 +131,6 @@ export default function EvaluacionesTab({ license }: { license: any }) {
     setForm({ title:'', group:GROUPS[0], type:'cuestionario', date:'', duration:30, attempts:1 });
     setQuestions([]);
   };
-
-  const isPremium = license?.plan === 'premium' || license?.plan === 'pro';
 
   if (viewEval) return (
     <div className="space-y-5">
@@ -281,13 +279,11 @@ export default function EvaluacionesTab({ license }: { license: any }) {
               ) : (
                 <>
                   {/* Botón AI */}
-                  {isPremium && (
-                    <button onClick={generateWithAI} disabled={aiLoading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-[#6940A5] bg-purple-50 text-[#6940A5] rounded-lg text-sm font-medium hover:bg-purple-100 transition-colors disabled:opacity-60">
-                      {aiLoading ? <Clock className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                      {aiLoading ? 'Generando con IA...' : '✨ Generar preguntas con IA'}
-                    </button>
-                  )}
+                  <button onClick={generateWithAI} disabled={aiLoading}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-[#6940A5] bg-purple-50 text-[#6940A5] rounded-lg text-sm font-medium hover:bg-purple-100 transition-colors disabled:opacity-60">
+                    {aiLoading ? <Clock className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {aiLoading ? 'Generando con IA...' : '✨ Generar preguntas con IA'}
+                  </button>
 
                   {/* Preguntas añadidas */}
                   {questions.length > 0 && (

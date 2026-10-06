@@ -1,21 +1,16 @@
 /**
  * NeuroLearn AI — Admin: Configuración del Sistema
- * Secciones: Sistema, Seguridad, IA, Límites de Licencia
+ * Secciones: Sistema, Seguridad, IA
  */
 import { useEffect, useState, useRef } from 'react';
 import {
   Settings, RefreshCw, CheckCircle2, AlertTriangle,
-  Server, Shield, Brain, Layers,
+  Server, Shield, Brain,
   Info, Save,
 } from 'lucide-react';
 import api from '../../services/api';
 
 interface AIProvider { name: string; model: string; active: boolean }
-interface LicenseLimits {
-  basica:  { teachers: number; students: number };
-  premium: { teachers: number; students: number };
-  pro:     { teachers: number; students: number };
-}
 
 interface Config {
   app_name: string;
@@ -29,7 +24,6 @@ interface Config {
   email_configured: boolean;
   email_from: string;
   ai_providers: AIProvider[];
-  license_limits: LicenseLimits;
   total_users: number;
   active_users: number;
   total_institutions: number;
@@ -45,25 +39,6 @@ function InfoRow({ label, value, mono = false }: { label: string; value: React.R
   );
 }
 
-// ── Componente: campo numérico editable ──────────────────────────────────────
-function NumberField({
-  label, value, onChange, min = 1, max = 999999,
-}: { label: string; value: number; onChange: (v: number) => void; min?: number; max?: number }) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-[#F3F3F1] last:border-0">
-      <span className="text-sm text-[#787774]">{label}</span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="w-24 text-right border border-[#E9E9E7] rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B6E99]/40"
-      />
-    </div>
-  );
-}
-
 export default function SystemConfig() {
   const [config, setConfig] = useState<Config | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,11 +48,6 @@ export default function SystemConfig() {
   const [tokenExpire, setTokenExpire]   = useState(1440);
   const [emailFrom,   setEmailFrom]     = useState('');
   const [debugMode,   setDebugMode]     = useState(false);
-  const [limits, setLimits] = useState({
-    basica_teachers:  20,   basica_students:  300,
-    premium_teachers: 60,   premium_students: 1500,
-    pro_teachers:     9999, pro_students:     999999,
-  });
 
   // Feedback
   const [saving, setSaving] = useState(false);
@@ -100,14 +70,6 @@ export default function SystemConfig() {
       setTokenExpire(c.token_expire_minutes);
       setEmailFrom(c.email_from);
       setDebugMode(c.debug_mode);
-      setLimits({
-        basica_teachers:  c.license_limits.basica.teachers,
-        basica_students:  c.license_limits.basica.students,
-        premium_teachers: c.license_limits.premium.teachers,
-        premium_students: c.license_limits.premium.students,
-        pro_teachers:     c.license_limits.pro.teachers,
-        pro_students:     c.license_limits.pro.students,
-      });
     } catch {
       setError('No se pudo cargar la configuración del sistema.');
     } finally {
@@ -124,12 +86,6 @@ export default function SystemConfig() {
         token_expire_minutes:   tokenExpire,
         debug_mode:             debugMode,
         email_from:             emailFrom,
-        license_basica_teachers:  limits.basica_teachers,
-        license_basica_students:  limits.basica_students,
-        license_premium_teachers: limits.premium_teachers,
-        license_premium_students: limits.premium_students,
-        license_pro_teachers:     limits.pro_teachers,
-        license_pro_students:     limits.pro_students,
       });
       showNotice('ok', res.data.message);
       fetchConfig();
@@ -313,34 +269,6 @@ export default function SystemConfig() {
             <p className="text-xs text-[#787774]">
               Para cambiar los modelos de IA, actualiza <span className="font-mono">GROQ_MODEL</span> o <span className="font-mono">GEMINI_MODEL</span> en las variables de entorno de Vercel.
             </p>
-          </div>
-        </div>
-
-        {/* ── Sección: Límites de Licencia ──────── */}
-        <div className="bg-white rounded-md border border-[#E9E9E7] shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-[#E9E9E7] flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#D9730D]" />
-            <h2 className="font-semibold text-[#191919] text-sm">Límites por Tipo de Licencia</h2>
-          </div>
-          <div className="px-5 py-3">
-            {/* Básica */}
-            <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mt-1 mb-1">Básica</p>
-            <NumberField label="Máx. docentes" value={limits.basica_teachers}
-              onChange={v => setLimits(l => ({ ...l, basica_teachers: v }))} />
-            <NumberField label="Máx. estudiantes" value={limits.basica_students}
-              onChange={v => setLimits(l => ({ ...l, basica_students: v }))} />
-            {/* Premium */}
-            <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mt-3 mb-1">Premium</p>
-            <NumberField label="Máx. docentes" value={limits.premium_teachers}
-              onChange={v => setLimits(l => ({ ...l, premium_teachers: v }))} />
-            <NumberField label="Máx. estudiantes" value={limits.premium_students}
-              onChange={v => setLimits(l => ({ ...l, premium_students: v }))} />
-            {/* Pro */}
-            <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mt-3 mb-1">Pro</p>
-            <NumberField label="Máx. docentes" value={limits.pro_teachers}
-              onChange={v => setLimits(l => ({ ...l, pro_teachers: v }))} />
-            <NumberField label="Máx. estudiantes" value={limits.pro_students}
-              onChange={v => setLimits(l => ({ ...l, pro_students: v }))} />
           </div>
         </div>
 

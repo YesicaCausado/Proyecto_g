@@ -1,9 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useLicense } from '../context/LicenseContext';
-import { planColor } from '../styles/plan';
-import LicenseBanner from './LicenseBanner';
-import SuspendedScreen from './SuspendedScreen';
+import { THEME } from '../styles/theme';
 import { COMPETENCIES } from '../data/competencies';
 import {
   LogOut,
@@ -27,23 +24,12 @@ import {
 import { useState, useEffect, type ReactNode } from 'react';
 import { navItemStyle } from '../styles/sidebar';
 
-type NavModule =
-  | 'mis_cursos'
-  | 'tutor_ia'
-  | 'evaluaciones'
-  | 'estadisticas'
-  | 'recursos'
-  | 'mensajes'
-  | 'calendario'
-  | 'perfil';
-
 interface NavLinkItem {
   id: string;
   type: 'link';
   to: string;
   label: string;
   icon: string; // nombre de icono resuelto en render
-  module?: NavModule;
 }
 
 interface NavGroupItem {
@@ -51,7 +37,6 @@ interface NavGroupItem {
   type: 'group';
   label: string;
   icon: string;
-  module?: NavModule;
   children: NavLinkItem[];
 }
 
@@ -84,7 +69,6 @@ const iconMap: Record<string, ReactNode> = {
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const { hasStudentModule, licenseStatus, licenseType } = useLicense();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -95,12 +79,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const isTeacher = user?.role === 'profesor';
-  const plan = planColor(licenseType);
-
-  // Pantalla de suspensión
-  if (licenseStatus === 'suspended' && user?.role === 'estudiante') {
-    return <SuspendedScreen role="estudiante" />;
-  }
 
   const exact = (path: string) => location.pathname === path;
 
@@ -129,7 +107,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               type: 'group',
               label: 'Competencias',
               icon: 'compe',
-              module: 'tutor_ia',
               children: COMPETENCIES.map((c) => ({
                 id: `comp-${c.slug}`,
                 type: 'link' as const,
@@ -144,27 +121,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               label: 'Desafíos',
               icon: 'desafios',
               children: [
-                { id: 'realizar', type: 'link', to: '/quizzes', label: 'Realizar quiz', icon: 'play', module: 'evaluaciones' },
-                { id: 'historial', type: 'link', to: '/quizzes/history', label: 'Historial de quizzes', icon: 'historial', module: 'evaluaciones' },
-                { id: 'desempeno', type: 'link', to: '/performance', label: 'Desempeño', icon: 'desempeno', module: 'estadisticas' },
+                { id: 'realizar', type: 'link', to: '/quizzes', label: 'Realizar quiz', icon: 'play' },
+                { id: 'historial', type: 'link', to: '/quizzes/history', label: 'Historial de quizzes', icon: 'historial' },
+                { id: 'desempeno', type: 'link', to: '/performance', label: 'Desempeño', icon: 'desempeno' },
               ],
             },
-            { id: 'material', type: 'link', to: '/material', label: 'Material de Apoyo', icon: 'material', module: 'recursos' },
-          ].filter((i: any) => !i.module || hasStudentModule(i.module)),
+            { id: 'material', type: 'link', to: '/material', label: 'Material de Apoyo', icon: 'material' },
+          ],
         },
         {
           label: 'MI INSTITUCIÓN',
           items: [
-            { id: 'mis-clases', type: 'link', to: '/my-classes', label: 'Mis Clases', icon: 'clases', module: 'mis_cursos' },
-            { id: 'tablero', type: 'link', to: '/tablero', label: 'Tablero', icon: 'tablero', module: 'mis_cursos' },
-            { id: 'calendario', type: 'link', to: '/calendar', label: 'Calendario', icon: 'calendario', module: 'calendario' },
-          ].filter((i: any) => !i.module || hasStudentModule(i.module)),
+            { id: 'mis-clases', type: 'link', to: '/my-classes', label: 'Mis Clases', icon: 'clases' },
+            { id: 'tablero', type: 'link', to: '/tablero', label: 'Tablero', icon: 'tablero' },
+            { id: 'calendario', type: 'link', to: '/calendar', label: 'Calendario', icon: 'calendario' },
+          ],
         },
         {
           label: 'COMUNICACIÓN',
           items: [
-            { id: 'mensajes', type: 'link', to: '/messages', label: 'Mensajes', icon: 'mensajes', module: 'mensajes' },
-          ].filter((i: any) => !i.module || hasStudentModule(i.module)),
+            { id: 'mensajes', type: 'link', to: '/messages', label: 'Mensajes', icon: 'mensajes' },
+          ],
         },
         {
           label: 'CUENTA',
@@ -222,9 +199,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // ─── Estilos reutilizables por estado (compartidos con todos los paneles) ──
   const linkClass = (active: boolean) =>
-    `group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', active, { planType: licenseType }).stateClass}`;
-  const skipModule = (item: NavItem): boolean =>
-    !!item.module && !hasStudentModule(item.module);
+    `group flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', active).stateClass}`;
 
   // ─── Sidebar inner ─────────────────────────────────────────────────────────
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
@@ -256,10 +231,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <nav className="space-y-0.5">
               {section.items.map((item) => {
                 if (item.type === 'link') {
-                  if (skipModule(item)) return null;
                   const active = linkActive(item);
                   const icon = iconMap[item.icon] ?? null;
-                  const st = navItemStyle('light', active, { planType: licenseType });
+                  const st = navItemStyle('light', active);
                   return (
                     <Link
                       key={item.id}
@@ -271,7 +245,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       <span className={st.iconClass}>{icon}</span>
                       <span className="flex-1 truncate">{item.label}</span>
                       {active && (
-                        <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" style={{ color: plan.accent }} />
+                        <ChevronRight className="w-3.5 h-3.5 ml-auto flex-shrink-0" style={{ color: THEME.accent }} />
                       )}
                     </Link>
                   );
@@ -280,7 +254,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 // ── Grupo con submenú (Competencias / Desafíos) ──
                 const open = openGroups.has(item.id);
                 const groupIsActive = groupActive(item);
-                const visibleChildren = item.children.filter((c) => !skipModule(c));
+                const visibleChildren = item.children;
                 if (visibleChildren.length === 0) return null;
 
                 return (
@@ -288,11 +262,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <button
                       type="button"
                       onClick={() => toggleGroup(item.id)}
-                      className={`group w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', groupIsActive, { planType: licenseType }).stateClass}`}
-                      style={navItemStyle('light', groupIsActive, { planType: licenseType }).style}
+                      className={`group w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', groupIsActive).stateClass}`}
+                      style={navItemStyle('light', groupIsActive).style}
                       aria-expanded={open}
                     >
-                      <span className={navItemStyle('light', groupIsActive, { planType: licenseType }).iconClass}>
+                      <span className={navItemStyle('light', groupIsActive).iconClass}>
                         {iconMap[item.icon]}
                       </span>
                       <span className="flex-1 truncate text-left">{item.label}</span>
@@ -300,7 +274,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         className={`w-3.5 h-3.5 ml-auto flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''} ${
                           groupIsActive ? '' : 'text-[#AEADAB]'
                         }`}
-                        style={groupIsActive ? { color: plan.accent } : undefined}
+                        style={groupIsActive ? { color: THEME.accent } : undefined}
                       />
                     </button>
 
@@ -315,18 +289,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                               key={child.id}
                               to={child.to}
                               onClick={() => mobile && setSidebarOpen(false)}
-                              className={`group flex items-center gap-2.5 pl-2 pr-2.5 py-[6px] rounded-md text-[13px] font-medium transition-all duration-150 ${navItemStyle('light', cActive, { planType: licenseType }).stateClass}`}
-                              style={navItemStyle('light', cActive, { planType: licenseType }).style}
+                              className={`group flex items-center gap-2.5 pl-2 pr-2.5 py-[6px] rounded-md text-[13px] font-medium transition-all duration-150 ${navItemStyle('light', cActive).stateClass}`}
+                              style={navItemStyle('light', cActive).style}
                             >
                               <span
                                 className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
                                   cActive ? '' : 'bg-[#C4C8CC] group-hover:bg-[#2F5B80]'
                                 }`}
-                                style={cActive ? { background: plan.accent } : undefined}
+                                style={cActive ? { background: THEME.accent } : undefined}
                               />
                               <span className="flex-1 truncate">{child.label}</span>
                               {cIcon && (
-                                <span className={navItemStyle('light', cActive, { planType: licenseType }).iconClass}>{cIcon}</span>
+                                <span className={navItemStyle('light', cActive).iconClass}>{cIcon}</span>
                               )}
                             </Link>
                           );
@@ -353,12 +327,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">
               {user?.full_name || user?.username}
             </p>
-            <div className="flex items-center gap-1.5">
-              <p className="text-[10px] text-[#787774] capitalize truncate">{user?.role}</p>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${plan.className}`}>
-                {plan.label}
-              </span>
-            </div>
+            <p className="text-[10px] text-[#787774] capitalize truncate">{user?.role}</p>
           </div>
           <button
             onClick={handleLogout}
@@ -380,7 +349,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Sidebar Desktop ── */}
       <aside
         className="hidden md:flex md:flex-col md:w-[240px] flex-shrink-0 border-r border-[#E9E9E7]"
-        style={{ background: plan.background }}
+        style={{ background: THEME.background }}
       >
         <SidebarContent />
       </aside>
@@ -399,9 +368,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           >
             NeuroLearn
           </span>
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${plan.className}`}>
-            {plan.label}
-          </span>
         </div>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -419,7 +385,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         >
           <div
             className="absolute left-0 top-12 bottom-0 w-[240px] border-r border-[#E9E9E7]"
-            style={{ background: plan.background }}
+            style={{ background: THEME.background }}
             onClick={(e) => e.stopPropagation()}
           >
             <SidebarContent mobile />
@@ -429,8 +395,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Main content ── */}
       <main className="flex-1 overflow-y-auto flex flex-col">
-        {/* Banner de licencia para estudiante */}
-        {!isTeacher && <LicenseBanner showContactButton={false} />}
         <div className="pt-12 md:pt-0 pb-16 md:pb-0 min-h-full flex-1">
           {children}
         </div>
@@ -440,13 +404,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {!isTeacher && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#E9E9E7] flex items-center justify-around px-1 h-16 safe-area-pb">
           {(() => {
-            const items: { to: string; label: string; icon: ReactNode; module: NavModule; active: boolean }[] = [
-              { to: '/dashboard', label: 'Inicio', icon: <Home className="w-5 h-5" />, module: 'inicio' as NavModule, active: exact('/dashboard') },
-              { to: '/chat', label: 'Competencias', icon: <BookOpen className="w-5 h-5" />, module: 'tutor_ia' as NavModule, active: location.pathname.startsWith('/chat') },
-              { to: '/quizzes', label: 'Desafíos', icon: <Trophy className="w-5 h-5" />, module: 'evaluaciones' as NavModule, active: location.pathname.startsWith('/quizzes') || exact('/performance') },
-              { to: '/my-classes', label: 'Clases', icon: <Users className="w-5 h-5" />, module: 'mis_cursos' as NavModule, active: location.pathname.startsWith('/my-classes') },
-              { to: '/settings', label: 'Perfil', icon: <Settings className="w-5 h-5" />, module: 'perfil' as NavModule, active: exact('/settings') },
-            ].filter((i) => !i.module || hasStudentModule(i.module));
+            const items: { to: string; label: string; icon: ReactNode; active: boolean }[] = [
+              { to: '/dashboard', label: 'Inicio', icon: <Home className="w-5 h-5" />, active: exact('/dashboard') },
+              { to: '/chat', label: 'Competencias', icon: <BookOpen className="w-5 h-5" />, active: location.pathname.startsWith('/chat') },
+              { to: '/quizzes', label: 'Desafíos', icon: <Trophy className="w-5 h-5" />, active: location.pathname.startsWith('/quizzes') || exact('/performance') },
+              { to: '/my-classes', label: 'Clases', icon: <Users className="w-5 h-5" />, active: location.pathname.startsWith('/my-classes') },
+              { to: '/settings', label: 'Perfil', icon: <Settings className="w-5 h-5" />, active: exact('/settings') },
+            ];
             return items.map((item) => (
               <Link
                 key={item.to}
@@ -454,8 +418,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 onClick={() => setSidebarOpen(false)}
                 className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]"
               >
-                <span className={`transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: plan.accent } : undefined}>{item.icon}</span>
-                <span className={`text-[10px] font-medium transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: plan.accent } : undefined}>{item.label}</span>
+                <span className={`transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: THEME.accent } : undefined}>{item.icon}</span>
+                <span className={`text-[10px] font-medium transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: THEME.accent } : undefined}>{item.label}</span>
               </Link>
             ));
           })()}

@@ -40,12 +40,6 @@ class Settings(BaseSettings):
     # Debe quedar por debajo del maxDuration (30 s) de la función de Vercel.
     EMAIL_HTTP_TIMEOUT: float = float(os.getenv("EMAIL_HTTP_TIMEOUT", "10"))
 
-    # ── Licencias institucionales (planes Básica / Premium / Pro) ────────
-    # false (por defecto): sin licencias. Cada usuario tiene todas las
-    #   funcionalidades de su rol, sin vencimiento y sin cupos.
-    # true: se aplican planes, vencimiento y cupos (modelo SaaS comercial).
-    LICENSING_ENABLED: bool = os.getenv("LICENSING_ENABLED", "false").lower() == "true"
-
     # ── CU-03 Recuperar contraseña ───────────────────────────────────────
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = int(os.getenv("PASSWORD_RESET_TOKEN_TTL_MINUTES", "15"))
     PASSWORD_RESET_COOLDOWN_SECONDS: int = int(os.getenv("PASSWORD_RESET_COOLDOWN_SECONDS", "60"))

@@ -464,7 +464,6 @@ class ClassroomStudentDetailResponse(BaseModel):
 class InstitutionCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     dane_code: str = Field(..., min_length=3, max_length=20)
-    license_type: str = Field(default="basica", pattern="^(basica|premium|pro)$")
     # Datos del Super Profesor
     sp_full_name: str = Field(..., min_length=2, max_length=100)
     sp_document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
@@ -483,7 +482,6 @@ class InstitutionResponse(BaseModel):
     id: int
     name: str
     dane_code: str
-    license_type: str
     is_active: bool
     created_at: datetime
     credential: CredentialItem
@@ -499,19 +497,6 @@ class BulkCreateResponse(BaseModel):
     total_created: int
     total_errors: int
 
-
-class LicenseUsage(BaseModel):
-    license_type: str
-    license_status: str
-    max_teachers: int
-    current_teachers: int
-    max_students: int
-    current_students: int
-    expiry_date: Optional[str] = None
-    days_left: Optional[int] = None
-    institution_name: str = ""
-    # Módulos del panel de Súper Profesor habilitados por licencia.
-    super_modules: List[str] = []
 
 class AdminStats(BaseModel):
     """Estadísticas globales del sistema para el panel del administrador"""
@@ -624,7 +609,6 @@ class InstitutionListItem(BaseModel):
     id: int
     name: str
     dane_code: str
-    license_type: str
     is_active: bool
     created_at: datetime
     teacher_count: int

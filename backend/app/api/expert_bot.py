@@ -17,7 +17,6 @@ from app.models.user import User, UserRole
 from app.models.expert_bot import ExpertBot
 from app.models.classroom import Classroom, Enrollment, ClassroomBot
 from app.models.learning import ChatMessage, LearningSession
-from app.services.license_service import quota_limit
 
 # Router montado en main.py con prefix="/api/v1/bots".
 # (El antiguo `prefix="/expert-bots"` se eliminó para evitar rutas duplicadas
@@ -305,13 +304,6 @@ async def create_bot(
 
     # Resolver categoría (campo principal) o alias subject_area
     category = payload.category or payload.subject_area or ""
-
-    # Verificar cupos de la institución (sin licencias: ilimitado)
-    institution = current_user.institution
-    if institution and institution.license_type:
-        limits = quota_limit("neurobots", institution.license_type)
-        if db.query(ExpertBot).filter(ExpertBot.creator_id == current_user.id).count() >= limits:
-            raise HTTPException(status_code=400, detail=f"Límite de bots alcanzado: {limits}")
 
     bot = ExpertBot(
         name=payload.name,

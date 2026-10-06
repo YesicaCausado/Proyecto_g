@@ -47,7 +47,7 @@ const FILE_ICONS: Record<FileType, any> = {
   img:  Eye,
 };
 
-export default function MaterialesTab({ license: _license }: { license: any }) {
+export default function MaterialesTab() {
   const [folders,    setFolders]    = useState<MaterialFolder[]>(INITIAL_FOLDERS);
   const [loading,    setLoading]    = useState(true);
   const [selected,   setSelected]   = useState<MaterialFolder | null>(null);

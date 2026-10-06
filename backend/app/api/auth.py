@@ -39,7 +39,8 @@ from app.core.security import (
     check_rate_limit,
     failed_login_tracker,
 )
-from app.models.user import User as UserModel
+from app.core.permissions import FORBIDDEN_MESSAGE, Permission, has_permission
+from app.models.user import User as UserModel, UserRole
 from app.schemas.schemas import (
     UserCreate,
     UserLogin,
@@ -390,7 +391,51 @@ async def get_current_user(
             ),
         )
 
+    ensure_institution_active(user)
+
     return user
+
+
+INSTITUTION_INACTIVE_MESSAGE = (
+    "La institución está desactivada. "
+    "Contacta al administrador."
+)
+
+
+def ensure_institution_active(user: UserModel) -> None:
+    """
+    Bloquea a los usuarios de una institución desactivada por el
+    Administrador. El Administrador no pertenece a ninguna institución.
+    """
+    if user.role == UserRole.ADMIN.value or user.institution_id is None:
+        return
+    institution = user.institution
+    if institution is not None and not institution.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=INSTITUTION_INACTIVE_MESSAGE,
+        )
+
+
+def require_permission(permission: Permission):
+    """
+    Dependencia de FastAPI: exige que el rol del usuario tenga el permiso.
+
+    Uso:
+        current_user: UserModel = Depends(require_permission(Permission.GESTIONAR_AULAS))
+    """
+
+    def dependency(
+        current_user: UserModel = Depends(get_current_user),
+    ) -> UserModel:
+        if not has_permission(current_user.role, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=FORBIDDEN_MESSAGE,
+            )
+        return current_user
+
+    return dependency
 
 
 # ============================================================
@@ -700,6 +745,8 @@ async def login(
                 "Contacta al administrador."
             ),
         )
+
+    ensure_institution_active(user)
 
     # --------------------------------------------------------
     # 7. Login correcto

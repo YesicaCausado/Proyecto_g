@@ -85,7 +85,7 @@ export default function AdminHome() {
       {/* ── Encabezado con Neuron (igual que estudiante) ─────── */}
       <NeuronWelcome
         name={user?.full_name || user?.username || ''}
-        subtitle="Gestión global de instituciones, licencias y usuarios de NeuroLearn IA"
+        subtitle="Gestión global de instituciones y usuarios de NeuroLearn IA"
       />
 
       {/* ── Flujo de roles ─────────────────────────────────── */}

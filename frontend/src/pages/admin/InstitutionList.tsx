@@ -1,12 +1,14 @@
 /**
  * InstitutionList — Lista de instituciones registradas
- * Consume GET /admin/institutions
+ * Consume GET /admin/institutions y PATCH /admin/institutions/{id}
+ * (activar / desactivar). Una institución desactivada bloquea el acceso de
+ * todos sus usuarios.
  */
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   School, Plus, Search, CheckCircle, XCircle,
-  Users, BookOpen, ChevronRight, Loader2, RefreshCw,
+  Users, BookOpen, Loader2, RefreshCw, Power,
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -14,7 +16,6 @@ interface InstitutionItem {
   id: number;
   name: string;
   dane_code: string;
-  license_type: 'basica' | 'premium' | 'pro';
   is_active: boolean;
   created_at: string;
   teacher_count: number;
@@ -31,18 +32,14 @@ interface InstitutionListEnvelope {
   }>;
 }
 
-const LICENSE_BADGE: Record<string, string> = {
-  basica:  'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]',
-  premium: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',
-  pro:     'bg-[#F7F3FB] text-[#6940A5] border-[#D9CCE9]',
-};
-
 export default function InstitutionList() {
   const [institutions, setInstitutions] = useState<InstitutionItem[]>([]);
   const [total, setTotal]               = useState(0);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState<string | null>(null);
   const [search, setSearch]             = useState('');
+  const [togglingId, setTogglingId]     = useState<number | null>(null);
+  const [actionError, setActionError]   = useState<string | null>(null);
 
   const fetchInstitutions = async () => {
     setLoading(true);
@@ -55,7 +52,6 @@ export default function InstitutionList() {
         id: i.id,
         name: i.name,
         dane_code: i.dane_code,
-        license_type: i.license_type,
         is_active: i.is_active,
         created_at: i.created_at ?? new Date().toISOString(),
         teacher_count: i.teachers_count ?? 0,
@@ -71,6 +67,28 @@ export default function InstitutionList() {
   };
 
   useEffect(() => { fetchInstitutions(); }, []);
+
+  const toggleActive = async (inst: InstitutionItem) => {
+    const next = !inst.is_active;
+    if (!next && !window.confirm(
+      `¿Desactivar «${inst.name}»? Ninguno de sus usuarios podrá iniciar sesión hasta que la reactives.`,
+    )) {
+      return;
+    }
+    setTogglingId(inst.id);
+    setActionError(null);
+    try {
+      const { data } = await api.patch<{ is_active: boolean }>(
+        `/admin/institutions/${inst.id}`,
+        { is_active: next },
+      );
+      setInstitutions(prev => prev.map(i => (i.id === inst.id ? { ...i, is_active: data.is_active } : i)));
+    } catch {
+      setActionError(`No se pudo ${next ? 'activar' : 'desactivar'} «${inst.name}». Intenta de nuevo.`);
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   // Filtro local por nombre o código DANE
   const filtered = institutions.filter(i =>
@@ -109,6 +127,12 @@ export default function InstitutionList() {
           className="w-full pl-9 pr-4 py-2.5 text-sm border border-[#E9E9E7] rounded-md bg-white text-[#37352F] placeholder-[#9B9A97] focus:outline-none focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F]"
         />
       </div>
+
+      {actionError && (
+        <div className="mb-4 bg-[#FDEEEE] border border-[#F4BDBD] rounded-md px-4 py-3 text-sm text-[#E03E3E]">
+          {actionError}
+        </div>
+      )}
 
       {/* ── Estado: cargando ───────────────────────────── */}
       {loading && (
@@ -178,9 +202,6 @@ export default function InstitutionList() {
                   Código DANE
                 </th>
                 <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
-                  Licencia
-                </th>
-                <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
                   Usuarios
                 </th>
                 <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
@@ -189,7 +210,9 @@ export default function InstitutionList() {
                 <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
                   Registrada
                 </th>
-                <th className="px-5 py-3 w-10" />
+                <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
+                  Acción
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E9E9E7]">
@@ -214,13 +237,6 @@ export default function InstitutionList() {
                   <td className="px-5 py-4">
                     <span className="text-sm font-mono text-[#787774]">
                       {inst.dane_code}
-                    </span>
-                  </td>
-
-                  {/* Licencia */}
-                  <td className="px-5 py-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded-full capitalize ${LICENSE_BADGE[inst.license_type] ?? LICENSE_BADGE.basica}`}>
-                      {inst.license_type}
                     </span>
                   </td>
 
@@ -260,13 +276,21 @@ export default function InstitutionList() {
 
                   {/* Acción */}
                   <td className="px-5 py-4">
-                    <Link
-                      to={`/admin/instituciones/nueva`}
-                      className="text-[#9B9A97] hover:text-[#37352F] transition-colors"
-                      title="Ver detalle"
+                    <button
+                      type="button"
+                      onClick={() => toggleActive(inst)}
+                      disabled={togglingId === inst.id}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border transition-colors disabled:opacity-60 ${
+                        inst.is_active
+                          ? 'border-[#F4BDBD] text-[#E03E3E] hover:bg-[#FDEEEE]'
+                          : 'border-[#B3E3DA] text-[#0F7B6C] hover:bg-[#EEF7F4]'
+                      }`}
                     >
-                      <ChevronRight className="w-4 h-4" />
-                    </Link>
+                      {togglingId === inst.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Power className="w-3.5 h-3.5" />}
+                      {inst.is_active ? 'Desactivar' : 'Activar'}
+                    </button>
                   </td>
                 </tr>
               ))}

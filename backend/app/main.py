@@ -32,7 +32,6 @@ from app.api import teacher_materials
 from app.api import teacher_evaluations
 from app.api import teacher_reports
 from app.api import teacher_ai
-from app.api import license
 from app.api import admin_users
 from app.api import notifications
 from app.api import admin_bots
@@ -334,16 +333,6 @@ app.include_router(
 
 app.include_router(
     teacher_reports.router,
-    prefix="/api/v1",
-)
-
-
-# ------------------------------------------------------------
-# LICENSE
-# ------------------------------------------------------------
-
-app.include_router(
-    license.router,
     prefix="/api/v1",
 )
 

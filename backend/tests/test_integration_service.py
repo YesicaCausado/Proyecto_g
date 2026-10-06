@@ -1,7 +1,7 @@
 r"""
 NeuroLearn AI — Pruebas del motor de Integraciones y Automatizaciones
 ======================================================================
-Valida los mecanismos reales que usa la página Docente Pro → Integraciones:
+Valida los mecanismos reales que usa la página Profesor → Integraciones:
 
 1. Cifrado/descifrado de tokens con la SECRET_KEY del servidor (roundtrip).
 2. Webhook: envío de una petición HTTP POST real a un servidor local de
@@ -132,7 +132,7 @@ def test_automation_create_alerta_dispatches_and_records():
     db = Session()
 
     inst = Institution(id=None, name="Colegio Test", dane_code="123456789",
-                       license_type="pro", is_active=True)
+                       is_active=True)
     db.add(inst)
     db.commit()
     db.refresh(inst)
@@ -204,7 +204,7 @@ def test_automation_webhook_action_is_real():
 
     try:
         inst = Institution(name="Colegio Test", dane_code="987654321",
-                           license_type="pro", is_active=True)
+                           is_active=True)
         db.add(inst); db.commit(); db.refresh(inst)
         teacher = User(username="prof.webhook", email="wh@test.co", role="PROFESOR",
                        institution_id=inst.id, is_active=True, hashed_password="x")

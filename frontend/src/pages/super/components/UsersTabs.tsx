@@ -259,7 +259,7 @@ function EditUserModal({ title, fields, initial, saving, onSave, onCancel }: Edi
   );
 }
 
-export function TeachersTab({ license }: { license: any }) {
+export function TeachersTab() {
   const [activeTab, setActiveTab] = useState<'individual' | 'batch'>('individual');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -486,11 +486,11 @@ export function TeachersTab({ license }: { license: any }) {
             <Users className="w-6 h-6" /> Gestión de Profesores
           </h2>
           <p className="text-sm text-[#787774] mt-1">
-            Crea credenciales B2B para tus profesores. Limite de licencias controlado por el sistema.
+            Crea credenciales B2B para tus profesores.
           </p>
         </div>
         <div className="text-sm font-medium bg-[#F7F6F3] p-2 px-4 rounded border border-[#E9E9E7] shadow-sm">
-          Licencias: <span className="text-primary">{license?.current_teachers || 0}</span> / {license?.max_teachers || '∞'}
+          Profesores registrados: <span className="text-primary">{loadingList ? '…' : existingTeachers.length}</span>
         </div>
       </div>
 
@@ -921,7 +921,7 @@ export function TeachersTab({ license }: { license: any }) {
   );
 }
 
-export function StudentsTab({ license, teachers }: { license: any; teachers: any[] }) {
+export function StudentsTab({ teachers }: { teachers: any[] }) {
   const [activeTab, setActiveTab] = useState<'individual' | 'batch'>('individual');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -1162,7 +1162,7 @@ export function StudentsTab({ license, teachers }: { license: any; teachers: any
           </p>
         </div>
         <div className="text-sm font-medium bg-[#F7F6F3] p-2 px-4 rounded border border-[#E9E9E7] shadow-sm">
-          Licencias: <span className="text-primary">{license?.current_students || 0}</span> / {license?.max_students || '∞'}
+          Estudiantes registrados: <span className="text-primary">{loadingList ? '…' : existingStudents.length}</span>
         </div>
       </div>
 

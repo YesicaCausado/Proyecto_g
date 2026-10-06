@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { planColor } from './plan';
+import { THEME } from './theme';
 
 /**
  * Único origen del efecto de "hover / activo / seleccionado" de las barras
@@ -7,7 +7,7 @@ import { planColor } from './plan';
  *
  * Cada panel conserva su propio layout (padding, redondeo, tipografía), pero
  * los ESTADOS (hover suave, activo con barra lateral de acento y tinte del
- * plan, y la correspondiente variación del color del icono) se calculan aquí
+ * tema, y la correspondiente variación del color del icono) se calculan aquí
  * para que todos reutilicen el mismo efecto visual.
  *
  * `theme`:
@@ -15,9 +15,8 @@ import { planColor } from './plan';
  *   - 'dark'  → sidebar oscura del admin (#191919). Hover con overlay claro y
  *               acento azul consistente.
  *
- * El acento de los paneles ligados a licencia se toma del plan (azul/verde/
- * morado según la licencia), de modo que el estado activo del menú quede
- * cohesionado con el tinte de la sidebar y el banner de bienvenida.
+ * El acento (barra del ítem activo y su tinte) viene del tema único de
+ * NeuroLearn (styles/theme.ts), igual para todos los paneles.
  */
 export type SidebarTheme = 'light' | 'dark';
 
@@ -32,8 +31,6 @@ export interface NavItemTokens {
 
 export interface NavItemStyleOptions {
   disabled?: boolean;
-  /** Tipo de licencia que tiñe el estado activo (si no se pasa: azul por defecto). */
-  planType?: string | null;
 }
 
 export function navItemStyle(
@@ -48,10 +45,8 @@ export function navItemStyle(
     };
   }
 
-  // Acento del plan (solo aplica a paneles light ligados a licencia).
-  const plan = planColor(opts?.planType);
-  const accent = plan.accent;
-  const tint = plan.activeTint;
+  const accent = THEME.accent;
+  const tint = THEME.activeTint;
 
   if (theme === 'dark') {
     return active

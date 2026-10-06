@@ -8,7 +8,8 @@ DELETE /admin/users/{id}         → eliminar usuario (solo si no tiene datos vi
 POST   /admin/users/{id}/reset-password → generar nueva contraseña temporal
 GET    /admin/stats              → estadísticas globales del sistema
 GET    /admin/audit-logs         → logs de auditoría del sistema (paginado)
-PATCH  /admin/institutions/{id}/license → gestionar licencia de institución
+GET    /admin/institutions   → lista de instituciones con conteo de usuarios
+PATCH  /admin/institutions/{id} → activar o desactivar una institución
 """
 import secrets, string, re
 from typing import Optional, List
@@ -253,39 +254,16 @@ async def admin_stats(
     total_institutions   = db.query(Institution).count()
     active_institutions  = db.query(Institution).filter(Institution.is_active == True).count()
 
-    # Conteo de licencias vencidas / por vencer usando la MISMA lógica central
-    # (_resolve_license_state) que emplea el resto del sistema: la licencia es
-    # anual (created_at + 365 días) salvo que exista expiry_date explícita.
-    from app.services.license_service import _resolve_license_state
-    expired_licenses = 0
-    expiring_soon = 0
-    _active_insts = db.query(Institution).filter(Institution.is_active == True).all()
-    for inst in _active_insts:
-        status, _ = _resolve_license_state(inst)
-        if status == "expired":
-            expired_licenses += 1
-        elif status == "expiring_soon":
-            expiring_soon += 1
-
-    # Conteo por tipo de licencia
-    license_breakdown: dict = {}
-    from app.models.institution import LICENSE_LIMITS
-    for lt in LICENSE_LIMITS:
-        license_breakdown[lt] = db.query(Institution).filter(
-            Institution.license_type == lt
-        ).count()
-
     # Instituciones más grandes (por estudiantes)
     top_institutions = (
         db.query(
             Institution.id,
             Institution.name,
-            Institution.license_type,
             Institution.is_active,
             func.count(User.id).label("student_count"),
         )
         .outerjoin(User, (User.institution_id == Institution.id) & (User.role == "estudiante"))
-        .group_by(Institution.id, Institution.name, Institution.license_type, Institution.is_active)
+        .group_by(Institution.id, Institution.name, Institution.is_active)
         .order_by(desc("student_count"))
         .limit(5)
         .all()
@@ -295,14 +273,10 @@ async def admin_stats(
         **role_counts,
         "institutions": total_institutions,
         "institutions_active": active_institutions,
-        "expired_licenses": expired_licenses,
-        "expiring_soon": expiring_soon,
-        "license_breakdown": license_breakdown,
         "top_institutions": [
             {
                 "id": r.id,
                 "name": r.name,
-                "license_type": r.license_type,
                 "is_active": r.is_active,
                 "student_count": r.student_count,
             }
@@ -389,74 +363,45 @@ async def admin_audit_logs(
     }
 
 
-# ─── PATCH /admin/institutions/{id}/license ───────────────────────────────────
+# ─── PATCH /admin/institutions/{id} ──────────────────────────────────────────
 
-class LicenseUpdatePayload(BaseModel):
-    license_type: Optional[str] = None      # basica | premium | pro
-    is_active: Optional[bool] = None
-    expiry_date: Optional[str] = None       # "YYYY-MM-DD" o null para quitar vencimiento
-    clear_expiry: Optional[bool] = False    # True = eliminar vencimiento
+class InstitutionStatusPayload(BaseModel):
+    is_active: bool
 
 
-@router.patch("/institutions/{institution_id}/license")
-async def update_institution_license(
+@router.patch("/institutions/{institution_id}")
+async def update_institution_status(
     institution_id: int,
-    payload: LicenseUpdatePayload,
+    payload: InstitutionStatusPayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Activa o desactiva una institución. Los usuarios de una institución
+    desactivada no pueden iniciar sesión (ver auth.ensure_institution_active).
+    """
     _require_admin(current_user)
     inst = db.query(Institution).filter(Institution.id == institution_id).first()
     if not inst:
         raise HTTPException(404, "Institución no encontrada")
 
-    from app.models.institution import LICENSE_LIMITS
-    valid_types = list(LICENSE_LIMITS.keys())
-
-    if payload.license_type is not None:
-        if payload.license_type not in valid_types:
-            raise HTTPException(400, f"Tipo de licencia inválido. Opciones: {valid_types}")
-        inst.license_type = payload.license_type
-
-    if payload.is_active is not None:
-        inst.is_active = payload.is_active
-
-    if payload.clear_expiry:
-        inst.expiry_date = None
-    elif payload.expiry_date is not None:
-        try:
-            inst.expiry_date = datetime.strptime(payload.expiry_date, "%Y-%m-%d")
-        except ValueError:
-            raise HTTPException(400, "Formato de fecha inválido. Use YYYY-MM-DD")
-
+    inst.is_active = payload.is_active
     db.commit()
     db.refresh(inst)
-
-    # Invalida la caché TTL de licencia para que el cambio aplique de inmediato.
-    try:
-        from app.services.license_service import _invalidate_institution_cache
-        _invalidate_institution_cache(inst.id)
-    except Exception:
-        pass
 
     return {
         "ok": True,
         "institution_id": inst.id,
         "name": inst.name,
-        "license_type": inst.license_type,
         "is_active": inst.is_active,
-        "expiry_date": inst.expiry_date.strftime("%Y-%m-%d") if inst.expiry_date else None,
-        "max_teachers": inst.max_teachers,
-        "max_students": inst.max_students,
     }
 
 
-# ─── GET /admin/institutions (resumen con uso de licencia) ────────────────────
+# ─── GET /admin/institutions ──────────────────────────────────────────────────
 
 @router.get("/institutions")
 async def admin_list_institutions(
     search: Optional[str] = Query(None),
-    license_type: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -472,15 +417,12 @@ async def admin_list_institutions(
             or_(func.lower(Institution.name).like(term),
                 func.lower(Institution.dane_code).like(term))
         )
-    if license_type:
-        q = q.filter(Institution.license_type == license_type)
     if is_active is not None:
         q = q.filter(Institution.is_active == is_active)
 
     total = q.count()
     institutions = q.order_by(Institution.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
-    today = datetime.utcnow()
     result = []
     for inst in institutions:
         teachers = db.query(User).filter(
@@ -491,25 +433,11 @@ async def admin_list_institutions(
             User.institution_id == inst.id,
             User.role == "estudiante"
         ).count()
-        # Licencia anual: si no hay fecha de vencimiento explícita, la vigencia
-        # dura 365 días desde la creación de la institución (cada día resta uno).
-        effective_expiry = inst.expiry_date or (
-            (inst.created_at + timedelta(days=365)) if inst.created_at else None
-        )
-        days_left = None
-        if effective_expiry:
-            delta = (effective_expiry - today).days
-            days_left = max(delta, 0)
         result.append({
             "id":           inst.id,
             "name":         inst.name,
             "dane_code":    inst.dane_code,
-            "license_type": inst.license_type,
             "is_active":    inst.is_active,
-            "expiry_date":  effective_expiry.strftime("%Y-%m-%d") if effective_expiry else None,
-            "days_left":    days_left,
-            "max_teachers": inst.max_teachers,
-            "max_students": inst.max_students,
             "teachers_count": teachers,
             "students_count": students,
             "created_at":   inst.created_at.isoformat() if inst.created_at else None,
@@ -530,7 +458,6 @@ async def admin_get_config(
 
     from app.core.config import settings
     from app.services.mail.factory import is_email_configured
-    from app.models.institution import LICENSE_LIMITS
     import os
 
     # Conteos rápidos
@@ -574,8 +501,6 @@ async def admin_get_config(
         "email_from":       settings.EMAIL_FROM,
         # ── IA ───────────────────────────────────────────────────
         "ai_providers": ai_providers,
-        # ── Límites de licencia ──────────────────────────────────
-        "license_limits": LICENSE_LIMITS,
         # ── Estadísticas rápidas ─────────────────────────────────
         "total_users":        total_users,
         "active_users":       active_users,
@@ -589,13 +514,6 @@ class ConfigUpdatePayload(BaseModel):
     token_expire_minutes: Optional[int] = None   # 60–43200
     debug_mode: Optional[bool] = None
     email_from: Optional[str] = None
-    # Límites de licencia personalizados (sobreescriben LICENSE_LIMITS en memoria)
-    license_basica_teachers:  Optional[int] = None
-    license_basica_students:  Optional[int] = None
-    license_premium_teachers: Optional[int] = None
-    license_premium_students: Optional[int] = None
-    license_pro_teachers:     Optional[int] = None
-    license_pro_students:     Optional[int] = None
 
 
 @router.patch("/config")
@@ -611,7 +529,6 @@ async def admin_update_config(
     _require_admin(current_user)
 
     from app.core.config import settings
-    from app.models.institution import LICENSE_LIMITS
 
     changes: list = []
 
@@ -629,22 +546,6 @@ async def admin_update_config(
         settings.EMAIL_FROM = payload.email_from.strip()
         changes.append(f"email_from → {payload.email_from}")
 
-    # Límites de licencia
-    for tier, field_t, field_s in [
-        ("basica",   payload.license_basica_teachers,   payload.license_basica_students),
-        ("premium",  payload.license_premium_teachers,  payload.license_premium_students),
-        ("pro",      payload.license_pro_teachers,      payload.license_pro_students),
-    ]:
-        if field_t is not None:
-            if field_t < 1:
-                raise HTTPException(400, f"El límite de docentes para {tier} debe ser >= 1")
-            LICENSE_LIMITS[tier]["teachers"] = field_t
-            changes.append(f"license_{tier}_teachers → {field_t}")
-        if field_s is not None:
-            if field_s < 1:
-                raise HTTPException(400, f"El límite de estudiantes para {tier} debe ser >= 1")
-            LICENSE_LIMITS[tier]["students"] = field_s
-            changes.append(f"license_{tier}_students → {field_s}")
 
     if not changes:
         return {"ok": True, "message": "Sin cambios aplicados", "changes": []}
