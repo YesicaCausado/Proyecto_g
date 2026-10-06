@@ -231,10 +231,163 @@ async def create_institution_admin(
     )
 
 
+<<<<<<< HEAD
 @router.put("/institutions/{institution_id}", response_model=InstitutionResponse)
 async def update_institution_admin(
     institution_id: int,
     payload: InstitutionCreate,
+=======
+# ─── GET /admin/institutions (resumen con uso de licencia) ────────────────────
+
+@router.get("/institutions")
+async def admin_list_institutions(
+    search: Optional[str] = Query(None),
+    license_type: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+
+    q = db.query(Institution)
+    if search:
+        term = f"%{search.lower()}%"
+        q = q.filter(
+            or_(func.lower(Institution.name).like(term),
+                func.lower(Institution.dane_code).like(term))
+        )
+    if license_type:
+        q = q.filter(Institution.license_type == license_type)
+    if is_active is not None:
+        q = q.filter(Institution.is_active == is_active)
+
+    total = q.count()
+    institutions = q.order_by(Institution.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    today = datetime.utcnow()
+    result = []
+    for inst in institutions:
+        teachers = db.query(User).filter(
+            User.institution_id == inst.id,
+            User.role.in_(["profesor", "super_profesor"])
+        ).count()
+        students = db.query(User).filter(
+            User.institution_id == inst.id,
+            User.role == "estudiante"
+        ).count()
+        # Licencia anual: si no hay fecha de vencimiento explícita, la vigencia
+        # dura 365 días desde la creación de la institución (cada día resta uno).
+        effective_expiry = inst.expiry_date or (
+            (inst.created_at + timedelta(days=365)) if inst.created_at else None
+        )
+        days_left = None
+        if effective_expiry:
+            delta = (effective_expiry - today).days
+            days_left = max(delta, 0)
+        result.append({
+            "id":           inst.id,
+            "name":         inst.name,
+            "dane_code":    inst.dane_code,
+            "license_type": inst.license_type,
+            "is_active":    inst.is_active,
+            "expiry_date":  effective_expiry.strftime("%Y-%m-%d") if effective_expiry else None,
+            "days_left":    days_left,
+            "max_teachers": inst.max_teachers,
+            "max_students": inst.max_students,
+            "teachers_count": teachers,
+            "students_count": students,
+            "created_at":   inst.created_at.isoformat() if inst.created_at else None,
+        })
+
+    return {"total": total, "page": page, "page_size": page_size, "institutions": result}
+
+
+# ─── GET /admin/config ────────────────────────────────────────────────────────
+
+@router.get("/config")
+async def admin_get_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Devuelve la configuración global del sistema (info + ajustes)."""
+    _require_admin(current_user)
+
+    from app.core.config import settings
+    from app.services.mail.factory import is_email_configured
+    from app.models.institution import LICENSE_LIMITS
+    import os
+
+    # Conteos rápidos
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+    total_institutions = db.query(Institution).count()
+
+    # Estado de la base de datos
+    db_connected = True
+    try:
+        db.execute(__import__("sqlalchemy").text("SELECT 1"))
+    except Exception:
+        db_connected = False
+
+    # Modelos de IA activos (detectar por claves de env)
+    ai_providers = []
+    if os.getenv("GROQ_API_KEY"):
+        ai_providers.append({"name": "Groq", "model": settings.GROQ_MODEL, "active": True})
+    if os.getenv("GEMINI_API_KEY"):
+        ai_providers.append({"name": "Gemini", "model": settings.GEMINI_MODEL, "active": True})
+    if os.getenv("OPENAI_API_KEY"):
+        ai_providers.append({"name": "OpenAI", "model": "gpt-4o-mini", "active": True})
+    if not ai_providers:
+        ai_providers.append({"name": "Sin proveedor configurado", "model": "—", "active": False})
+
+    return {
+        # ── Sistema ─────────────────────────────────────────────
+        "app_name":    settings.APP_NAME,
+        "app_version": settings.APP_VERSION,
+        "environment": settings.ENVIRONMENT,
+        "debug_mode":  settings.DEBUG,
+        # ── Base de datos ────────────────────────────────────────
+        "db_connected":       db_connected,
+        "db_url_configured":  bool(settings.DATABASE_URL),
+        # ── Seguridad ────────────────────────────────────────────
+        "token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        "algorithm":            settings.ALGORITHM,
+        # ── Email ────────────────────────────────────────────────
+        "email_configured": is_email_configured(),
+        "email_provider":   settings.EMAIL_PROVIDER,
+        "email_from":       settings.EMAIL_FROM,
+        # ── IA ───────────────────────────────────────────────────
+        "ai_providers": ai_providers,
+        # ── Límites de licencia ──────────────────────────────────
+        "license_limits": LICENSE_LIMITS,
+        # ── Estadísticas rápidas ─────────────────────────────────
+        "total_users":        total_users,
+        "active_users":       active_users,
+        "total_institutions": total_institutions,
+    }
+
+
+# ─── PATCH /admin/config ──────────────────────────────────────────────────────
+
+class ConfigUpdatePayload(BaseModel):
+    token_expire_minutes: Optional[int] = None   # 60–43200
+    debug_mode: Optional[bool] = None
+    email_from: Optional[str] = None
+    # Límites de licencia personalizados (sobreescriben LICENSE_LIMITS en memoria)
+    license_basica_teachers:  Optional[int] = None
+    license_basica_students:  Optional[int] = None
+    license_premium_teachers: Optional[int] = None
+    license_premium_students: Optional[int] = None
+    license_pro_teachers:     Optional[int] = None
+    license_pro_students:     Optional[int] = None
+
+
+@router.patch("/config")
+async def admin_update_config(
+    payload: ConfigUpdatePayload,
+>>>>>>> c2854c22917fa587265fa11eaec38604e06de41d
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

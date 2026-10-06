@@ -1,8 +1,9 @@
 # Vercel Python Function Dependencies - MINIMO estricto
 # Solo lo imprescindible para que la funcion de /api pese < 225 MB.
 #   - scikit-learn, pandas, numpy, reportlab, openpyxl, joblib  -> no se usan
-#   - uvicorn[standard], alembic, mangum, resend               -> innecesarios
+#   - uvicorn[standard], alembic, mangum                       -> innecesarios
 #   - openai (SDK)                                             -> Groq/Gemini usan httpx
+#   - SDK de correo                                            -> Brevo se llama por REST con httpx
 #   - python-jose[cryptography]                                -> HS256 usa HMAC de stdlib
 fastapi==0.104.1
 sqlalchemy==2.0.23

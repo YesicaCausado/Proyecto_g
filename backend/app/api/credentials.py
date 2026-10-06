@@ -21,6 +21,7 @@ from app.schemas.schemas import (
     AdminStats,
 )
 from app.services.email_service import send_credentials_email
+from app.services.mail.addresses import placeholder_email_for
 
 router = APIRouter(tags=["Credenciales B2B"])
 
@@ -192,6 +193,145 @@ async def get_institution(
             temp_password="",
             role="",
         ),
+<<<<<<< HEAD
+=======
+    }
+
+
+# ─── Super Profesor: Estudiantes ──────────────────────────────────────────────
+
+@router.get("/super/students")
+async def list_students(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    students = db.query(User).filter(
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).order_by(User.full_name).all()
+    return [
+        {
+            "id": s.id,
+            "full_name": s.full_name,
+            "username": s.username,
+            "email": s.email or "",
+            "document_type": s.document_type or "",
+            "document_number": s.document_number or "",
+            "grade": s.grade or "",
+            "birth_date": s.birth_date or "",
+            "is_active": s.is_active,
+        }
+        for s in students
+    ]
+
+
+@router.delete("/super/students/{user_id}")
+async def delete_student(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    student = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).first()
+    if not student:
+        raise HTTPException(404, "Estudiante no encontrado en tu institución")
+    if student.id == current_user.id:
+        raise HTTPException(400, "No puedes eliminar tu propia cuenta de estudiante")
+
+    # Soft-delete: desactiva la cuenta en lugar de eliminarla.
+    # Preserva el historial académico y evita IntegrityError por FKs en PostgreSQL.
+    student.is_active = False
+    db.commit()
+    return {"ok": True, "message": "Estudiante desactivado correctamente"}
+
+
+@router.post("/super/students/bulk-delete")
+async def bulk_delete_students(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    ids = payload.get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(400, "Debes enviar al menos un ID válido")
+
+    students = db.query(User).filter(
+        User.id.in_(ids),
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).all()
+
+    deleted = 0
+    for student in students:
+        if student.id == current_user.id:
+            continue
+        student.is_active = False
+        deleted += 1
+
+    db.commit()
+    return {"ok": True, "deleted": deleted, "message": "Estudiantes desactivados correctamente"}
+
+
+@router.post("/super/students", response_model=CredentialItem, status_code=201)
+async def create_student(
+    payload: StudentCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    _check_license(db, institution, UserRole.ESTUDIANTE.value)
+
+    if db.query(User).filter(User.document_number == payload.document_number).first():
+        raise HTTPException(400, "Ya existe un usuario con ese número de documento")
+    if payload.email and db.query(User).filter(User.email == payload.email).first():
+        raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
+
+    temp_pwd = _gen_temp_password()
+    student = User(
+        username=payload.document_number,
+        email=payload.email or placeholder_email_for(payload.document_number),
+        full_name=payload.full_name,
+        hashed_password=get_password_hash(temp_pwd),
+        role=UserRole.ESTUDIANTE.value,
+        document_type=payload.document_type,
+        document_number=payload.document_number,
+        birth_date=payload.birth_date,
+        grade=payload.grade,
+        institution_id=institution.id,
+        must_change_password=True,
+    )
+    db.add(student)
+    db.flush()
+    _log(db, "create_student", current_user, institution.id,
+         student.id, "estudiante", _client_ip(request))
+    db.commit()
+
+    if payload.email:
+        send_credentials_email(
+            to_email=student.email,
+            to_name=student.full_name or student.username,
+            username=student.username,
+            temp_password=temp_pwd,
+            role=student.role,
+        )
+
+    return CredentialItem(
+        full_name=student.full_name,
+        username=student.username,
+        temp_password=temp_pwd,
+        role=student.role,
+>>>>>>> c2854c22917fa587265fa11eaec38604e06de41d
     )
 
 
@@ -200,6 +340,7 @@ async def list_institutions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+<<<<<<< HEAD
     """
     Lista todas las instituciones (solo para admins).
     """
@@ -222,6 +363,146 @@ async def list_institutions(
                 temp_password="",
                 role="",
             ),
+=======
+    """Edita un estudiante de la institución (solo campos enviados). No cambia documento."""
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    student = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).first()
+    if not student:
+        raise HTTPException(404, "Estudiante no encontrado en tu institución")
+    if student.id == current_user.id:
+        raise HTTPException(400, "No puedes editar tu propia cuenta de estudiante")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(400, "No hay campos para actualizar")
+
+    new_email = updates.get("email")
+    if new_email is not None:
+        if not _validate_email(new_email):
+            raise HTTPException(400, "Formato de correo inválido")
+        conflict = db.query(User).filter(
+            User.email == new_email,
+            User.id != user_id,
+        ).first()
+        if conflict:
+            raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
+    if updates.get("full_name"):
+        student.full_name = updates["full_name"]
+    if "document_type" in updates and updates["document_type"]:
+        student.document_type = updates["document_type"]
+    if "grade" in updates:
+        student.grade = updates["grade"]
+    if "birth_date" in updates:
+        student.birth_date = updates["birth_date"]
+    if "email" in updates:
+        student.email = updates["email"]
+    if "is_active" in updates:
+        student.is_active = updates["is_active"]
+
+    db.commit()
+    _log(db, "update_student", current_user, institution.id,
+         student.id, "estudiante", _client_ip(request), notes="Edición de estudiante")
+    db.refresh(student)
+    return StudentListItem(
+        id=student.id,
+        full_name=student.full_name,
+        username=student.username,
+        email=student.email or "",
+        document_type=student.document_type or "",
+        document_number=student.document_number or "",
+        grade=student.grade or "",
+        birth_date=student.birth_date or "",
+        is_active=student.is_active,
+    )
+
+
+@router.post("/super/students/bulk", response_model=BulkCreateResponse, status_code=201)
+async def bulk_create_students(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+
+    content = await file.read()
+    if not content.strip():
+        raise HTTPException(400, "El archivo CSV está vacío")
+
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+    if not reader.fieldnames:
+        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
+
+    required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
+
+    created: List[CredentialItem] = []
+    errors = []
+    seen_docs_s: set = set()
+
+    for i, raw_row in enumerate(reader, start=2):
+        row = _normalize_csv_row(raw_row)
+        if not row or not any((value or "").strip() for value in row.values()):
+            continue
+        missing = required_cols - set(row.keys())
+        if missing:
+            errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
+            continue
+
+        err = None
+        if not row.get("nombre_completo"):
+            err = "Nombre vacío"
+        elif not row.get("numero_documento"):
+            err = "Documento vacío"
+        elif row["numero_documento"] in seen_docs_s:
+            err = "Documento duplicado en este archivo"
+        elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
+            err = "Documento duplicado"
+
+        if err:
+            errors.append({"row": i, "error": err, "data": row})
+            continue
+
+        limits = LICENSE_LIMITS.get(institution.license_type, LICENSE_LIMITS["basica"])
+        s_count = db.query(User).filter(
+            User.institution_id == institution.id,
+            User.role == UserRole.ESTUDIANTE.value,
+        ).count()
+        if s_count + len(created) >= limits["students"]:
+            errors.append({"row": i, "error": "Límite de licencia alcanzado", "data": row})
+            continue
+
+        email = row.get("correo") or placeholder_email_for(row["numero_documento"])
+        temp_pwd = _gen_temp_password()
+        student = User(
+            username=row["numero_documento"],
+            email=email,
+            full_name=row["nombre_completo"],
+            hashed_password=get_password_hash(temp_pwd),
+            role=UserRole.ESTUDIANTE.value,
+            document_type=row.get("tipo_documento", "CC"),
+            document_number=row["numero_documento"],
+            birth_date=row.get("fecha_nacimiento"),
+            grade=row.get("grado", ""),
+            institution_id=institution.id,
+            must_change_password=True,
+        )
+        db.add(student)
+        db.flush()
+        seen_docs_s.add(row["numero_documento"])
+        _log(db, "bulk_create_student", current_user, institution.id,
+             student.id, "estudiante", _client_ip(request))
+        created.append(CredentialItem(
+            full_name=student.full_name,
+            username=student.username,
+            temp_password=temp_pwd,
+            role=student.role,
+>>>>>>> c2854c22917fa587265fa11eaec38604e06de41d
         ))
     
     return results

@@ -12,17 +12,18 @@ Endpoints principales:
 - GET  /auth/me
 - PATCH /auth/me
 - POST /auth/change-password
-- POST /auth/forgot-password
-- GET  /auth/reset-password/validate
-- POST /auth/reset-password
+- POST /auth/forgot-password            (CU-03 paso 1)
+- POST /auth/reset-password/validate   (CU-03 paso 2)
+- POST /auth/reset-password            (CU-03 paso 3)
 """
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import base64
 import binascii
+import logging
 import re
-import secrets
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -46,8 +47,23 @@ from app.schemas.schemas import (
     Token,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    ValidateResetTokenRequest,
 )
-from app.services.email_service import send_password_reset_email
+from app.repositories.password_reset_repository import (
+    SqlAlchemyAuditRecorder,
+    SqlAlchemyPasswordResetTokenRepository,
+    SqlAlchemyUserRepository,
+)
+from app.services.email_service import frontend_url
+from app.services.mail.factory import get_email_sender
+from app.services.password_reset_service import (
+    InvalidResetTokenError,
+    PasswordResetError,
+    PasswordResetPolicy,
+    PasswordResetService,
+)
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -1022,425 +1038,136 @@ async def change_password(
 
 
 # ============================================================
-# OLVIDÉ MI CONTRASEÑA
+# CU-03 RECUPERAR CONTRASEÑA
 # ============================================================
+#
+# Los endpoints solo traducen HTTP ⇄ caso de uso. La lógica y las reglas de
+# negocio viven en app/services/password_reset_service.py.
+#
+# Son funciones síncronas (def) a propósito: la sesión SQLAlchemy y el
+# cliente HTTP de Brevo son bloqueantes, y FastAPI ejecuta los "def" en un
+# hilo aparte sin bloquear el event loop.
+
+FORGOT_PASSWORD_MESSAGE = (
+    "Si los datos corresponden a una cuenta con correo registrado, "
+    "recibirás un enlace para restablecer tu contraseña."
+)
+
+
+def get_password_reset_service(
+    db: Session = Depends(get_db),
+) -> PasswordResetService:
+    """Composición de dependencias de CU-03 (Dependency Injection)."""
+    return PasswordResetService(
+        users=SqlAlchemyUserRepository(db),
+        tokens=SqlAlchemyPasswordResetTokenRepository(db),
+        audit=SqlAlchemyAuditRecorder(db),
+        transaction=db,
+        email_sender=get_email_sender(),
+        hash_password=get_password_hash,
+        verify_password=verify_password,
+        check_password_policy=validate_password_strength,
+        policy=PasswordResetPolicy(
+            reset_page_url=frontend_url("/reset-password"),
+            login_url=frontend_url("/login"),
+            token_ttl_minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES,
+            cooldown_seconds=settings.PASSWORD_RESET_COOLDOWN_SECONDS,
+            max_requests_per_hour=settings.PASSWORD_RESET_MAX_PER_HOUR,
+        ),
+    )
+
 
 @router.post(
     "/forgot-password",
     status_code=status.HTTP_200_OK,
 )
-async def forgot_password(
+def forgot_password(
     payload: ForgotPasswordRequest,
     request: Request,
     db: Session = Depends(get_db),
+    service: PasswordResetService = Depends(get_password_reset_service),
 ):
     """
-    Solicitar recuperación de contraseña.
+    CU-03 paso 1 — Solicitar enlace de recuperación.
 
-    Por seguridad, siempre devuelve el mismo mensaje
-    independientemente de si el usuario existe.
-
-    Esto evita revelar:
-    - usuarios registrados
-    - emails registrados
-    - existencia de cuentas
+    Siempre responde lo mismo y con una duración mínima similar, exista o
+    no la cuenta, para no revelar qué usuarios están registrados.
     """
+    started = time.monotonic()
 
     check_origin(request)
-    check_rate_limit(request)
-
-    generic_response = {
-        "message": (
-            "Si los datos son correctos, recibirás "
-            "un correo con las instrucciones."
-        )
-    }
-
-    # --------------------------------------------------------
-    # Buscar usuario
-    # --------------------------------------------------------
+    check_rate_limit(request, f"forgot:{payload.username.strip().lower()}")
 
     try:
-        user = (
-            db.query(UserModel)
-            .filter(
-                (UserModel.username == payload.username)
-                | (UserModel.email == payload.username)
-            )
-            .first()
+        service.request_reset(
+            identifier=payload.username,
+            ip_address=get_client_ip(request),
         )
-
-    except SQLAlchemyError:
-        # No revelamos información sobre el usuario.
-        return generic_response
-
-    if not user or not user.is_active:
-        return generic_response
-
-    # --------------------------------------------------------
-    # Importación local
-    # --------------------------------------------------------
-
-    from app.models.password_reset import (
-        PasswordResetToken
-    )
-
-    now = datetime.now(timezone.utc)
-
-    # --------------------------------------------------------
-    # Limitar tokens activos
-    # --------------------------------------------------------
-
-    try:
-
-        active_count = (
-            db.query(PasswordResetToken)
-            .filter(
-                PasswordResetToken.user_id
-                == user.id,
-                PasswordResetToken.used == False,
-                PasswordResetToken.expires_at > now,
-            )
-            .count()
-        )
-
-    except SQLAlchemyError:
+    except Exception:  # BD caída, error inesperado: no se revela al cliente
         db.rollback()
-        return generic_response
+        logger.exception("CU-03: error inesperado al solicitar recuperación")
 
-    if active_count >= 5:
-        return generic_response
+    remaining = settings.PASSWORD_RESET_MIN_RESPONSE_SECONDS - (time.monotonic() - started)
+    if remaining > 0:
+        time.sleep(remaining)
 
-    # --------------------------------------------------------
-    # Invalidar tokens anteriores
-    # --------------------------------------------------------
-
-    try:
-
-        db.query(PasswordResetToken).filter(
-            PasswordResetToken.user_id
-            == user.id,
-            PasswordResetToken.used == False,
-        ).update(
-            {
-                "used": True
-            },
-            synchronize_session=False,
-        )
-
-        # ----------------------------------------------------
-        # Crear nuevo token
-        # ----------------------------------------------------
-
-        token = secrets.token_urlsafe(64)
-
-        expires_at = (
-            now + timedelta(minutes=15)
-        )
-
-        ip = get_client_ip(request)
-
-        reset_token = PasswordResetToken(
-            user_id=user.id,
-            token=token,
-            expires_at=expires_at,
-            ip_address=ip,
-        )
-
-        db.add(reset_token)
-
-        # ----------------------------------------------------
-        # Enviar correo antes de confirmar la transacción.
-        #
-        # Si el correo falla, hacemos rollback para evitar
-        # crear un token inutilizable.
-        # ----------------------------------------------------
-
-        try:
-
-            send_password_reset_email(
-                to_email=user.email,
-                to_name=(
-                    user.full_name
-                    or user.username
-                ),
-                reset_token=token,
-                ip_address=ip,
-            )
-
-        except Exception:
-            db.rollback()
-
-            # No revelamos si el usuario existe.
-            return generic_response
-
-        # ----------------------------------------------------
-        # Confirmar creación del token
-        # ----------------------------------------------------
-
-        db.commit()
-
-    except SQLAlchemyError:
-        db.rollback()
-
-        return generic_response
-
-    return generic_response
+    return {"message": FORGOT_PASSWORD_MESSAGE}
 
 
-# ============================================================
-# VALIDAR TOKEN DE RECUPERACIÓN
-# ============================================================
-
-@router.get(
+@router.post(
     "/reset-password/validate",
     status_code=status.HTTP_200_OK,
 )
-async def validate_reset_token(
-    token: str,
-    db: Session = Depends(get_db),
+def validate_reset_token(
+    payload: ValidateResetTokenRequest,
+    request: Request,
+    service: PasswordResetService = Depends(get_password_reset_service),
 ):
-    """
-    Valida un token de recuperación.
-
-    Condiciones:
-    - debe existir
-    - no debe estar usado
-    - no debe estar expirado
-    """
-
-    from app.models.password_reset import (
-        PasswordResetToken
-    )
+    """CU-03 paso 2 — Comprobar que el enlace exista, no esté usado ni vencido."""
+    check_origin(request)
+    check_rate_limit(request)
 
     try:
-
-        reset = (
-            db.query(PasswordResetToken)
-            .filter(
-                PasswordResetToken.token
-                == token
-            )
-            .first()
-        )
-
+        service.validate_token(payload.token)
+    except InvalidResetTokenError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except SQLAlchemyError:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "No fue posible validar "
-                "el enlace."
-            ),
+            detail="No fue posible validar el enlace. Intenta más tarde.",
         )
 
-    if not reset:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Token inválido o inexistente."
-            ),
-        )
+    return {"valid": True, "message": "Enlace válido."}
 
-    if reset.used:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Este enlace ya fue utilizado."
-            ),
-        )
-
-    now = datetime.now(timezone.utc)
-
-    # Normalización para evitar problemas cuando
-    # SQLAlchemy devuelve un datetime sin timezone.
-    expires_at = reset.expires_at
-
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(
-            tzinfo=timezone.utc
-        )
-
-    if expires_at < now:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "El enlace ha expirado. "
-                "Solicita uno nuevo."
-            ),
-        )
-
-    return {
-        "valid": True,
-        "message": "Token válido",
-    }
-
-
-# ============================================================
-# RESTABLECER CONTRASEÑA
-# ============================================================
 
 @router.post(
     "/reset-password",
     status_code=status.HTTP_200_OK,
 )
-async def reset_password(
+def reset_password(
     payload: ResetPasswordRequest,
     request: Request,
     db: Session = Depends(get_db),
+    service: PasswordResetService = Depends(get_password_reset_service),
 ):
-    """
-    Restablece la contraseña utilizando
-    un token enviado por correo.
-    """
-
+    """CU-03 paso 3 — Fijar la nueva contraseña con el token recibido."""
     check_origin(request)
     check_rate_limit(request)
 
-    from app.models.password_reset import (
-        PasswordResetToken
-    )
-
-    # --------------------------------------------------------
-    # Buscar token
-    # --------------------------------------------------------
-
     try:
-
-        reset = (
-            db.query(PasswordResetToken)
-            .filter(
-                PasswordResetToken.token
-                == payload.token
-            )
-            .first()
+        service.reset_password(
+            raw_token=payload.token,
+            new_password=payload.new_password,
+            ip_address=get_client_ip(request),
         )
-
-    except SQLAlchemyError:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "No fue posible procesar "
-                "la solicitud."
-            ),
-        )
-
-    # --------------------------------------------------------
-    # Validar token
-    # --------------------------------------------------------
-
-    if not reset or reset.used:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Token inválido o ya utilizado."
-            ),
-        )
-
-    now = datetime.now(timezone.utc)
-
-    expires_at = reset.expires_at
-
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(
-            tzinfo=timezone.utc
-        )
-
-    if expires_at < now:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "El enlace ha expirado. "
-                "Solicita uno nuevo."
-            ),
-        )
-
-    # --------------------------------------------------------
-    # Validar nueva contraseña
-    # --------------------------------------------------------
-
-    pwd = payload.new_password
-
-    strength_error = validate_password_strength(
-        pwd
-    )
-
-    if strength_error:
-        raise HTTPException(
-            status_code=400,
-            detail=strength_error,
-        )
-
-    # --------------------------------------------------------
-    # Buscar usuario
-    # --------------------------------------------------------
-
-    try:
-
-        user = (
-            db.query(UserModel)
-            .filter(
-                UserModel.id == reset.user_id
-            )
-            .first()
-        )
-
-    except SQLAlchemyError:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "No fue posible consultar "
-                "el usuario."
-            ),
-        )
-
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="Usuario no encontrado.",
-        )
-
-    # --------------------------------------------------------
-    # Evitar reutilizar contraseña anterior
-    # --------------------------------------------------------
-
-    if verify_password(
-        pwd,
-        user.hashed_password,
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "La nueva contraseña debe ser "
-                "diferente de la anterior."
-            ),
-        )
-
-    # --------------------------------------------------------
-    # Actualizar contraseña
-    # --------------------------------------------------------
-
-    try:
-
-        user.hashed_password = (
-            get_password_hash(pwd)
-        )
-
-        user.must_change_password = False
-
-        # Marcar token como utilizado.
-        reset.used = True
-
-        db.commit()
-
+    except PasswordResetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except SQLAlchemyError:
         db.rollback()
-
+        logger.exception("CU-03: error de BD al restablecer contraseña")
         raise HTTPException(
-            status_code=500,
-            detail=(
-                "No fue posible restablecer "
-                "la contraseña."
-            ),
+            status_code=503,
+            detail="No fue posible restablecer la contraseña. Intenta más tarde.",
         )
 
     return {

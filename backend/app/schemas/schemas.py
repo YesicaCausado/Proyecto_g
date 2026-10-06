@@ -120,14 +120,25 @@ class ChangePasswordRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    """Solicitud de recuperación — acepta username o email"""
-    username: str = Field(..., min_length=3)
+    """CU-03 paso 1 — acepta usuario (n.º de documento) o correo."""
+    username: str = Field(..., min_length=3, max_length=100)
+
+
+class ValidateResetTokenRequest(BaseModel):
+    """CU-03 paso 2 — el token viaja en el cuerpo (no en la URL ni en logs)."""
+    token: str = Field(..., min_length=10, max_length=256)
 
 
 class ResetPasswordRequest(BaseModel):
+<<<<<<< HEAD
     username: str = Field(..., min_length=3)
     token: str
     new_password: str = Field(..., min_length=8)
+=======
+    """CU-03 paso 3 — restablecer contraseña con el token recibido por correo."""
+    token: str = Field(..., min_length=10, max_length=256)
+    new_password: str = Field(..., min_length=8, max_length=128)
+>>>>>>> c2854c22917fa587265fa11eaec38604e06de41d
 
 
 # ===== MENSAJERÍA =====

@@ -1,26 +1,30 @@
 /**
- * ResetPasswordPage — Establecer nueva contraseña con token del email
+ * ResetPasswordPage — CU-03 Recuperar contraseña (pasos 2 y 3).
  * Se accede desde el enlace recibido por correo: /reset-password?token=xxx
+ *
+ * El token se lee una sola vez y se retira de la barra de direcciones para
+ * que no quede en el historial ni en capturas de pantalla. La validación se
+ * hace por POST para que el token no aparezca en los logs del servidor.
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { KeyRound, Eye, EyeOff, CheckCircle, XCircle, Loader2, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
-
-const RULES = [
-  { id: 'len',     label: 'Mínimo 8 caracteres',        test: (p: string) => p.length >= 8 },
-  { id: 'upper',   label: 'Una letra mayúscula',         test: (p: string) => /[A-Z]/.test(p) },
-  { id: 'lower',   label: 'Una letra minúscula',         test: (p: string) => /[a-z]/.test(p) },
-  { id: 'digit',   label: 'Un número',                   test: (p: string) => /\d/.test(p) },
-  { id: 'special', label: 'Un carácter especial (!@#…)', test: (p: string) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
-];
+import { PASSWORD_RULES as RULES } from '../../data/passwordRules';
 
 type PageState = 'validating' | 'valid' | 'invalid' | 'success';
 
 export default function ResetPasswordPage() {
-  const navigate          = useNavigate();
-  const [params]          = useSearchParams();
-  const token             = params.get('token') ?? '';
+  const navigate                  = useNavigate();
+  const [params, setParams]       = useSearchParams();
+  const [token]                   = useState(() => params.get('token') ?? '');
+
+  // Quitar el token de la URL visible (se conserva en el estado del componente).
+  useEffect(() => {
+    if (params.has('token')) {
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
 
   const [pageState, setPageState]   = useState<PageState>('validating');
   const [tokenError, setTokenError] = useState('');
@@ -45,7 +49,7 @@ export default function ResetPasswordPage() {
 
     const validate = async () => {
       try {
-        await api.get(`/auth/reset-password/validate?token=${token}`);
+        await api.post('/auth/reset-password/validate', { token });
         setPageState('valid');
       } catch (err: unknown) {
         const msg = (err as { response?: { data?: { detail?: string } } })
