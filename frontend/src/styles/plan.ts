@@ -64,7 +64,7 @@ export const PLAN_COLORS: Record<LicenseType, PlanColor> = {
  * Resuelve el color/gradiente/label de un tipo de licencia.
  * NOTA: Siempre devuelve los mismos colores ya que eliminamos el sistema de licencias.
  */
-export function planColor(type: LicenseType | string | null | undefined): PlanColor {
+export function planColor(_type: LicenseType | string | null | undefined): PlanColor {
   // Siempre devolver el mismo plan ya que eliminamos las diferencias por licencia
   return PLAN_COLORS.basica;
 }
@@ -73,7 +73,7 @@ export function planColor(type: LicenseType | string | null | undefined): PlanCo
  * Nombre legible del plan.
  * NOTA: Siempre devuelve el mismo nombre ya que eliminamos el sistema de licencias.
  */
-export function planLabel(type: LicenseType | string | null | undefined): string {
+export function planLabel(_type: LicenseType | string | null | undefined): string {
   // Siempre devolver el mismo nombre ya que eliminamos las diferencias por licencia
   return PLAN_COLORS.basica.label;
 }

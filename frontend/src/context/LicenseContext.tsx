@@ -130,35 +130,36 @@ interface LicenseContextType {
 // VALORES VACÍOS
 // ============================================================
 
-const EMPTY_LICENSE: LicenseInfo = {
-  license_type: 'basica',
-
-  license_status: 'suspended',
-
-  days_left: null,
-
-  role: undefined,
-
-  features: [],
-
-  super_modules: [],
-
-  teacher_modules: [],
-
-  student_modules: [],
-
-  teacher_dashboard_kpis: [],
-
-  neurobot_limit: 0,
-
-  groups_limit: 0,
-
-  students_limit: 0,
-
-  export_formats: [],
-
-  institution_name: '',
-};
+// EMPTY_LICENSE no se usa realmente, pero lo mantenemos comentado por si acaso se necesita en el futuro
+// const EMPTY_LICENSE: LicenseInfo = {
+//   license_type: 'basica',
+//   
+//   license_status: 'suspended',
+//   
+//   days_left: null,
+//   
+//   role: undefined,
+//   
+//   features: [],
+//   
+//   super_modules: [],
+//   
+//   teacher_modules: [],
+//   
+//   student_modules: [],
+//   
+//   teacher_dashboard_kpis: [],
+//   
+//   neurobot_limit: 0,
+//   
+//   groups_limit: 0,
+//   
+//   students_limit: 0,
+//   
+//   export_formats: [],
+//   
+//   institution_name: '',
+// };
 
 // ============================================================
 // CONTEXTO
@@ -298,12 +299,6 @@ export function LicenseProvider({
         neurodigital: 'neurodigital',
       };
       
-      // Función para convertir módulo a característica
-      const _module_feature = (module: string): string => {
-        module = (module || '').toLowerCase().trim();
-        return MODULE_ALIASES[module] || module;
-      };
-      
       // Obtener características disponibles para este rol
       const features: string[] = Object.keys(FEATURE_ROLES)
         .filter(feature => FEATURE_ROLES[feature].includes(role))
@@ -369,8 +364,8 @@ export function LicenseProvider({
         students_limit: UNLIMITED,
         teachers_limit: UNLIMITED,
         export_formats: ['csv', 'pdf', 'excel'],
-        institution_name: user.institution?.name || 'Sin institución',
-      });
+        institution_name: 'Sin institución', // TODO: Obtener nombre de institución desde institution_id
+      } as LicenseInfo);
     } catch (err) {
       /*
        * FAIL CLOSED
