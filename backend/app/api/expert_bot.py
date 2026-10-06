@@ -7,6 +7,8 @@ Actualizado para eliminar el sistema de licencias.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from pydantic import BaseModel
+from datetime import datetime
 
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_role

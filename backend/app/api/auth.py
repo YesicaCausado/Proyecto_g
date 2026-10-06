@@ -1,6 +1,5 @@
 """
 NeuroLearn AI - API de Autenticación
-
 Soporta autenticación mediante base de datos:
 - Local
 - Producción / Supabase / PostgreSQL
@@ -16,7 +15,6 @@ Endpoints principales:
 - POST /auth/reset-password/validate   (CU-03 paso 2)
 - POST /auth/reset-password            (CU-03 paso 3)
 """
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import base64
@@ -39,7 +37,7 @@ from app.core.security import (
     check_rate_limit,
     failed_login_tracker,
 )
-from app.models.user import User as UserModel
+from app.models.user import User as UserModel, UserRole
 from app.schemas.schemas import (
     UserCreate,
     UserLogin,
@@ -417,15 +415,15 @@ async def register(
 
     ADMIN:
         Puede crear:
-        - estudiante
-        - profesor
-        - super_profesor
-        - admin
+            estudiante
+            profesor
+            super_profesor
+            admin
 
     SUPER_PROFESOR:
         Puede crear:
-        - estudiante
-        - profesor
+            estudiante
+            profesor
 
     El flujo B2B principal utiliza:
         /admin/institutions
@@ -529,7 +527,7 @@ async def register(
         db_user = UserModel(
             username=user_data.username,
             email=user_data.email,
-            hashed_password=get_password_hash(
+            hashed_token=get_password_hash(
                 user_data.password
             ),
             full_name=user_data.full_name,
@@ -548,7 +546,6 @@ async def register(
 
     except SQLAlchemyError:
         db.rollback()
-
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
@@ -716,7 +713,6 @@ async def login(
 
     try:
         user.last_login = datetime.now(timezone.utc)
-
         db.commit()
 
     except SQLAlchemyError:
@@ -1040,13 +1036,6 @@ async def change_password(
 # ============================================================
 # CU-03 RECUPERAR CONTRASEÑA
 # ============================================================
-#
-# Los endpoints solo traducen HTTP ⇄ caso de uso. La lógica y las reglas de
-# negocio viven en app/services/password_reset_service.py.
-#
-# Son funciones síncronas (def) a propósito: la sesión SQLAlchemy y el
-# cliente HTTP de Brevo son bloqueantes, y FastAPI ejecuta los "def" en un
-# hilo aparte sin bloquear el event loop.
 
 FORGOT_PASSWORD_MESSAGE = (
     "Si los datos corresponden a una cuenta con correo registrado, "
@@ -1093,7 +1082,6 @@ def forgot_password(
     Siempre responde lo mismo y con una duración mínima similar, exista o
     no la cuenta, para no revelar qué usuarios están registrados.
     """
-    started = time.monotonic()
 
     check_origin(request)
     check_rate_limit(request, f"forgot:{payload.username.strip().lower()}")
@@ -1124,6 +1112,7 @@ def validate_reset_token(
     service: PasswordResetService = Depends(get_password_reset_service),
 ):
     """CU-03 paso 2 — Comprobar que el enlace exista, no esté usado ni vencido."""
+
     check_origin(request)
     check_rate_limit(request)
 
@@ -1134,7 +1123,7 @@ def validate_reset_token(
     except SQLAlchemyError:
         raise HTTPException(
             status_code=503,
-            detail="No fue posible validar el enlace. Intenta más tarde.",
+            detail="No fue posible validar el enlace. Intenta más tarde."
         )
 
     return {"valid": True, "message": "Enlace válido."}
@@ -1151,6 +1140,7 @@ def reset_password(
     service: PasswordResetService = Depends(get_password_reset_service),
 ):
     """CU-03 paso 3 — Fijar la nueva contraseña con el token recibido."""
+
     check_origin(request)
     check_rate_limit(request)
 
@@ -1167,7 +1157,7 @@ def reset_password(
         logger.exception("CU-03: error de BD al restablecer contraseña")
         raise HTTPException(
             status_code=503,
-            detail="No fue posible restablecer la contraseña. Intenta más tarde.",
+            detail="No fue posible restablecer la contraseña. Intenta más tarde."
         )
 
     return {
@@ -1176,3 +1166,14 @@ def reset_password(
             "Ya puedes iniciar sesión."
         )
     }
+
+
+def require_role(*allowed_roles: UserRole):
+    def role_checker(current_user: User = Depends(get_current_user)):
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Se requiere uno de los roles: {[r.value for r in allowed_roles]}",
+            )
+        return current_user
+    return role_checker

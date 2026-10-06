@@ -19,7 +19,7 @@ from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment
 from app.models.expert_bot import ExpertBot
 from app.models.learning import QuizHistory
-from app.models.events import ClassroomEvent
+from app.models.events import CalendarEvent
 from app.services.license_service import (
     require_active_license,
     LicenseInfo,
@@ -764,7 +764,7 @@ def _compute_teacher_stats(
         )
 
         event_filters = [
-            ClassroomEvent.classroom_id.in_(
+            CalendarEvent.classroom_id.in_(
                 classroom_ids
             )
         ]
@@ -773,24 +773,24 @@ def _compute_teacher_stats(
 
             event_filters.append(
                 and_(
-                    ClassroomEvent.classroom_id.is_(None),
-                    ClassroomEvent.institution_id
+                    CalendarEvent.classroom_id.is_(None),
+                    CalendarEvent.institution_id
                     == institution_id,
                 )
             )
 
         upcoming_events = (
-            db.query(ClassroomEvent)
+            db.query(CalendarEvent)
             .filter(
                 or_(*event_filters),
-                ClassroomEvent.event_date
+                CalendarEvent.event_date
                 >= today.isoformat(),
-                ClassroomEvent.event_date
+                CalendarEvent.event_date
                 < cutoff.isoformat(),
-                ClassroomEvent.is_active.is_(True),
+                CalendarEvent.is_active.is_(True),
             )
             .order_by(
-                ClassroomEvent.event_date.asc()
+                CalendarEvent.event_date.asc()
             )
             .limit(5)
             .all()

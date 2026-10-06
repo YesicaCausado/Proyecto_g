@@ -4,7 +4,7 @@ NeuroLearn AI - API de Publicaciones (MODIFICADO)
 
 Actualizado para eliminar el sistema de licencias.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -12,9 +12,10 @@ from datetime import datetime
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.post import Post, PostType
+from app.models.posts import Post, PostType
 from app.models.classroom import Classroom
 from app.services.license_service import require_active_license  # Mantener por compatibilidad
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/posts", tags=["Publicaciones"])
 
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/posts", tags=["Publicaciones"])
 class PostBase(BaseModel):
     title: str
     content: str
-    post_type: PostType = PostType.TEXTO  # TEXTO, ENLACE, IMAGEN, VIDEO, ENCUESTA
+    post_type: PostType = PostType.ANUNCIO  # anuncio|tarea|recordatorio|material|enlace
 
 class PostCreate(PostBase):
     classroom_id: int

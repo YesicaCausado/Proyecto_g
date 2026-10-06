@@ -10,8 +10,8 @@ from datetime import datetime
 from app.db.database import Base
 
 
-class ClassroomEvent(Base):
-    """Evento del calendario de una clase"""
+class CalendarEvent(Base):
+    """Evento del calendario"""
     __tablename__ = "classroom_events"
 
     id           = Column(Integer, primary_key=True, index=True)

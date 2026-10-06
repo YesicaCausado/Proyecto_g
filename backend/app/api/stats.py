@@ -8,13 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_role
 from app.models.user import User, UserRole
-from app.models.quiz import Quiz, QuizHistory
-from app.models.classroom import Classroom
-from app.models.classroom_user import ClassroomUser
+from app.models.learning import QuizHistory
+from app.models.classroom import Classroom, ClassroomUser
 from app.services.license_service import require_active_license  # Mantener por compatibilidad
 
 router = APIRouter(prefix="/stats", tags=["Estadísticas"])

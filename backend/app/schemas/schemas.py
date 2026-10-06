@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 from pydantic import BaseModel, Field, validator
 
@@ -22,7 +22,158 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Optional[str] = None
 
-class User(BaseModel):
+class StartSessionRequest(BaseModel):
+    topic: str
+    bot_id: Optional[int] = None
+
+class ChatMessageRequest(BaseModel):
+    topic: Optional[str] = None
+    cognitive_state: Optional[str] = None
+    difficulty: Optional[str] = None
+    message: str
+    response_time_ms: Optional[float] = None
+    typing_speed_cpm: Optional[float] = None
+    pause_before_ms: Optional[int] = None
+    corrections: Optional[int] = None
+    typing_bursts: Optional[int] = None
+    is_question: Optional[bool] = None
+    facial_data: Optional[str] = None
+    voice_data: Optional[str] = None
+    conversation_id: Optional[int] = None
+
+class ChatMessageResponse(BaseModel):
+    message: str
+    action: str
+    difficulty: str
+    cognitive_state: str
+    confidence: float
+    suggestions: List[str]
+    should_pause: bool
+    metadata: Dict[str, Any]
+
+class ChatPatternPayload(BaseModel):
+    cognitive_state: Optional[str] = None
+    topic: str
+    response_time_ms: Optional[float] = None
+    typing_speed_cpm: Optional[float] = None
+    pause_before_ms: Optional[int] = None
+    corrections: Optional[int] = None
+    typing_bursts: Optional[int] = None
+    is_question: Optional[bool] = None
+    message_length: Optional[int] = None
+    facial_data: Optional[str] = None
+    voice_data: Optional[str] = None
+    confidence: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class ChatPatternHistoryEntry(BaseModel):
+    timestamp: datetime
+    topic: str
+    cognitive_state: Optional[str] = None
+    response_time_ms: Optional[float] = None
+    typing_speed_cpm: Optional[float] = None
+    pause_before_ms: Optional[int] = None
+    corrections: Optional[int] = None
+    typing_bursts: Optional[int] = None
+    is_question: Optional[bool] = None
+    message_length: Optional[int] = None
+    facial_data: Optional[str] = None
+    voice_data: Optional[str] = None
+    confidence: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class ChatPatternHistoryResponse(BaseModel):
+    topic: str
+    total: int
+    items: List[ChatPatternHistoryEntry]
+
+class ConversationRename(BaseModel):
+    title: str
+
+class ConversationMeta(BaseModel):
+    id: int
+    student_id: int
+    title: str
+    subject: str
+    skill: str
+    topic: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    last_interaction: datetime
+
+class ConversationListResponse(BaseModel):
+    conversations: List[ConversationMeta]
+    total: int
+
+class QuizRequest(BaseModel):
+    topic: str
+    difficulty: Optional[str] = None
+    num_questions: Optional[int] = None
+
+class QuizQuestion(BaseModel):
+    id: int
+    question: str
+    options: List[str]
+    answer: str
+    explanation: str
+
+class QuizResponseGemini(BaseModel):
+    quiz_title: str
+    difficulty: str
+    questions: List[QuizQuestion]
+
+class QuizResponse(BaseModel):
+    # Placeholder - we need to see what fields are expected
+    # For now, we'll make it similar to QuizResponseGemini but without quiz_title?
+    # Or we can leave it empty and then adjust if we find errors.
+    pass
+
+class SessionStatsResponse(BaseModel):
+    total_messages: int
+    correct_answers: int
+    wrong_answers: int
+    average_response_time: float
+    topics_covered: List[str]
+    session_duration: float
+
+class QuizSubmission(BaseModel):
+    quiz_title: str
+    user_answers: Dict[str, Any]
+
+class QuizHistoryEntry(BaseModel):
+    id: int
+    date: str
+    title: str
+    questions_count: int
+    user_score: float
+    difficulty: str
+    mistakes: List[str]
+    adaptation: str
+    performance_score: float
+
+class QuizMistakeDetail(BaseModel):
+    question_id: int
+    question: str
+    user_answer: str
+    correct_answer: str
+    explanation: str
+
+class QuizAnalysisResponse(BaseModel):
+    score: str
+    correct_answers: int
+    wrong_answers: int
+    percentage: float
+    mistakes: List[QuizMistakeDetail]
+    weak_concepts: List[str]
+    recommended_difficulty: str
+    adaptation_message: str
+
+class QuizHistoryResponse(BaseModel):
+    history: List[QuizHistoryEntry]
+    total_quizzes: int
+
+class UserResponse(BaseModel):
     id: int
     username: str
     email: str
@@ -37,20 +188,24 @@ class User(BaseModel):
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    email: str = Field(..., pattern=r"^[^@]+@[^@]+\.[^@]+$")
     password: str = Field(..., min_length=8)
     full_name: str = Field(..., min_length=2, max_length=100)
     role: str = Field(..., pattern="^(estudiante|profesor|super_profesor|admin)$")
     institution_id: Optional[int] = None
 
+class UserLogin(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=8)
+
 class UserUpdate(BaseModel):
-    email: Optional[str] = Field(None, regex=r"^[^@]+@[^@]+\.[^@]+$")
+    email: Optional[str] = Field(None, pattern=r"^[^@]+@[^@]+\.[^@]+$")
     full_name: Optional[str] = Field(None, min_length=2, max_length=100)
     role: Optional[str] = Field(None, pattern="^(estudiante|profesor|super_profesor|admin)$")
     institution_id: Optional[int] = None
     is_active: Optional[bool] = None
 
-class UserInDBBase(User):
+class UserInDBBase(UserResponse):
     hashed_password: str
 
 class UserInDB(UserInDBBase):
@@ -130,15 +285,10 @@ class ValidateResetTokenRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-<<<<<<< HEAD
-    username: str = Field(..., min_length=3)
-    token: str
-    new_password: str = Field(..., min_length=8)
-=======
     """CU-03 paso 3 — restablecer contraseña con el token recibido por correo."""
+    username: str = Field(..., min_length=3)
     token: str = Field(..., min_length=10, max_length=256)
     new_password: str = Field(..., min_length=8, max_length=128)
->>>>>>> c2854c22917fa587265fa11eaec38604e06de41d
 
 
 # ===== MENSAJERÍA =====
@@ -329,7 +479,7 @@ class ResourceResponse(ResourceBase):
 class ProfileBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=50)
     last_name: str = Field(..., min_length=1, max_length=50)
-    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    email: str = Field(..., pattern=r"^[^@]+@[^@]+\.[^@]+$")
     phone: Optional[str] = None
     birth_date: Optional[str] = None  # YYYY-MM-DD
     gender: Optional[str] = Field(None, pattern="^(M|F|O)$")
@@ -373,7 +523,7 @@ class NotificationResponse(NotificationBase):
 class StudentBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=50)
     last_name: str = Field(..., min_length=1, max_length=50)
-    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    email: str = Field(..., pattern=r"^[^@]+@[^@]+\.[^@]+$")
     phone: Optional[str] = None
     birth_date: Optional[str] = None  # YYYY-MM-DD
     gender: Optional[str] = Field(None, pattern="^(M|F|O)$")
@@ -400,14 +550,14 @@ class StudentResponse(StudentBase):
 class TeacherBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=50)
     last_name: str = Field(..., min_length=1, max_length=50)
-    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    email: str = Field(..., pattern=r"^[^@]+@[^@]+\.[^@]+$")
     phone: Optional[str] = None
     birth_date: Optional[str] = None  # YYYY-MM-DD
     gender: Optional[str] = Field(None, pattern="^(M|F|O)$")
     address: Optional[str] = None
     employee_id: str = Field(..., min_length=1, max_length=20)
     subject_area: Optional[str] = None
-    hire_date: Optional[str = None  # YYYY-MM-DD
+    hire_date: Optional[str] = None  # YYYY-MM-DD
 
 class TeacherCreate(TeacherBase):
     pass

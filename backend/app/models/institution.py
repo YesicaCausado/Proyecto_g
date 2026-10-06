@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import relationship
+from datetime import datetime
 
 from app.db.database import Base
 

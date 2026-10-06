@@ -5,10 +5,19 @@ Post: publicación del profesor en una clase (anuncio, tarea, recordatorio, mate
 PostReaction: reacción de un usuario a un post
 PostComment: comentario de un usuario en un post
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, JSON, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.database import Base
+from enum import Enum
+
+
+class PostType(str, Enum):
+    ANUNCIO = "anuncio"
+    TAREA = "tarea"
+    RECORDATORIO = "recordatorio"
+    MATERIAL = "material"
+    ENLACE = "enlace"
 
 
 class Post(Base):
@@ -19,7 +28,7 @@ class Post(Base):
     classroom_id= Column(Integer, ForeignKey("classrooms.id"), nullable=False)
     teacher_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    post_type   = Column(String(30), default="anuncio")   # anuncio|tarea|recordatorio|material|enlace
+    post_type   = Column(SQLEnum(PostType), default=PostType.ANUNCIO)   # anuncio|tarea|recordatorio|material|enlace
     title       = Column(String(200), nullable=False)
     content     = Column(Text, default="")
     due_date    = Column(String(20), nullable=True)        # YYYY-MM-DD

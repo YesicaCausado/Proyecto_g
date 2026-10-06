@@ -4,10 +4,11 @@ NeuroLearn AI - API de Aulas y Grupos (MODIFICADO)
 
 Actualizado para usar permisos basados en rol en lugar de licencias.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.api.auth import get_current_user

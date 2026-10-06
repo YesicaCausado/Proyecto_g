@@ -12,11 +12,12 @@ from typing import List, Optional
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
-from app.models.events import CalendarEvent, ClassroomEvent
+from app.models.events import CalendarEvent
 from app.models.institution import Institution
 from app.models.classroom import Classroom
-from app.models.classroom_user import ClassroomUser
+from app.models.classroom import ClassroomUser
 from app.services.license_service import require_active_license  # Mantener por compatibilidad pero ya no verifica licencia real
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/events", tags=["Calendario - Eventos"])
 

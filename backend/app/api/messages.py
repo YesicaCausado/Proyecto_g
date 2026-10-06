@@ -11,8 +11,10 @@ from typing import List, Optional
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
-from app.models.message import Message, Conversation
+from app.models.messages import Message, Conversation
 from app.services.license_service import require_active_license  # Mantener por compatibilidad
+from pydantic import BaseModel
+from datetime import datetime
 
 router = APIRouter(prefix="/messages", tags=["Mensajería"])
 
