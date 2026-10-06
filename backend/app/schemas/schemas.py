@@ -78,6 +78,8 @@ class ChatMessageRequest(BaseModel):
     cognitive_state: Optional[str] = None
     # Conversación (memoria entre chats tipo ChatGPT)
     conversation_id: Optional[int] = None
+    # NeuroBot con el que se conversa: su base de conocimiento se usa como contexto.
+    bot_id: Optional[int] = None
     # Patrón 1 — Ritmo de Interacción
     response_time_ms: Optional[float] = Field(default=None, ge=0)
     typing_speed_cpm: Optional[float] = Field(default=None, ge=0)
@@ -90,6 +92,28 @@ class ChatMessageRequest(BaseModel):
     # Patrones 3 y 4 — datos multimodales opcionales
     facial_data: Optional[Dict[str, Any]] = None
     voice_data: Optional[Dict[str, Any]] = None
+
+
+class BotDocumentResponse(BaseModel):
+    """Documento de la base de conocimiento de un NeuroBot."""
+    id: int
+    bot_id: int
+    filename: str
+    extension: str
+    mime_type: str
+    size_bytes: int
+    text_chars: int
+    chunk_count: int
+    status: str = "procesado"
+    truncated: bool = False
+    created_at: Optional[str] = None
+
+
+class BotDocumentListResponse(BaseModel):
+    bot_id: int
+    documents: List[BotDocumentResponse]
+    total: int
+    total_size_bytes: int
 
 
 class ConversationCreate(BaseModel):

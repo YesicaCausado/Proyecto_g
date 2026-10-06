@@ -17,6 +17,38 @@ from app.models.user import User, UserRole
 from app.models.expert_bot import ExpertBot
 from app.models.classroom import Classroom, Enrollment, ClassroomBot
 from app.models.learning import ChatMessage, LearningSession
+from app.models.bot_document import BotDocument
+from app.services.bot_documents import can_use_bot, delete_bot_documents
+from app.core.permissions import FORBIDDEN_MESSAGE
+
+
+def _same_institution_creators(query, user: User):
+    """
+    Aislamiento por institución: limita la consulta a bots creados por usuarios
+    de la institución de `user` o por el Administrador (bots globales, sin
+    institución). Misma regla que `can_use_bot`.
+    """
+    query = query.join(User, ExpertBot.creator_id == User.id)
+    if user.institution_id is None:
+        return query.filter(User.institution_id.is_(None))
+    return query.filter(
+        or_(User.institution_id == user.institution_id, User.institution_id.is_(None))
+    )
+
+
+def _query_count(db: Session, bot_id: int) -> int:
+    """Consultas reales: mensajes enviados por usuarios en sesiones con este bot."""
+    return (
+        db.query(func.count(ChatMessage.id))
+        .join(LearningSession, ChatMessage.session_id == LearningSession.id)
+        .filter(LearningSession.bot_id == bot_id, ChatMessage.role == "user")
+        .scalar()
+        or 0
+    )
+
+
+def _document_count(db: Session, bot_id: int) -> int:
+    return db.query(func.count(BotDocument.id)).filter(BotDocument.bot_id == bot_id).scalar() or 0
 
 # Router montado en main.py con prefix="/api/v1/bots".
 # (El antiguo `prefix="/expert-bots"` se eliminó para evitar rutas duplicadas
@@ -72,16 +104,23 @@ async def list_bots(
     query = db.query(ExpertBot)
 
     # Restringir acceso según rol
-    if current_user.role != UserRole.SUPER_PROFESOR.value and current_user.role != UserRole.ADMIN.value:
-        # Profesores y estudiantes: solo ven bots públicos O los que ellos mismos crearon.
+    if current_user.role == UserRole.ADMIN.value:
+        # Admin ve todos los bots del sistema
+        if is_public is not None:
+            query = query.filter(ExpertBot.is_public == is_public)
+        if creator_id is not None:
+            query = query.filter(ExpertBot.creator_id == creator_id)
+    elif current_user.role != UserRole.SUPER_PROFESOR.value:
+        # Profesores y estudiantes: solo ven bots públicos de su institución O los que ellos mismos crearon.
         # Se ignora el parámetro is_public del cliente para evitar enumeración de bots privados ajenos.
-        query = query.filter(
+        query = _same_institution_creators(query, current_user).filter(
             or_(ExpertBot.is_public == True, ExpertBot.creator_id == current_user.id)
         )
         if creator_id is not None:
             query = query.filter(ExpertBot.creator_id == creator_id)
     else:
-        # Admin/Super pueden ver todos
+        # Súper Profesor: todos los bots de su institución (y los globales)
+        query = _same_institution_creators(query, current_user)
         if is_public is not None:
             query = query.filter(ExpertBot.is_public == is_public)
         if creator_id is not None:
@@ -178,7 +217,7 @@ async def list_shared_bots(
 
     # 2) Bots públicos creados por profesores (que no sean del propio estudiante)
     public_bots = (
-        db.query(ExpertBot)
+        _same_institution_creators(db.query(ExpertBot), current_user)
         .filter(ExpertBot.is_public == True, ExpertBot.is_active == True)
         .order_by(ExpertBot.created_at.desc())
         .all()
@@ -219,7 +258,7 @@ async def list_my_bots(
         .order_by(ExpertBot.created_at.desc())
         .all()
     )
-    return {"bots": [_build_bot_response(b) for b in bots]}
+    return {"bots": [_build_bot_response(b, db) for b in bots]}
 
 
 # ─── GET /bots/{bot_id} ────────────────────────────────────────────────────────
@@ -238,9 +277,9 @@ async def get_bot(
     if not bot:
         raise HTTPException(status_code=404, detail="Bot no encontrado")
 
-    # Verificar permisos
-    if not bot.is_public and bot.creator_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Acceso denegado. El bot es privado.")
+    # Verificar permisos (creador, Admin, o bot público/asignado de su institución)
+    if not can_use_bot(db, current_user, bot):
+        raise HTTPException(status_code=403, detail=FORBIDDEN_MESSAGE)
 
     return {
         "id": bot.id,
@@ -269,9 +308,11 @@ async def get_bot(
 
 
 # ─── POST /bots + /bots/create ────────────────────────────────────────────────
-def _build_bot_response(bot: ExpertBot) -> dict:
+def _build_bot_response(bot: ExpertBot, db: Optional[Session] = None) -> dict:
     """Respuesta normalizada del bot que consume el frontend (NeuroBotsTab)."""
     return {
+        "document_count": _document_count(db, bot.id) if db is not None else 0,
+        "query_count": _query_count(db, bot.id) if db is not None else 0,
         "id": bot.id,
         "name": bot.name,
         "description": bot.description or "",
@@ -319,7 +360,7 @@ async def create_bot(
     db.commit()
     db.refresh(bot)
 
-    return _build_bot_response(bot)
+    return _build_bot_response(bot, db)
 
 
 # ─── PUT /bots/{bot_id} ────────────────────────────────────────────────────────
@@ -362,7 +403,7 @@ async def update_bot(
     db.commit()
     db.refresh(bot)
 
-    return _build_bot_response(bot)
+    return _build_bot_response(bot, db)
 
 
 # ─── PATCH /{bot_id} (actualización parcial — toggle is_active/is_public) ─────
@@ -404,7 +445,7 @@ async def patch_bot(
     db.commit()
     db.refresh(bot)
 
-    return _build_bot_response(bot)
+    return _build_bot_response(bot, db)
 
 
 # ─── DELETE /bots/{bot_id} ─────────────────────────────────────────────────────
@@ -433,6 +474,13 @@ async def delete_bot(
     db.query(LearningSession).filter(LearningSession.bot_id == bot_id).update(
         {"bot_id": None}, synchronize_session=False
     )
+    # 3. Conversaciones del tutor asociadas al bot (se conservan, sin la FK).
+    from app.models.adaptive import Conversation
+    db.query(Conversation).filter(Conversation.bot_id == bot_id).update(
+        {"bot_id": None}, synchronize_session=False
+    )
+    # 4. Base de conocimiento: documentos y fragmentos indexados.
+    delete_bot_documents(db, bot_id)
     db.delete(bot)
     db.commit()
 

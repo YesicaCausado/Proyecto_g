@@ -19,6 +19,7 @@ from app.db.database import (
 from app.api import auth
 from app.api import chat
 from app.api import expert_bot
+from app.api import bot_documents
 from app.api import classroom
 from app.api import stats
 from app.api import conversations
@@ -193,6 +194,13 @@ app.include_router(
 
 app.include_router(
     expert_bot.router,
+    prefix="/api/v1/bots",
+)
+
+# Documentos de la base de conocimiento de cada NeuroBot:
+# /api/v1/bots/{bot_id}/documents...
+app.include_router(
+    bot_documents.router,
     prefix="/api/v1/bots",
 )
 

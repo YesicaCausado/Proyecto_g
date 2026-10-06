@@ -78,10 +78,41 @@ from app.ai.adaptive.student_model import StudentModel
 from app.services.student_model_service import StudentModelService
 from app.services.llm_context import build_adaptation_context
 from app.core.config import settings
+from app.core.permissions import FORBIDDEN_MESSAGE
+from app.models.expert_bot import ExpertBot
+from app.services.bot_documents import build_bot_context, can_use_bot
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat Adaptativo"])
+
+
+def _resolve_chat_bot(db: Session, user: User, bot_id: Optional[int],
+                      conversation_id: Optional[int] = None) -> Optional[ExpertBot]:
+    """
+    NeuroBot de la conversación: el `bot_id` explícito o, si no llega, el bot
+    asociado a la conversación del propio usuario. Valida que el usuario pueda
+    usarlo (misma institución, aula asignada, público o creador).
+    """
+    if bot_id is not None:
+        bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
+        if bot is None:
+            raise HTTPException(status_code=404, detail="NeuroBot no encontrado")
+        if not can_use_bot(db, user, bot):
+            raise HTTPException(status_code=403, detail=FORBIDDEN_MESSAGE)
+        return bot
+
+    if conversation_id is not None:
+        from app.models.adaptive import Conversation
+        conversation = db.query(Conversation).filter(
+            Conversation.id == conversation_id,
+            Conversation.student_id == user.id,
+        ).first()
+        if conversation is not None and conversation.bot_id:
+            bot = db.query(ExpertBot).filter(ExpertBot.id == conversation.bot_id).first()
+            if bot is not None and can_use_bot(db, user, bot):
+                return bot
+    return None
 
 # Motor de Adaptación Pedagógica (separado del LLM).
 _adaptation_engine = PedagogicalAdaptationEngine()
@@ -971,7 +1002,12 @@ async def start_session(
     db: Session = Depends(get_db),
 ):
     """Inicia sesión: la IA genera un mensaje de bienvenida al tema."""
+    bot = _resolve_chat_bot(db, current_user, request.bot_id, request.conversation_id)
     system_prompt = _build_system_prompt(request.topic)
+    knowledge_meta = None
+    if bot is not None:
+        bot_context, knowledge_meta = build_bot_context(db, bot, request.topic)
+        system_prompt += bot_context
     result = await ai_manager.generate(
         prompt=f"El estudiante empieza a estudiar: {request.topic}. Preséntate brevemente y comienza con una introducción motivadora al tema. Luego haz la primera pregunta de diagnóstico.",
         system_prompt=system_prompt,
@@ -991,7 +1027,8 @@ async def start_session(
         )
         result["provider"] = "local"
 
-    session = _get_or_create_learning_session(db, current_user.id, request.topic, request.bot_id)
+    session = _get_or_create_learning_session(
+        db, current_user.id, request.topic, bot.id if bot is not None else None)
     _save_chat_message(
         db,
         session.id,
@@ -1014,7 +1051,7 @@ async def start_session(
         confidence=1.0,
         suggestions=[],
         should_pause=False,
-        metadata={"provider": result["provider"]},
+        metadata={"provider": result["provider"], "knowledge": knowledge_meta},
     )
 
 
@@ -1039,6 +1076,9 @@ async def send_message(
 
         topic = request.topic or "Preparación Saber 11"
         cognitive_state = _normalize_cognitive_state(request.cognitive_state)
+        # NeuroBot (opcional): se valida antes de cualquier procesamiento.
+        chat_bot = _resolve_chat_bot(db, current_user, request.bot_id, request.conversation_id)
+        knowledge_meta = None
         active_modalities: List[str] = []
         error_risk = 0.0
 
@@ -1164,7 +1204,8 @@ async def send_message(
                     pause_ratio=float(request.voice_data.get("pause_ratio", 0.0) or 0.0),
                 )
 
-            session = _get_or_create_learning_session(db, current_user.id, topic)
+            session = _get_or_create_learning_session(
+                db, current_user.id, topic, chat_bot.id if chat_bot is not None else None)
 
             user_engine = _get_user_engine(current_user.id)
             # Re-siembra la predicción de error con lo respondido en el chat
@@ -1369,6 +1410,19 @@ async def send_message(
             # Nunca debe romper el chat; degradar con tronco sin inventar datos.
             logger.warning("⚠️ Motor de adaptación pedagógica falló: %s", adapt_err)
 
+        # ═══ Base de conocimiento del NeuroBot (documentos del docente) ═══
+        if chat_bot is not None:
+            try:
+                bot_context, knowledge_meta = build_bot_context(db, chat_bot, request.message)
+                system_prompt += bot_context
+            except Exception as kb_err:
+                logger.warning("⚠️ No se pudo cargar la base de conocimiento del bot %s: %s",
+                               chat_bot.id, kb_err)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
         # Reconstruir historial de conversación
         context_messages: List[Dict] = []
         if request.history:
@@ -1457,6 +1511,7 @@ async def send_message(
                 "suggested_difficulty": suggested_difficulty,
                 "should_adapt": bool(analysis.should_adapt) if analysis else False,
                 "adaptation": strategy_meta,
+                "knowledge": knowledge_meta,
                 "patterns": {
                     "P1_interaction_rhythm": {
                         "response_time_ms": request.response_time_ms,

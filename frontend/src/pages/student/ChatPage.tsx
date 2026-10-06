@@ -318,6 +318,11 @@ export default function ChatPage() {
 
   // If bot_id is present (teacher testing their own bot), start directly
   const isCustomBot = !!botIdParam;
+  // Tema de la sesión con un NeuroBot: el mismo en /chat/start y /chat/message
+  // para que los mensajes queden en la sesión asociada al bot.
+  const botTopic = botIdParam
+    ? (skillParam ? decodeURIComponent(skillParam) : botNameParam ? decodeURIComponent(botNameParam) : 'General')
+    : null;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -398,9 +403,7 @@ export default function ChatPage() {
   const startSession = async (skillKey: string, initialMessage?: string) => {
     const skill = SKILLS.find((s) => s.key === skillKey);
     // For custom bots, use the bot's subject as topic even if skill not in list
-    const topicForBot = botIdParam
-      ? (skillParam ? decodeURIComponent(skillParam) : botNameParam ? decodeURIComponent(botNameParam) : 'General')
-      : null;
+    const topicForBot = botTopic;
     const topic = topicForBot ?? skill?.topic;
     if (!topic) return;
     setSending(true);
@@ -550,7 +553,9 @@ export default function ChatPage() {
       const skill = SKILLS.find((s) => s.key === (skillKeyOverride ?? selectedSkill));
       const res = await api.post<ChatMessageResponse>("/chat/message", {
         message: msgContent,
-        topic: skill?.topic ?? "Tema general",
+        topic: botTopic ?? skill?.topic ?? "Tema general",
+        // NeuroBot: el backend agrega al contexto los documentos del docente.
+        bot_id: botIdParam ? Number(botIdParam) : undefined,
         conversation_id: conversationId ?? undefined,
         cognitive_state: lastResponse?.cognitive_state || "normal",
         history: messages.slice(-10).map((m) => ({

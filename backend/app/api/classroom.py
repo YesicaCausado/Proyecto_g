@@ -1046,6 +1046,15 @@ async def assign_bot_to_classroom(
             detail="Bot no encontrado",
         )
 
+    # Solo bots propios o públicos de su institución: asignar un bot da a los
+    # estudiantes del aula acceso a su base de conocimiento.
+    from app.services.bot_documents import can_use_bot
+    if not can_use_bot(db, current_user, bot):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo puedes asignar tus NeuroBots o los públicos de tu institución.",
+        )
+
     # --------------------------------------------------------
     # Verificar duplicado
     # --------------------------------------------------------

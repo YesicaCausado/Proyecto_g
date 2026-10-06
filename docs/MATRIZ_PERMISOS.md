@@ -44,6 +44,7 @@ Rechazo por permisos: HTTP 403 con el mensaje
 | `gestionar_materiales` | | | ✅ | | `api/teacher_materials.py` |
 | `publicar_en_tablero` | | | ✅ | | `api/posts.py` (crear publicación) |
 | `usar_ia_docente` | ✅ | | ✅ | | `api/teacher_ai.py` |
+| `gestionar_documentos_neurobot` | ✅ | ✅ | ✅ | | `api/bot_documents.py` (además, solo el creador del NeuroBot o el Admin) |
 | `participar_en_aulas` | | | | ✅ | `api/classroom.py` (unirse / mis aulas) |
 | `usar_chat_ia` | ✅ | | ✅ | ✅ | `api/chat.py`, `api/conversations.py` |
 | `ver_neuroalertas` | ✅ | ✅ | ✅ | | `api/super_stats.py` |

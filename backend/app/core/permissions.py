@@ -39,6 +39,7 @@ class Permission(str, enum.Enum):
     GESTIONAR_MATERIALES = "gestionar_materiales"
     PUBLICAR_EN_TABLERO = "publicar_en_tablero"
     USAR_IA_DOCENTE = "usar_ia_docente"            # IA generativa para el docente
+    GESTIONAR_DOCUMENTOS_NEUROBOT = "gestionar_documentos_neurobot"  # base de conocimiento de sus NeuroBots
 
     # Estudiante
     PARTICIPAR_EN_AULAS = "participar_en_aulas"    # unirse y ver sus aulas
@@ -59,6 +60,9 @@ ROLE_PERMISSIONS: Dict[Permission, FrozenSet[str]] = {
     Permission.GESTIONAR_MATERIALES: frozenset({PROFESOR}),
     Permission.PUBLICAR_EN_TABLERO: frozenset({PROFESOR}),
     Permission.USAR_IA_DOCENTE: frozenset({ADMIN, PROFESOR}),
+    # Mismos roles que pueden crear NeuroBots (POST /bots/create); además solo
+    # el creador del bot (o el Administrador) gestiona sus documentos.
+    Permission.GESTIONAR_DOCUMENTOS_NEUROBOT: frozenset({ADMIN, SUPER, PROFESOR}),
     Permission.PARTICIPAR_EN_AULAS: frozenset({ESTUDIANTE}),
     Permission.USAR_CHAT_IA: frozenset({ADMIN, PROFESOR, ESTUDIANTE}),
     Permission.VER_NEUROALERTAS: frozenset({ADMIN, SUPER, PROFESOR}),

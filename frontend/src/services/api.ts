@@ -94,3 +94,14 @@ api.interceptors.response.use(
 );
 
 export default api;
+/**
+ * Invalida las lecturas GET cacheadas cuyo URL empiece por `prefix`
+ * (p. ej. '/bots' después de subir o eliminar un documento de un NeuroBot).
+ */
+export function invalidateApiCache(prefix: string): void {
+  for (const key of Array.from(_cache.keys())) {
+    if (key.includes(` /api/v1${prefix}`)) {
+      _cache.delete(key);
+    }
+  }
+}

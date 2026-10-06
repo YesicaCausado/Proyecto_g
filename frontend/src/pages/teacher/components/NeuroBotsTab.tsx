@@ -2,11 +2,20 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Plus, Trash2, Globe, Lock, FileText, Upload, X,
   CheckCircle, Clock, AlertCircle, BarChart2, MessageSquare, BookOpen,
-  ToggleLeft, ToggleRight, Play, Send, Loader2, Users, Share2,
+  ToggleLeft, ToggleRight, Play, Send, Loader2, Users, Share2, Download, RotateCcw,
 } from 'lucide-react';
-import api from '../../../services/api';
+import api, { invalidateApiCache } from '../../../services/api';
 
-interface ChatMsg { role: 'user' | 'bot'; text: string; }
+/** Mensaje de error real que devuelve el backend (FastAPI `detail`). */
+function apiError(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg);
+  if (!err?.response) return 'No se pudo conectar con el servidor. Revisa tu conexión.';
+  return fallback;
+}
+
+interface ChatMsg { role: 'user' | 'bot'; text: string; sources?: string[]; }
 
 // ── Chat modal para probar el bot ─────────────────────────────────────────────
 function BotChatModal({ bot, onClose }: { bot: NeuroBot; onClose: () => void }) {
@@ -29,13 +38,13 @@ function BotChatModal({ bot, onClose }: { bot: NeuroBot; onClose: () => void }) 
           difficulty: 'medium',
           bot_id: Number(bot.id),
         });
-        const reply = res.data?.message ?? '¡Hola! Soy tu NeuroBot. ¿En qué puedo ayudarte?';
-        setMsgs([{ role: 'bot', text: reply }]);
-        setHistory([{ role: 'assistant', content: reply }]);
-      } catch {
-        const reply = `¡Hola! Soy ${bot.name}. ¿En qué puedo ayudarte sobre ${bot.subject}?`;
-        setMsgs([{ role: 'bot', text: reply }]);
-        setHistory([{ role: 'assistant', content: reply }]);
+        const reply: string = res.data?.message ?? '';
+        if (reply) {
+          setMsgs([{ role: 'bot', text: reply }]);
+          setHistory([{ role: 'assistant', content: reply }]);
+        }
+      } catch (err) {
+        setMsgs([{ role: 'bot', text: `⚠️ ${apiError(err, 'No se pudo iniciar la conversación con el NeuroBot.')}` }]);
       } finally {
         setSending(false);
         setStarted(true);
@@ -55,13 +64,15 @@ function BotChatModal({ bot, onClose }: { bot: NeuroBot; onClose: () => void }) 
       const res = await api.post('/chat/message', {
         message: userText,
         topic: bot.description || bot.subject || bot.name,
+        bot_id: Number(bot.id),
         history: newHistory.slice(-10),
       });
-      const reply = res.data?.message ?? '...';
-      setMsgs(prev => [...prev, { role: 'bot', text: reply }]);
+      const reply: string = res.data?.message ?? '';
+      const sources: string[] = res.data?.metadata?.knowledge?.sources ?? [];
+      setMsgs(prev => [...prev, { role: 'bot', text: reply, sources }]);
       setHistory(prev => [...prev, { role: 'assistant', content: reply }]);
-    } catch {
-      setMsgs(prev => [...prev, { role: 'bot', text: 'No se pudo conectar con la IA. Verifica la configuración.' }]);
+    } catch (err) {
+      setMsgs(prev => [...prev, { role: 'bot', text: `⚠️ ${apiError(err, 'No se pudo obtener la respuesta del NeuroBot.')}` }]);
     } finally {
       setSending(false);
     }
@@ -101,6 +112,11 @@ function BotChatModal({ bot, onClose }: { bot: NeuroBot; onClose: () => void }) 
                   : 'bg-[#F7F6F3] text-[#191919] rounded-bl-sm'
               }`}>
                 {m.text}
+                {m.sources && m.sources.length > 0 && (
+                  <p className="mt-1.5 pt-1.5 border-t border-[#E9E9E7] text-[10px] text-[#787774]">
+                    📄 Basado en: {m.sources.join(', ')}
+                  </p>
+                )}
               </div>
             </div>
           ))}
@@ -135,12 +151,45 @@ function BotChatModal({ bot, onClose }: { bot: NeuroBot; onClose: () => void }) 
   );
 }
 
-interface KnowledgeFile {
-  id: string;
-  name: string;
-  size: string;
-  date: string;
-  status: 'processed' | 'processing' | 'error';
+/** Documento procesado e indexado por el backend (GET/POST /bots/{id}/documents). */
+interface KnowledgeDoc {
+  id: number;
+  filename: string;
+  extension: string;
+  size_bytes: number;
+  chunk_count: number;
+  text_chars: number;
+  truncated: boolean;
+  status: 'procesado';
+  created_at: string | null;
+}
+
+/** Archivo seleccionado por el profesor mientras se sube o si falló. */
+interface UploadItem {
+  key: string;
+  file: File;
+  status: 'pendiente' | 'subiendo' | 'procesando' | 'error';
+  progress: number;
+  error?: string;
+}
+
+const ACCEPTED_EXTENSIONS = ['pdf', 'docx', 'txt', 'md'];
+const MAX_FILE_BYTES = 4 * 1024 * 1024; // igual que el backend (límite de Vercel)
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Validación previa (la definitiva la hace el backend). */
+function precheck(file: File): string | null {
+  const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
+  if (ext === 'doc') return 'Los archivos .doc no son compatibles. Guárdalo como .docx o PDF.';
+  if (!ACCEPTED_EXTENSIONS.includes(ext)) return 'Formato no soportado. Sube un archivo PDF, DOCX, TXT o Markdown (.md).';
+  if (file.size === 0) return 'El archivo está vacío.';
+  if (file.size > MAX_FILE_BYTES) return 'El archivo supera el tamaño máximo de 4 MB.';
+  return null;
 }
 
 interface ClassOption {
@@ -318,49 +367,165 @@ interface NeuroBot {
   mode: 'public' | 'private';
   active: boolean;
   queries: number;
-  docs: KnowledgeFile[];
+  docCount: number;
   created: string;
 }
 
+function toNeuroBot(b: any): NeuroBot {
+  return {
+    id:          String(b.id),
+    name:        b.name,
+    description: b.description ?? '',
+    subject:     b.category || b.subject || 'General',
+    mode:        b.is_public ? 'public' : 'private',
+    active:      b.is_active ?? true,
+    queries:     b.query_count ?? 0,
+    docCount:    b.document_count ?? 0,
+    created:     (b.created_at ?? '').slice(0, 10),
+  };
+}
 
-const STATUS_CONFIG = {
-  processed:  { icon: CheckCircle, color: 'text-[#0F7B6C]', label: 'Procesado'  },
-  processing: { icon: Clock,       color: 'text-[#D9730D]', label: 'Procesando' },
-  error:      { icon: AlertCircle, color: 'text-[#E03E3E]', label: 'Error'       },
+
+const UPLOAD_STATUS = {
+  pendiente:  { icon: Clock,       color: 'text-[#787774]', label: 'Pendiente'  },
+  subiendo:   { icon: Loader2,     color: 'text-[#2E6FDB]', label: 'Subiendo'   },
+  procesando: { icon: Loader2,     color: 'text-[#D9730D]', label: 'Procesando' },
+  error:      { icon: AlertCircle, color: 'text-[#E03E3E]', label: 'Error'      },
 };
 
 // ── Vista detalle de un bot ───────────────────────────────────────────────────
 function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => void; onUpdate: (b: NeuroBot) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [docs,      setDocs]      = useState<KnowledgeDoc[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [uploads,   setUploads]   = useState<UploadItem[]>([]);
+  const [busyDoc,   setBusyDoc]   = useState<number | null>(null);
+  const [docError,  setDocError]  = useState('');
+  const processingRef = useRef(false);
+  const queueRef = useRef<UploadItem[]>([]);
+  const docsRef = useRef<KnowledgeDoc[]>([]);
+  docsRef.current = docs;
 
-  const handleUpload = (files: FileList | null) => {
-    if (!files) return;
-    setUploading(true);
-    const newDocs: KnowledgeFile[] = Array.from(files).map(f => ({
-      id:     Date.now().toString() + f.name,
-      name:   f.name,
-      size:   `${(f.size / 1024 / 1024).toFixed(1)} MB`,
-      date:   new Date().toISOString().slice(0, 10),
-      status: 'processing',
-    }));
-    const updated = { ...bot, docs: [...bot.docs, ...newDocs] };
-    onUpdate(updated);
-    setTimeout(() => {
-      onUpdate({
-        ...updated,
-        docs: updated.docs.map(d => d.status === 'processing' ? { ...d, status: 'processed' } : d),
-      });
-      setUploading(false);
-    }, 2000);
+  const syncCount = (list: KnowledgeDoc[]) => {
+    invalidateApiCache('/bots');
+    onUpdate({ ...bot, docCount: list.length });
   };
 
-  const removeDoc = (docId: string) => {
-    onUpdate({ ...bot, docs: bot.docs.filter(d => d.id !== docId) });
+  const loadDocs = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const res = await api.get(`/bots/${bot.id}/documents`);
+      setDocs(res.data?.documents ?? []);
+    } catch (err) {
+      setLoadError(apiError(err, 'No se pudieron cargar los documentos del NeuroBot.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const totalSize = bot.docs.reduce((acc, d) => acc + parseFloat(d.size), 0);
+  useEffect(() => { invalidateApiCache(`/bots/${bot.id}/documents`); loadDocs(); }, [bot.id]);
+
+  const patchUpload = (key: string, patch: Partial<UploadItem>) =>
+    setUploads(prev => prev.map(u => u.key === key ? { ...u, ...patch } : u));
+
+  // Sube los archivos pendientes uno por uno. El estado de cada archivo refleja
+  // lo que realmente ocurre: subiendo (progreso de red) → procesando (el
+  // backend extrae e indexa) → documento procesado (201) o error real.
+  const processQueue = async (items: UploadItem[]) => {
+    queueRef.current.push(...items);
+    if (processingRef.current) return; // el ciclo en curso tomará los nuevos
+    processingRef.current = true;
+    try {
+      while (queueRef.current.length > 0) {
+        const item = queueRef.current.shift()!;
+        patchUpload(item.key, { status: 'subiendo', progress: 0, error: undefined });
+        const form = new FormData();
+        form.append('file', item.file);
+        try {
+          const res = await api.post(`/bots/${bot.id}/documents`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (e) => {
+              const pct = e.total ? Math.round((e.loaded / e.total) * 100) : 0;
+              patchUpload(item.key, pct >= 100 ? { status: 'procesando', progress: 100 } : { progress: pct });
+            },
+          });
+          const doc: KnowledgeDoc = res.data;
+          const next = [doc, ...docsRef.current];
+          setDocs(next);
+          syncCount(next);
+          setUploads(prev => prev.filter(u => u.key !== item.key));
+        } catch (err) {
+          patchUpload(item.key, { status: 'error', error: apiError(err, 'No se pudo procesar el documento.') });
+        }
+      }
+    } finally {
+      processingRef.current = false;
+    }
+  };
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const items: UploadItem[] = Array.from(files).map((file, i) => {
+      const problem = precheck(file);
+      return {
+        key: `${Date.now()}-${i}-${file.name}`,
+        file,
+        status: problem ? 'error' : 'pendiente',
+        progress: 0,
+        error: problem ?? undefined,
+      };
+    });
+    setUploads(prev => [...prev, ...items]);
+    if (fileRef.current) fileRef.current.value = '';
+    processQueue(items.filter(i => i.status === 'pendiente'));
+  };
+
+  const retry = (item: UploadItem) => {
+    patchUpload(item.key, { status: 'pendiente', error: undefined, progress: 0 });
+    processQueue([{ ...item, status: 'pendiente' }]);
+  };
+
+  const dismiss = (key: string) => setUploads(prev => prev.filter(u => u.key !== key));
+
+  const removeDoc = async (doc: KnowledgeDoc) => {
+    if (busyDoc !== null) return;
+    if (!window.confirm(`¿Eliminar «${doc.filename}»? El NeuroBot dejará de usar su contenido.`)) return;
+    setBusyDoc(doc.id);
+    setDocError('');
+    try {
+      await api.delete(`/bots/${bot.id}/documents/${doc.id}`);
+      const next = docsRef.current.filter(d => d.id !== doc.id);
+      setDocs(next);
+      syncCount(next);
+    } catch (err) {
+      setDocError(apiError(err, 'No se pudo eliminar el documento.'));
+    } finally {
+      setBusyDoc(null);
+    }
+  };
+
+  const downloadDoc = async (doc: KnowledgeDoc) => {
+    setDocError('');
+    try {
+      const res = await api.get(`/bots/${bot.id}/documents/${doc.id}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setDocError(apiError(err, 'No se pudo descargar el documento.'));
+    }
+  };
+
+  const totalSize = docs.reduce((acc, d) => acc + d.size_bytes, 0);
+  const isUploading = uploads.some(u => u.status === 'subiendo' || u.status === 'procesando' || u.status === 'pendiente');
 
   return (
     <div className="space-y-5">
@@ -385,7 +550,7 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3 text-xs text-[#787774]">
             <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> {bot.queries} consultas</span>
-            <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> {bot.docs.length} docs</span>
+            <span className="flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> {docs.length} docs</span>
           </div>
           <button onClick={() => setShowShare(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2E6FDB] text-white rounded-lg text-xs font-medium hover:bg-[#255DC0] transition-colors">
@@ -399,53 +564,122 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
         <div className="px-5 py-4 border-b border-[#E9E9E7] flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-[#191919] text-sm">Base de Conocimiento</h3>
-            <p className="text-xs text-[#787774] mt-0.5">{bot.docs.length} documentos · {totalSize.toFixed(1)} MB total</p>
+            <p className="text-xs text-[#787774] mt-0.5">{docs.length} documentos · {formatSize(totalSize)} total</p>
           </div>
           <div className="flex gap-2">
-            <input ref={fileRef} type="file" accept=".pdf,.md,.txt" multiple className="hidden"
-              onChange={e => handleUpload(e.target.files)} />
+            <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" multiple className="hidden"
+              onChange={e => handleFiles(e.target.files)} />
             <button onClick={() => fileRef.current?.click()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2E6FDB] text-white rounded-lg text-xs font-medium hover:bg-[#255DC0] transition-colors">
-              {uploading ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              {uploading ? 'Procesando...' : 'Subir documento'}
+              {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {isUploading ? 'Subiendo...' : 'Subir documento'}
             </button>
           </div>
         </div>
 
-        {bot.docs.length === 0 ? (
-          <div className="p-10 text-center">
-            <BookOpen className="w-10 h-10 text-[#E9E9E7] mx-auto mb-2" />
-            <p className="text-sm text-[#787774]">No hay documentos. Sube PDF o Markdown para entrenar al bot.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-[#F7F6F3]">
-            {bot.docs.map(doc => {
-              const sc = STATUS_CONFIG[doc.status];
+        {/* Archivos en curso o con error */}
+        {uploads.length > 0 && (
+          <div className="divide-y divide-[#F7F6F3] border-b border-[#E9E9E7] bg-[#FBFBFA]">
+            {uploads.map(item => {
+              const sc = UPLOAD_STATUS[item.status];
               const SIcon = sc.icon;
+              const spinning = item.status === 'subiendo' || item.status === 'procesando';
               return (
-                <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#F7F6F3]/50 transition-colors">
-                  <FileText className="w-4 h-4 text-[#787774] flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[#191919] truncate font-medium">{doc.name}</p>
-                    <p className="text-[11px] text-[#AEADAB]">{doc.size} · Subido el {doc.date}</p>
+                <div key={item.key} className="px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-4 h-4 text-[#787774] flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[#191919] truncate font-medium">{item.file.name}</p>
+                      <p className="text-[11px] text-[#AEADAB]">
+                        {formatSize(item.file.size)}
+                        {item.status === 'subiendo' && ` · ${item.progress}%`}
+                        {item.status === 'procesando' && ' · extrayendo e indexando el texto'}
+                      </p>
+                    </div>
+                    <div className={`flex items-center gap-1 text-xs font-medium ${sc.color}`}>
+                      <SIcon className={`w-3.5 h-3.5 ${spinning ? 'animate-spin' : ''}`} /> {sc.label}
+                    </div>
+                    {item.status === 'error' && (
+                      <>
+                        {!precheck(item.file) && (
+                          <button onClick={() => retry(item)} title="Reintentar"
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#EEF3FD] text-[#787774] hover:text-[#2E6FDB] transition-colors">
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button onClick={() => dismiss(item.key)} title="Quitar"
+                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-[#AEADAB] hover:text-[#E03E3E] transition-colors">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
-                  <div className={`flex items-center gap-1 text-xs font-medium ${sc.color}`}>
-                    <SIcon className="w-3.5 h-3.5" /> {sc.label}
-                  </div>
-                  <button onClick={() => removeDoc(doc.id)}
-                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-[#AEADAB] hover:text-[#E03E3E] transition-colors">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  {item.status === 'subiendo' && (
+                    <div className="mt-2 h-1 bg-[#E9E9E7] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#2E6FDB] transition-all" style={{ width: `${item.progress}%` }} />
+                    </div>
+                  )}
+                  {item.status === 'error' && item.error && (
+                    <p className="mt-1.5 text-xs text-[#E03E3E]">{item.error}</p>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
 
+        {docError && (
+          <div className="px-5 py-2 text-xs text-[#E03E3E] bg-red-50 border-b border-[#E9E9E7]">{docError}</div>
+        )}
+
+        {loading ? (
+          <div className="p-10 flex justify-center">
+            <Loader2 className="w-5 h-5 animate-spin text-[#2E6FDB]" />
+          </div>
+        ) : loadError ? (
+          <div className="p-8 text-center">
+            <AlertCircle className="w-8 h-8 text-[#E03E3E] mx-auto mb-2" />
+            <p className="text-sm text-[#E03E3E]">{loadError}</p>
+            <button onClick={loadDocs} className="mt-3 text-xs font-medium text-[#2E6FDB] hover:underline">Reintentar</button>
+          </div>
+        ) : docs.length === 0 ? (
+          <div className="p-10 text-center">
+            <BookOpen className="w-10 h-10 text-[#E9E9E7] mx-auto mb-2" />
+            <p className="text-sm text-[#787774]">No hay documentos. Sube PDF, Word, Markdown o texto para entrenar al bot.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#F7F6F3]">
+            {docs.map(doc => (
+              <div key={doc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-[#F7F6F3]/50 transition-colors">
+                <FileText className="w-4 h-4 text-[#787774] flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-[#191919] truncate font-medium">{doc.filename}</p>
+                  <p className="text-[11px] text-[#AEADAB]">
+                    {formatSize(doc.size_bytes)} · {doc.chunk_count} fragmentos indexados
+                    {doc.created_at ? ` · Subido el ${doc.created_at.slice(0, 10)}` : ''}
+                    {doc.truncated ? ' · solo se indexó la primera parte (documento muy extenso)' : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 text-xs font-medium text-[#0F7B6C]">
+                  <CheckCircle className="w-3.5 h-3.5" /> Procesado
+                </div>
+                <button onClick={() => downloadDoc(doc)} title="Descargar original"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#EEF3FD] text-[#AEADAB] hover:text-[#2E6FDB] transition-colors">
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => removeDoc(doc)} disabled={busyDoc !== null} title="Eliminar"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-50 text-[#AEADAB] hover:text-[#E03E3E] disabled:opacity-50 transition-colors">
+                  {busyDoc === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="px-5 py-3 bg-[#F7F6F3] border-t border-[#E9E9E7]">
           <p className="text-xs text-[#787774]">
-            📄 Formatos soportados: <strong>PDF</strong>, <strong>Markdown (.md)</strong>, <strong>Texto plano (.txt)</strong>.
-            El sistema extrae e indexa el texto automáticamente para responder consultas.
+            📄 Formatos soportados: <strong>PDF</strong>, <strong>Word (.docx)</strong>, <strong>Markdown (.md)</strong> y <strong>Texto (.txt)</strong>, hasta 4 MB por archivo.
+            El sistema extrae e indexa el texto; el NeuroBot lo usa para responder a tus estudiantes.
           </p>
         </div>
       </div>
@@ -461,28 +695,35 @@ export default function NeuroBotsTab() {
   const [creating,   setCreating]   = useState(false);
   const [testBot,    setTestBot]    = useState<NeuroBot | null>(null);
   const [form,       setForm]       = useState({ name:'', description:'', subject:'', mode:'public' as 'public'|'private' });
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [previewImg, setPreviewImg] = useState<string | null>(null);
+  const [loadingBots, setLoadingBots] = useState(true);
+  const [listError,  setListError]  = useState('');
+  const [createError, setCreateError] = useState('');
 
-  useEffect(() => {
-    api.get('/bots/my-bots')
-      .then(r => setBots((r.data.bots ?? []).map((b: any): NeuroBot => ({
-        id:          String(b.id),
-        name:        b.name,
-        description: b.description ?? '',
-        subject:     b.category ?? b.subject ?? 'General',
-        mode:        b.is_public ? 'public' : 'private',
-        active:      b.is_active ?? true,
-        queries:     b.total_users ?? 0,
-        docs:        [],
-        created:     (b.created_at ?? '').slice(0, 10),
-      }))))
-      .catch(() => setBots([]));
-  }, []);
+  const loadBots = async () => {
+    setLoadingBots(true);
+    setListError('');
+    try {
+      const r = await api.get('/bots/my-bots');
+      setBots((r.data.bots ?? []).map(toNeuroBot));
+    } catch (err) {
+      setListError(apiError(err, 'No se pudieron cargar tus NeuroBots.'));
+    } finally {
+      setLoadingBots(false);
+    }
+  };
+
+  useEffect(() => { loadBots(); }, []);
+
+  const closeCreate = () => {
+    setShowModal(false);
+    setCreateError('');
+    setForm({ name:'', description:'', subject:'', mode:'public' });
+  };
 
   const handleCreate = async () => {
     if (!form.name.trim() || creating) return;
     setCreating(true);
+    setCreateError('');
     try {
       const res = await api.post('/bots/create', {
         name:        form.name.trim(),
@@ -490,54 +731,40 @@ export default function NeuroBotsTab() {
         category:    form.subject.trim() || 'General',
         is_public:   form.mode === 'public',
       });
-      const b = res.data;
-      const newBot: NeuroBot = {
-        id:          String(b.id),
-        name:        b.name,
-        description: b.description ?? '',
-        subject:     b.category ?? 'General',
-        mode:        b.is_public ? 'public' : 'private',
-        active:      b.is_active ?? true,
-        queries:     0,
-        docs:        [],
-        created:     (b.created_at ?? new Date().toISOString()).slice(0, 10),
-      };
-      setBots(prev => [newBot, ...prev]);
-    } catch {
-      // Fallback optimista si el backend falla
-      const newBot: NeuroBot = {
-        id:          Date.now().toString(),
-        name:        form.name.trim(),
-        description: form.description.trim(),
-        subject:     form.subject.trim() || 'General',
-        mode:        form.mode,
-        active:      true, queries: 0, docs: [],
-        created:     new Date().toISOString().slice(0, 10),
-      };
-      setBots(prev => [newBot, ...prev]);
+      invalidateApiCache('/bots');
+      setBots(prev => [toNeuroBot(res.data), ...prev]);
+      closeCreate();
+    } catch (err) {
+      setCreateError(apiError(err, 'No se pudo crear el NeuroBot.'));
     } finally {
       setCreating(false);
-      setShowModal(false);
-      setForm({ name:'', description:'', subject:'', mode:'public' });
-      setPreviewImg(null);
     }
   };
 
   const toggleBot = async (id: string) => {
     const bot = bots.find(b => b.id === id);
     if (!bot) return;
-    setBots(prev => prev.map(b => b.id === id ? { ...b, active: !b.active } : b));
+    setListError('');
+    setBots(prev => prev.map(b => b.id === id ? { ...b, active: !bot.active } : b));
     try {
       await api.patch(`/bots/${id}`, { is_active: !bot.active });
-    } catch { /* keep optimistic */ }
+      invalidateApiCache('/bots');
+    } catch (err) {
+      setBots(prev => prev.map(b => b.id === id ? { ...b, active: bot.active } : b));
+      setListError(apiError(err, 'No se pudo cambiar el estado del NeuroBot.'));
+    }
   };
 
   const deleteBot = async (id: string) => {
-    if (!window.confirm('¿Eliminar este NeuroBot?')) return;
-    setBots(prev => prev.filter(b => b.id !== id));
+    if (!window.confirm('¿Eliminar este NeuroBot? También se eliminarán sus documentos.')) return;
+    setListError('');
     try {
       await api.delete(`/bots/${id}`);
-    } catch { /* already removed from UI */ }
+      invalidateApiCache('/bots');
+      setBots(prev => prev.filter(b => b.id !== id));
+    } catch (err) {
+      setListError(apiError(err, 'No se pudo eliminar el NeuroBot.'));
+    }
   };
 
   const tryBot = (bot: NeuroBot) => {
@@ -561,7 +788,7 @@ export default function NeuroBotsTab() {
         <div className="flex gap-4 text-sm text-[#787774]">
           <span><strong className="text-[#191919]">{bots.filter(b=>b.active).length}</strong> activos</span>
           <span><strong className="text-[#191919]">{bots.reduce((a,b)=>a+b.queries,0).toLocaleString()}</strong> consultas totales</span>
-          <span><strong className="text-[#191919]">{bots.reduce((a,b)=>a+b.docs.length,0)}</strong> documentos</span>
+          <span><strong className="text-[#191919]">{bots.reduce((a,b)=>a+b.docCount,0)}</strong> documentos</span>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -570,6 +797,13 @@ export default function NeuroBotsTab() {
           <Plus className="w-4 h-4" /> Crear NeuroBot
         </button>
       </div>
+
+      {listError && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg bg-red-50 border border-[#E03E3E]/20 text-sm text-[#E03E3E]">
+          <span className="flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {listError}</span>
+          <button onClick={loadBots} className="text-xs font-medium hover:underline">Reintentar</button>
+        </div>
+      )}
 
       {/* Tabla */}
       <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
@@ -606,7 +840,7 @@ export default function NeuroBotsTab() {
                     {bot.mode === 'public' ? 'Público' : 'Privado'}
                   </span>
                 </td>
-                <td className="px-5 py-3 text-center text-sm font-semibold text-[#191919]">{bot.docs.length}</td>
+                <td className="px-5 py-3 text-center text-sm font-semibold text-[#191919]">{bot.docCount}</td>
                 <td className="px-5 py-3 text-center">
                   <span className="flex items-center justify-center gap-1 text-xs text-[#6940A5]">
                     <BarChart2 className="w-3.5 h-3.5" /> {bot.queries.toLocaleString()}
@@ -639,7 +873,11 @@ export default function NeuroBotsTab() {
             ))}
           </tbody>
         </table>
-        {bots.length === 0 && (
+        {loadingBots ? (
+          <div className="py-12 flex justify-center">
+            <Loader2 className="w-5 h-5 animate-spin text-[#2E6FDB]" />
+          </div>
+        ) : bots.length === 0 && !listError && (
           <div className="py-12 text-center">
             <Bot className="w-10 h-10 text-[#E9E9E7] mx-auto mb-2" />
             <p className="text-sm text-[#787774]">No hay bots. Crea tu primer NeuroBot.</p>
@@ -653,7 +891,7 @@ export default function NeuroBotsTab() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="px-6 py-4 border-b border-[#E9E9E7] flex items-center justify-between">
               <h3 className="font-semibold text-[#191919]">Crear NeuroBot</h3>
-              <button onClick={() => setShowModal(false)} className="text-[#787774] hover:text-[#37352F] text-xl">×</button>
+              <button onClick={closeCreate} className="text-[#787774] hover:text-[#37352F] text-xl">×</button>
             </div>
             <div className="p-6 space-y-4">
               <div>
@@ -689,18 +927,12 @@ export default function NeuroBotsTab() {
                   })}
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Imagen (opcional)</label>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                  onChange={e => { const f=e.target.files?.[0]; if(f){ const r=new FileReader(); r.onload=ev=>setPreviewImg(ev.target?.result as string); r.readAsDataURL(f); }}} />
-                {previewImg
-                  ? <div className="relative w-16 h-16"><img src={previewImg} className="w-16 h-16 rounded-lg object-cover border border-[#E9E9E7]" /><button onClick={() => setPreviewImg(null)} className="absolute -top-1 -right-1 w-4 h-4 bg-[#E03E3E] text-white rounded-full text-[10px] flex items-center justify-center">×</button></div>
-                  : <button onClick={() => fileRef.current?.click()} className="w-full py-2.5 border border-dashed border-[#E9E9E7] rounded-lg text-xs text-[#787774] hover:bg-[#F7F6F3] transition-colors">+ Subir imagen</button>
-                }
-              </div>
+              {createError && (
+                <p className="text-xs text-[#E03E3E] flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> {createError}</p>
+              )}
             </div>
             <div className="px-6 pb-5 flex justify-end gap-2">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
+              <button onClick={closeCreate} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
               <button onClick={handleCreate} disabled={!form.name.trim() || creating}
                 className="px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
                 {creating
