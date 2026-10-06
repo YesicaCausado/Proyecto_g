@@ -1,470 +1,67 @@
 """
-NeuroLearn AI - Schemas Pydantic
+NeuroLearn AI - Esquemas Pydantic (MODIFICADO)
+===============================================
+
+Actualizado para eliminar el sistema de licencias.
 """
-from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any
+from __future__ import annotations
+
+import re
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, validator
 
 
-# ===== USUARIO =====
-
-class UserCreate(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
-    email: str = Field(..., max_length=100)
-    password: str = Field(..., min_length=6)
-    full_name: Optional[str] = None
-    role: str = Field(
-        default="estudiante",
-        pattern="^(estudiante|profesor|super_profesor|admin)$"
-    )
-
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-    email: Optional[str]
-    full_name: Optional[str]
-    role: str = "estudiante"
-    is_active: bool
-    is_expert: bool
-    photo: Optional[str] = None
-    created_at: datetime
-    cognitive_profile: Optional[Dict] = None
-    must_change_password: Optional[bool] = False
-    institution_id: Optional[int] = None
-    document_number: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
+# ===== AUTENTICACIÓN =====
 
 class Token(BaseModel):
     access_token: str
-    token_type: str = "bearer"
-    user_id: Optional[int] = None
-    role: Optional[str] = None
-    full_name: Optional[str] = None
-    must_change_password: Optional[bool] = False
-    # Datos completos del usuario para evitar un segundo GET /auth/me
-    email: Optional[str] = None
+    token_type: str
+
+class TokenData(BaseModel):
     username: Optional[str] = None
-    is_active: Optional[bool] = True
-    is_expert: Optional[bool] = False
-    photo: Optional[str] = None
-    institution_id: Optional[int] = None
-    document_number: Optional[str] = None
-    cognitive_profile: Optional[Dict] = None
-    created_at: Optional[datetime] = None
 
-
-# ===== CHAT / APRENDIZAJE =====
-
-class StartSessionRequest(BaseModel):
-    topic: str = Field(..., min_length=1, max_length=200)
-    difficulty: str = Field(default="medium")
-    bot_id: Optional[int] = None
-    conversation_id: Optional[int] = None
-
-
-class ChatMessageRequest(BaseModel):
-    message: str = Field(..., min_length=1)
-    topic: Optional[str] = None
-    history: Optional[List[Dict[str, Any]]] = None
-    cognitive_state: Optional[str] = None
-    # Conversación (memoria entre chats tipo ChatGPT)
-    conversation_id: Optional[int] = None
-    # Patrón 1 — Ritmo de Interacción
-    response_time_ms: Optional[float] = Field(default=None, ge=0)
-    typing_speed_cpm: Optional[float] = Field(default=None, ge=0)
-    pause_before_ms: Optional[float] = Field(default=None, ge=0)
-    # Patrón 2 — Secuencia de Decisión
-    corrections: Optional[int] = Field(default=None, ge=0)       # backspaces reales
-    typing_bursts: Optional[int] = Field(default=None, ge=0)     # ráfagas separadas por pausas
-    is_question: Optional[bool] = None        # mensaje termina en '?'
-    message_length: Optional[int] = Field(default=None, ge=0)    # longitud del mensaje
-    # Patrones 3 y 4 — datos multimodales opcionales
-    facial_data: Optional[Dict[str, Any]] = None
-    voice_data: Optional[Dict[str, Any]] = None
-
-
-class ConversationCreate(BaseModel):
-    subject: str = Field(default="")
-    skill: str = Field(default="")
-    topic: str = Field(default="")
-    bot_id: Optional[int] = None
-
-
-class ConversationRename(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-
-
-class ConversationMeta(BaseModel):
-    """Metadatos de una conversación para listado."""
+class User(BaseModel):
     id: int
-    student_id: int
-    title: str
-    subject: str
-    skill: str
-    topic: str
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-    last_interaction: datetime
-
-
-class ConversationListResponse(BaseModel):
-    conversations: List[ConversationMeta]
-    total: int
-
-
-class ChatMessageResponse(BaseModel):
-    message: str
-    action: str
-    difficulty: str
-    cognitive_state: str
-    confidence: float
-    suggestions: List[str]
-    should_pause: bool
-    metadata: Dict[str, Any]
-
-
-class ChatPatternPayload(BaseModel):
-    topic: str = Field(..., min_length=1, max_length=200)
-    cognitive_state: Optional[str] = None
-    response_time_ms: Optional[float] = Field(default=None, ge=0)
-    typing_speed_cpm: Optional[float] = Field(default=None, ge=0)
-    pause_before_ms: Optional[float] = Field(default=None, ge=0)
-    corrections: Optional[int] = Field(default=None, ge=0)
-    typing_bursts: Optional[int] = Field(default=None, ge=0)
-    is_question: Optional[bool] = None
-    message_length: Optional[int] = Field(default=None, ge=0)
-    facial_data: Optional[Dict[str, Any]] = None
-    voice_data: Optional[Dict[str, Any]] = None
-    confidence: Optional[float] = Field(default=None, ge=0, le=1)
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class ChatPatternHistoryEntry(BaseModel):
-    timestamp: datetime
-    topic: str
-    cognitive_state: Optional[str] = None
-    response_time_ms: Optional[float] = None
-    typing_speed_cpm: Optional[float] = None
-    pause_before_ms: Optional[float] = None
-    corrections: Optional[int] = None
-    typing_bursts: Optional[int] = None
-    is_question: Optional[bool] = None
-    message_length: Optional[int] = None
-    facial_data: Optional[Dict[str, Any]] = None
-    voice_data: Optional[Dict[str, Any]] = None
-    confidence: Optional[float] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class ChatPatternHistoryResponse(BaseModel):
-    topic: Optional[str] = None
-    total: int
-    items: List[ChatPatternHistoryEntry]
-
-# ===== QUIZ COGNITIVO (Formato Gemini) =====
-
-class QuizQuestionGemini(BaseModel):
-    """Pregunta individual en formato Gemini"""
-    id: int
-    question: str
-    options: List[str]  # Lista simple de opciones
-    answer: str  # La opción correcta textual
-    explanation: str
-
-class QuizResponseGemini(BaseModel):
-    """Respuesta completa del quiz en formato Gemini"""
-    quiz_title: str
-    difficulty: str  # Fácil/Medio/Difícil
-    questions: List[QuizQuestionGemini]
-
-class QuizRequest(BaseModel):
-    topic: str
-    num_questions: Optional[int] = 5
-    difficulty: Optional[str] = None  # Opcional: Fácil/Medio/Difícil
-
-class QuizHistoryEntry(BaseModel):
-    """Entrada individual del historial de quizzes con adaptación"""
-    id: Optional[int] = None
-    date: str  # YYYY-MM-DD
-    title: str
-    questions_count: int
-    user_score: Optional[str] = None  # "X/Y" formato
-    difficulty: str
-    mistakes: Optional[List[str]] = None  # Lista de preguntas falladas
-    adaptation: Optional[str] = None  # Descripción de cómo se ajustó el siguiente quiz
-    performance_score: Optional[float] = None  # Porcentaje de aciertos
-    recommended_difficulty: Optional[str] = None  # Dificultad sugerida
-    details: Optional[List[Dict[str, Any]]] = None  # Revisión por pregunta
-
-class QuizHistoryResponse(BaseModel):
-    """Respuesta con el historial completo de quizzes"""
-    history: List[QuizHistoryEntry]
-    total_quizzes: int
-
-class QuizSubmission(BaseModel):
-    """Envío de respuestas del quiz por parte del usuario"""
-    quiz_title: str
-    user_answers: Dict[int, str]  # {question_id: selected_answer}
-    classroom_id: Optional[int] = None 
-    duration: Optional[int] = None  # segundos que tardó el usuario en responder 
-
-class QuizAnalysisResponse(BaseModel):
-    """Respuesta del análisis de quiz con recomendaciones adaptativas"""
-    score: str
-    correct_answers: int
-    wrong_answers: int
-    percentage: float
-    mistakes: List[Dict[str, Any]]  # Detalles de errores
-    weak_concepts: List[str]  # Conceptos a reforzar
-    recommended_difficulty: str
-    adaptation_message: str
-
-# ===== SCHEMAS LEGACY (mantener compatibilidad) =====
-
-class QuizOption(BaseModel):
-    id: str
-    text: str
-
-class QuizQuestion(BaseModel):
-    id: int
-    question: str
-    options: List[QuizOption]
-    correct_option: str
-    explanation: str
-
-class QuizResponse(BaseModel):
-    topic: str
-    difficulty: str
-    cognitive_level: str
-    questions: List[QuizQuestion]
-
-class SessionStatsResponse(BaseModel):
-    """Estadísticas de actividad del usuario en el chat (datos reales).
-
-    FIX: el response_model anterior (session_id/topic/duration_minutes/
-    avg_response_time/mastery_level/concepts_learned/cognitive_evolution) NO
-    correspondía a lo que el endpoint /chat/stats devuelve realmente, lo que
-    causaba un ValidationError de Pydantic (7 campos faltantes) y un 500 en
-    cada consulta. Ahora el esquema refleja la respuesta real del endpoint.
-    """
-    total_messages: int
-    correct_answers: int
-    wrong_answers: int
-    average_response_time: float
-    topics_covered: List[str]
-    session_duration: float
-
-# ===== BOT EXPERTO =====
-
-class ExpertBotCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    description: str = ""
-    category: str = Field(default="General", max_length=50)
-    is_public: bool = True
-
-
-class ExpertBotResponse(BaseModel):
-    id: int
-    name: str
-    description: str
-    category: str
-    creator_id: int
-    is_public: bool
-    is_active: bool
-    total_users: int
-    avg_rating: float
-    total_sessions: int
-    created_at: datetime
-    personality: Dict = {}
-    knowledge_summary: Dict = {}
-
-    class Config:
-        from_attributes = True
-
-
-class BotPersonalityConfig(BaseModel):
-    teaching_style: str = Field(default="balanced")
-    verbosity: str = Field(default="medium")
-    use_examples: bool = True
-    use_analogies: bool = True
-
-
-class BotStepCreate(BaseModel):
-    title: str
-    description: str
-    details: str = ""
-    is_critical: bool = False
-    common_errors: List[str] = []
-    tips: List[str] = []
-
-
-class BotWarningCreate(BaseModel):
-    message: str
-    severity: str = "medium"
-    when_to_show: str = ""
-    related_steps: List[int] = []
-
-
-class BotScenarioCreate(BaseModel):
-    title: str
-    description: str
-    initial_situation: str
-    expected_actions: List[str]
-    correct_outcome: str
-    common_mistakes: List[str] = []
-    difficulty: str = "medium"
-
-
-class BotQACreate(BaseModel):
-    question: str
-    answer: str
-    category: str = ""
-    difficulty: str = "medium"
-
-
-class BotListResponse(BaseModel):
-    bots: List[ExpertBotResponse]
-    total: int
-
-
-# ===== CLASES (ROL PROFESOR) =====
-
-class ClassroomCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=150)
-    description: str = ""
-    subject: str = Field(..., max_length=100)
-    grade: str = Field(default="", max_length=20)
-    max_students: int = Field(default=40, ge=1, le=100)
-    color: str = Field(default="#2E6FDB", max_length=20)
-
-
-class ClassroomResponse(BaseModel):
-    id: int
-    teacher_id: int
-    name: str
-    description: str = ""
-    subject: str
-    grade: str
-    invite_code: str
-    is_active: bool
-    max_students: int
-    student_count: int = 0
-    color: str = "#2E6FDB"
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class ClassroomListResponse(BaseModel):
-    classrooms: List[ClassroomResponse]
-    total: int
-
-
-class EnrollByCodeRequest(BaseModel):
-    invite_code: str = Field(..., min_length=8, max_length=8)
-
-
-class EnrollmentResponse(BaseModel):
-    id: int
-    student_id: int
-    student_name: str = ""
-    student_username: str = ""
-    student_email: Optional[str] = None
-    classroom_id: int
-    enrolled_at: datetime
-    overall_progress: float
-    total_sessions: int
-    total_time_minutes: float
-    average_score: float
-    risk_level: str
-    last_activity: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class AssignBotRequest(BaseModel):
-    bot_id: int
-    is_required: bool = False
-    order_index: int = 0
-
-
-class StudentProgressResponse(BaseModel):
-    student_id: int
-    student_name: str
     username: str
-    overall_progress: float
-    total_sessions: int
-    total_time_minutes: float
-    average_score: float
-    risk_level: str
-    last_activity: Optional[datetime] = None
-    cognitive_profile: Optional[Dict] = None
-
-
-class ClassroomStatsResponse(BaseModel):
-    classroom_id: int
-    classroom_name: str
-    total_students: int
-    active_students: int
-    avg_progress: float
-    avg_score: float
-    total_sessions: int
-    students_at_risk: int
-    top_performers: List[Dict] = Field(default_factory=list)
-    struggling_students: List[Dict] = Field(default_factory=list)
-
-
-class ClassroomBotResponse(BaseModel):
-    bot_id: int
-    name: str
-    description: str = ""
-    category: Optional[str] = None
-    is_required: bool = False
-    order_index: int = 0
-
-
-class ClassroomStudentDetailResponse(BaseModel):
-    """Detalle de una clase para el estudiante inscrito (vista estilo classroom)"""
-    id: int
-    name: str
-    description: str = ""
-    subject: str
-    grade: str = ""
-    color: str = "#2E6FDB"
-    max_students: int = 40
-    student_count: int = 0
+    email: str
+    full_name: str
+    role: str
+    is_active: bool
+    institution_id: Optional[int] = None
     created_at: datetime
-    teacher_name: str = ""
-    invite_code: str = ""
-    # Progreso del estudiante en esta clase
-    overall_progress: float = 0.0
-    total_sessions: int = 0
-    total_time_minutes: float = 0.0
-    average_score: float = 0.0
-    risk_level: str = "none"
-    last_activity: Optional[datetime] = None
-    # Bots asignados a la clase (tutores)
-    bots: List[ClassroomBotResponse] = Field(default_factory=list)
 
+    class Config:
+        from_attributes = True
+
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    password: str = Field(..., min_length=8)
+    full_name: str = Field(..., min_length=2, max_length=100)
+    role: str = Field(..., pattern="^(estudiante|profesor|super_profesor|admin)$")
+    institution_id: Optional[int] = None
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = Field(None, regex=r"^[^@]+@[^@]+\.[^@]+$")
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    role: Optional[str] = Field(None, pattern="^(estudiante|profesor|super_profesor|admin)$")
+    institution_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class UserInDBBase(User):
+    hashed_password: str
+
+class UserInDB(UserInDBBase):
+    pass
 
 # ===== SISTEMA B2B — INSTITUCIONES Y CREDENCIALES =====
 
 class InstitutionCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     dane_code: str = Field(..., min_length=3, max_length=20)
-    license_type: str = Field(default="basica", pattern="^(basica|premium|pro)$")
+    # NOTA: license_type ha sido eliminada - el sistema ya no usa licencias
     # Datos del Super Profesor
     sp_full_name: str = Field(..., min_length=2, max_length=100)
     sp_document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
@@ -483,7 +80,7 @@ class InstitutionResponse(BaseModel):
     id: int
     name: str
     dane_code: str
-    license_type: str
+    # NOTA: license_type ha sido eliminada - el sistema ya no usa licencias
     is_active: bool
     created_at: datetime
     credential: CredentialItem
@@ -500,18 +97,9 @@ class BulkCreateResponse(BaseModel):
     total_errors: int
 
 
-class LicenseUsage(BaseModel):
-    license_type: str
-    license_status: str
-    max_teachers: int
-    current_teachers: int
-    max_students: int
-    current_students: int
-    expiry_date: Optional[str] = None
-    days_left: Optional[int] = None
-    institution_name: str = ""
-    # Módulos del panel de Súper Profesor habilitados por licencia.
-    super_modules: List[str] = []
+# NOTA: La clase LicenseUsage ha sido eliminada completamente
+# ya que el sistema ya no usa licencias ni tracking de uso por licencia
+
 
 class AdminStats(BaseModel):
     """Estadísticas globales del sistema para el panel del administrador"""
@@ -520,8 +108,12 @@ class AdminStats(BaseModel):
     total_super_profesores: int
     total_profesores:     int
     total_estudiantes:    int
-
+    total_admins:         int
     
+    class Config:
+        from_attributes = True
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)
@@ -533,97 +125,295 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    """Restablecer contraseña con token recibido por email"""
-    token: str = Field(..., min_length=10)
+    username: str = Field(..., min_length=3)
+    token: str
     new_password: str = Field(..., min_length=8)
 
 
-class CSVValidationRow(BaseModel):
-    row: int
-    data: Dict[str, Any]
-    error: Optional[str] = None
-    valid: bool = True
+# ===== MENSAJERÍA =====
 
+class MessageBase(BaseModel):
+    content: str
+    message_type: str = "text"
 
-# ===== SCHEMAS B2B FALTANTES =====
+class MessageCreate(MessageBase):
+    conversation_id: int
 
-class TeacherCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
-    email: str = Field(..., max_length=100)
-    subject_area: Optional[str] = None
-
-
-class TeacherListItem(BaseModel):
+class MessageResponse(MessageBase):
     id: int
-    full_name: str
-    username: str
-    email: str
-    document_type: Optional[str] = None
-    document_number: Optional[str] = None
-    subject_area: Optional[str] = None
-    is_active: bool = True
-    temp_password: Optional[str] = None
+    conversation_id: int
+    sender_id: int
+    sender_name: str
+    created_at: datetime
+    is_read: bool
 
     class Config:
         from_attributes = True
 
 
-class StudentCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
-    email: Optional[str] = None
-    grade: Optional[str] = None
-    birth_date: Optional[str] = None
+class ConversationBase(BaseModel):
+    pass
 
+class ConversationCreate(ConversationBase):
+    participant_ids: List[int]  # IDs de usuarios con quienes iniciar la conversación
 
-class TeacherUpdate(BaseModel):
-    """Edición parcial de un docente (solo envía los campos que cambian)."""
-    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
-    document_type: Optional[str] = Field(None, pattern="^(CC|TI|CE|PA)$")
-    email: Optional[str] = Field(None, max_length=100)
-    subject_area: Optional[str] = Field(None, max_length=100)
-    is_active: Optional[bool] = None
-
-
-class StudentUpdate(BaseModel):
-    """Edición parcial de un estudiante (solo envía los campos que cambian)."""
-    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
-    document_type: Optional[str] = Field(None, pattern="^(CC|TI|CE|PA)$")
-    email: Optional[str] = Field(None, max_length=100)
-    grade: Optional[str] = Field(None, max_length=20)
-    birth_date: Optional[str] = Field(None, max_length=20)
-    is_active: Optional[bool] = None
-
-
-class StudentListItem(BaseModel):
+class ConversationResponse(ConversationBase):
     id: int
-    full_name: str
-    username: str
-    email: str
-    document_type: Optional[str] = None
-    document_number: Optional[str] = None
-    grade: Optional[str] = None
-    birth_date: Optional[str] = None
-    is_active: bool = True
+    participant_ids: List[int]
+    participant_names: List[str]
+    created_at: datetime
+    updated_at: datetime
+    last_message: Optional[MessageResponse] = None
+    unread_count: int = 0
 
     class Config:
         from_attributes = True
 
 
+# ===== AULAS Y GRUPOS =====
 
-
-class InstitutionListItem(BaseModel):
-    id: int
+class ClassroomBase(BaseModel):
     name: str
-    dane_code: str
-    license_type: str
+    subject_area: Optional[str] = None
+    grade: Optional[str] = None
+    academic_year: Optional[str] = None
+    description: Optional[str] = None
+
+class ClassroomCreate(ClassroomBase):
+    pass
+
+class ClassroomResponse(ClassroomBase):
+    id: int
+    teacher_id: int
+    teacher_name: str
+    student_count: int
     is_active: bool
     created_at: datetime
-    teacher_count: int
-    student_count: int
+    updated_at: datetime
 
-class Config:
+    class Config:
         from_attributes = True
+
+
+class ClassroomUpdate(BaseModel):
+    name: Optional[str] = None
+    subject_area: Optional[str] = None
+    grade: Optional[str] = None
+    academic_year: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class ClassroomUserBase(BaseModel):
+    user_id: int
+    role: str  # student, teacher, etc.
+    joined_at: datetime
+    is_active: bool
+
+class ClassroomUserCreate(ClassroomUserBase):
+    pass
+
+class ClassroomUserResponse(ClassroomUserBase):
+    id: int
+    user_id: int
+    user_name: str
+    role: str
+    joined_at: datetime
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+# ===== CALENDARIO =====
+
+class EventBase(BaseModel):
+    title: str
+    event_type: str = "clase"  # examen|tarea|clase|anuncio|evento|feriado
+    event_date: str  # YYYY-MM-DD
+    event_time: Optional[str] = None
+    description: str = ""
+
+class EventCreate(EventBase):
+    classroom_id: Optional[int] = None  # None = evento global/institucional
+
+class EventResponse(EventBase):
+    id: int
+    classroom_id: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+    is_global: bool
+    classroom_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class EventUpdate(BaseModel):
+    title: Optional[str] = None
+    event_type: Optional[str] = None
+    event_date: Optional[str] = None
+    event_time: Optional[str] = None
+    description: Optional[str] = None
+
+
+# ===== EVALUACIONES =====
+
+class EvaluationBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    points: float = Field(..., ge=0, le=100)
+    due_date: str  # YYYY-MM-DD
+
+class EvaluationCreate(EvaluationBase):
+    classroom_id: int
+
+class EvaluationResponse(EvaluationBase):
+    id: int
+    classroom_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EvaluationSubmission(BaseModel):
+    evaluation_id: int
+    score: float = Field(..., ge=0, le=100)
+    submitted_at: str  # YYYY-MM-DD HH:MM:SS
+
+
+class EvaluationGrade(BaseModel):
+    evaluation_id: int
+    student_id: int
+    score: float
+    feedback: Optional[str] = None
+    graded_at: str  # YYYY-MM-DD HH:MM:SS
+
+
+# ===== RECURSOS =====
+
+class ResourceBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    url: str
+    resource_type: str = "link"  # link, video, document, etc.
+
+class ResourceCreate(ResourceBase):
+    classroom_id: int
+
+class ResourceResponse(ResourceBase):
+    id: int
+    classroom_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===== PERFIL =====
+
+class ProfileBase(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=50)
+    last_name: str = Field(..., min_length=1, max_length=50)
+    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    phone: Optional[str] = None
+    birth_date: Optional[str] = None  # YYYY-MM-DD
+    gender: Optional[str] = Field(None, pattern="^(M|F|O)$")
+    address: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+class ProfileUpdate(ProfileBase):
+    pass
+
+class ProfileResponse(ProfileBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===== NOTIFICACIONES =====
+
+class NotificationBase(BaseModel):
+    title: str
+    message: str
+    notification_type: str = "info"  # info, warning, error, success
+    is_read: bool = False
+
+class NotificationCreate(NotificationBase):
+    user_id: int
+
+class NotificationResponse(NotificationBase):
+    id: int
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===== DATOS DE ESTUDIANTE =====
+
+class StudentBase(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=50)
+    last_name: str = Field(..., min_length=1, max_length=50)
+    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    phone: Optional[str] = None
+    birth_date: Optional[str] = None  # YYYY-MM-DD
+    gender: Optional[str] = Field(None, pattern="^(M|F|O)$")
+    address: Optional[str] = None
+    student_id: str = Field(..., min_length=1, max_length=20)
+    grade: Optional[str] = None
+    academic_year: Optional[str] = None
+
+class StudentCreate(StudentBase):
+    pass
+
+class StudentResponse(StudentBase):
+    id: int
+    institution_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===== DATOS DE PROFESOR =====
+
+class TeacherBase(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=50)
+    last_name: str = Field(..., min_length=1, max_length=50)
+    email: str = Field(..., regex=r"^[^@]+@[^@]+\.[^@]+$")
+    phone: Optional[str] = None
+    birth_date: Optional[str] = None  # YYYY-MM-DD
+    gender: Optional[str] = Field(None, pattern="^(M|F|O)$")
+    address: Optional[str] = None
+    employee_id: str = Field(..., min_length=1, max_length=20)
+    subject_area: Optional[str] = None
+    hire_date: Optional[str = None  # YYYY-MM-DD
+
+class TeacherCreate(TeacherBase):
+    pass
+
+class TeacherResponse(TeacherBase):
+    id: int
+    institution_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ===== CONFIGURACIÓN DE LICENCIA (ELIMINADA) =====
+# NOTA: Todas las clases relacionadas con licencias han sido eliminadas
+# ya que el sistema ya no usa el modelo de licencias.
+# Esto incluye:
+# - LicenseUsage (eliminada completamente)
+# - Cualquier otro esquema relacionado con licencias

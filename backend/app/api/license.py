@@ -1,9 +1,11 @@
 """
-NeuroLearn AI — Control de Licenciamiento y Restricciones
-===========================================================
-Endpoints para gestión de licencias y control de acceso según plan
+NeuroLearn AI — Información de Licencia (MODIFICADO)
+=====================================================
+
+Endpoint para obtener información de licencia adaptado al nuevo sistema
+sin restricciones de licencia.
 """
-from typing import Optional, List
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -12,46 +14,14 @@ from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.institution import Institution
-from app.services.license_service import (
-    get_license_for_user,
-    TEACHER_LIMITS,
-    STUDENT_LIMITS,
-    features_for_user,
-)
+from app.services.license_service import get_license_for_user
 
-router = APIRouter(prefix="/license", tags=["License Control"])
-
-# Feature keys expuestos por /license/info — derivados de la MATRIZ
-# de funcionalidades (FEATURE_MATRIX). Para /info se usa la unión de features
-# de los tres roles en ese plan (vista institucional), no de un rol concreto.
-def _features_for_plan(plan: str) -> List[str]:
-    """Unión de features disponibles en el plan para los tres roles."""
-    roles = ("super_profesor", "profesor", "estudiante")
-    acc: set = set()
-    for r in roles:
-        acc |= set(features_for_user(r, plan))
-    return sorted(acc)
-
-
-def _check_feature_access(
-    institution_id: int,
-    feature: str,
-    db: Session,
-    current_user: User
-) -> bool:
-    """
-    Verifica si el usuario tiene acceso a una funcionalidad según su licencia.
-
-    feature: nombre canónico de FEATURE_MATRIX (ej. "neuroalertas", "automation").
-    Comprueba ROL + LICENCIA usando la lógica central de license_service.
-    """
-    lic = get_license_for_user(current_user, db)
-    return lic.has_feature(feature)
+router = APIRouter(prefix="/license", tags=["License Information"])
 
 
 class LicenseInfo(BaseModel):
     institution_id: int
-    license_type: str
+    license_type: str  # Mantenido para compatibilidad frontend
     is_active: bool
     expiry_date: Optional[str]
     teachers_limit: int
@@ -59,8 +29,9 @@ class LicenseInfo(BaseModel):
     teachers_current: int
     students_current: int
     available_features: List[str]
-    blocked_features: List[str]
-    usage_percentage: float
+    blocked_features: List[str]  # Siempre vacío ahora
+    usage_percentage: float  # Siempre 0 ahora (sin límites)
+    institution_name: str
 
 
 @router.get("/my-license")
@@ -69,26 +40,14 @@ async def get_my_license(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Licencia del usuario autenticado, en el formato que consume el frontend.
-
-    Reutiliza la lógica central de `license_service.get_license_for_user`, que
-    calcula el estado (active/expiring_soon/expired/suspended), los módulos
-    disponibles por plan y rol, límites, etc.
-
-    Formato de respuesta (LicenseInfo.to_dict):
-      license_type, license_status, days_left, teacher_modules, student_modules,
-      teacher_dashboard_kpis, neurobot_limit, export_formats, groups_limit,
-      students_limit, institution_name
-
-    Este es el endpoint canónico que la UI debe usar (ver LicenseContext.tsx).
+    Información de licencia del usuario autenticado.
+    MODIFICADO: Ahora refleja permisos basados en rol, no en restricciones de licencia.
     """
     try:
         license_info = get_license_for_user(current_user, db)
     except HTTPException:
         raise
     except Exception as e:
-        # La base de datos puede fallar/colgarse en serverless (causa del 500
-        # en producción). Devolvemos un 503 controlado en lugar del 500 crudo.
         raise HTTPException(
             status_code=503,
             detail=f"No se pudo obtener la licencia (base de datos). {str(e)[:160]}",
@@ -103,15 +62,7 @@ async def get_license_info(
 ):
     """
     Obtiene información completa de la licencia de la institución del usuario.
-    
-    Retorna:
-    - Tipo de licencia activa
-    - Fecha de vencimiento
-    - Límites de cupos (docentes y estudiantes)
-    - Uso actual
-    - Funcionalidades habilitadas
-    - Funcionalidades bloqueadas
-    - Porcentaje de uso
+    MODIFICADO: Todos los límites son ilimitados, todas las características disponibles según rol.
     """
     institution = db.query(Institution).filter(
         Institution.id == current_user.institution_id,
@@ -121,10 +72,14 @@ async def get_license_info(
     if not institution:
         raise HTTPException(status_code=404, detail="Institución no encontrada")
 
+    # Usar el license_type real de la institución para el campo, pero no para permisos
     plan = institution.license_type or "basica"
-    teachers_limit = TEACHER_LIMITS.get(plan, TEACHER_LIMITS["basica"])
-    students_limit = STUDENT_LIMITS.get(plan, STUDENT_LIMITS["basica"])
+    
+    # Todos los límites son ilimitados ahora
+    teachers_limit = 999999
+    students_limit = 999999
 
+    # Contar usuarios actuales
     teachers = db.query(User).filter(
         User.institution_id == institution.id,
         User.role.in_([UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value])
@@ -135,15 +90,16 @@ async def get_license_info(
         User.role == UserRole.ESTUDIANTE.value
     ).count()
 
-    enabled_features = _features_for_plan(plan)
-    # Funcionalidades bloqueadas = todo lo de PRO menos lo que sí tiene el plan
-    # actual (modelo acumulativo: PRO es el superset de todas las features).
-    all_features = _features_for_plan("pro")
-    blocked_features = sorted(set(all_features) - set(enabled_features))
+    # Obtener características disponibles según el rol del usuario
+    from app.services.license_service import get_license_for_user
+    license_info = get_license_for_user(current_user, db)
+    enabled_features = license_info.features
+    
+    # Sin características bloqueadas (todo disponible según rol)
+    blocked_features = []
 
-    total_cupos = teachers_limit + students_limit
-    total_uso = teachers + students
-    usage_percentage = (total_uso / total_cupos * 100) if total_cupos > 0 else 0
+    # Sin uso porcentual (sin límites)
+    usage_percentage = 0.0
 
     return LicenseInfo(
         institution_id=institution.id,
@@ -156,7 +112,8 @@ async def get_license_info(
         students_current=students,
         available_features=enabled_features,
         blocked_features=blocked_features,
-        usage_percentage=round(usage_percentage, 1)
+        usage_percentage=usage_percentage,
+        institution_name=institution.name,
     )
 
 
@@ -167,18 +124,11 @@ async def check_feature_access(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Verifica si el usuario tiene acceso a una funcionalidad (módulo) específica.
-
-    Uso: GET /license/check-feature/neurobots
-    Devuelve: {"has_access": true|false, "feature": "neurobots"}
+    Verifica si el usuario tiene acceso a una funcionalidad basada en su rol.
     """
     try:
-        has_access = _check_feature_access(
-            institution_id=current_user.institution_id,
-            feature=feature,
-            db=db,
-            current_user=current_user
-        )
+        license_info = get_license_for_user(current_user, db)
+        has_access = license_info.has_feature(feature)
         return {"has_access": has_access, "feature": feature}
     except HTTPException:
         raise
