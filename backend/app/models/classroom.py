@@ -52,22 +52,6 @@ class Classroom(Base):
         return uuid.uuid4().hex[:8].upper()
 
 
-class ClassroomUser(Base):
-    """Usuario asociado a una clase (estudiante, profesor, etc.)"""
-    __tablename__ = "classroom_users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=False)
-    role = Column(String(20), nullable=False)  # student, teacher, assistant, etc.
-    is_active = Column(Boolean, default=True)
-    joined_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relaciones
-    user = relationship("User", backref="classroom_memberships")
-    classroom = relationship("Classroom", backref="classroom_users")
-
-
 class Enrollment(Base):
     """Inscripción de un estudiante en una clase"""
     __tablename__ = "enrollments"

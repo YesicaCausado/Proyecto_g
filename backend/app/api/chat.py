@@ -1926,8 +1926,11 @@ async def submit_quiz_answers(
 
         # user_answers puede llegar con claves int o string dependiendo de
         # cómo lo serializó el cliente (JSON siempre usa strings como
-        # respuestas válidas (el frontend envía claves de objeto como strings).
-        user_answer = submission.user_answers.get(str(question_id))
+        # claves de objeto). Probamos ambas formas para no perder
+        # respuestas válidas.
+        user_answer = submission.user_answers.get(question_id)
+        if user_answer is None:
+            user_answer = submission.user_answers.get(str(question_id))
 
         # Valida de forma robusta (letra o texto, case/acentos/espacios) para
         # que la nota sea REAL y coincida con la que ve el estudiante.

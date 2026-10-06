@@ -1,71 +1,185 @@
 """
-NeuroLearn AI - API de Publicaciones (MODIFICADO)
-=================================================
+NeuroLearn AI - API Tablero de Clase (Posts)
 
-Actualizado para eliminar el sistema de licencias.
+Endpoints:
+  GET  /posts                         - posts de las clases del usuario actual
+  POST /posts                         - crear post (solo profesor)
+  GET  /posts/{post_id}               - detalle de un post
+  POST /posts/{post_id}/reactions     - toggle reacción 👍
+  GET  /posts/{post_id}/comments      - listar comentarios
+  POST /posts/{post_id}/comments      - añadir comentario
+  DELETE /posts/{post_id}             - eliminar post (solo profesor dueño)
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional, List
 from datetime import datetime
-
-from app.db.database import get_db
-from app.api.auth import get_current_user, require_role
-from app.models.user import User, UserRole
-from app.models.posts import Post, PostType
-from app.models.classroom import Classroom
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/posts", tags=["Publicaciones"])
+from app.db.database import get_db
+from app.api.auth import get_current_user
+from app.models.user import User, UserRole
+from app.models.classroom import Classroom, Enrollment
+from app.models.posts import Post, PostReaction, PostComment
+from app.services.license_service import get_license, require_active_license, LicenseInfo
+
+router = APIRouter(prefix="/posts", tags=["Tablero - Posts"])
 
 
-# ── Esquemas ────────────────────────────────────────────────────────────────
+def _check_post_access(post: Post, current_user: User, db: Session) -> None:
+    """Verifica que el usuario tiene acceso al aula del post (anti cross-tenant).
+    Lanza 403 si el usuario no es dueño del aula ni está inscrito activamente en ella.
+    """
+    if current_user.role in (UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value):
+        return  # Super y admin tienen acceso completo
+    if current_user.role == UserRole.PROFESOR.value:
+        classroom = db.query(Classroom).filter(Classroom.id == post.classroom_id).first()
+        if not classroom or classroom.teacher_id != current_user.id:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este post")
+    else:
+        # Estudiante: debe estar inscrito en el aula
+        enrolled = db.query(Enrollment).filter(
+            Enrollment.classroom_id == post.classroom_id,
+            Enrollment.student_id == current_user.id,
+            Enrollment.is_active == True,
+        ).first()
+        if not enrolled:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este post")
 
-class PostBase(BaseModel):
+
+# ── Schemas internos ────────────────────────────────────────────────────────
+
+class PostCreate(BaseModel):
+    classroom_id: int
+    post_type: str = "anuncio"   # anuncio|tarea|recordatorio|material|enlace
     title: str
+    content: str = ""
+    due_date: Optional[str] = None
+    attachments: Optional[list] = []
+
+class CommentCreate(BaseModel):
     content: str
-    post_type: PostType = PostType.ANUNCIO  # anuncio|tarea|recordatorio|material|enlace
-
-class PostCreate(PostBase):
-    classroom_id: int
-
-class PostResponse(PostBase):
-    id: int
-    classroom_id: int
-    teacher_id: int
-    created_at: datetime
-    updated_at: datetime
-    is_published: bool = True
-
-    class Config:
-        from_attributes = True
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+def _post_to_dict(post: Post, current_user_id: int, db: Session) -> dict:
+    """Serializa un Post a dict con metadatos de reacciones y comentarios."""
+    # Reacciones
+    reactions = db.query(PostReaction).filter(PostReaction.post_id == post.id).all()
+    user_reacted = any(r.user_id == current_user_id for r in reactions)
+
+    # Comentarios activos
+    comments_q = db.query(PostComment).filter(
+        PostComment.post_id == post.id,
+        PostComment.is_active == True,
+    ).order_by(PostComment.created_at).all()
+
+    comments = []
+    for c in comments_q:
+        author = db.query(User).filter(User.id == c.author_id).first()
+        comments.append({
+            "id": c.id,
+            "author_id": c.author_id,
+            "author_name": (author.full_name or author.username) if author else "?",
+            "author_role": author.role if author else "estudiante",
+            "content": c.content,
+            "created_at": c.created_at.isoformat(),
+        })
+
+    teacher = db.query(User).filter(User.id == post.teacher_id).first()
+    classroom = db.query(Classroom).filter(Classroom.id == post.classroom_id).first()
+
+    return {
+        "id": post.id,
+        "classroom_id": post.classroom_id,
+        "classroom_name": classroom.name if classroom else "",
+        "teacher_id": post.teacher_id,
+        "teacher_name": (teacher.full_name or teacher.username) if teacher else "Profesor",
+        "post_type": post.post_type,
+        "title": post.title,
+        "content": post.content,
+        "due_date": post.due_date,
+        "attachments": post.attachments or [],
+        "is_pinned": post.is_pinned,
+        "created_at": post.created_at.isoformat(),
+        "updated_at": post.updated_at.isoformat(),
+        "reactions_count": len(reactions),
+        "user_reacted": user_reacted,
+        "comments": comments,
+        "comments_count": len(comments),
+    }
+
+
+# ── Endpoints ────────────────────────────────────────────────────────────────
+
+@router.get("")
+async def list_posts(
+    classroom_id: Optional[int] = Query(None, description="Filtrar por clase"),
+    post_type: Optional[str]    = Query(None, description="Filtrar por tipo"),
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    db: Session = Depends(get_db),
+):
+    """
+    Devuelve los posts de las clases del usuario actual.
+    - Profesor: posts de sus propias clases.
+    - Estudiante: posts de las clases en las que está inscrito.
+    """
+    if current_user.role == UserRole.PROFESOR.value:
+        my_classrooms = db.query(Classroom).filter(
+            Classroom.teacher_id == current_user.id,
+            Classroom.is_active == True,
+        ).all()
+        cids = [c.id for c in my_classrooms]
+    else:
+        # Estudiante — clases inscritas
+        enrollments = db.query(Enrollment).filter(
+            Enrollment.student_id == current_user.id,
+            Enrollment.is_active == True,
+        ).all()
+        cids = [e.classroom_id for e in enrollments]
+
+    if not cids:
+        return {"posts": [], "total": 0}
+
+    q = db.query(Post).filter(
+        Post.classroom_id.in_(cids),
+        Post.is_active == True,
+    )
+    if classroom_id:
+        q = q.filter(Post.classroom_id == classroom_id)
+    if post_type:
+        q = q.filter(Post.post_type == post_type)
+
+    posts = q.order_by(Post.is_pinned.desc(), Post.created_at.desc()).all()
+    return {
+        "posts": [_post_to_dict(p, current_user.id, db) for p in posts],
+        "total": len(posts),
+    }
+
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_post(
     body: PostCreate,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """Crear un post en el tablero (solo profesores dueños de la clase)."""
-    # Verificar que el usuario sea profesor o super profesor
     if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo profesores pueden publicar")
+        raise HTTPException(status_code=403, detail="Solo profesores pueden publicar")
 
-    # Verificar que el usuario tenga permiso para crear posts en este aula
+    # Verificar módulo 'cursos' para profesores
+    if not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
     classroom = db.query(Classroom).filter(
         Classroom.id == body.classroom_id,
         Classroom.teacher_id == current_user.id,
         Classroom.is_active == True,
     ).first()
     if not classroom:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clase no encontrada o sin permiso")
-    
-    # NOTA: Ya no se verifica disponibilidad de módulo por licencia
-    # Todos los profesores y super profesores pueden crear posts en sus aulas
+        raise HTTPException(status_code=404, detail="Clase no encontrada o sin permiso")
 
     post = Post(
         classroom_id=body.classroom_id,
@@ -73,120 +187,193 @@ async def create_post(
         post_type=body.post_type,
         title=body.title,
         content=body.content,
-        is_published=True,
+        due_date=body.due_date,
+        attachments=body.attachments or [],
     )
-    
     db.add(post)
     db.commit()
     db.refresh(post)
-    
-    return PostResponse(
-        id=post.id,
-        classroom_id=post.classroom_id,
-        teacher_id=post.teacher_id,
-        created_at=post.created_at,
-        updated_at=post.updated_at,
-        is_published=post.is_published,
-    )
+
+    # ── Automatizaciones: "Nueva actividad" ────────────────────────────────
+    # Cada publicación en el tablero (anuncio, tarea, recordatorio, material,
+    # enlace) se considera una "actividad"; dispara las automatizaciones de la
+    # institución que estén configuradas para este evento (ej. crear evento en
+    # Google Calendar, ejecutar webhook).
+    try:
+        from app.services import integration_service as _isvc
+        _isvc.dispatch_trigger(db, current_user, "nueva_actividad", {
+            "event_desc": "Nueva actividad en el tablero",
+            "title": post.title,
+            "content": post.content or "",
+            "post_type": post.post_type or "anuncio",
+            "date": post.due_date,
+            "classroom_id": post.classroom_id,
+        })
+    except Exception:
+        # Una automatización que falla no debe romper la publicación.
+        db.rollback()
+
+    return _post_to_dict(post, current_user.id, db)
 
 
-@router.get("")
-async def list_posts(
-    classroom_id: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    limit: int = Query(50, gt=0, le=100),
-    offset: int = Query(0, ge=0),
-):
-    """
-    Lista los posts disponibles para el usuario según su rol y permisos.
-    """
-    # Construir consulta base
-    query = db.query(Post)
-    
-    # Filtrar por aula si se especifica
-    if classroom_id is not None:
-        query = query.filter(Post.classroom_id == classroom_id)
-        # Verificar que el usuario tenga acceso a esta aula
-        classroom = db.query(Classroom).filter(
-            Classroom.id == classroom_id
-        ).first()
-        if not classroom:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Aula no encontrada"
-            )
-        # Verificar permisos según el rol
-        if current_user.role == UserRole.ESTUDIANTE.value:
-            # Estudiantes solo ven posts de sus clases inscritas
-            # (Esto requeriría verificar inscripciones, simplificado por ahora)
-            pass
-        elif current_user.role == UserRole.PROFESOR.value:
-            # Profesores solo ven posts de sus propias clases
-            query = query.filter(Post.teacher_id == current_user.id)
-        # Super Profesor y Admin ven todos los posts (pero filtrado por aula si se especificó)
-    elif current_user.role == UserRole.PROFESOR.value:
-        # Si no se especifica aula, profesores ven solo sus propios posts
-        query = query.filter(Post.teacher_id == current_user.id)
-    # Super Profesor y Admin ven todos los posts cuando no se especifica aula
-    
-    # Aplicar paginado
-    posts = query.order_by(Post.created_at.desc()).offset(offset).limit(limit).all()
-    
-    results = []
-    for post in posts:
-        results.append(PostResponse(
-            id=post.id,
-            classroom_id=post.classroom_id,
-            teacher_id=post.teacher_id,
-            created_at=post.created_at,
-            updated_at=post.updated_at,
-            is_published=post.is_published,
-        ))
-    
-    return results
-
-
-@router.get("/{post_id}", response_model=PostResponse)
+@router.get("/{post_id}")
 async def get_post(
     post_id: int,
     current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
     db: Session = Depends(get_db),
 ):
-    """
-    Obtiene un post específico.
-    """
-    post = db.query(Post).filter(Post.id == post_id).first()
+    # Verificar acceso al módulo 'mis_cursos' o 'cursos'
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
+    post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
     if not post:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post no encontrado")
-    
-    # Verificar permisos según el rol
-    if current_user.role == UserRole.ESTUDIANTE.value:
-        # Estudiantes solo pueden ver posts de sus clases (simplificado)
-        pass
-    elif current_user.role == UserRole.PROFESOR.value:
-        # Profesores solo pueden ver posts de sus propias clases
-        if post.teacher_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tienes permiso para acceder a este post"
-            )
-    # Super Profesor y Admin pueden ver todos los posts
-    
-    return PostResponse(
-        id=post.id,
-        classroom_id=post.classroom_id,
-        teacher_id=post.teacher_id,
-        created_at=post.created_at,
-        updated_at=post.updated_at,
-        is_published=post.is_published,
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
+    return _post_to_dict(post, current_user.id, db)
+
+
+@router.post("/{post_id}/reactions")
+async def toggle_reaction(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license),
+    db: Session = Depends(get_db),
+):
+    """Toggle de reacción 👍 del usuario actual en un post."""
+    # Verificar acceso al módulo 'mis_cursos'/'cursos'
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
+    post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
+
+    existing = db.query(PostReaction).filter(
+        PostReaction.post_id == post_id,
+        PostReaction.user_id == current_user.id,
+    ).first()
+
+    if existing:
+        db.delete(existing)
+        db.commit()
+        reacted = False
+    else:
+        db.add(PostReaction(post_id=post_id, user_id=current_user.id))
+        db.commit()
+        reacted = True
+
+    count = db.query(PostReaction).filter(PostReaction.post_id == post_id).count()
+    return {"reacted": reacted, "reactions_count": count}
+
+
+@router.get("/{post_id}/comments")
+async def list_comments(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    db: Session = Depends(get_db),
+):
+    # Verificar módulo de lectura
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
+    post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
+
+    comments = db.query(PostComment).filter(
+        PostComment.post_id == post_id,
+        PostComment.is_active == True,
+    ).order_by(PostComment.created_at).all()
+
+    result = []
+    for c in comments:
+        author = db.query(User).filter(User.id == c.author_id).first()
+        result.append({
+            "id": c.id,
+            "author_id": c.author_id,
+            "author_name": (author.full_name or author.username) if author else "?",
+            "author_role": author.role if author else "estudiante",
+            "content": c.content,
+            "created_at": c.created_at.isoformat(),
+        })
+    return {"comments": result, "total": len(result)}
+
+
+@router.post("/{post_id}/comments", status_code=status.HTTP_201_CREATED)
+async def add_comment(
+    post_id: int,
+    body: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license),
+    db: Session = Depends(get_db),
+):
+    """Añadir comentario a un post (profesores y estudiantes pueden comentar)."""
+    # Verificar módulo 'mis_cursos'/'cursos'
+    if current_user.role == UserRole.PROFESOR.value and not license_info.has_teacher_module("cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'cursos' no está disponible en tu licencia ({license_info.license_type}).")
+    if current_user.role == UserRole.ESTUDIANTE.value and not license_info.has_student_module("mis_cursos"):
+        raise HTTPException(status_code=403, detail=f"El módulo 'mis_cursos' no está disponible en tu licencia ({license_info.license_type}).")
+
+    post = db.query(Post).filter(Post.id == post_id, Post.is_active == True).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _check_post_access(post, current_user, db)
+
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
+
+    comment = PostComment(
+        post_id=post_id,
+        author_id=current_user.id,
+        content=body.content.strip(),
     )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+
+    return {
+        "id": comment.id,
+        "author_id": comment.author_id,
+        "author_name": current_user.full_name or current_user.username,
+        "author_role": current_user.role,
+        "content": comment.content,
+        "created_at": comment.created_at.isoformat(),
+    }
 
 
-# Los demás endpoints (put, delete, etc.) seguirían un patrón similar...
+@router.delete("/{post_id}")
+async def delete_post(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    license_info: LicenseInfo = Depends(get_license),
+    active_license: LicenseInfo = Depends(require_active_license),
+    db: Session = Depends(get_db),
+):
+    """Desactivar un post (solo el profesor que lo creó)."""
+    if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
+        raise HTTPException(status_code=403, detail="Solo profesores pueden eliminar posts")
 
-# Mantener funciones de compatibilidad pero simplificadas
-def _require_posts_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    # Verificar que el usuario sea profesor o super profesor
-    return user.role in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value)
+    post = db.query(Post).filter(
+        Post.id == post_id,
+        Post.teacher_id == current_user.id,
+        Post.is_active == True,
+    ).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado o sin permiso")
+
+    post.is_active = False
+    db.commit()
+    return {"message": "Post eliminado"}

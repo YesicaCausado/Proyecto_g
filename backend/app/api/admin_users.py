@@ -1,576 +1,601 @@
 """
-NeuroLearn AI - API de Administración de Usuarios
-=================================================
-
-Administración global del sistema.
-
-El sistema YA NO utiliza licencias.
-El acceso a módulos y funcionalidades depende únicamente
-del rol y de la lógica actual de la aplicación.
+NeuroLearn AI — Admin: Gestión de Usuarios
+==========================================
+GET    /admin/users              → lista todos los usuarios (filtrable por rol, institución, búsqueda)
+GET    /admin/users/{id}         → detalle de un usuario
+PATCH  /admin/users/{id}         → activar/desactivar, cambiar rol, editar nombre/email
+DELETE /admin/users/{id}         → eliminar usuario (solo si no tiene datos vinculados)
+POST   /admin/users/{id}/reset-password → generar nueva contraseña temporal
+GET    /admin/stats              → estadísticas globales del sistema
+GET    /admin/audit-logs         → logs de auditoría del sistema (paginado)
+PATCH  /admin/institutions/{id}/license → gestionar licencia de institución
 """
+import secrets, string, re
+from typing import Optional, List
+from datetime import datetime, timedelta
 
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
-from sqlalchemy import desc, func, text
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func, desc
+from pydantic import BaseModel
 
-from app.api.auth import get_current_user
-from app.core.config import settings
 from app.db.database import get_db
-from app.models.institution import Institution
+from app.api.auth import get_current_user, get_password_hash
 from app.models.user import User, UserRole
-from app.schemas.schemas import (
-    AdminStats,
-    CredentialItem,
-    InstitutionCreate,
-    InstitutionResponse,
-)
+from app.models.institution import Institution, AuditLog
+
+router = APIRouter(prefix="/admin", tags=["Admin - Usuarios"])
 
 
-router = APIRouter(
-    prefix="/admin",
-    tags=["Administración"],
-)
+def _require_admin(user: User):
+    if user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Solo el administrador puede acceder a esta sección")
 
 
-# ============================================================================
-# DEPENDENCIAS
-# ============================================================================
-
-def _require_admin(
-    current_user: User = Depends(get_current_user),
-) -> User:
-    """
-    Verifica que el usuario autenticado tenga rol ADMIN.
-    """
-
-    if current_user.role != UserRole.ADMIN.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Se requiere rol de administrador para esta operación.",
-        )
-
-    return current_user
+def _gen_temp_pwd(length: int = 10) -> str:
+    special = "!@#$%&*"
+    pool = string.ascii_letters + string.digits + special
+    mandatory = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+        secrets.choice(special),
+    ]
+    rest = [secrets.choice(pool) for _ in range(length - len(mandatory))]
+    pwd = mandatory + rest
+    secrets.SystemRandom().shuffle(pwd)
+    return "".join(pwd)
 
 
-# ============================================================================
-# ESTADÍSTICAS
-# ============================================================================
+class UserUpdatePayload(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
 
-@router.get(
-    "/stats",
-    response_model=AdminStats,
-)
-async def get_admin_stats(
+
+# ─── GET /admin/users ─────────────────────────────────────────────────────────
+
+@router.get("/users")
+async def list_users(
+    search: Optional[str] = Query(None, description="Buscar por nombre, usuario o email"),
+    role: Optional[str] = Query(None, description="Filtrar por rol"),
+    institution_id: Optional[int] = Query(None, description="Filtrar por institución"),
+    is_active: Optional[bool] = Query(None, description="Filtrar por estado"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Obtiene estadísticas generales del sistema.
-
-    Las estadísticas relacionadas con licencias fueron eliminadas.
-    """
-
     _require_admin(current_user)
 
-    # ------------------------------------------------------------------------
-    # Usuarios por rol
-    # ------------------------------------------------------------------------
-
-    role_counts = {}
-
-    for role in UserRole:
-        count = (
-            db.query(User)
-            .filter(User.role == role.value)
-            .count()
-        )
-
-        role_counts[role.value] = count
-
-    # ------------------------------------------------------------------------
-    # Instituciones
-    # ------------------------------------------------------------------------
-
-    total_institutions = (
-        db.query(Institution)
-        .count()
-    )
-
-    active_institutions = (
-        db.query(Institution)
-        .filter(Institution.is_active.is_(True))
-        .count()
-    )
-
-    # ------------------------------------------------------------------------
-    # Respuesta
-    # ------------------------------------------------------------------------
-
-    return AdminStats(
-        total_institutions=total_institutions,
-        active_institutions=active_institutions,
-
-        total_super_profesores=role_counts.get(
-            UserRole.SUPER_PROFESOR.value,
-            0,
-        ),
-
-        total_profesores=role_counts.get(
-            UserRole.PROFESOR.value,
-            0,
-        ),
-
-        total_estudiantes=role_counts.get(
-            UserRole.ESTUDIANTE.value,
-            0,
-        ),
-
-        total_admins=role_counts.get(
-            UserRole.ADMIN.value,
-            0,
-        ),
-    )
-
-
-# ============================================================================
-# LISTAR INSTITUCIONES
-# ============================================================================
-
-@router.get(
-    "/institutions",
-    response_model=List[InstitutionResponse],
-)
-async def list_institutions_admin(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    is_active: Optional[bool] = Query(
-        None,
-        description="Filtrar por estado activo/inactivo.",
-    ),
-    search: Optional[str] = Query(
-        None,
-        description="Buscar por nombre o código DANE.",
-    ),
-    limit: int = Query(
-        50,
-        gt=0,
-        le=100,
-    ),
-    offset: int = Query(
-        0,
-        ge=0,
-    ),
-):
-    """
-    Lista las instituciones registradas en el sistema.
-
-    Ya no existe filtro por tipo de licencia.
-    """
-
-    _require_admin(current_user)
-
-    query = db.query(Institution)
-
-    # ------------------------------------------------------------------------
-    # Filtro por estado
-    # ------------------------------------------------------------------------
-
-    if is_active is not None:
-        query = query.filter(
-            Institution.is_active == is_active
-        )
-
-    # ------------------------------------------------------------------------
-    # Búsqueda
-    # ------------------------------------------------------------------------
+    q = db.query(User)
 
     if search:
-        search_term = f"%{search}%"
+        term = f"%{search.lower()}%"
+        q = q.filter(or_(
+            func.lower(User.full_name).like(term),
+            func.lower(User.username).like(term),
+            func.lower(User.email).like(term),
+            func.lower(User.document_number).like(term),
+        ))
+    if role:
+        q = q.filter(User.role == role)
+    if institution_id is not None:
+        q = q.filter(User.institution_id == institution_id)
+    if is_active is not None:
+        q = q.filter(User.is_active == is_active)
 
-        query = query.filter(
-            Institution.name.ilike(search_term)
-            | Institution.dane_code.ilike(search_term)
+    total = q.count()
+    users = q.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    # Mapear institución
+    inst_ids = {u.institution_id for u in users if u.institution_id}
+    institutions = {}
+    if inst_ids:
+        for inst in db.query(Institution).filter(Institution.id.in_(inst_ids)).all():
+            institutions[inst.id] = inst.name
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "users": [
+            {
+                "id":               u.id,
+                "username":         u.username,
+                "full_name":        u.full_name or "",
+                "email":            u.email or "",
+                "role":             u.role,
+                "is_active":        u.is_active,
+                "institution_id":   u.institution_id,
+                "institution_name": institutions.get(u.institution_id, "—"),
+                "document_type":    u.document_type or "",
+                "document_number":  u.document_number or "",
+                "created_at":       u.created_at.isoformat() if u.created_at else None,
+                "last_login":       u.last_login.isoformat() if getattr(u, "last_login", None) else None,
+                "must_change_password": getattr(u, "must_change_password", False),
+            }
+            for u in users
+        ],
+    }
+
+
+# ─── GET /admin/users/{id} ───────────────────────────────────────────────────
+
+@router.get("/users/{user_id}")
+async def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado")
+
+    inst_name = "—"
+    if u.institution_id:
+        inst = db.query(Institution).filter(Institution.id == u.institution_id).first()
+        inst_name = inst.name if inst else "—"
+
+    return {
+        "id": u.id, "username": u.username, "full_name": u.full_name or "",
+        "email": u.email or "", "role": u.role, "is_active": u.is_active,
+        "institution_id": u.institution_id, "institution_name": inst_name,
+        "document_type": u.document_type or "", "document_number": u.document_number or "",
+        "subject_area": getattr(u, "subject_area", "") or "",
+        "grade": getattr(u, "grade", "") or "",
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "last_login": u.last_login.isoformat() if getattr(u, "last_login", None) else None,
+        "must_change_password": getattr(u, "must_change_password", False),
+    }
+
+
+# ─── PATCH /admin/users/{id} ─────────────────────────────────────────────────
+
+@router.patch("/users/{user_id}")
+async def update_user(
+    user_id: int,
+    payload: UserUpdatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado")
+    if u.id == current_user.id and payload.is_active is False:
+        raise HTTPException(400, "No puedes desactivar tu propia cuenta")
+
+    if payload.full_name is not None:
+        u.full_name = payload.full_name.strip()
+    if payload.email is not None:
+        email = payload.email.strip()
+        if email and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            raise HTTPException(400, "Formato de correo inválido")
+        if email:
+            exists = db.query(User).filter(User.email == email, User.id != user_id).first()
+            if exists:
+                raise HTTPException(400, "Ese correo ya está en uso")
+        u.email = email or None
+    if payload.role is not None:
+        valid_roles = [r.value for r in UserRole]
+        if payload.role not in valid_roles:
+            raise HTTPException(400, f"Rol inválido. Opciones: {valid_roles}")
+        u.role = payload.role
+    if payload.is_active is not None:
+        u.is_active = payload.is_active
+
+    db.commit()
+    return {"ok": True, "message": "Usuario actualizado correctamente"}
+
+
+# ─── DELETE /admin/users/{id} ────────────────────────────────────────────────
+
+@router.delete("/users/{user_id}", status_code=200)
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    if user_id == current_user.id:
+        raise HTTPException(400, "No puedes eliminar tu propia cuenta")
+
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado")
+    if u.role in (UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value):
+        raise HTTPException(400, "No se pueden eliminar cuentas de Super Profesor o Admin. Desactívalas en su lugar.")
+
+    db.delete(u)
+    db.commit()
+    return {"ok": True, "message": "Usuario eliminado"}
+
+
+# ─── POST /admin/users/{id}/reset-password ───────────────────────────────────
+
+@router.post("/users/{user_id}/reset-password")
+async def admin_reset_password(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado")
+
+    temp_pwd = _gen_temp_pwd()
+    u.hashed_password = get_password_hash(temp_pwd)
+    u.must_change_password = True
+    db.commit()
+    return {"ok": True, "temp_password": temp_pwd, "message": "Contraseña temporal generada. El usuario deberá cambiarla en su próximo login."}
+
+
+# ─── GET /admin/stats ────────────────────────────────────────────────────────
+
+@router.get("/stats")
+async def admin_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+
+    # Contadores por rol
+    role_counts: dict = {}
+    for role in UserRole:
+        role_counts[role.value] = db.query(User).filter(
+            User.role == role.value, User.is_active == True
+        ).count()
+
+    total_institutions   = db.query(Institution).count()
+    active_institutions  = db.query(Institution).filter(Institution.is_active == True).count()
+
+    # Conteo de licencias vencidas / por vencer usando la MISMA lógica central
+    # (_resolve_license_state) que emplea el resto del sistema: la licencia es
+    # anual (created_at + 365 días) salvo que exista expiry_date explícita.
+    from app.services.license_service import _resolve_license_state
+    expired_licenses = 0
+    expiring_soon = 0
+    _active_insts = db.query(Institution).filter(Institution.is_active == True).all()
+    for inst in _active_insts:
+        status, _ = _resolve_license_state(inst)
+        if status == "expired":
+            expired_licenses += 1
+        elif status == "expiring_soon":
+            expiring_soon += 1
+
+    # Conteo por tipo de licencia
+    license_breakdown: dict = {}
+    from app.models.institution import LICENSE_LIMITS
+    for lt in LICENSE_LIMITS:
+        license_breakdown[lt] = db.query(Institution).filter(
+            Institution.license_type == lt
+        ).count()
+
+    # Instituciones más grandes (por estudiantes)
+    top_institutions = (
+        db.query(
+            Institution.id,
+            Institution.name,
+            Institution.license_type,
+            Institution.is_active,
+            func.count(User.id).label("student_count"),
         )
-
-    # ------------------------------------------------------------------------
-    # Paginación
-    # ------------------------------------------------------------------------
-
-    institutions = (
-        query
-        .offset(offset)
-        .limit(limit)
+        .outerjoin(User, (User.institution_id == Institution.id) & (User.role == "estudiante"))
+        .group_by(Institution.id, Institution.name, Institution.license_type, Institution.is_active)
+        .order_by(desc("student_count"))
+        .limit(5)
         .all()
     )
 
-    # ------------------------------------------------------------------------
-    # Respuesta
-    # ------------------------------------------------------------------------
-
-    results = []
-
-    for institution in institutions:
-        results.append(
-            InstitutionResponse(
-                id=institution.id,
-                name=institution.name,
-                dane_code=institution.dane_code,
-                is_active=institution.is_active,
-                created_at=institution.created_at,
-                credential=CredentialItem(
-                    full_name="",
-                    username="",
-                    temp_password="",
-                    role="",
-                ),
-            )
-        )
-
-    return results
+    return {
+        **role_counts,
+        "institutions": total_institutions,
+        "institutions_active": active_institutions,
+        "expired_licenses": expired_licenses,
+        "expiring_soon": expiring_soon,
+        "license_breakdown": license_breakdown,
+        "top_institutions": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "license_type": r.license_type,
+                "is_active": r.is_active,
+                "student_count": r.student_count,
+            }
+            for r in top_institutions
+        ],
+    }
 
 
-# ============================================================================
-# CREAR INSTITUCIÓN
-# ============================================================================
+# ─── GET /admin/audit-logs ───────────────────────────────────────────────────
 
-@router.post(
-    "/institutions",
-    response_model=InstitutionResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_institution_admin(
-    payload: InstitutionCreate,
+@router.get("/audit-logs")
+async def admin_audit_logs(
+    action: Optional[str] = Query(None, description="Filtrar por acción"),
+    institution_id: Optional[int] = Query(None),
+    performed_by_id: Optional[int] = Query(None),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Crea una nueva institución y su Super Profesor.
-    """
-
     _require_admin(current_user)
 
-    # ------------------------------------------------------------------------
-    # Verificar código DANE
-    # ------------------------------------------------------------------------
+    q = db.query(AuditLog)
 
-    existing = (
-        db.query(Institution)
-        .filter(
-            Institution.dane_code == payload.dane_code
-        )
-        .first()
-    )
+    if action:
+        q = q.filter(AuditLog.action.ilike(f"%{action}%"))
+    if institution_id is not None:
+        q = q.filter(AuditLog.institution_id == institution_id)
+    if performed_by_id is not None:
+        q = q.filter(AuditLog.performed_by_id == performed_by_id)
+    if date_from:
+        try:
+            dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+            q = q.filter(AuditLog.created_at >= dt_from)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            q = q.filter(AuditLog.created_at < dt_to)
+        except ValueError:
+            pass
 
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El código DANE ya está registrado por otra institución.",
-        )
+    total = q.count()
+    logs = q.order_by(desc(AuditLog.created_at)).offset((page - 1) * page_size).limit(page_size).all()
 
-    # ------------------------------------------------------------------------
-    # Crear institución
-    # ------------------------------------------------------------------------
+    # Enrich con nombre de usuario y nombre de institución
+    user_ids = {l.performed_by_id for l in logs if l.performed_by_id}
+    user_ids |= {l.target_user_id for l in logs if l.target_user_id}
+    inst_ids = {l.institution_id for l in logs if l.institution_id}
 
-    institution = Institution(
-        name=payload.name,
-        dane_code=payload.dane_code,
-        created_by=current_user.id,
-    )
+    users_map: dict = {}
+    insts_map: dict = {}
+    if user_ids:
+        for u in db.query(User).filter(User.id.in_(user_ids)).all():
+            users_map[u.id] = u.username
+    if inst_ids:
+        for inst in db.query(Institution).filter(Institution.id.in_(inst_ids)).all():
+            insts_map[inst.id] = inst.name
 
-    db.add(institution)
-    db.flush()
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "logs": [
+            {
+                "id":               log.id,
+                "action":           log.action,
+                "performed_by_id":  log.performed_by_id,
+                "performed_by":     users_map.get(log.performed_by_id, "—"),
+                "target_user_id":   log.target_user_id,
+                "target_user":      users_map.get(log.target_user_id, "—"),
+                "institution_id":   log.institution_id,
+                "institution_name": insts_map.get(log.institution_id, "—"),
+                "user_type":        getattr(log, "user_type", None) or "—",
+                "ip_address":       getattr(log, "ip_address", None) or "—",
+                "notes":            getattr(log, "notes", None) or "",
+                "created_at":       log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ],
+    }
 
-    # ------------------------------------------------------------------------
-    # Generar credenciales del Super Profesor
-    # ------------------------------------------------------------------------
 
-    sp_username = payload.sp_document_number
-    sp_password = Institution._generate_temp_password()
+# ─── PATCH /admin/institutions/{id}/license ───────────────────────────────────
 
-    sp_user = User(
-        username=sp_username,
-        email=payload.sp_email,
-        full_name=payload.sp_full_name,
-        role=UserRole.SUPER_PROFESOR.value,
-        hashed_password=User._hash_password(sp_password),
-        institution_id=institution.id,
-        is_active=True,
-    )
+class LicenseUpdatePayload(BaseModel):
+    license_type: Optional[str] = None      # basica | premium | pro
+    is_active: Optional[bool] = None
+    expiry_date: Optional[str] = None       # "YYYY-MM-DD" o null para quitar vencimiento
+    clear_expiry: Optional[bool] = False    # True = eliminar vencimiento
 
-    db.add(sp_user)
-    db.flush()
 
-    # ------------------------------------------------------------------------
-    # Credenciales
-    # ------------------------------------------------------------------------
+@router.patch("/institutions/{institution_id}/license")
+async def update_institution_license(
+    institution_id: int,
+    payload: LicenseUpdatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    inst = db.query(Institution).filter(Institution.id == institution_id).first()
+    if not inst:
+        raise HTTPException(404, "Institución no encontrada")
 
-    credential = CredentialItem(
-        full_name=sp_user.full_name,
-        username=sp_user.username,
-        temp_password=sp_password,
-        role=sp_user.role,
-    )
+    from app.models.institution import LICENSE_LIMITS
+    valid_types = list(LICENSE_LIMITS.keys())
 
-    # ------------------------------------------------------------------------
-    # Enviar credenciales por correo
-    # ------------------------------------------------------------------------
+    if payload.license_type is not None:
+        if payload.license_type not in valid_types:
+            raise HTTPException(400, f"Tipo de licencia inválido. Opciones: {valid_types}")
+        inst.license_type = payload.license_type
 
+    if payload.is_active is not None:
+        inst.is_active = payload.is_active
+
+    if payload.clear_expiry:
+        inst.expiry_date = None
+    elif payload.expiry_date is not None:
+        try:
+            inst.expiry_date = datetime.strptime(payload.expiry_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, "Formato de fecha inválido. Use YYYY-MM-DD")
+
+    db.commit()
+    db.refresh(inst)
+
+    # Invalida la caché TTL de licencia para que el cambio aplique de inmediato.
     try:
-        from app.services.email_service import send_credentials_email
-
-        send_credentials_email(
-            to_email=sp_user.email,
-            credential=credential,
-            institution_name=institution.name,
-        )
-
+        from app.services.license_service import _invalidate_institution_cache
+        _invalidate_institution_cache(inst.id)
     except Exception:
-        # El fallo del correo NO debe impedir la creación
-        # de la institución.
         pass
 
-    # ------------------------------------------------------------------------
-    # Guardar
-    # ------------------------------------------------------------------------
-
-    db.commit()
-
-    db.refresh(institution)
-    db.refresh(sp_user)
-
-    # ------------------------------------------------------------------------
-    # Respuesta
-    # ------------------------------------------------------------------------
-
-    return InstitutionResponse(
-        id=institution.id,
-        name=institution.name,
-        dane_code=institution.dane_code,
-        is_active=institution.is_active,
-        created_at=institution.created_at,
-        credential=credential,
-    )
+    return {
+        "ok": True,
+        "institution_id": inst.id,
+        "name": inst.name,
+        "license_type": inst.license_type,
+        "is_active": inst.is_active,
+        "expiry_date": inst.expiry_date.strftime("%Y-%m-%d") if inst.expiry_date else None,
+        "max_teachers": inst.max_teachers,
+        "max_students": inst.max_students,
+    }
 
 
-# ============================================================================
-# ACTUALIZAR INSTITUCIÓN
-# ============================================================================
+# ─── GET /admin/institutions (resumen con uso de licencia) ────────────────────
 
-@router.put(
-    "/institutions/{institution_id}",
-    response_model=InstitutionResponse,
-)
-async def update_institution_admin(
-    institution_id: int,
-    payload: InstitutionCreate,
+@router.get("/institutions")
+async def admin_list_institutions(
+    search: Optional[str] = Query(None),
+    license_type: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Actualiza los datos básicos de una institución.
-    """
-
     _require_admin(current_user)
 
-    institution = (
-        db.query(Institution)
-        .filter(
-            Institution.id == institution_id
+    q = db.query(Institution)
+    if search:
+        term = f"%{search.lower()}%"
+        q = q.filter(
+            or_(func.lower(Institution.name).like(term),
+                func.lower(Institution.dane_code).like(term))
         )
-        .first()
-    )
+    if license_type:
+        q = q.filter(Institution.license_type == license_type)
+    if is_active is not None:
+        q = q.filter(Institution.is_active == is_active)
 
-    if not institution:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Institución no encontrada.",
+    total = q.count()
+    institutions = q.order_by(Institution.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    today = datetime.utcnow()
+    result = []
+    for inst in institutions:
+        teachers = db.query(User).filter(
+            User.institution_id == inst.id,
+            User.role.in_(["profesor", "super_profesor"])
+        ).count()
+        students = db.query(User).filter(
+            User.institution_id == inst.id,
+            User.role == "estudiante"
+        ).count()
+        # Licencia anual: si no hay fecha de vencimiento explícita, la vigencia
+        # dura 365 días desde la creación de la institución (cada día resta uno).
+        effective_expiry = inst.expiry_date or (
+            (inst.created_at + timedelta(days=365)) if inst.created_at else None
         )
+        days_left = None
+        if effective_expiry:
+            delta = (effective_expiry - today).days
+            days_left = max(delta, 0)
+        result.append({
+            "id":           inst.id,
+            "name":         inst.name,
+            "dane_code":    inst.dane_code,
+            "license_type": inst.license_type,
+            "is_active":    inst.is_active,
+            "expiry_date":  effective_expiry.strftime("%Y-%m-%d") if effective_expiry else None,
+            "days_left":    days_left,
+            "max_teachers": inst.max_teachers,
+            "max_students": inst.max_students,
+            "teachers_count": teachers,
+            "students_count": students,
+            "created_at":   inst.created_at.isoformat() if inst.created_at else None,
+        })
 
-    # ------------------------------------------------------------------------
-    # Verificar que el nuevo DANE no pertenezca a otra institución
-    # ------------------------------------------------------------------------
-
-    duplicate = (
-        db.query(Institution)
-        .filter(
-            Institution.dane_code == payload.dane_code,
-            Institution.id != institution_id,
-        )
-        .first()
-    )
-
-    if duplicate:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El código DANE ya está registrado por otra institución.",
-        )
-
-    # ------------------------------------------------------------------------
-    # Actualizar
-    # ------------------------------------------------------------------------
-
-    institution.name = payload.name
-    institution.dane_code = payload.dane_code
-
-    db.commit()
-    db.refresh(institution)
-
-    return InstitutionResponse(
-        id=institution.id,
-        name=institution.name,
-        dane_code=institution.dane_code,
-        is_active=institution.is_active,
-        created_at=institution.created_at,
-        credential=None,
-    )
+    return {"total": total, "page": page, "page_size": page_size, "institutions": result}
 
 
-# ============================================================================
-# CONFIGURACIÓN DEL SISTEMA
-# ============================================================================
+# ─── GET /admin/config ────────────────────────────────────────────────────────
 
 @router.get("/config")
 async def admin_get_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Devuelve la configuración global del sistema.
-
-    IMPORTANTE:
-    Ya no devuelve información relacionada con licencias.
-    """
-
+    """Devuelve la configuración global del sistema (info + ajustes)."""
     _require_admin(current_user)
 
+    from app.core.config import settings
     from app.services.mail.factory import is_email_configured
+    from app.models.institution import LICENSE_LIMITS
     import os
 
-    # ------------------------------------------------------------------------
-    # Estadísticas
-    # ------------------------------------------------------------------------
+    # Conteos rápidos
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+    total_institutions = db.query(Institution).count()
 
-    total_users = (
-        db.query(User)
-        .count()
-    )
-
-    active_users = (
-        db.query(User)
-        .filter(User.is_active.is_(True))
-        .count()
-    )
-
-    total_institutions = (
-        db.query(Institution)
-        .count()
-    )
-
-    # ------------------------------------------------------------------------
     # Estado de la base de datos
-    # ------------------------------------------------------------------------
-
     db_connected = True
-
     try:
-        db.execute(text("SELECT 1"))
-
+        db.execute(__import__("sqlalchemy").text("SELECT 1"))
     except Exception:
         db_connected = False
 
-    # ------------------------------------------------------------------------
-    # Proveedores de IA
-    # ------------------------------------------------------------------------
-
+    # Modelos de IA activos (detectar por claves de env)
     ai_providers = []
-
     if os.getenv("GROQ_API_KEY"):
-        ai_providers.append(
-            {
-                "name": "Groq",
-                "model": settings.GROQ_MODEL,
-                "active": True,
-            }
-        )
-
+        ai_providers.append({"name": "Groq", "model": settings.GROQ_MODEL, "active": True})
     if os.getenv("GEMINI_API_KEY"):
-        ai_providers.append(
-            {
-                "name": "Gemini",
-                "model": settings.GEMINI_MODEL,
-                "active": True,
-            }
-        )
-
+        ai_providers.append({"name": "Gemini", "model": settings.GEMINI_MODEL, "active": True})
     if os.getenv("OPENAI_API_KEY"):
-        ai_providers.append(
-            {
-                "name": "OpenAI",
-                "model": "gpt-4o-mini",
-                "active": True,
-            }
-        )
-
+        ai_providers.append({"name": "OpenAI", "model": "gpt-4o-mini", "active": True})
     if not ai_providers:
-        ai_providers.append(
-            {
-                "name": "Sin proveedor configurado",
-                "model": "—",
-                "active": False,
-            }
-        )
-
-    # ------------------------------------------------------------------------
-    # Respuesta
-    # ------------------------------------------------------------------------
+        ai_providers.append({"name": "Sin proveedor configurado", "model": "—", "active": False})
 
     return {
-        # Sistema
-        "app_name": settings.APP_NAME,
+        # ── Sistema ─────────────────────────────────────────────
+        "app_name":    settings.APP_NAME,
         "app_version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
-        "debug_mode": settings.DEBUG,
-
-        # Base de datos
-        "db_connected": db_connected,
-        "db_url_configured": bool(settings.DATABASE_URL),
-
-        # Seguridad
+        "debug_mode":  settings.DEBUG,
+        # ── Base de datos ────────────────────────────────────────
+        "db_connected":       db_connected,
+        "db_url_configured":  bool(settings.DATABASE_URL),
+        # ── Seguridad ────────────────────────────────────────────
         "token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
-        "algorithm": settings.ALGORITHM,
-
-        # Email
+        "algorithm":            settings.ALGORITHM,
+        # ── Email ────────────────────────────────────────────────
         "email_configured": is_email_configured(),
-        "email_provider": settings.EMAIL_PROVIDER,
-        "email_from": settings.EMAIL_FROM,
-
-        # IA
+        "email_provider":   settings.EMAIL_PROVIDER,
+        "email_from":       settings.EMAIL_FROM,
+        # ── IA ───────────────────────────────────────────────────
         "ai_providers": ai_providers,
-
-        # Estadísticas
-        "total_users": total_users,
-        "active_users": active_users,
+        # ── Límites de licencia ──────────────────────────────────
+        "license_limits": LICENSE_LIMITS,
+        # ── Estadísticas rápidas ─────────────────────────────────
+        "total_users":        total_users,
+        "active_users":       active_users,
         "total_institutions": total_institutions,
     }
 
 
-# ============================================================================
-# ACTUALIZAR CONFIGURACIÓN
-# ============================================================================
+# ─── PATCH /admin/config ──────────────────────────────────────────────────────
 
 class ConfigUpdatePayload(BaseModel):
-    """
-    Configuración global modificable desde el panel de administración.
-
-    No contiene ningún campo relacionado con licencias.
-    """
-
-    token_expire_minutes: Optional[int] = None
+    token_expire_minutes: Optional[int] = None   # 60–43200
     debug_mode: Optional[bool] = None
     email_from: Optional[str] = None
+    # Límites de licencia personalizados (sobreescriben LICENSE_LIMITS en memoria)
+    license_basica_teachers:  Optional[int] = None
+    license_basica_students:  Optional[int] = None
+    license_premium_teachers: Optional[int] = None
+    license_premium_students: Optional[int] = None
+    license_pro_teachers:     Optional[int] = None
+    license_pro_students:     Optional[int] = None
 
 
 @router.patch("/config")
@@ -580,98 +605,52 @@ async def admin_update_config(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Actualiza la configuración global del sistema.
+    Actualiza ajustes del sistema en memoria (persiste hasta el próximo reinicio).
+    Para cambios permanentes en producción, actualiza las variables de entorno en Vercel.
     """
-
     _require_admin(current_user)
 
-    # ------------------------------------------------------------------------
-    # Validar y actualizar duración del token
-    # ------------------------------------------------------------------------
+    from app.core.config import settings
+    from app.models.institution import LICENSE_LIMITS
+
+    changes: list = []
 
     if payload.token_expire_minutes is not None:
-
-        if not 60 <= payload.token_expire_minutes <= 43200:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "token_expire_minutes debe estar entre "
-                    "60 y 43200 minutos."
-                ),
-            )
-
-        settings.ACCESS_TOKEN_EXPIRE_MINUTES = (
-            payload.token_expire_minutes
-        )
-
-    # ------------------------------------------------------------------------
-    # Debug
-    # ------------------------------------------------------------------------
+        if not (60 <= payload.token_expire_minutes <= 43200):
+            raise HTTPException(400, "token_expire_minutes debe estar entre 60 y 43200")
+        settings.ACCESS_TOKEN_EXPIRE_MINUTES = payload.token_expire_minutes
+        changes.append(f"token_expire_minutes → {payload.token_expire_minutes}")
 
     if payload.debug_mode is not None:
         settings.DEBUG = payload.debug_mode
-
-    # ------------------------------------------------------------------------
-    # Email
-    # ------------------------------------------------------------------------
+        changes.append(f"debug_mode → {payload.debug_mode}")
 
     if payload.email_from is not None:
-        settings.EMAIL_FROM = payload.email_from
+        settings.EMAIL_FROM = payload.email_from.strip()
+        changes.append(f"email_from → {payload.email_from}")
+
+    # Límites de licencia
+    for tier, field_t, field_s in [
+        ("basica",   payload.license_basica_teachers,   payload.license_basica_students),
+        ("premium",  payload.license_premium_teachers,  payload.license_premium_students),
+        ("pro",      payload.license_pro_teachers,      payload.license_pro_students),
+    ]:
+        if field_t is not None:
+            if field_t < 1:
+                raise HTTPException(400, f"El límite de docentes para {tier} debe ser >= 1")
+            LICENSE_LIMITS[tier]["teachers"] = field_t
+            changes.append(f"license_{tier}_teachers → {field_t}")
+        if field_s is not None:
+            if field_s < 1:
+                raise HTTPException(400, f"El límite de estudiantes para {tier} debe ser >= 1")
+            LICENSE_LIMITS[tier]["students"] = field_s
+            changes.append(f"license_{tier}_students → {field_s}")
+
+    if not changes:
+        return {"ok": True, "message": "Sin cambios aplicados", "changes": []}
 
     return {
-        "status": "ok",
-        "message": "Configuración actualizada correctamente.",
+        "ok": True,
+        "message": f"{len(changes)} ajuste(s) aplicado(s). Nota: estos cambios son en memoria; para persistirlos actualiza las variables de entorno en Vercel.",
+        "changes": changes,
     }
-
-
-# ============================================================================
-# ELIMINAR INSTITUCIÓN
-# ============================================================================
-
-@router.delete(
-    "/institutions/{institution_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_institution_admin(
-    institution_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Elimina una institución y sus usuarios asociados.
-    """
-
-    _require_admin(current_user)
-
-    institution = (
-        db.query(Institution)
-        .filter(
-            Institution.id == institution_id
-        )
-        .first()
-    )
-
-    if not institution:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Institución no encontrada.",
-        )
-
-    # ------------------------------------------------------------------------
-    # Eliminar usuarios asociados
-    # ------------------------------------------------------------------------
-
-    db.query(User).filter(
-        User.institution_id == institution.id
-    ).delete(
-        synchronize_session=False
-    )
-
-    # ------------------------------------------------------------------------
-    # Eliminar institución
-    # ------------------------------------------------------------------------
-
-    db.delete(institution)
-    db.commit()
-
-    return None

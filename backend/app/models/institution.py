@@ -1,9 +1,19 @@
 """
-NeuroLearn AI - Modelos de Institución (MODIFICADO)
-====================================================
+NeuroLearn AI - Modelos de Institución, Licencia y Auditoría
 
-Actualizado para eliminar el sistema de licencias.
+Sistema B2B:
+Administrador
+    ↓
+Super Profesor
+    ↓
+Profesor
+    ↓
+Estudiante
 """
+
+import enum
+from datetime import datetime
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -14,9 +24,40 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import relationship
-from datetime import datetime
 
 from app.db.database import Base
+
+
+# =========================================================
+# TIPOS DE LICENCIA
+# =========================================================
+
+class LicenseType(str, enum.Enum):
+    BASICA = "basica"
+    PREMIUM = "premium"
+    PRO = "pro"
+
+
+# =========================================================
+# LÍMITES DE LICENCIA
+# =========================================================
+
+LICENSE_LIMITS = {
+    LicenseType.BASICA.value: {
+        "teachers": 20,
+        "students": 300,
+    },
+
+    LicenseType.PREMIUM.value: {
+        "teachers": 60,
+        "students": 1500,
+    },
+
+    LicenseType.PRO.value: {
+        "teachers": 9999,
+        "students": 999999,
+    },
+}
 
 
 # =========================================================
@@ -43,6 +84,29 @@ class Institution(Base):
         unique=True,
         index=True,
         nullable=False,
+    )
+
+    # =====================================================
+    # LICENCIA
+    # =====================================================
+
+    license_type = Column(
+        String(20),
+        default=LicenseType.BASICA.value,
+        nullable=False,
+        index=True,
+    )
+
+    is_active = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    # None = sin vencimiento
+    expiry_date = Column(
+        DateTime,
+        nullable=True,
     )
 
     # =====================================================
@@ -130,6 +194,36 @@ class Institution(Base):
         "User",
         foreign_keys=[created_by],
     )
+
+    # =====================================================
+    # PROPIEDADES DE LICENCIA
+    # =====================================================
+
+    @property
+    def max_teachers(self) -> int:
+        """
+        Número máximo de profesores permitidos
+        según el tipo de licencia.
+        """
+        limits = LICENSE_LIMITS.get(
+            self.license_type,
+            LICENSE_LIMITS[LicenseType.BASICA.value],
+        )
+
+        return limits["teachers"]
+
+    @property
+    def max_students(self) -> int:
+        """
+        Número máximo de estudiantes permitidos
+        según el tipo de licencia.
+        """
+        limits = LICENSE_LIMITS.get(
+            self.license_type,
+            LICENSE_LIMITS[LicenseType.BASICA.value],
+        )
+
+        return limits["students"]
 
 
 # =========================================================

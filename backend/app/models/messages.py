@@ -10,7 +10,7 @@ Reglas de conversación (validadas en app/api/messages.py):
   - Profesor    ↔ Super       (rector)
   - Super       ↔ cualquiera  (rector puede hablar con todos)
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, LargeBinary, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, LargeBinary
 from sqlalchemy.orm import relationship, deferred
 from datetime import datetime
 from app.db.database import Base
@@ -34,36 +34,3 @@ class DirectMessage(Base):
 
     sender   = relationship("User", foreign_keys=[sender_id])
     receiver = relationship("User", foreign_keys=[receiver_id])
-
-
-class Message(Base):
-    """Mensaje en una conversación"""
-    __tablename__ = "messages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("user_conversations.id"), nullable=False)
-    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    content = Column(Text, nullable=False)
-    message_type = Column(String(50), default="text")
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    conversation = relationship("Conversation", back_populates="messages")
-    sender = relationship("User", foreign_keys=[sender_id])
-
-
-class Conversation(Base):
-    """Conversación entre usuarios"""
-    __tablename__ = "user_conversations"
-
-    id = Column(Integer, primary_key=True, index=True)
-    participant_ids = Column(JSON, nullable=False)  # List of user IDs
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_message_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
-    last_message = relationship("Message", foreign_keys=[last_message_id])
-
-    # Relationship to messages
-    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")

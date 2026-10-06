@@ -1,11 +1,31 @@
-"""
+r"""
 NeuroLearn AI — Pruebas del motor de Integraciones y Automatizaciones
-=====================================================================
+======================================================================
+Valida los mecanismos reales que usa la página Docente Pro → Integraciones:
 
-Actualizado para eliminar el sistema de licencias.
+1. Cifrado/descifrado de tokens con la SECRET_KEY del servidor (roundtrip).
+2. Webhook: envío de una petición HTTP POST real a un servidor local de
+   prueba y verificación de la respuesta (conexión real de extremo a extremo).
+3. Motor de automatizaciones: una automatización "crear_alerta" se configura,
+   se persiste y se dispara, y queda registrada una ejecución en la tabla
+   automation_executions (trazabilidad real).
+4. Acción "webhook": una automatización webhook ejecuta un POST real y se
+   marca como ok/error según la respuesta del servidor.
+
+Uso de una base SQLite en memoria — NO toca la base real de Supabase.
+
+Ejecutar (sin necesidad de `pytest`):
+
+    cd backend
+    .venv\Scripts\python.exe tests\test_integration_service.py
+
+O con pytest (si está instalado):
+
+    .venv\Scripts\python.exe -m pytest tests\test_integration_service.py -v
 """
 import os
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timezone
 
@@ -21,7 +41,7 @@ except Exception:
     pass
 
 
-# ── 0. Servidor HTTP local para probar el webhook real ─────────────────────
+# ── 0. Servidor HTTP local para probar el webhook real ────────────────────────
 class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -112,7 +132,7 @@ def test_automation_create_alerta_dispatches_and_records():
     db = Session()
 
     inst = Institution(id=None, name="Colegio Test", dane_code="123456789",
-                       is_active=True)
+                       license_type="pro", is_active=True)
     db.add(inst)
     db.commit()
     db.refresh(inst)
@@ -184,7 +204,7 @@ def test_automation_webhook_action_is_real():
 
     try:
         inst = Institution(name="Colegio Test", dane_code="987654321",
-                           is_active=True)
+                           license_type="pro", is_active=True)
         db.add(inst); db.commit(); db.refresh(inst)
         teacher = User(username="prof.webhook", email="wh@test.co", role="PROFESOR",
                        institution_id=inst.id, is_active=True, hashed_password="x")
