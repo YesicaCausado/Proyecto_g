@@ -162,6 +162,106 @@ interface LicenseContextType {
 // };
 
 // ============================================================
+// PERMISOS POR ROL
+// ============================================================
+
+// Funcionalidades por rol (sin licencias: solo depende del rol).
+const FEATURE_ROLES: Record<string, string[]> = {
+  // FUNCIONES TRANSVERSALES
+  perfil: ['super_profesor', 'profesor', 'estudiante'],
+  mensajes: ['super_profesor', 'profesor', 'estudiante'],
+  calendario: ['super_profesor', 'profesor', 'estudiante'],
+  
+  // SUPER PROFESOR
+  configuracion: ['super_profesor'],
+  licencia: ['super_profesor'],
+  gestion_profesores: ['super_profesor'],
+  gestion_estudiantes: ['super_profesor'],
+  gestion_grupos: ['super_profesor', 'profesor'],
+  
+  // DASHBOARD Y ANALÍTICA
+  dashboard: ['super_profesor', 'profesor', 'estudiante'],
+  basic_analytics: ['super_profesor', 'profesor', 'estudiante'],
+  advanced_analytics: ['super_profesor', 'profesor'],
+  predictive_analytics: ['super_profesor', 'profesor'],
+  groups_compare: ['super_profesor', 'profesor'],
+  risk_indicators: ['super_profesor', 'profesor'],
+  
+  // CONTENIDO ACADÉMICO
+  recursos: ['profesor', 'estudiante'],
+  evaluaciones: ['profesor', 'estudiante'],
+  tareas: ['estudiante'],
+  anuncios: ['profesor'],
+  
+  // NEUROBOTS / NEUROALERTAS
+  neurobots: ['super_profesor', 'profesor'],
+  neurobots_advanced: ['super_profesor', 'profesor'],
+  neuroalertas: ['super_profesor', 'profesor'],
+  
+  // NEURODIGITAL
+  neurodigital: ['profesor', 'estudiante'],
+  
+  // REPORTES
+  reportes: ['super_profesor', 'profesor'],
+  reportes_avanzados: ['super_profesor', 'profesor'],
+  
+  // IA PARA ESTUDIANTES
+  tutor_ia: ['estudiante'],
+  tutor_ia_adaptive: ['estudiante'],
+  chat_history: ['estudiante'],
+  recommendations: ['estudiante'],
+  adaptive_feedback: ['estudiante'],
+  difficulty_detection: ['estudiante'],
+  skill_tracking: ['estudiante'],
+  learning_analytics: ['estudiante'],
+  tutor_ia_advanced: ['estudiante'],
+  personal_reports: ['estudiante'],
+  personal_analytics: ['estudiante'],
+  personalized_plans: ['estudiante'],
+  
+  // IA PARA PROFESORES
+  teacher_ai: ['profesor'],
+  
+  // AUTOMATIZACIÓN / INTEGRACIONES
+  automation: ['super_profesor', 'profesor'],
+  integrations: ['super_profesor', 'profesor'],
+};
+
+// Módulo de navegación → funcionalidad que lo habilita.
+const MODULE_ALIASES: Record<string, string> = {
+  inicio: 'dashboard',
+  mis_cursos: 'dashboard',
+  estadisticas: 'basic_analytics',
+  cursos: 'dashboard',
+  grupos: 'gestion_grupos',
+  estudiantes: 'gestion_estudiantes',
+  profesores: 'gestion_profesores',
+  recursos: 'recursos',
+  evaluaciones: 'evaluaciones',
+  tareas: 'tareas',
+  mensajes: 'mensajes',
+  mensajeria: 'mensajes',
+  calendario: 'calendario',
+  perfil: 'perfil',
+  reportes: 'reportes',
+  licencia: 'licencia',
+  configuracion: 'configuracion',
+  neurobots: 'neurobots',
+  neuroalertas: 'neuroalertas',
+  neurodigital: 'neurodigital',
+  // Botón "Competencias" del menú del estudiante (chat con IA, /chat).
+  tutor_ia: 'tutor_ia',
+};
+
+/**
+ * Traduce un nombre de módulo (p. ej. "estadisticas") a la funcionalidad que
+ * lo habilita ("basic_analytics"). Igual que `_module_feature` del backend.
+ */
+function resolveFeature(name: string): string {
+  return MODULE_ALIASES[name] ?? name;
+}
+
+// ============================================================
 // CONTEXTO
 // ============================================================
 
@@ -212,92 +312,6 @@ export function LicenseProvider({
     try {
       // En lugar de llamar al backend, calculamos todo basado en el rol del usuario
       const role = user.role;
-      
-      // Mapeo de roles a características disponibles (basado en nuestro permission service)
-      const FEATURE_ROLES: Record<string, string[]> = {
-        // FUNCIONES TRANSVERSALES
-        perfil: ['super_profesor', 'profesor', 'estudiante'],
-        mensajes: ['super_profesor', 'profesor', 'estudiante'],
-        calendario: ['super_profesor', 'profesor', 'estudiante'],
-        
-        // SUPER PROFESOR
-        configuracion: ['super_profesor'],
-        licencia: ['super_profesor'],
-        gestion_profesores: ['super_profesor'],
-        gestion_estudiantes: ['super_profesor'],
-        gestion_grupos: ['super_profesor', 'profesor'],
-        
-        // DASHBOARD Y ANALÍTICA
-        dashboard: ['super_profesor', 'profesor', 'estudiante'],
-        basic_analytics: ['super_profesor', 'profesor', 'estudiante'],
-        advanced_analytics: ['super_profesor', 'profesor'],
-        predictive_analytics: ['super_profesor', 'profesor'],
-        groups_compare: ['super_profesor', 'profesor'],
-        risk_indicators: ['super_profesor', 'profesor'],
-        
-        // CONTENIDO ACADÉMICO
-        recursos: ['profesor', 'estudiante'],
-        evaluaciones: ['profesor', 'estudiante'],
-        tareas: ['estudiante'],
-        anuncios: ['profesor'],
-        
-        // NEUROBOTS / NEUROALERTAS
-        neurobots: ['super_profesor', 'profesor'],
-        neurobots_advanced: ['super_profesor', 'profesor'],
-        neuroalertas: ['super_profesor', 'profesor'],
-        
-        // NEURODIGITAL
-        neurodigital: ['profesor', 'estudiante'],
-        
-        // REPORTES
-        reportes: ['super_profesor', 'profesor'],
-        reportes_avanzados: ['super_profesor', 'profesor'],
-        
-        // IA PARA ESTUDIANTES
-        tutor_ia: ['estudiante'],
-        tutor_ia_adaptive: ['estudiante'],
-        chat_history: ['estudiante'],
-        recommendations: ['estudiante'],
-        adaptive_feedback: ['estudiante'],
-        difficulty_detection: ['estudiante'],
-        skill_tracking: ['estudiante'],
-        learning_analytics: ['estudiante'],
-        tutor_ia_advanced: ['estudiante'],
-        personal_reports: ['estudiante'],
-        personal_analytics: ['estudiante'],
-        personalized_plans: ['estudiante'],
-        
-        // IA PARA PROFESORES
-        teacher_ai: ['profesor'],
-        
-        // AUTOMATIZACIÓN / INTEGRACIONES
-        automation: ['super_profesor', 'profesor'],
-        integrations: ['super_profesor', 'profesor'],
-      };
-      
-      // Módulos y sus características correspondientes
-      const MODULE_ALIASES: Record<string, string> = {
-        inicio: 'dashboard',
-        mis_cursos: 'dashboard',
-        estadisticas: 'basic_analytics',
-        cursos: 'dashboard',
-        grupos: 'gestion_grupos',
-        estudiantes: 'gestion_estudiantes',
-        profesores: 'gestion_profesores',
-        recursos: 'recursos',
-        evaluaciones: 'evaluaciones',
-        tareas: 'tareas',
-        mensajes: 'mensajes',
-        mensajeria: 'mensajes',
-        calendario: 'calendario',
-        perfil: 'perfil',
-        reportes: 'reportes',
-        licencia: 'licencia',
-        configuracion: 'configuracion',
-        neurobots: 'neurobots',
-        neuroalertas: 'neuroalertas',
-        neurodigital: 'neurodigital',
-      };
       
       // Obtener características disponibles para este rol
       const features: string[] = Object.keys(FEATURE_ROLES)
@@ -432,7 +446,8 @@ export function LicenseProvider({
       return false;
     }
 
-    return info!.features.includes(feature);
+    // Acepta nombres de funcionalidad o de módulo (p. ej. 'estadisticas').
+    return info!.features.includes(resolveFeature(feature));
   };
 
   // ==========================================================================
