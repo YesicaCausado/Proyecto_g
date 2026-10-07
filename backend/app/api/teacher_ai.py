@@ -4,13 +4,18 @@ NeuroLearn AI — Generación de Contenido IA para el Docente
 Endpoints de IA Generativa para el panel del profesor (permiso USAR_IA_DOCENTE).
 
 Usa el gestor central de proveedores (Groq → Gemini) mediante `ai_manager`.
-Si la IA no está configurada o falla, devuelve contenido local estructurado
-(misma forma que los endpoints de chat), de forma que la UI siempre recibe
-un resultado utilizable.
+Si la IA no está configurada, falla o devuelve un formato inválido, el
+endpoint responde con un error claro (503/502). Nunca devuelve contenido
+de plantilla presentado como si lo hubiera generado la IA.
+
+Lo usan:
+  - IAGenerativaTab.tsx  (plan de clase, preguntas, guía, rúbrica)
+  - EvaluacionesTab.tsx  (kind="preguntas" → revisión → guardar evaluación)
 """
 import json
+import logging
 import re
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -22,6 +27,8 @@ from app.core.config import settings
 
 # Reutilizar el mismo gestor que usa el chat (Groq → Gemini → local).
 from app.ai.providers.ai_manager import AIManager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/teacher/ai", tags=["Teacher - IA Generativa"])
 
@@ -36,10 +43,20 @@ ai_manager = AIManager(
 class GenerateRequest(BaseModel):
     kind: str = Field(..., description="plan_clase | preguntas | guia | rubrica")
     topic: str = Field(..., min_length=1, max_length=200)
-    level: str = "10°"
+    level: str = Field("10°", max_length=30)
     count: int = Field(5, ge=1, le=12)
-    subject: Optional[str] = None           # ej: Matemáticas
-    extra: Optional[str] = None             # contexto / instrucciones extra
+    subject: Optional[str] = Field(None, max_length=120)      # ej: Matemáticas
+    extra: Optional[str] = Field(None, max_length=1000)       # contexto / instrucciones extra
+    # Solo para kind="preguntas"
+    competency: Optional[str] = Field(None, max_length=120)   # competencia Saber 11
+    difficulty: Optional[Literal["basico", "intermedio", "avanzado"]] = None
+
+
+DIFFICULTY_LABELS = {
+    "basico": "básico (reconocimiento y comprensión)",
+    "intermedio": "intermedio (aplicación y análisis)",
+    "avanzado": "avanzado (análisis, argumentación y resolución de problemas complejos)",
+}
 
 
 KINDS = {"plan_clase", "preguntas", "guia", "rubrica"}
@@ -55,10 +72,14 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "Ajusta la dificultad al grado indicado. Escribe solo el JSON, sin texto adicional."
     ),
     "preguntas": (
-        "Eres un docente experto en evaluaciones académicas. Genera preguntas de opción múltiple en español "
-        "adecuadas al grado y tema indicados. Devuelve únicamente un arreglo JSON con el formato "
-        '[{"type":"multiple","text":string,"options":[4 strings],"correct":string,"points":2}. '
-        "La opción 'correct' debe coincidir exactamente con una de las opciones. Sin texto adicional."
+        "Eres un docente experto en evaluaciones tipo Saber 11 (ICFES, Colombia). Genera preguntas de "
+        "selección múltiple con única respuesta, en español, adecuadas al grado, tema, competencia y "
+        "dificultad indicados. Cada pregunta puede incluir un breve contexto o situación en el enunciado. "
+        "Devuelve únicamente un arreglo JSON con el formato exacto "
+        '[{"type":"multiple","text":string,"options":[4 strings],"correct":string,"explanation":string,"points":2}]. '
+        "Reglas: exactamente 4 opciones distintas y plausibles; 'correct' debe ser idéntica a una de las "
+        "opciones; 'explanation' justifica en una o dos frases por qué es la respuesta correcta; "
+        "no numeres las preguntas ni pongas letras en las opciones. Sin texto adicional."
     ),
     "guia": (
         "Eres un docente experto en elaboración de guías de estudio. Genera una guía de estudio en español "
@@ -78,77 +99,85 @@ SYSTEM_PROMPTS: dict[str, str] = {
 PROMPT_BODY = (
     "\n\nTEMA: {topic}\nGRADO/NIVEL: {level}\n"
 ) + (
-    "{subject_line}NÚMERO DE ÍTEMS: {count}\n"
+    "{subject_line}{competency_line}{difficulty_line}NÚMERO DE ÍTEMS: {count}\n"
     "{extra}"
 )
 
 
-# ─── Fallbacks locales (cuando la IA no está disponible) ──────────────────────
+# ─── Normalización de preguntas ───────────────────────────────────────────────
 
-def _fallback(kind: str, topic: str, level: str, count: int, subject: Optional[str]) -> dict:
-    cap = topic.strip().capitalize()
-    s = f" de {subject}" if subject else ""
-    if kind == "preguntas":
-        questions = []
-        for i in range(count):
-            n = i + 1
-            questions.append({
-                "type": "multiple",
-                "text": f"{n}. ¿Cuál es la afirmación correcta sobre {topic}?",
-                "options": [f"Opción A sobre {cap}", f"Opción B sobre {cap}",
-                            f"Distractor C sobre {cap}", f"Distractor D sobre {cap}"],
-                "correct": f"Opción A sobre {cap}",
-                "points": 2,
-            })
-        return {"titulo": f"Evaluación de {cap}", "questions": questions}
-    if kind == "plan_clase":
-        return {
-            "titulo": f"Plan de clase: {cap}",
-            "duracion_minutos": 60,
-            "grado": level,
-            "objetivos": [f"Comprender los conceptos fundamentales de {topic}",
-                          f"Aplicar {topic} en ejercicios prácticos{s}."],
-            "indicadores_desempeno": [f"Explica con sus palabras la importancia de {topic}.",
-                                      f"Resuelve problemas tipo sobre {cap}."],
-            "momentos": [
-                {"nombre": "Apertura", "duracion_min": 10, "detalle": f"Motivación y exploración de saberes previos sobre {cap}."},
-                {"nombre": "Desarrollo", "duracion_min": 35, "detalle": f"Explicación guiada y práctica supervisada de {cap}."},
-                {"nombre": "Cierre", "duracion_min": 15, "detalle": f"Socialización de resultados y retroalimentación."},
-            ],
-            "recursos": [f"Guía impresa de {cap}", "Tablero y marcadores", "Material concreto de apoyo"],
-            "evaluacion": f"Lista de chequeo y participación durante la actividad sobre {cap}.",
-            "cierre": f"Retroalimentación general y asignación de tarea corta sobre {cap}.",
-        }
-    if kind == "guia":
-        return {
-            "titulo": f"Guía de estudio: {cap}",
-            "tema": topic,
-            "grado": level,
-            "conceptos_clave": [cap, f"Conceptos previos de {topic}", "Aplicaciones cotidianas"],
-            "resumen": f"La presente guía permite al estudiante consolidar los conceptos centrales de {cap}{s}, mediante lectura, ejemplos y práctica guiada.",
-            "actividades": [
-                {"titulo": "Lectura comprensiva", "tipo": "individual", "descripcion": f"Leer el material de {cap} y subrayar ideas fuerza."},
-                {"titulo": "Ejercicios guiados", "tipo": "práctica", "descripcion": f"Resolver la serie de ejercicios base de {cap}."},
-                {"titulo": "Puesta en común", "tipo": "grupal", "descripcion": "Socializar respuestas y aclarar dudas en grupo."},
-            ],
-            "preguntas_reflexion": [f"¿Por qué es relevante estudiar {topic}?",
-                                    "¿Cómo se relaciona este tema con tu vida cotidiana?"],
-            "recomendaciones": ["Repasar los apuntes diariamente", "Practicar con ejercicios progresivos"],
-        }
-    # rubrica
-    return {
-        "criterios": [
-            {"criterio": "Dominio conceptual", "descripcion": f"Comprende y explica correctamente los conceptos de {cap}.",
-             "niveles": ["No logra identificar los conceptos", "Identifica algunos conceptos con ayuda",
-                         "Explica los conceptos de forma adecuada", "Explica y relaciona conceptos con autonomía"]},
-            {"criterio": "Aplicación práctica", "descripcion": f"Resuelve situaciones que requieren {cap}.",
-             "niveles": ["No resuelve las situaciones", "Resuelve con acompañamiento", "Resuelve correctamente",
-                         "Resuelve y justifica su estrategia"]},
-            {"criterio": "Comunicación", "descripcion": "Comunica ideas y resultados con claridad.",
-             "niveles": ["Comunica con dificultad", "Comunica ideas básicas", "Comunica con claridad",
-                         "Comunica y fundamenta su respuesta"]},
-        ]
-    }
+_LETTER_PREFIX = re.compile(r"^\s*(?:[A-Da-d]|[1-4])\s*[\).:-]\s+")
+_NUMBER_PREFIX = re.compile(r"^\s*\d+\s*[\).:-]\s+")
+
+
+def _clean_option(value) -> str:
+    return _LETTER_PREFIX.sub("", str(value or "")).strip()
+
+
+def normalize_questions(parsed, count: int) -> List[dict]:
+    """
+    Convierte la respuesta de la IA al formato de pregunta del frontend
+    (EvaluacionesTab / TeacherEvaluation.questions):
+
+        {"id", "type": "multiple", "text", "options": [4], "correct", "points", "explanation"}
+
+    Descarta las preguntas mal formadas (sin enunciado, con menos de 4 opciones
+    distintas o con una respuesta correcta que no está entre las opciones).
+    """
+    items = parsed if isinstance(parsed, list) else (parsed or {}).get("questions") or []
+    result: List[dict] = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        text = _NUMBER_PREFIX.sub("", str(raw.get("text") or raw.get("pregunta") or "")).strip()
+        if not text:
+            continue
+
+        options: List[str] = []
+        for opt in raw.get("options") or raw.get("opciones") or []:
+            cleaned = _clean_option(opt)
+            if cleaned and cleaned not in options:
+                options.append(cleaned)
+        if len(options) < 4:
+            continue
+
+        correct_raw = raw.get("correct", raw.get("respuesta_correcta"))
+        correct = None
+        if isinstance(correct_raw, int) and 0 <= correct_raw < len(options):
+            correct = options[correct_raw]
+        elif correct_raw is not None:
+            candidate = str(correct_raw).strip()
+            if len(candidate) == 1 and candidate.upper() in "ABCD":
+                correct = options["ABCD".index(candidate.upper())]
+            else:
+                candidate = _clean_option(candidate)
+                correct = next((o for o in options if o == candidate), None) or next(
+                    (o for o in options if o.lower() == candidate.lower()), None
+                )
+        if correct is None:
+            continue
+        if options.index(correct) >= 4:
+            continue  # la correcta quedó fuera de las 4 opciones que se conservan
+        options = options[:4]
+
+        try:
+            points = int(raw.get("points", 2))
+        except (TypeError, ValueError):
+            points = 2
+        explanation = str(raw.get("explanation") or raw.get("explicacion") or "").strip()[:600]
+
+        result.append({
+            "id": f"ia-{len(result) + 1}",
+            "type": "multiple",
+            "text": text[:2000],
+            "options": options,
+            "correct": correct,
+            "points": min(max(points, 1), 10),
+            "explanation": explanation,
+        })
+        if len(result) >= count:
+            break
+    return result
 
 
 def _extract_json(text: str, kind: str):
@@ -156,9 +185,8 @@ def _extract_json(text: str, kind: str):
     completa esperada para el tipo de contenido (`kind`).
 
     Devuelve `None` si el texto no contiene JSON válido o si el JSON está
-    incompleto (p. ej. truncado por el límite de tokens del modelo). Devolver
-    `None` hace que el endpoint use el fallback local en lugar de presentar
-    contenido vacío o roto en la UI.
+    incompleto (p. ej. truncado por el límite de tokens del modelo); en ese
+    caso el endpoint responde 502 en lugar de presentar contenido vacío o roto.
     """
     if not text:
         return None
@@ -167,6 +195,12 @@ def _extract_json(text: str, kind: str):
         candidates.append(text.strip())
     for m in re.finditer(r"```(?:json)?\s*([\s\S]*?)```", text):
         candidates.append(m.group(1).strip())
+    # Bloque más amplio: del primer "[" / "{" al último "]" / "}" (texto
+    # explicativo antes o después del JSON).
+    for open_ch, close_ch in (("[", "]"), ("{", "}")):
+        start, end = text.find(open_ch), text.rfind(close_ch)
+        if 0 <= start < end:
+            candidates.append(text[start:end + 1])
     for m in re.finditer(r"[\[{][\s\S]*?[\]}]", text):
         candidates.append(m.group(0).strip())
     seen = set()
@@ -231,44 +265,99 @@ async def generate_content(
     _authorized: User = Depends(require_permission(Permission.USAR_IA_DOCENTE)),
     current_user: User = Depends(get_current_user),
 ):
-    """Genera contenido educativo con IA (o fallback local) para el docente."""
+    """
+    Genera contenido educativo con IA real para el docente.
+
+    Errores:
+      400  kind inválido
+      503  no hay proveedor de IA disponible (sin claves o todos fallaron)
+      502  la IA respondió con un formato que no se pudo interpretar
+    """
     kind = req.kind
     if kind not in KINDS:
         raise HTTPException(status_code=400, detail=f"kind inválido: {kind}")
+    topic = req.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail="Escribe el tema.")
+
+    if not ai_manager.providers:
+        raise HTTPException(
+            status_code=503,
+            detail="La IA no está configurada en el servidor (GROQ_API_KEY o GEMINI_API_KEY).",
+        )
 
     system = SYSTEM_PROMPTS[kind]
+    is_questions = kind == "preguntas"
     body = PROMPT_BODY.format(
-        topic=req.topic,
+        topic=topic,
         level=req.level,
-        subject_line=f"ASIGNATURA: {req.subject}\n" if req.subject else "",
+        subject_line=f"ASIGNATURA: {req.subject.strip()}\n" if req.subject and req.subject.strip() else "",
+        competency_line=(
+            f"COMPETENCIA SABER 11: {req.competency.strip()}\n"
+            if is_questions and req.competency and req.competency.strip() else ""
+        ),
+        difficulty_line=(
+            f"DIFICULTAD: {DIFFICULTY_LABELS[req.difficulty]}\n"
+            if is_questions and req.difficulty else ""
+        ),
         count=req.count,
-        extra=f"CONTEXTO EXTRA: {req.extra}" if req.extra else "",
+        extra=f"CONTEXTO EXTRA: {req.extra.strip()}" if req.extra and req.extra.strip() else "",
     )
 
-    ai = None
-    provider = None
     try:
         # max_tokens generoso: un plan de clase completo puede superar los 2000
         # tokens de salida. Con valores bajos (1400) la IA alcanzaba a emitir el
         # JSON a medias y el contenido se mostraba vacío/roto.
-        result = await ai_manager.generate(prompt=body, system_prompt=system, temperature=0.7, max_tokens=3000)
-        ai = result.get("response")
-        provider = result.get("provider")
+        result = await ai_manager.generate(
+            prompt=body, system_prompt=system, temperature=0.7, max_tokens=3000, expect_json=True,
+        )
     except Exception:
-        ai = None
+        logger.exception("Error llamando a la IA (kind=%s, user=%s)", kind, current_user.id)
+        result = {}
 
-    parsed = _extract_json(ai, kind) if ai else None
-    fallback_used = parsed is None
+    provider = result.get("provider")
+    ai_text = result.get("response") if provider and provider != "local" else None
+    if not ai_text:
+        # "local" es la plantilla interna del gestor: no es contenido generado por IA.
+        raise HTTPException(
+            status_code=503,
+            detail="El servicio de IA no respondió. Inténtalo de nuevo en unos segundos.",
+        )
 
+    parsed = _extract_json(ai_text, kind)
     if parsed is None:
-        parsed = _fallback(kind, req.topic, req.level, req.count, req.subject)
+        logger.warning("IA devolvió JSON inválido (kind=%s, provider=%s)", kind, provider)
+        raise HTTPException(
+            status_code=502,
+            detail="La IA respondió con un formato que no se pudo interpretar. Inténtalo de nuevo.",
+        )
 
-    return {
+    response = {
         "kind": kind,
-        "topic": req.topic,
+        "topic": topic,
         "level": req.level,
         "subject": req.subject,
-        "content": parsed,
-        "provider": provider if not fallback_used else "local",
-        "ai_used": provider is not None and not fallback_used,
+        "provider": provider,
+        "ai_used": True,
     }
+    if is_questions:
+        questions = normalize_questions(parsed, req.count)
+        if not questions:
+            raise HTTPException(
+                status_code=502,
+                detail="La IA no devolvió preguntas válidas (enunciado, 4 opciones y respuesta correcta). Inténtalo de nuevo.",
+            )
+        response.update({
+            "competency": req.competency,
+            "difficulty": req.difficulty,
+            "requested": req.count,
+            "content": {"questions": questions},
+        })
+    else:
+        response["content"] = parsed
+
+    logger.info(
+        "IA docente: kind=%s provider=%s user=%s institution=%s",
+        kind, provider, current_user.id, current_user.institution_id,
+    )
+    return response
