@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app/bot-service
 
@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y \
     sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements
+# Copiar requirements (backend/requirements.txt incluye ../api/requirements.txt,
+# la fuente única de dependencias de producción)
+COPY api/requirements.txt /app/api/requirements.txt
 COPY backend/requirements.txt .
 
 # Instalar dependencias de Python

@@ -4,4 +4,4 @@
 # que corre en producción. Requiere Python 3.12 (ver docs/PRUEBAS.md).
 #   pip install -r requirements-dev.txt
 -r ../api/requirements.txt
-pytest==8.3.3
+pytest==9.1.1

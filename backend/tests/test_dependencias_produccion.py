@@ -110,9 +110,18 @@ class ProductionDependenciesTest(unittest.TestCase):
         # Regresión concreta: Integraciones cifra los tokens de Google Drive.
         self.assertIn("cryptography", paquetes_declarados())
 
-    def test_dev_requirements_reuse_production_requirements(self):
-        dev = (BACKEND_DIR / "requirements-dev.txt").read_text(encoding="utf-8")
-        self.assertIn("-r ../api/requirements.txt", dev.splitlines())
+    def test_local_requirements_reuse_production_requirements(self):
+        # Pruebas, desarrollo local y Docker instalan las mismas versiones que
+        # Vercel: api/requirements.txt es la fuente única.
+        for nombre in ("requirements-dev.txt", "requirements.txt"):
+            with self.subTest(archivo=nombre):
+                lineas = (BACKEND_DIR / nombre).read_text(encoding="utf-8").splitlines()
+                self.assertIn("-r ../api/requirements.txt", lineas)
+                fijadas = [l for l in lineas if "==" in l.split("#", 1)[0]]
+                permitidas = {"pytest", "uvicorn"}
+                self.assertEqual(
+                    [l for l in fijadas if re.split(r"[\[=]", l, maxsplit=1)[0].strip() not in permitidas], [],
+                    f"{nombre} solo debe agregar herramientas locales; las dependencias de la app van en api/requirements.txt")
 
 
 if __name__ == "__main__":

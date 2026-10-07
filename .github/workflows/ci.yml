@@ -5,8 +5,9 @@
 #     lo mismo que instala Vercel) + pytest con Python 3.12 y ejecuta la suite
 #     completa (backend/tests). Las pruebas usan SQLite en memoria, correo a
 #     consola y dobles para la IA: no necesitan secretos ni servicios externos.
-#   - Frontend: npm ci + npm run build (tsc -b && vite build), el mismo
-#     comando que ejecuta Vercel.
+#   - Frontend: npm ci, npm audit (bloqueante para dependencias de
+#     producción) y npm run build (tsc -b && vite build), el mismo comando
+#     que ejecuta Vercel.
 #
 # Si un job falla, GitHub marca el commit con ✗ y muestra el error en la
 # pestaña "Actions". Guía: docs/PRUEBAS.md
@@ -69,7 +70,7 @@ jobs:
         run: git diff --exit-code --stat
 
   frontend:
-    name: Frontend · compilación (Node 22)
+    name: Frontend · auditoría y compilación (Node 22)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -90,6 +91,20 @@ jobs:
 
       - name: Instalar dependencias
         run: npm ci
+
+      # Bloqueante: ninguna vulnerabilidad moderada o mayor en las librerías
+      # que llegan al navegador del usuario (dependencies de package.json).
+      - name: Auditoría de seguridad (dependencias de producción)
+        run: npm audit --omit=dev --audit-level=moderate
+
+      # Informativa: las herramientas de desarrollo (Vite, ESLint, Babel…) no
+      # llegan al navegador; si aparece una vulnerabilidad alta se muestra como
+      # advertencia en la ejecución, sin bloquear. Ver docs/SEGURIDAD_DEPENDENCIAS.md
+      - name: Auditoría de seguridad (todas las dependencias)
+        run: |
+          if ! npm audit --audit-level=high; then
+            echo "::warning title=npm audit::Hay vulnerabilidades altas en dependencias de desarrollo. Revise docs/SEGURIDAD_DEPENDENCIAS.md"
+          fi
 
       - name: Compilar (TypeScript + Vite)
         run: npm run build

@@ -127,8 +127,8 @@ proyectog/
 
 ### Backend
 ```bash
-cd backend
-pip install -r requirements.txt
+cd backend                      # requiere Python 3.12
+pip install -r requirements.txt  # dependencias de producción + uvicorn
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # Documentación interactiva: http://localhost:8000/docs
 ```
@@ -174,6 +174,7 @@ GitHub Actions ejecuta estas pruebas y la compilación del frontend en cada push
 - 💡 [Idea Definitiva del Proyecto](docs/IDEA_DEFINITIVA.md)
 - 📐 [Diagramas UML y Arquitectura](docs/DIAGRAMAS_UML.md)
 - 🧪 [Pruebas automáticas](docs/PRUEBAS.md)
+- 🔒 [Seguridad de dependencias](docs/SEGURIDAD_DEPENDENCIAS.md)
 - 📊 [Análisis de Viabilidad](docs/ESTUDIO_VIABILIDAD.md)
 - 🗓️ [Cronograma de Desarrollo](docs/CRONOGRAMA.md)
 
