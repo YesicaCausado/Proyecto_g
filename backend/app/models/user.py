@@ -212,6 +212,14 @@ class User(Base):
         foreign_keys=[institution_id],
     )
 
+    @property
+    def institution_name(self):
+        """Nombre real de la institución del usuario (None si no tiene)."""
+        if self.institution_id is None:
+            return None
+        institution = self.institution
+        return institution.name if institution is not None else None
+
     learning_sessions = relationship(
         "LearningSession",
         back_populates="user",

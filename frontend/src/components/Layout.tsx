@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
 import { navItemStyle } from '../styles/sidebar';
+import { institutionLabel } from '../utils/institution';
 
 interface NavLinkItem {
   id: string;
@@ -330,7 +331,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">
               {user?.full_name || user?.username}
             </p>
-            <p className="text-[10px] text-[#787774] capitalize truncate">{user?.role}</p>
+            <p className="text-[10px] text-[#787774] truncate" title={institutionLabel(user)}>{institutionLabel(user)}</p>
           </div>
           <button
             onClick={handleLogout}

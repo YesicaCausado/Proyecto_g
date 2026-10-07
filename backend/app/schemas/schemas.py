@@ -37,6 +37,7 @@ class UserResponse(BaseModel):
     cognitive_profile: Optional[Dict] = None
     must_change_password: Optional[bool] = False
     institution_id: Optional[int] = None
+    institution_name: Optional[str] = None
     document_number: Optional[str] = None
 
     class Config:
@@ -57,6 +58,7 @@ class Token(BaseModel):
     is_expert: Optional[bool] = False
     photo: Optional[str] = None
     institution_id: Optional[int] = None
+    institution_name: Optional[str] = None
     document_number: Optional[str] = None
     cognitive_profile: Optional[Dict] = None
     created_at: Optional[datetime] = None

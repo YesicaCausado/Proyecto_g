@@ -821,6 +821,7 @@ async def login(
             "institution_id",
             None,
         ),
+        institution_name=user.institution_name,
         document_number=getattr(
             user,
             "document_number",

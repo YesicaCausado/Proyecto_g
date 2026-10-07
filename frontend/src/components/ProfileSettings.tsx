@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Camera, Lock, Bell, Eye, EyeOff, CheckCircle, LogOut, Hash, Shield, Calendar, Save,
+  Camera, Lock, Bell, Eye, EyeOff, CheckCircle, LogOut, Hash, Shield, Calendar, Save, Building2,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { institutionLabel } from '../utils/institution';
 
 /**
  * PerfilSettings — Componente único y reutilizable de configuración de perfil.
@@ -206,6 +207,7 @@ export default function ProfileSettings({
         <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2"><Hash className="w-4 h-4 text-[#787774]" /><span className="text-[#9B9A97]">Usuario:</span><span className="text-[#37352F] font-medium">@{user?.username}</span></div>
           <div className="flex items-center gap-2"><Shield className="w-4 h-4 text-[#787774]" /><span className="text-[#9B9A97]">Rol:</span><span className="text-[#37352F] font-medium capitalize">{roleLabel}</span></div>
+          <div className="flex items-center gap-2 min-w-0"><Building2 className="w-4 h-4 text-[#787774] flex-shrink-0" /><span className="text-[#9B9A97]">Institución:</span><span className="text-[#37352F] font-medium truncate" title={institutionLabel(user)}>{institutionLabel(user)}</span></div>
           <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-[#787774]" /><span className="text-[#9B9A97]">Cuenta creada:</span><span className="text-[#37352F] font-medium">{joined}</span></div>
         </div>
 

@@ -11,7 +11,6 @@ import api from '../services/api';
 import type {
   User,
   LoginRequest,
-  RegisterRequest,
   Token,
 } from '../types';
 
@@ -26,7 +25,6 @@ interface AuthContextType {
   loading: boolean;
 
   login: (data: LoginRequest) => Promise<void>;
-  register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
 
   updateUser: (updates: Partial<User>) => void;
@@ -359,6 +357,10 @@ export function AuthProvider({
         tokenData.institution_id ??
         undefined,
 
+      institution_name:
+        tokenData.institution_name ??
+        null,
+
       document_number:
         tokenData.document_number ??
         undefined,
@@ -374,31 +376,6 @@ export function AuthProvider({
     setUser(userData);
 
 
-  };
-
-
-  // ==========================================================================
-  // REGISTRO
-  // ==========================================================================
-
-  const register = async (
-    registerData: RegisterRequest,
-  ): Promise<void> => {
-
-    await api.post(
-      '/auth/register',
-      registerData,
-    );
-
-
-    // ------------------------------------------------------------------------
-    // Después de registrar, iniciar sesión
-    // ------------------------------------------------------------------------
-
-    await login({
-      username: registerData.username,
-      password: registerData.password,
-    });
   };
 
 
@@ -473,7 +450,6 @@ export function AuthProvider({
 
     login,
 
-    register,
 
     logout,
 

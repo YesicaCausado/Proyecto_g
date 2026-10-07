@@ -16,6 +16,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import AdminHome from './AdminHome';
+import { institutionLabel } from '../../utils/institution';
 import CreateInstitution from './CreateInstitution';
 import InstitutionList from './InstitutionList';
 import UserManagement from './UserManagement';
@@ -97,7 +98,7 @@ export default function AdminDashboard() {
           />
           <div className="min-w-0">
             <p className="font-bold text-sm leading-tight">NeuroLearn IA</p>
-            <p className="text-xs text-[#0B6E99] leading-tight">Panel Administrador</p>
+            <p className="text-xs text-[#0B6E99] leading-tight">Panel Administrador · {institutionLabel(user)}</p>
           </div>
         </div>
       </div>

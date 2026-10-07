@@ -8,6 +8,7 @@ import MisGruposTab from './components/MisGruposTab';
 import NeuroBotsTab from './components/NeuroBotsTab';
 import NeuroAlertasTab from './components/NeuroAlertasTab';
 import TableroTab from './components/TableroTab';
+import { institutionLabel } from '../../utils/institution';
 import EvaluacionesTab from './components/EvaluacionesTab';
 import MaterialesTab from './components/MaterialesTab';
 import MensajesTab from './components/MensajesTab';
@@ -748,8 +749,9 @@ export default function TeacherPanel() {
                 text-[#787774]
                 truncate
               "
+              title={`Docente · ${institutionLabel(user)}`}
             >
-              Docente
+              Docente · {institutionLabel(user)}
             </p>
           </div>
 

@@ -82,7 +82,7 @@ proyectog/
 ├── frontend/                       # 🔨 PWA — React 18 + TypeScript + Tailwind CSS
 │   ├── src/
 │   │   ├── pages/
-│   │   │   ├── auth/               # LoginPage, RegisterPage
+│   │   │   ├── auth/               # LoginPage, recuperación y cambio de contraseña
 │   │   │   ├── student/            # StudentDashboard, ChatPage, BotsPage, MyClassesPage
 │   │   │   └── teacher/            # TeacherDashboard, CreateClassroomPage, ClassroomDetailPage
 │   │   ├── components/             # Layout, ProtectedRoute, CognitiveDashboard

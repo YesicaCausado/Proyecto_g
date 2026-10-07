@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { institutionLabel } from '../../utils/institution';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../styles/theme';
@@ -124,7 +125,7 @@ export default function SuperDashboard() {
           <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white flex-shrink-0" />
           <div>
             <p className="text-[13px] font-bold text-[#191919] leading-tight">NeuroLearn</p>
-            <p className="text-[10px] text-[#787774]">Panel Institucional</p>
+            <p className="text-[10px] text-[#787774] truncate" title={institutionLabel(user)}>{institutionLabel(user)}</p>
           </div>
         </div>
 
