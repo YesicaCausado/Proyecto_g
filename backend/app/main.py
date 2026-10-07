@@ -32,6 +32,7 @@ from app.api import teacher_stats
 from app.api import teacher_materials
 from app.api import teacher_evaluations
 from app.api import student_evaluations
+from app.api import consents
 from app.api import teacher_reports
 from app.api import teacher_ai
 from app.api import admin_users
@@ -336,6 +337,12 @@ app.include_router(
 # Evaluaciones del estudiante: /api/v1/student/evaluations...
 app.include_router(
     student_evaluations.router,
+    prefix="/api/v1",
+)
+
+# Consentimientos de cámara y micrófono: /api/v1/consents...
+app.include_router(
+    consents.router,
     prefix="/api/v1",
 )
 

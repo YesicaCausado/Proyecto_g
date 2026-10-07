@@ -81,10 +81,25 @@ from app.core.config import settings
 from app.core.permissions import FORBIDDEN_MESSAGE
 from app.models.expert_bot import ExpertBot
 from app.services.bot_documents import build_bot_context, can_use_bot
+from app.services.consent_service import has_consent
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat Adaptativo"])
+
+
+def _enforce_media_consent(db: Session, user: User, payload) -> None:
+    """
+    Descarta los indicadores de cámara/micrófono si el usuario no tiene el
+    consentimiento vigente (la interfaz ya no activa los dispositivos sin él;
+    esto lo garantiza también en el servidor).
+    """
+    if getattr(payload, "facial_data", None) and not has_consent(db, user.id, "camara_facial"):
+        logger.info("facial_data ignorado: usuario %s sin consentimiento de cámara", user.id)
+        payload.facial_data = None
+    if getattr(payload, "voice_data", None) and not has_consent(db, user.id, "microfono_voz"):
+        logger.info("voice_data ignorado: usuario %s sin consentimiento de micrófono", user.id)
+        payload.voice_data = None
 
 
 def _resolve_chat_bot(db: Session, user: User, bot_id: Optional[int],
@@ -907,6 +922,7 @@ async def save_pattern_data(
     db: Session = Depends(get_db),
 ):
     """Guarda los datos de los 5 patrones por usuario y tema."""
+    _enforce_media_consent(db, current_user, payload)
     normalized_state = _normalize_cognitive_state(payload.cognitive_state)
     session = _get_or_create_learning_session(db, current_user.id, payload.topic)
     event_data = {
@@ -1076,6 +1092,8 @@ async def send_message(
 
         topic = request.topic or "Preparación Saber 11"
         cognitive_state = _normalize_cognitive_state(request.cognitive_state)
+        # Cámara/micrófono solo con consentimiento vigente.
+        _enforce_media_consent(db, current_user, request)
         # NeuroBot (opcional): se valida antes de cualquier procesamiento.
         chat_bot = _resolve_chat_bot(db, current_user, request.bot_id, request.conversation_id)
         knowledge_meta = None

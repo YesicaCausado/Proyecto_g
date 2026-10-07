@@ -8,6 +8,8 @@ import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import { useVoiceTutor } from "../../hooks/useVoiceTutor";
+import { useConsents, type ConsentType } from "../../hooks/useConsents";
+import ConsentModal from "../../components/ConsentModal";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
 import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
@@ -348,6 +350,39 @@ export default function ChatPage() {
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
+  // Consentimiento previo: la cámara y el micrófono solo se encienden con un
+  // consentimiento vigente registrado en el backend.
+  const consents = useConsents();
+  const [consentPrompt, setConsentPrompt] = useState<ConsentType | null>(null);
+  const [consentNotice, setConsentNotice] = useState("");
+
+  const activateDevice = (type: ConsentType) => {
+    setConsentNotice("");
+    if (type === "camara_facial") facial.startCamera();
+    else voice.startMic();
+  };
+
+  const requestDevice = (type: ConsentType) => {
+    if (consents.granted(type)) activateDevice(type);
+    else setConsentPrompt(type);
+  };
+
+  const acceptConsent = async (version: string) => {
+    if (!consentPrompt) return;
+    const type = consentPrompt;
+    await consents.accept(type, version);
+    setConsentPrompt(null);
+    activateDevice(type);
+  };
+
+  const declineConsent = () => {
+    if (consentPrompt) {
+      setConsentNotice(consentPrompt === "camara_facial"
+        ? "No se activó la cámara: el consentimiento no fue aceptado."
+        : "No se activó el micrófono: el consentimiento no fue aceptado.");
+    }
+    setConsentPrompt(null);
+  };
 
   // Tutor de Voz — STT escucha al usuario, TTS responde en voz alta
   const voiceTutor = useVoiceTutor(async (transcript) => {
@@ -1007,6 +1042,22 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
       {newChatPicker}
+      {consentPrompt && (
+        <ConsentModal
+          type={consentPrompt}
+          state={consents.consents?.[consentPrompt] ?? null}
+          loadError={consents.error}
+          onAccept={acceptConsent}
+          onDecline={declineConsent}
+          onRetry={consents.load}
+        />
+      )}
+      {consentNotice && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-[#191919] text-white text-xs rounded-lg px-4 py-2.5 shadow-lg">
+          <span>{consentNotice}</span>
+          <button onClick={() => setConsentNotice("")} className="text-[#AEADAB] hover:text-white" aria-label="Cerrar">×</button>
+        </div>
+      )}
       {/* Sidebar historial de chats (estilo ChatGPT) */}
       <ChatHistorySidebar
         conversations={conversations}
@@ -1055,7 +1106,7 @@ export default function ChatPage() {
                 <button
                   onClick={() => {
                     if (facial.errorMessage) facial.resetError();
-                    facial.isStreaming ? facial.stopCamera() : facial.startCamera();
+                    facial.isStreaming ? facial.stopCamera() : requestDevice("camara_facial");
                   }}
                   title={
                     facial.errorMessage ? facial.errorMessage
@@ -1099,7 +1150,7 @@ export default function ChatPage() {
                 <button
                   onClick={() => {
                     if (voice.errorMessage) voice.resetError();
-                    voice.isStreaming ? voice.stopMic() : voice.startMic();
+                    voice.isStreaming ? voice.stopMic() : requestDevice("microfono_voz");
                   }}
                   title={
                     voice.errorMessage ? voice.errorMessage

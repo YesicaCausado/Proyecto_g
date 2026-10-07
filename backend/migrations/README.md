@@ -34,7 +34,8 @@ migrations/
 | 005 | `005_rls_multitenant.sql` | **RLS multi-tenant**: políticas de fila (institutions, users, classrooms, expert_bots, enrollments) | — |
 | 007 | `007_eliminar_licencias.sql` | **Aplicada el 6 oct 2026.** Elimina `institutions.license_type` y `institutions.expiry_date` (modelo de licencias retirado). Ejecutar después de desplegar el código; ver instrucciones en el archivo. | Oct 2026 |
 | 008 | `008_documentos_neurobots.sql` | **Aplicada.** Crea `bot_documents` y `bot_document_chunks` (base de conocimiento de los NeuroBots). | Oct 2026 |
-| 009 | `009_evaluaciones_estudiantes.sql` | **Pendiente de ejecutar — ANTES de desplegar el parche 4.** Estado, aula y fechas en `teacher_evaluations`; tabla `evaluation_submissions`. | Oct 2026 |
+| 009 | `009_evaluaciones_estudiantes.sql` | **Aplicada.** Estado, aula y fechas en `teacher_evaluations`; tabla `evaluation_submissions`. | Oct 2026 |
+| 010 | `010_consentimientos.sql` | **Pendiente de ejecutar** (antes o después del despliegue). Tabla `user_consents` (consentimiento de cámara y micrófono). | Oct 2026 |
 
 ## RLS multi-tenant (005)
 
