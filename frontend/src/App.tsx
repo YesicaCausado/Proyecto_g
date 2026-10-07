@@ -20,6 +20,7 @@ const BotsPage             = lazy(() => import('./pages/student/BotsPage'));
 const MyClassesPage        = lazy(() => import('./pages/student/MyClassesPage'));
 const ClassroomPage        = lazy(() => import('./pages/student/ClassroomPage'));
 const QuizzesPage          = lazy(() => import('./pages/student/QuizzesPage'));
+const EvaluationsPage      = lazy(() => import('./pages/student/EvaluationsPage'));
 const DesempenoPage        = lazy(() => import('./pages/student/DesempenoPage'));
 const MaterialPage         = lazy(() => import('./pages/student/MaterialPage'));
 const TableroPage          = lazy(() => import('./pages/student/TableroPage'));
@@ -93,6 +94,10 @@ function AppRoutes() {
         } />
         <Route path="/quizzes" element={
           <ProtectedRoute role="estudiante"><Layout><QuizzesPage /></Layout></ProtectedRoute>
+        } />
+        {/* Evaluaciones publicadas por los profesores (lista, responder, resultado) */}
+        <Route path="/evaluations" element={
+          <ProtectedRoute role="estudiante"><Layout><EvaluationsPage /></Layout></ProtectedRoute>
         } />
         {/* Historial de quizzes dentro de la sección Desafíos */}
         <Route path="/quizzes/history" element={

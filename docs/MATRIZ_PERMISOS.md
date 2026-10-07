@@ -40,12 +40,12 @@ Rechazo por permisos: HTTP 403 con el mensaje
 |---------|:-----:|:--------------:|:--------:|:----------:|-------------------------|
 | `gestionar_aulas` | | | ✅ | | `api/classroom.py` (aulas del docente, estudiantes del aula) |
 | `asignar_bots_aula` | | | ✅ | | `api/classroom.py` (NeuroBots del aula) |
-| `gestionar_evaluaciones` | | | ✅ | | `api/teacher_evaluations.py` |
+| `gestionar_evaluaciones` | | | ✅ | | `api/teacher_evaluations.py` (crear, publicar, cerrar, resultados, calificar) |
 | `gestionar_materiales` | | | ✅ | | `api/teacher_materials.py` |
 | `publicar_en_tablero` | | | ✅ | | `api/posts.py` (crear publicación) |
 | `usar_ia_docente` | ✅ | | ✅ | | `api/teacher_ai.py` |
 | `gestionar_documentos_neurobot` | ✅ | ✅ | ✅ | | `api/bot_documents.py` (además, solo el creador del NeuroBot o el Admin) |
-| `participar_en_aulas` | | | | ✅ | `api/classroom.py` (unirse / mis aulas) |
+| `participar_en_aulas` | | | | ✅ | `api/classroom.py` (unirse / mis aulas), `api/student_evaluations.py` (responder evaluaciones) |
 | `usar_chat_ia` | ✅ | | ✅ | ✅ | `api/chat.py`, `api/conversations.py` |
 | `ver_neuroalertas` | ✅ | ✅ | ✅ | | `api/super_stats.py` |
 | `exportar_reportes` | ✅ | ✅ | ✅ | | `api/teacher_reports.py` |

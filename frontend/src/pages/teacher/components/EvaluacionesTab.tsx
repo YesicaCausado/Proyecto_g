@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, CheckCircle, Eye, AlertCircle,
-  Trash2, ToggleLeft, ToggleRight, X, Sparkles, Loader2,
+  Plus, CheckCircle, Eye, AlertCircle, Pencil, Send, Lock,
+  Trash2, X, Sparkles, Loader2,
 } from 'lucide-react';
-import api from '../../../services/api';
+import api, { invalidateApiCache } from '../../../services/api';
 import { COMPETENCIES } from '../../../data/competencies';
+import EvaluationResults from './EvaluationResults';
 
+// 'match' (emparejamiento) solo puede venir de evaluaciones antiguas: ya no se crea.
 type QuestionType = 'multiple' | 'truefalse' | 'open' | 'match';
+type EvalStatus = 'borrador' | 'publicada' | 'cerrada';
 type Difficulty = 'basico' | 'intermedio' | 'avanzado';
 
 interface Question {
@@ -22,14 +25,19 @@ interface Question {
 interface Evaluation {
   id: string;
   title: string;
+  classroomId: number | null;
   group: string;
   type: 'cuestionario' | 'examen';
-  date: string;
-  duration: number; // minutos
+  date: string;          // fecha límite AAAA-MM-DD ("" = sin límite)
+  duration: number;      // minutos por intento
   attempts: number;
   questions: Question[];
-  active: boolean;
-  submissions: number;
+  status: EvalStatus;
+  pastDeadline: boolean;
+  studentsSubmitted: number;
+  studentsTotal: number;
+  pendingReview: number;
+  editable: boolean;
 }
 
 /** Aula real del profesor (GET /classrooms/my-classes). */
@@ -44,7 +52,14 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   multiple:  'Selección múltiple',
   truefalse: 'Verdadero / Falso',
   open:      'Pregunta abierta',
-  match:     'Emparejamiento',
+  match:     'Selección múltiple',
+};
+const EDITOR_TYPES: QuestionType[] = ['multiple', 'truefalse', 'open'];
+
+const STATUS_BADGE: Record<EvalStatus, { label: string; cls: string }> = {
+  borrador:  { label: 'Borrador',  cls: 'bg-[#F7F6F3] text-[#787774]' },
+  publicada: { label: 'Publicada', cls: 'bg-[#EEF7F4] text-[#0F7B6C]' },
+  cerrada:   { label: 'Cerrada',   cls: 'bg-[#EEF3FD] text-[#2E6FDB]' },
 };
 
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
@@ -66,21 +81,26 @@ function apiError(err: any, fallback: string): string {
 
 function toEvaluation(e: any): Evaluation {
   return {
-    id:          String(e.id),
-    title:       e.title,
-    group:       e.group,
-    type:        e.type,
-    date:        e.date,
-    duration:    e.duration,
-    attempts:    e.attempts,
-    questions:   e.questions ?? [],
-    active:      e.active,
-    submissions: e.submissions,
+    id:                String(e.id),
+    title:             e.title,
+    classroomId:       e.classroom_id ?? null,
+    group:             e.group,
+    type:              e.type,
+    date:              e.date ?? '',
+    duration:          e.duration,
+    attempts:          e.attempts,
+    questions:         e.questions ?? [],
+    status:            e.status,
+    pastDeadline:      !!e.past_deadline,
+    studentsSubmitted: e.students_submitted ?? 0,
+    studentsTotal:     e.students_total ?? 0,
+    pendingReview:     e.pending_review ?? 0,
+    editable:          !!e.editable,
   };
 }
 
 const EMPTY_FORM = {
-  title: '', group: '', type: 'cuestionario' as 'cuestionario' | 'examen',
+  title: '', classroom_id: 0, type: 'cuestionario' as 'cuestionario' | 'examen',
   date: '', duration: 30, attempts: 1,
 };
 const EMPTY_Q = { type: 'multiple' as QuestionType, text: '', options: ['', '', '', ''], correct: '', points: 2 };
@@ -92,6 +112,9 @@ export default function EvaluacionesTab() {
   const [groups,      setGroups]      = useState<Group[]>([]);
   const [showModal,   setShowModal]   = useState(false);
   const [viewEval,    setViewEval]    = useState<Evaluation | null>(null);
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [busyId,      setBusyId]      = useState<string | null>(null);
+  const [notice,      setNotice]      = useState('');
   const [step,        setStep]        = useState<1 | 2>(1);
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -112,10 +135,21 @@ export default function EvaluacionesTab() {
   const [saveError, setSaveError] = useState('');
 
   /* ── Carga inicial: evaluaciones y grupos reales del profesor ──────── */
+  const reload = async () => {
+    invalidateApiCache('/teacher/evaluations');
+    try {
+      const r = await api.get('/teacher/evaluations');
+      setEvals((r.data.evaluations ?? []).map(toEvaluation));
+    } catch (err) {
+      setListError(apiError(err, 'No se pudieron cargar las evaluaciones.'));
+    }
+  };
+
   useEffect(() => {
     (async () => {
       setLoading(true);
       setListError('');
+      invalidateApiCache('/teacher/evaluations');
       try {
         const [evRes, grRes] = await Promise.all([
           api.get('/teacher/evaluations'),
@@ -133,17 +167,35 @@ export default function EvaluacionesTab() {
     })();
   }, []);
 
-  const selectedGroup = groups.find(g => g.name === form.group);
+  const selectedGroup = groups.find(g => g.id === form.classroom_id);
 
-  const openCreate = () => {
-    setForm({ ...EMPTY_FORM, group: groups[0]?.name ?? '' });
-    setQuestions([]);
+  const resetEditor = () => {
     setNewQ(EMPTY_Q);
     setQError('');
     setAiDraft([]);
     setAiError('');
     setSaveError('');
     setStep(1);
+  };
+
+  const openEdit = (ev: Evaluation) => {
+    setEditingId(ev.id);
+    setForm({
+      title: ev.title,
+      classroom_id: groups.some(g => g.id === ev.classroomId) ? ev.classroomId! : (groups[0]?.id ?? 0),
+      type: ev.type, date: ev.date, duration: ev.duration, attempts: ev.attempts,
+    });
+    // Las preguntas antiguas de "emparejamiento" se editan como selección múltiple.
+    setQuestions(ev.questions.map(q => (q.type === 'match' ? { ...q, type: 'multiple' } : q)));
+    resetEditor();
+    setShowModal(true);
+  };
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM, classroom_id: groups[0]?.id ?? 0 });
+    setQuestions([]);
+    resetEditor();
     setShowModal(true);
   };
 
@@ -163,22 +215,35 @@ export default function EvaluacionesTab() {
     setStep(2);
   };
 
-  const toggleEval = async (id: string) => {
+  const changeStatus = async (ev: Evaluation, action: 'publish' | 'close') => {
+    if (busyId) return;
+    const question = action === 'publish'
+      ? `¿Publicar «${ev.title}»? Los estudiantes de ${ev.group} podrán responderla y ya no podrás editarla cuando alguien la empiece.`
+      : `¿Cerrar «${ev.title}»? No recibirá más entregas y los estudiantes verán la corrección.`;
+    if (!window.confirm(question)) return;
+    setBusyId(ev.id);
     setListError('');
+    setNotice('');
     try {
-      const r = await api.post(`/teacher/evaluations/${id}/toggle`);
-      setEvals(prev => prev.map(e => e.id === id ? { ...e, active: r.data.active } : e));
+      const r = await api.post(`/teacher/evaluations/${ev.id}/${action}`);
+      setEvals(prev => prev.map(e => e.id === ev.id ? toEvaluation(r.data) : e));
+      invalidateApiCache('/teacher/evaluations');
+      setNotice(action === 'publish' ? 'Evaluación publicada.' : 'Evaluación cerrada.');
     } catch (err) {
       setListError(apiError(err, 'No se pudo cambiar el estado de la evaluación.'));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const deleteEval = async (id: string) => {
-    if (!window.confirm('¿Eliminar evaluación?')) return;
+  const deleteEval = async (ev: Evaluation) => {
+    const warn = ev.studentsSubmitted > 0 ? ` Se eliminarán también las ${ev.studentsSubmitted} entrega(s) de estudiantes.` : '';
+    if (!window.confirm(`¿Eliminar «${ev.title}»?${warn}`)) return;
     setListError('');
     try {
-      await api.delete(`/teacher/evaluations/${id}`);
-      setEvals(prev => prev.filter(e => e.id !== id));
+      await api.delete(`/teacher/evaluations/${ev.id}`);
+      invalidateApiCache('/teacher/evaluations');
+      setEvals(prev => prev.filter(e => e.id !== ev.id));
     } catch (err) {
       setListError(apiError(err, 'No se pudo eliminar la evaluación.'));
     }
@@ -262,18 +327,24 @@ export default function EvaluacionesTab() {
 
   /* ── Guardar evaluación (POST /teacher/evaluations) ────────────────── */
   const handleCreate = async () => {
-    if (saving || !form.title.trim() || !form.group || questions.length === 0) return;
+    if (saving || !form.title.trim() || !form.classroom_id || questions.length === 0) return;
     setSaving(true);
     setSaveError('');
     try {
-      const r = await api.post('/teacher/evaluations', {
+      const payload = {
         ...form,
         title: form.title.trim(),
         questions: questions.map(({ id, type, text, options, correct, points, explanation }) => ({
           id, type, text, options, correct, points, explanation,
         })),
-      });
-      setEvals(prev => [toEvaluation(r.data), ...prev]);
+      };
+      const r = editingId
+        ? await api.put(`/teacher/evaluations/${editingId}`, payload)
+        : await api.post('/teacher/evaluations', payload);
+      const saved = toEvaluation(r.data);
+      setEvals(prev => editingId ? prev.map(e => e.id === editingId ? saved : e) : [saved, ...prev]);
+      invalidateApiCache('/teacher/evaluations');
+      setNotice(editingId ? 'Cambios guardados.' : 'Evaluación guardada como borrador. Publícala para que tus estudiantes la vean.');
       setShowModal(false);
     } catch (err) {
       setSaveError(apiError(err, 'No se pudo guardar la evaluación.'));
@@ -283,34 +354,10 @@ export default function EvaluacionesTab() {
   };
 
   if (viewEval) return (
-    <div className="space-y-5">
-      <button onClick={() => setViewEval(null)} className="text-sm text-[#787774] hover:text-[#37352F]">← Evaluaciones</button>
-      <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
-        <h2 className="text-lg font-bold text-[#191919]">{viewEval.title}</h2>
-        <p className="text-sm text-[#787774]">{viewEval.group} · {viewEval.type} · {viewEval.date || 'sin fecha'} · {viewEval.duration} min</p>
-        <div className="mt-4 grid grid-cols-3 gap-4 text-center">
-          <div><p className="text-xl font-bold text-[#2E6FDB]">{viewEval.questions.length}</p><p className="text-xs text-[#787774]">Preguntas</p></div>
-          <div><p className="text-xl font-bold text-[#0F7B6C]">{viewEval.submissions}</p><p className="text-xs text-[#787774]">Entregas</p></div>
-          <div><p className="text-xl font-bold text-[#D9730D]">{viewEval.attempts}</p><p className="text-xs text-[#787774]">Intentos</p></div>
-        </div>
-      </div>
-      <div className="space-y-3">
-        {viewEval.questions.map((q, i) => (
-          <div key={q.id ?? i} className="bg-white border border-[#E9E9E7] rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <span className="w-6 h-6 rounded-full bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center text-xs font-bold flex-shrink-0">{i+1}</span>
-              <div className="flex-1">
-                <span className="text-[10px] font-semibold text-[#787774] uppercase">{TYPE_LABELS[q.type]}</span>
-                <p className="text-sm text-[#191919] mt-0.5 whitespace-pre-line">{q.text}</p>
-                {q.options && <div className="mt-2 space-y-1">{q.options.map(o=><div key={o} className={`text-xs px-2 py-1 rounded ${o===q.correct ? 'bg-emerald-50 text-[#0F7B6C] font-medium' : 'text-[#787774]'}`}>{o}</div>)}</div>}
-                {q.explanation && <p className="mt-2 text-xs text-[#787774] italic">💡 {q.explanation}</p>}
-              </div>
-              <span className="text-xs font-semibold text-[#6940A5]">{q.points} pts</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <EvaluationResults
+      evaluationId={viewEval.id}
+      onBack={() => { setViewEval(null); reload(); }}
+    />
   );
 
   const inputCls = 'w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB]';
@@ -338,12 +385,17 @@ export default function EvaluacionesTab() {
           <AlertCircle className="w-4 h-4" /> {listError}
         </div>
       )}
+      {notice && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#EEF7F4] border border-[#0F7B6C]/20 text-sm text-[#0F7B6C]">
+          <CheckCircle className="w-4 h-4" /> {notice}
+        </div>
+      )}
 
       <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
-              {['Título','Grupo','Tipo','Fecha','Preguntas','Entregas','Estado','Acciones'].map(h=>(
+              {['Título','Grupo','Tipo','Fecha límite','Preguntas','Entregas','Estado','Acciones'].map(h=>(
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#787774] uppercase">{h}</th>
               ))}
             </tr>
@@ -352,25 +404,48 @@ export default function EvaluacionesTab() {
             {evals.map(ev => (
               <tr key={ev.id} className="border-b border-[#F7F6F3] hover:bg-[#F7F6F3]/50">
                 <td className="px-4 py-3 font-medium text-[#191919] max-w-[180px] truncate">{ev.title}</td>
-                <td className="px-4 py-3 text-xs text-[#787774]">{ev.group}</td>
+                <td className="px-4 py-3 text-xs text-[#787774]">
+                  {ev.classroomId ? ev.group : <span className="text-[#D9730D]">Sin grupo · edítala para asignar uno</span>}
+                </td>
                 <td className="px-4 py-3">
                   <span className="px-2 py-0.5 bg-[#EEF3FD] text-[#2E6FDB] rounded text-[10px] font-medium capitalize">{ev.type}</span>
                 </td>
-                <td className="px-4 py-3 text-xs text-[#787774]">{ev.date}</td>
+                <td className="px-4 py-3 text-xs text-[#787774]">
+                  {ev.date || 'Sin límite'}{ev.pastDeadline && ev.status === 'publicada' ? ' · vencida' : ''}
+                </td>
                 <td className="px-4 py-3 text-center text-sm font-semibold text-[#191919]">{ev.questions.length}</td>
-                <td className="px-4 py-3 text-center text-sm font-semibold text-[#0F7B6C]">{ev.submissions}</td>
-                <td className="px-4 py-3 text-center">
-                  <button onClick={() => toggleEval(ev.id)}>
-                    {ev.active ? <ToggleRight className="w-6 h-6 text-[#0F7B6C]" /> : <ToggleLeft className="w-6 h-6 text-[#AEADAB]" />}
-                  </button>
+                <td className="px-4 py-3 text-center text-sm font-semibold text-[#0F7B6C]">
+                  {ev.status === 'borrador' ? '—' : `${ev.studentsSubmitted}/${ev.studentsTotal}`}
+                  {ev.pendingReview > 0 && <span className="block text-[10px] font-medium text-[#6940A5]">{ev.pendingReview} por calificar</span>}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${STATUS_BADGE[ev.status].cls}`}>{STATUS_BADGE[ev.status].label}</span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <button onClick={() => setViewEval(ev)} title="Ver"
+                    {ev.status === 'borrador' && (
+                      <button onClick={() => changeStatus(ev, 'publish')} disabled={busyId === ev.id || !ev.classroomId} title="Publicar"
+                        className="h-7 px-2 flex items-center gap-1 rounded bg-[#2E6FDB] text-white text-[11px] font-medium hover:bg-[#255DC0] disabled:opacity-50">
+                        {busyId === ev.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />} Publicar
+                      </button>
+                    )}
+                    {ev.status === 'publicada' && (
+                      <button onClick={() => changeStatus(ev, 'close')} disabled={busyId === ev.id} title="Cerrar"
+                        className="h-7 px-2 flex items-center gap-1 rounded border border-[#E9E9E7] text-[#37352F] text-[11px] font-medium hover:bg-[#F7F6F3] disabled:opacity-50">
+                        {busyId === ev.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />} Cerrar
+                      </button>
+                    )}
+                    {ev.editable && (
+                      <button onClick={() => openEdit(ev)} title="Editar"
+                        className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#F7F6F3] text-[#787774] transition-colors">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button onClick={() => setViewEval(ev)} title="Ver resultados"
                       className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#EEF3FD] text-[#2E6FDB] transition-colors">
                       <Eye className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => deleteEval(ev.id)} title="Eliminar"
+                    <button onClick={() => deleteEval(ev)} title="Eliminar"
                       className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-[#AEADAB] hover:text-[#E03E3E] transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -391,7 +466,7 @@ export default function EvaluacionesTab() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="px-6 py-4 border-b border-[#E9E9E7] flex items-center justify-between flex-shrink-0">
               <div>
-                <h3 className="font-semibold text-[#191919]">Crear evaluación</h3>
+                <h3 className="font-semibold text-[#191919]">{editingId ? 'Editar evaluación' : 'Crear evaluación'}</h3>
                 <p className="text-xs text-[#787774]">Paso {step} de 2: {step===1 ? 'Configuración' : 'Preguntas'}</p>
               </div>
               <button onClick={closeCreate} className="text-[#787774] hover:text-[#37352F] text-xl">×</button>
@@ -415,8 +490,8 @@ export default function EvaluacionesTab() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelCls}>Grupo *</label>
-                      <select value={form.group} onChange={e=>setForm(p=>({...p,group:e.target.value}))} className={`${inputCls} bg-white`}>
-                        {groups.map(g=><option key={g.id} value={g.name}>{g.name}{g.grade ? ` · ${g.grade}` : ''}</option>)}
+                      <select value={form.classroom_id} onChange={e=>setForm(p=>({...p,classroom_id:Number(e.target.value)}))} className={`${inputCls} bg-white`}>
+                        {groups.map(g=><option key={g.id} value={g.id}>{g.name}{g.grade ? ` · ${g.grade}` : ''}</option>)}
                       </select>
                     </div>
                     <div>
@@ -429,11 +504,11 @@ export default function EvaluacionesTab() {
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className={labelCls}>Fecha</label>
+                      <label className={labelCls}>Fecha límite</label>
                       <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} className={inputCls} />
                     </div>
                     <div>
-                      <label className={labelCls}>Duración (min)</label>
+                      <label className={labelCls}>Tiempo (min)</label>
                       <input type="number" value={form.duration} onChange={e=>setForm(p=>({...p,duration:+e.target.value}))} min={5} max={180} className={inputCls} />
                     </div>
                     <div>
@@ -441,6 +516,11 @@ export default function EvaluacionesTab() {
                       <input type="number" value={form.attempts} onChange={e=>setForm(p=>({...p,attempts:+e.target.value}))} min={1} max={5} className={inputCls} />
                     </div>
                   </div>
+                  <p className="text-[11px] text-[#787774]">
+                    La fecha límite es el último día para entregar (hasta las 11:59 p. m.); déjala vacía si no tiene límite.
+                    El tiempo corre desde que el estudiante abre la evaluación. Con varios intentos cuenta el mejor.
+                    Se guarda como borrador: los estudiantes la verán cuando la publiques.
+                  </p>
                 </>
                 )
               ) : (
@@ -552,7 +632,7 @@ export default function EvaluacionesTab() {
                     <div className="flex items-center gap-2">
                       <select value={newQ.type} onChange={e=>setNewQ(p=>({...p,type:e.target.value as QuestionType, correct:''}))}
                         className="flex-1 px-3 py-2 border border-[#E9E9E7] rounded-lg text-xs focus:outline-none bg-white">
-                        {(Object.entries(TYPE_LABELS) as [QuestionType,string][]).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                        {EDITOR_TYPES.map(v=><option key={v} value={v}>{TYPE_LABELS[v]}</option>)}
                       </select>
                       <input type="number" value={newQ.points} onChange={e=>setNewQ(p=>({...p,points:Math.min(10, Math.max(1, +e.target.value || 1))}))} min={1} max={10}
                         className="w-16 px-2 py-2 border border-[#E9E9E7] rounded-lg text-xs focus:outline-none text-center" title="Puntos" />
@@ -594,14 +674,14 @@ export default function EvaluacionesTab() {
                   : <button onClick={closeCreate} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
                 }
                 {step === 1
-                  ? <button onClick={goToQuestions} disabled={!form.title.trim() || !form.group}
+                  ? <button onClick={goToQuestions} disabled={!form.title.trim() || !form.classroom_id}
                       className="px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
                       Siguiente →
                     </button>
                   : <button onClick={handleCreate} disabled={questions.length === 0 || saving}
                       className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
                       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      {saving ? 'Guardando...' : 'Crear evaluación'}
+                      {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Guardar borrador'}
                     </button>
                 }
               </div>

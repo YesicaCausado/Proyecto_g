@@ -31,6 +31,7 @@ from app.api import super_stats
 from app.api import teacher_stats
 from app.api import teacher_materials
 from app.api import teacher_evaluations
+from app.api import student_evaluations
 from app.api import teacher_reports
 from app.api import teacher_ai
 from app.api import admin_users
@@ -106,6 +107,14 @@ def _apply_schema_and_migrations():
         Base.metadata.create_all(
             bind=engine
         )
+
+        # SQLite local: create_all no agrega columnas nuevas a tablas que ya
+        # existen; se completan aquí para que la base de desarrollo no quede
+        # desincronizada. En PostgreSQL las columnas se agregan con las
+        # migraciones de backend/migrations/ (Supabase).
+        if engine.dialect.name == "sqlite":
+            from app.db.migrate import _add_missing_sqlite_columns
+            _add_missing_sqlite_columns(engine)
 
         print("[DB] Schema inicializado correctamente.")
 
@@ -321,6 +330,12 @@ app.include_router(
 
 app.include_router(
     teacher_evaluations.router,
+    prefix="/api/v1",
+)
+
+# Evaluaciones del estudiante: /api/v1/student/evaluations...
+app.include_router(
+    student_evaluations.router,
     prefix="/api/v1",
 )
 

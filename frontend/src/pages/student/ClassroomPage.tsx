@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import StudentEvaluationsList from '../../components/evaluations/StudentEvaluationsList';
 import api from '../../services/api';
 import type { Classroom } from '../../types';
 import {
@@ -212,6 +213,9 @@ export default function ClassroomPage() {
               </div>
             )}
           </section>
+
+          {/* Evaluaciones publicadas por el profesor en esta clase */}
+          <StudentEvaluationsList classroomId={classroom.id} title="Evaluaciones de esta clase" />
         </div>
 
         {/* Barra lateral */}

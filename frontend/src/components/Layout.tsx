@@ -20,6 +20,7 @@ import {
   History,
   Play,
   Target,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
 import { navItemStyle } from '../styles/sidebar';
@@ -65,6 +66,7 @@ const iconMap: Record<string, ReactNode> = {
   historial: <History className="w-4 h-4" />,
   desempeno: <TrendingUp className="w-4 h-4" />,
   meta: <Target className="w-4 h-4" />,
+  evaluaciones: <ClipboardCheck className="w-4 h-4" />,
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -133,6 +135,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           label: 'MI INSTITUCIÓN',
           items: [
             { id: 'mis-clases', type: 'link', to: '/my-classes', label: 'Mis Clases', icon: 'clases' },
+            { id: 'evaluaciones', type: 'link', to: '/evaluations', label: 'Evaluaciones', icon: 'evaluaciones' },
             { id: 'tablero', type: 'link', to: '/tablero', label: 'Tablero', icon: 'tablero' },
             { id: 'calendario', type: 'link', to: '/calendar', label: 'Calendario', icon: 'calendario' },
           ],

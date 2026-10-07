@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date, timedelta
 import sys
 import unittest
 from unittest import mock
@@ -133,11 +134,13 @@ class ApiTests(unittest.TestCase):
         sp = user("super_eval", UserRole.SUPER_PROFESOR.value, inst_a)
         profe_b = user("profe_eval_b", UserRole.PROFESOR.value, inst_b)
         db.flush()
-        db.add(Classroom(name="Matemáticas 9A", subject="Matemáticas", grade="9°",
-                         teacher_id=profe.id, invite_code="MAT9A1", is_active=True))
-        db.add(Classroom(name="Física 10B", subject="Física", grade="10°",
-                         teacher_id=profe_b.id, invite_code="FIS10B", is_active=True))
+        own = Classroom(name="Matemáticas 9A", subject="Matemáticas", grade="9°",
+                        teacher_id=profe.id, invite_code="MAT9A1", is_active=True)
+        other = Classroom(name="Física 10B", subject="Física", grade="10°",
+                          teacher_id=profe_b.id, invite_code="FIS10B", is_active=True)
+        db.add_all([own, other])
         db.commit()
+        cls.own_classroom, cls.other_classroom = own.id, other.id
         cls.headers = {
             name: {"Authorization": "Bearer " + create_access_token({"sub": u.username})}
             for name, u in {"profe": profe, "alumno": alumno, "super": sp, "profe_b": profe_b}.items()
@@ -213,9 +216,10 @@ class ApiTests(unittest.TestCase):
             resp, _ = self.generate(who=who, ai_response=json.dumps(AI_QUESTIONS))
             self.assertEqual(resp.status_code, 403, who)
 
-    def _evaluation(self, questions, group="Matemáticas 9A"):
-        return {"title": "Parcial ecuaciones", "group": group, "type": "examen",
-                "date": "2026-10-20", "duration": 45, "attempts": 1, "questions": questions}
+    def _evaluation(self, questions, classroom_id=None):
+        future = (date.today() + timedelta(days=10)).isoformat()
+        return {"title": "Parcial ecuaciones", "classroom_id": classroom_id or self.own_classroom,
+                "type": "examen", "date": future, "duration": 45, "attempts": 1, "questions": questions}
 
     def test_04_save_generated_questions(self):
         resp, _ = self.generate(ai_response=json.dumps(AI_QUESTIONS, ensure_ascii=False))
@@ -240,8 +244,8 @@ class ApiTests(unittest.TestCase):
     def test_05_save_rejects_invalid_data(self):
         good = {"type": "multiple", "text": "¿2+2?", "options": ["3", "4", "5", "6"], "correct": "4"}
         cases = [
-            (self._evaluation([good], group="Física 10B"), 400),           # grupo de otro profesor
-            (self._evaluation([good], group="Grupo inventado"), 400),
+            (self._evaluation([good], classroom_id=self.other_classroom), 400),  # grupo de otro profesor
+            (self._evaluation([good], classroom_id=99999), 400),               # grupo inexistente
             (self._evaluation([]), 400),
             (self._evaluation([{**good, "correct": "7"}]), 422),           # correcta fuera de las opciones
             (self._evaluation([{**good, "options": ["4", "4"]}]), 422),    # opciones repetidas
