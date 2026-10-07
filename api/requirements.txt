@@ -5,6 +5,10 @@
 #   - openai (SDK)                                             -> Groq/Gemini usan httpx
 #   - SDK de correo                                            -> Brevo se llama por REST con httpx
 #   - python-jose[cryptography]                                -> HS256 usa HMAC de stdlib
+#     (cryptography sí se instala aparte: la usa Integraciones, ver abajo)
+# Las pruebas (backend/requirements-dev.txt) y GitHub Actions instalan este
+# mismo archivo: si falta una librería que use la app, la CI lo detecta
+# (backend/tests/test_dependencias_produccion.py).
 fastapi==0.104.1
 sqlalchemy==2.0.23
 pydantic==2.5.2
@@ -18,3 +22,6 @@ python-dotenv==1.0.0
 psycopg2-binary==2.9.9
 # Lectura de PDF para la base de conocimiento de los NeuroBots (Python puro)
 pypdf==5.1.0
+# Cifrado (Fernet) de los tokens OAuth de Google Drive en Integraciones
+# (app/services/integration_service.py). Sin ella, conectar Drive da error 500.
+cryptography==50.0.2

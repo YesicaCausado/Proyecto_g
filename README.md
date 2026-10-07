@@ -1,5 +1,6 @@
 ﻿# 🧠 NeuroLearn AI
 
+[![CI](https://github.com/YesicaCausado/Proyecto_g/actions/workflows/ci.yml/badge.svg)](https://github.com/YesicaCausado/Proyecto_g/actions/workflows/ci.yml)
 
 **Plataforma B2B2C de Aprendizaje Adaptativo con Inferencia Neuroconductual Digital**
 
@@ -143,10 +144,13 @@ npm run dev
 ### Pruebas automáticas (backend)
 ```bash
 cd backend
-pip install -r requirements-dev.txt
+uv venv --python 3.12 .venv && source .venv/bin/activate   # Python 3.12
+uv pip install -r requirements-dev.txt                      # dependencias de producción + pytest
 python -m pytest -v
 # BD en memoria, sin correos reales ni IA real. Detalle: docs/PRUEBAS.md
 ```
+
+GitHub Actions ejecuta estas pruebas y la compilación del frontend en cada push (`.github/workflows/ci.yml`).
 
 ---
 

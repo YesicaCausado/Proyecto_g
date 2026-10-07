@@ -1,0 +1,95 @@
+# Integración continua de NeuroLearn IA.
+#
+# En cada push y en cada pull request:
+#   - Backend: instala las dependencias de PRODUCCIÓN (api/requirements.txt,
+#     lo mismo que instala Vercel) + pytest con Python 3.12 y ejecuta la suite
+#     completa (backend/tests). Las pruebas usan SQLite en memoria, correo a
+#     consola y dobles para la IA: no necesitan secretos ni servicios externos.
+#   - Frontend: npm ci + npm run build (tsc -b && vite build), el mismo
+#     comando que ejecuta Vercel.
+#
+# Si un job falla, GitHub marca el commit con ✗ y muestra el error en la
+# pestaña "Actions". Guía: docs/PRUEBAS.md
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
+
+# El workflow solo lee el código: no publica, no despliega, no usa secretos.
+permissions:
+  contents: read
+
+# Si llegan varios push seguidos a la misma rama, solo se ejecuta el último.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend · pruebas (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            api/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Instalar dependencias de producción + pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ejecutar las pruebas
+        run: python -m pytest -v
+
+      - name: Verificar que las pruebas no modificaron archivos versionados
+        run: git diff --exit-code --stat
+
+  frontend:
+    name: Frontend · compilación (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar (TypeScript + Vite)
+        run: npm run build

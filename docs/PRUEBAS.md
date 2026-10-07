@@ -7,11 +7,28 @@ pruebas. No hay pruebas que solo verifiquen que una pantalla carga.
 
 ## Cómo ejecutarlas
 
-Desde la carpeta `backend/`, con el entorno virtual del proyecto activo:
+**Requisito: Python 3.12** (la versión de Vercel y de GitHub Actions). Con
+Python 3.13 o 3.14 algunas librerías fijadas no tienen paquetes compilados y
+`pip` intenta compilarlas, lo que falla.
+
+`requirements-dev.txt` instala exactamente las dependencias de producción
+(`api/requirements.txt`, lo que instala Vercel) más pytest, para que las
+pruebas corran con lo mismo que corre en producción.
+
+Preparar el entorno, una sola vez (por ejemplo en GitHub Codespaces):
 
 ```bash
-pip install -r requirements-dev.txt     # requirements.txt + pytest
+cd backend
+pip install uv
+uv venv --python 3.12 .venv
+source .venv/bin/activate          # el prompt empieza con (.venv)
+uv pip install -r requirements-dev.txt
+```
 
+En cada terminal nueva basta con `source .venv/bin/activate`. Luego, desde
+`backend/`:
+
+```bash
 python -m pytest                        # toda la suite
 python -m pytest -v                     # con el nombre de cada prueba
 python -m pytest tests/test_auth_roles.py -v          # un archivo
@@ -37,7 +54,7 @@ python -m unittest tests.test_flujo_institucional -v
 > importar los scripts manuales antiguos (ver más abajo), que llaman a un
 > servidor en vivo. Use `python -m pytest`.
 
-Resultado esperado: `115 passed` (≈ 7 s). No requiere internet, servidor
+Resultado esperado: `119 passed` (≈ 10 s). No requiere internet, servidor
 levantado, base de datos ni claves de IA o de correo.
 
 ## Aislamiento: qué nunca tocan las pruebas
@@ -113,6 +130,7 @@ paso:
 
 | Archivo | Pruebas | Cubre |
 |---|--:|---|
+| `test_dependencias_produccion.py` | 4 | Toda librería que importa `backend/app` está en `api/requirements.txt` (lo que instala Vercel); detecta casos como el de `cryptography` |
 | `test_password_reset_service.py` | 25 | CU-03 a nivel de caso de uso: límites (cooldown, 3/hora), hash del token, expiración, contraseña débil, adaptador de Brevo, plantilla |
 | `test_security.py` | 7 | Validación de origen (CSRF), bloqueo por fuerza bruta, XSS y SQLi en login, cabeceras de seguridad |
 | `test_bot_documents.py` | 14 | Documentos de NeuroBots: validación, extracción PDF/DOCX/TXT, recuperación, permisos por institución |
@@ -139,6 +157,36 @@ por `test_auth_roles.py` y `test_flujo_institucional.py`. Los scripts sueltos
 de `backend/` (`test_login.py`, `test_all_logins.py`, `_audit_live_tests.ps1`,
 `_audit_db_inspect.py`) también quedan reemplazados; su retiro se hace en el
 punto de limpieza del repositorio.
+
+## Integración continua (GitHub Actions)
+
+`.github/workflows/ci.yml` ejecuta todo esto automáticamente en GitHub en cada
+`push` (a cualquier rama) y en cada pull request hacia `main`. No usa secretos
+ni servicios externos y solo tiene permiso de lectura sobre el repositorio.
+Los cambios que solo tocan documentación (`*.md`, `docs/`) no lo disparan.
+
+| Job | Qué hace | Falla si… |
+|---|---|---|
+| **Backend · pruebas (Python 3.12)** | Instala `backend/requirements-dev.txt` (dependencias de producción + pytest) y ejecuta `python -m pytest -v` | alguna prueba falla, falta una dependencia en `api/requirements.txt` o una prueba modificó un archivo versionado (por ejemplo `neurolearn.db`) |
+| **Frontend · compilación (Node 22)** | `npm ci` y `npm run build` (`tsc -b && vite build`), el mismo comando de Vercel | hay errores de TypeScript o la compilación de Vite falla |
+
+Cómo ver el resultado:
+
+- En GitHub, cada commit muestra ✓ (todo bien), ✗ (algo falló) o un punto
+  amarillo (en ejecución) junto a su mensaje, y el README muestra la insignia
+  **CI** con el estado de `main`.
+- La pestaña **Actions** del repositorio lista cada ejecución. Al abrir una con
+  ✗ se ve el job y el paso que fallaron, con la salida completa de pytest o de
+  `tsc`.
+- Para relanzar una ejecución: **Actions → CI → Run workflow**, o el botón
+  **Re-run jobs** dentro de la ejecución.
+
+Si la CI falla, se reproduce el mismo error en local con los comandos de
+arriba (backend) o con `cd frontend && npm ci && npm run build` (frontend),
+se corrige y se hace un nuevo `push`.
+
+El workflow `deploy-pages.yml` (publicación en GitHub Pages) es independiente y
+sigue funcionando igual.
 
 ## Escribir una prueba nueva
 

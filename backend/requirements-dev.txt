@@ -1,4 +1,7 @@
-# Dependencias de desarrollo y pruebas (no se instalan en Vercel).
+# Dependencias de desarrollo y pruebas.
+# Usa EXACTAMENTE las dependencias de producción (las que instala Vercel desde
+# api/requirements.txt) más pytest, para que las pruebas corran con lo mismo
+# que corre en producción. Requiere Python 3.12 (ver docs/PRUEBAS.md).
 #   pip install -r requirements-dev.txt
--r requirements.txt
+-r ../api/requirements.txt
 pytest==8.3.3
