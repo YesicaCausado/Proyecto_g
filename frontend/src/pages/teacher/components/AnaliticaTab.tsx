@@ -3,11 +3,12 @@ import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users, TrendingUp, AlertTriangle, Brain,
-  BarChart2, Award, Activity, Clock, Target, Sparkles,
+  BarChart2, Award, Activity, Clock, Target, Sparkles, Download,
   ArrowUpRight, ArrowDownRight, Bot, Layers, ShieldCheck, BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 import api from '../../../services/api';
+import ExportReportModal from './ExportReportModal';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface GroupPerf { name: string; avg: number; count: number; color: string; }
@@ -296,6 +297,7 @@ function CmdPanel({ title, icon: Icon, accent, right, children, center }: CmdPan
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [stats, setStats] = useState<TeacherStats | null>(null);
+  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     api.get('/teacher/stats').then(r => setStats(r.data)).catch(() => {});
@@ -342,11 +344,13 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
             <p className="text-sm text-[#787774]">Panel de rendimiento, participación y riesgo con datos reales</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs font-medium bg-[#EEF3FD] border border-[#C5D9F7] rounded-lg px-3 py-2 text-[#2E6FDB]">
-          <Sparkles className="w-4 h-4" />
-          Analítica avanzada
-        </div>
+        <button onClick={() => setShowExport(true)}
+          className="flex items-center gap-2 text-sm font-medium bg-[#2E6FDB] hover:bg-[#255DC0] rounded-lg px-4 py-2 text-white shadow-sm">
+          <Download className="w-4 h-4" />
+          Exportar reporte
+        </button>
       </motion.div>
+      {showExport && <ExportReportModal onClose={() => setShowExport(false)} />}
 
       {/* ══ Hero: gauge de salud + modelos ══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
