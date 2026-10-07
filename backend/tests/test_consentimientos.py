@@ -19,10 +19,8 @@ import sys
 import unittest
 from unittest import mock
 
-os.environ.setdefault("SECRET_KEY", "test-secret-key-para-pruebas-0123456789")
-# BD en memoria: la prueba nunca toca neurolearn.db ni la base de producción.
-os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:?check_same_thread=False")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import tests.entorno_pruebas  # noqa: E402,F401  (BD en memoria, correo a consola, sin IA real)
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402

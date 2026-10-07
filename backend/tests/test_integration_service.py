@@ -30,10 +30,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timezone
 
 # La clave del servidor debe existir ANTES de importar integration_service
-# (Settings lee variables de entorno).
-os.environ.setdefault("SECRET_KEY", "test-secret-key-para-pruebas-0123456789")
-
+# (Settings lee variables de entorno): la fija tests/entorno_pruebas.py.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import tests.entorno_pruebas  # noqa: E402,F401  (BD en memoria, correo a consola, sin IA real)
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")

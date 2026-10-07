@@ -30,3 +30,10 @@ _STANDALONE_SCRIPTS = [
 ]
 
 collect_ignore_glob = _STANDALONE_SCRIPTS
+
+
+# ── Entorno de pruebas aislado ───────────────────────────────────────────────
+# Se fija ANTES de que cualquier prueba importe la app: BD SQLite en memoria,
+# correo a consola, sin proveedores de IA. Ver tests/entorno_pruebas.py (cada
+# archivo de pruebas también lo importa, para quedar aislado con unittest).
+import tests.entorno_pruebas  # noqa: E402,F401

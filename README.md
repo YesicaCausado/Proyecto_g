@@ -140,6 +140,14 @@ npm run dev
 # App en: http://localhost:5173
 ```
 
+### Pruebas automáticas (backend)
+```bash
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest -v
+# BD en memoria, sin correos reales ni IA real. Detalle: docs/PRUEBAS.md
+```
+
 ---
 
 ## 📊 Estado del Proyecto
@@ -161,6 +169,7 @@ npm run dev
 - 📋 [Requisitos Funcionales (87 RF)](docs/REQUISITOS_FUNCIONALES.md)
 - 💡 [Idea Definitiva del Proyecto](docs/IDEA_DEFINITIVA.md)
 - 📐 [Diagramas UML y Arquitectura](docs/DIAGRAMAS_UML.md)
+- 🧪 [Pruebas automáticas](docs/PRUEBAS.md)
 - 📊 [Análisis de Viabilidad](docs/ESTUDIO_VIABILIDAD.md)
 - 🗓️ [Cronograma de Desarrollo](docs/CRONOGRAMA.md)
 
