@@ -124,6 +124,23 @@ from app.main import app
 
 ---
 
+### ❌ Error: "Total bundle size (… MB) exceeds the maximum function size (225 MB)"
+
+Vercel incluye en la función Python (`api/index.py`) **todos** los archivos del
+proyecto presentes durante el build, no solo el backend. Por eso
+`frontend/public` (≈ 140 MB: PDFs de material, `tutor.vrm`, WASM de MediaPipe)
+acababa dentro de la función; con las dependencias (≈ 60–90 MB) quedaba al
+límite, y al agregar `cryptography` (parche 9) pasó a ≈ 235 MB.
+
+Solución (parche 11C): `excludeFiles` en `vercel.json` deja fuera de la función
+`frontend/`, `docs/`, `scripts/`, `.github/`, pruebas y migraciones. El
+frontend se sigue publicando como sitio estático (`outputDirectory`), así que no
+cambia nada para el usuario. La prueba `backend/tests/test_vercel_bundle.py`
+falla si la función vuelve a crecer o si se excluye algo que el backend usa.
+
+`.vercelignore` no sirve para esto: excluiría `frontend/public` también del
+build del frontend.
+
 ## **5. Monitoreo y Logs**
 
 ### Ver logs en tiempo real
