@@ -54,7 +54,7 @@ python -m unittest tests.test_flujo_institucional -v
 > importar los scripts manuales antiguos (ver más abajo), que llaman a un
 > servidor en vivo. Use `python -m pytest`.
 
-Resultado esperado: `121 passed` (≈ 10 s). No requiere internet, servidor
+Resultado esperado: `126 passed` (≈ 12 s). No requiere internet, servidor
 levantado, base de datos ni claves de IA o de correo.
 
 ## Aislamiento: qué nunca tocan las pruebas
@@ -143,21 +143,29 @@ paso:
 | `test_adaptive_system.py` | 12 | Modelo del estudiante y motor de adaptación pedagógica |
 | `test_patterns.py` | 14 | Patrones neuroconductuales |
 | `test_integration_service.py` | 4 | Cifrado de tokens, webhooks reales a un servidor local, automatizaciones |
+| `test_crear_admin.py` | 5 | Alta del Administrador global con `scripts/crear_admin.py`: inicia sesión y crea instituciones, política de contraseñas, no pisa cuentas ni cambia roles, nunca imprime la contraseña |
 
 ## Scripts manuales que no forman parte de la suite
 
-`tests/conftest.py` excluye de la colección estos scripts antiguos, que se
-ejecutan a mano con `python -m tests.<nombre>`:
+Se ejecutan a mano desde `backend/`; pytest no los recoge:
 
-- `test_automated.py`, `test_bots_preentrenados.py`, `test_chatbot_interactive.py` (interactivo): simulaciones con `print`, sin aserciones.
-- `test_e2e_sprint3.py`, `test_full_flow.py`: llaman por HTTP a un servidor en `localhost` y usan el registro público, que ya no existe (alta B2B).
-- `test_8_states.py`: script de validación sin funciones de prueba.
+- `python -m tests.test_chatbot_interactive`: conversación interactiva por
+  terminal con el chatbot adaptativo (excluido en `tests/conftest.py`).
+- `python -m tests.test_8_states`: valida que el motor detecte los 8 estados
+  cognitivos con confianza > 0,6 e imprime el resultado (no define funciones
+  `test_*`).
 
-Sus escenarios útiles (login, flujo por rol, recuperación) quedaron cubiertos
-por `test_auth_roles.py` y `test_flujo_institucional.py`. Los scripts sueltos
-de `backend/` (`test_login.py`, `test_all_logins.py`, `_audit_live_tests.ps1`,
-`_audit_db_inspect.py`) también quedan reemplazados; su retiro se hace en el
-punto de limpieza del repositorio.
+En el parche 11 se retiraron los scripts manuales obsoletos:
+
+- de `tests/`: `test_e2e_sprint3.py` y `test_full_flow.py` (usaban el registro
+  público, que ya no existe), `test_automated.py` (fallaba con el motor actual)
+  y `test_bots_preentrenados.py` (probaba bots que ya no existen);
+- de `backend/`: `test_login.py`, `test_all_logins.py`, `test_db_connection.py`,
+  `_audit_live_tests.ps1`, `_audit_db_inspect.py` y `_verify_patterns.py`.
+
+Sus escenarios útiles (login de los 4 roles, flujo por rol, recuperación,
+patrones) están cubiertos por `test_auth_roles.py`, `test_flujo_institucional.py`
+y `test_patterns.py`.
 
 ## Integración continua (GitHub Actions)
 

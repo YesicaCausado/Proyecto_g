@@ -133,6 +133,19 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # Documentación interactiva: http://localhost:8000/docs
 ```
 
+### Primer Administrador
+El Administrador global (crea instituciones; no pertenece a ninguna) se da de
+alta con un script, contra la base que indique `DATABASE_URL`. La contraseña
+se pide sin mostrarse y debe cumplir la política del sistema:
+```bash
+cd backend
+python -m scripts.crear_admin --usuario admin.neurolearn --correo admin@colegio.edu.co --nombre "Nombre Apellido"
+python -m scripts.crear_admin --usuario admin.neurolearn --restablecer   # cambiar su contraseña
+```
+Desde el panel del Administrador se crean las instituciones (y su Súper
+Profesor); el Súper Profesor crea profesores y estudiantes. No hay cuentas de
+demostración con contraseñas conocidas.
+
 ### Frontend
 ```bash
 cd frontend

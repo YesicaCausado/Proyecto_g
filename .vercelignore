@@ -37,5 +37,6 @@ PLAN.md
 .git
 .gitignore
 README.md
-generate_hashes.py
 pyrightconfig.json
+.npm-cache
+audit-output

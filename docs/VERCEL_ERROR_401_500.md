@@ -122,7 +122,7 @@ vercel --prod
 **Verificar:**
 ```bash
 # Conectarse a Supabase desde terminal
-psql postgresql://postgres.sapozcwaspvibklyfldr:UntoD%40wn2712@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
+psql postgresql://<usuario>:<contraseña>@<host>.pooler.supabase.com:5432/postgres
 
 # Ver tablas
 \dt
