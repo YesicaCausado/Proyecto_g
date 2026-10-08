@@ -19,7 +19,6 @@ import {
   Users,
   Calculator,
   Zap,
-  Bell,
   Brain,
   TrendingUp,
   AlertTriangle,
@@ -27,8 +26,6 @@ import {
 } from 'lucide-react';
 import NeuronWelcome from '../../components/NeuronWelcome';
 import NeuronAvatar from '../../components/NeuronAvatar';
-import { NotificationsPanel } from '../../components/NotificationsPanel';
-import { useNotifications } from '../../hooks/useNotifications';
 
 const SKILL_ICONS: Record<string, React.ReactNode> = {
   matematicas: <Calculator className="w-5 h-5" />,
@@ -96,8 +93,6 @@ export default function StudentDashboard() {
   const [cognitive, setCognitive] = useState<CognitiveData>({ fatigue: 0, overload: 0, doubt: 0, mastery: 0 });
   const [subjects, setSubjects] = useState<Record<string, SubjectData>>({});
   const [, setLoading] = useState(true);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const { notifications, unreadCount, markAllRead } = useNotifications();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -166,24 +161,6 @@ export default function StudentDashboard() {
                 <span className="text-[#37352F] text-xs sm:text-sm font-semibold">{stats.streak_days}</span>
                 <span className="text-[#9B9A97] text-xs hidden sm:inline">días racha</span>
             </div>
-            <button
-                onClick={() => setShowNotifications(v => !v)}
-                className="relative w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center text-[#787774] hover:bg-[#F1F1EF] transition-colors"
-            >
-                <Bell className="w-4 h-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#7C5CBF] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-            </button>
-            {showNotifications && (
-              <NotificationsPanel
-                notifications={notifications}
-                onClose={() => setShowNotifications(false)}
-                onMarkAllRead={markAllRead}
-              />
-            )}
         </div>
       </div>
       

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { institutionLabel } from '../../utils/institution';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../styles/theme';
 import api from '../../services/api';
@@ -17,9 +17,10 @@ import AuditoriaTab from './components/AuditoriaTab';
 import SeguridadTab from './components/SeguridadTab';
 import ProfileSettings from '../../components/ProfileSettings';
 import NeuronWelcome from '../../components/NeuronWelcome';
+import NotificationBell from '../../components/NotificationBell';
 import {
   ShieldCheck, LogOut, Users, GraduationCap, LayoutDashboard,
-  BrainCircuit, Settings, Bell, BookOpen, Bot, FileText,
+  BrainCircuit, Settings, BookOpen, Bot, FileText,
   MessageSquare, Calendar, Shield, Lock, ChevronRight,
   Menu, X, UserRound
 } from 'lucide-react';
@@ -80,7 +81,10 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
 export default function SuperDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(
+    requestedTab && requestedTab in TAB_TITLES ? requestedTab : 'dashboard');
   const [teachers, setTeachers] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -89,6 +93,12 @@ export default function SuperDashboard() {
       .then(r => setTeachers(r.data))
       .catch(() => setTeachers([]));
   }, []);
+
+  // Enlaces de las notificaciones (/super?tab=...): abren la pestaña indicada
+  // también cuando el panel ya está abierto.
+  useEffect(() => {
+    if (requestedTab && requestedTab in TAB_TITLES) setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -159,13 +169,7 @@ export default function SuperDashboard() {
 
       {/* Pie del sidebar */}
       <div className="px-2 pb-3 pt-2 border-t border-[#E9E9E7] space-y-0.5">
-        <button
-          onClick={() => handleNav('alertas')}
-          className="w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] rounded-md transition-colors"
-        >
-          <Bell className="w-4 h-4" />
-          <span>Notificaciones</span>
-        </button>
+        <NotificationBell variant="sidebar" />
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-[#787774] hover:bg-[#FDEEEE] hover:text-[#E03E3E] rounded-md transition-colors"
@@ -250,7 +254,7 @@ export default function SuperDashboard() {
             {activeTab === 'auditoria'    && <AuditoriaTab />}
             {activeTab === 'configuracion' && <ConfiguracionTab />}
             {activeTab === 'seguridad'    && <SeguridadTab />}
-            {activeTab === 'perfil'       && <ProfileSettings role="super_profesor" prefsStorageKey="super_notifications" />}
+            {activeTab === 'perfil'       && <ProfileSettings role="super_profesor" />}
 
           </div>
         </main>

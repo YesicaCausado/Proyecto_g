@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import NotificationBell from '../../components/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 
@@ -32,7 +33,6 @@ import {
   Calendar,
   Settings,
   LogOut,
-  Bell,
   ChevronRight,
   Zap,
   Menu,
@@ -306,6 +306,16 @@ export default function TeacherPanel() {
 
     return 'dashboard';
   });
+
+  // Enlaces de las notificaciones (/teacher?tab=...): abren la pestaña
+  // indicada también cuando el panel ya está abierto.
+  const requestedTab = searchParams.get('tab');
+
+  useEffect(() => {
+    if (requestedTab && requestedTab in TAB_TITLES) {
+      setActiveTab(requestedTab);
+    }
+  }, [requestedTab]);
 
   // ----------------------------------------------------------
   // ESTADOS
@@ -823,36 +833,7 @@ export default function TeacherPanel() {
           space-y-0.5
         "
       >
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab(
-              'configuracion'
-            );
-
-            setSidebarOpen(false);
-          }}
-          className="
-            w-full
-            flex
-            items-center
-            gap-2.5
-            px-3
-            py-[7px]
-            text-[13px]
-            text-[#787774]
-            hover:bg-[#EBEBEA]
-            hover:text-[#37352F]
-            rounded-md
-            transition-colors
-          "
-        >
-          <Bell className="w-4 h-4" />
-
-          <span>
-            Notificaciones
-          </span>
-        </button>
+        <NotificationBell variant="sidebar" />
 
         <button
           type="button"

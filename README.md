@@ -186,6 +186,7 @@ GitHub Actions ejecuta estas pruebas y la compilación del frontend en cada push
 - 📋 [Requisitos Funcionales (87 RF)](docs/REQUISITOS_FUNCIONALES.md)
 - 💡 [Idea Definitiva del Proyecto](docs/IDEA_DEFINITIVA.md)
 - 📐 [Diagramas UML y Arquitectura](docs/DIAGRAMAS_UML.md)
+- 🤖 [NeuroBots asignados y notificaciones](docs/NEUROBOTS_NOTIFICACIONES.md)
 - 🧪 [Pruebas automáticas](docs/PRUEBAS.md)
 - 🔒 [Seguridad de dependencias](docs/SEGURIDAD_DEPENDENCIAS.md)
 - 📊 [Análisis de Viabilidad](docs/ESTUDIO_VIABILIDAD.md)

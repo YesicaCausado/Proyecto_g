@@ -20,6 +20,7 @@ from app.api import auth
 from app.api import chat
 from app.api import expert_bot
 from app.api import bot_documents
+from app.api import neurobot_assignments
 from app.api import classroom
 from app.api import stats
 from app.api import conversations
@@ -221,6 +222,13 @@ app.include_router(
 # Resultado:
 # /api/v1/bots/...
 # ------------------------------------------------------------
+
+# Asignación, «Mis NeuroBots» y resultados: ANTES de expert_bot para que
+# /bots/assigned-to-me no lo capture /bots/{bot_id}.
+app.include_router(
+    neurobot_assignments.router,
+    prefix="/api/v1/bots",
+)
 
 app.include_router(
     expert_bot.router,

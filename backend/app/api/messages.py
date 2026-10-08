@@ -469,6 +469,9 @@ async def send_message(
         attachment_data=attach_data,
     )
     db.add(msg)
+    # Notificación al destinatario en la misma transacción que el mensaje.
+    from app.services import notification_service
+    notification_service.notify_direct_message(db, current_user, receiver, msg.content)
     db.commit()
     db.refresh(msg)
     return _msg_to_dict(msg, db)

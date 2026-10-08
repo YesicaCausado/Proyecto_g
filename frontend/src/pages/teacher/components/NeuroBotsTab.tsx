@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Bot, Plus, Trash2, Globe, Lock, FileText, Upload, X,
   CheckCircle, Clock, AlertCircle, BarChart2, MessageSquare, BookOpen,
-  ToggleLeft, ToggleRight, Play, Send, Loader2, Users, Share2, Download, RotateCcw,
+  ToggleLeft, ToggleRight, Play, Send, Loader2, Share2, Download, RotateCcw,
 } from 'lucide-react';
 import api, { invalidateApiCache } from '../../../services/api';
+import AssignBotModal from './neurobots/AssignBotModal';
+import BotResults from './neurobots/BotResults';
 
 /** Mensaje de error real que devuelve el backend (FastAPI `detail`). */
 function apiError(err: any, fallback: string): string {
@@ -192,173 +195,6 @@ function precheck(file: File): string | null {
   return null;
 }
 
-interface ClassOption {
-  id: string;
-  name: string;
-  subject: string;
-  grade: string;
-}
-
-// ── Modal para compartir / asignar el bot a clases ────────────────────────────
-function ShareBotModal({ bot, onClose }: {
-  bot: NeuroBot;
-  onClose: () => void;
-}) {
-  const [classes,    setClasses]    = useState<ClassOption[]>([]);
-  const [assigned,   setAssigned]   = useState<Set<string>>(new Set());
-  const [loading,    setLoading]    = useState(true);
-  const [saving,     setSaving]     = useState<string | null>(null);
-  const [error,      setError]      = useState('');
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const [clsRes] = await Promise.all([
-          api.get('/classrooms/my-classes'),
-        ]);
-        // Clases del profesor
-        const clsList: ClassOption[] = (clsRes.data.classrooms ?? []).map((c: any) => ({
-          id: String(c.id),
-          name: c.name,
-          subject: c.subject,
-          grade: c.grade ?? '',
-        }));
-        setClasses(clsList);
-
-        // Obtener a qué clases ya está asignado este bot
-        // (consultamos la asignación en cada clase)
-        const assignedSet = new Set<string>();
-        await Promise.all(clsList.map(async (c) => {
-          try {
-            const r = await api.get(`/classrooms/${c.id}/bots`);
-            const botsInClass = r.data?.bots ?? [];
-            const found = botsInClass.find((b: any) => String(b.bot_id) === String(bot.id));
-            if (found) {
-              assignedSet.add(c.id);
-            }
-          } catch { /* ignore */ }
-        }));
-        setAssigned(assignedSet);
-      } catch {
-        setClasses([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [bot.id]);
-
-  const toggleAssign = async (classId: string) => {
-    if (saving) return;
-    const isCurrentlyAssigned = assigned.has(classId);
-    setSaving(classId);
-    setError('');
-    try {
-      if (isCurrentlyAssigned) {
-        await api.delete(`/classrooms/${classId}/bots/${bot.id}`);
-        setAssigned(prev => { const n = new Set(prev); n.delete(classId); return n; });
-      } else {
-        await api.post(`/classrooms/${classId}/bots`, {
-          bot_id: Number(bot.id),
-          is_required: false,
-          order_index: 0,
-        });
-        setAssigned(prev => { const n = new Set(prev); n.add(classId); return n; });
-      }
-    } catch (err: any) {
-      setError(err?.response?.data?.detail ?? 'No se pudo actualizar la asignación');
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E9E9E7]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-[#EEF3FD] rounded-lg flex items-center justify-center">
-              <Share2 className="w-4 h-4 text-[#2E6FDB]" />
-            </div>
-            <div>
-              <p className="font-semibold text-[#191919] text-sm">Compartir NeuroBot</p>
-              <p className="text-[11px] text-[#787774]">{bot.name} · asigna a tus clases</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-[#787774] hover:text-[#37352F]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5">
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-[#2E6FDB]" />
-            </div>
-          ) : classes.length === 0 ? (
-            <div className="text-center py-8">
-              <Users className="w-10 h-10 text-[#E9E9E7] mx-auto mb-2" />
-              <p className="text-sm text-[#787774]">No tienes clases creadas.</p>
-              <p className="text-xs text-[#AEADAB] mt-1">Crea una clase en "Grupos" para poder compartir este bot.</p>
-            </div>
-          ) : (
-            <>
-              <p className="text-xs text-[#787774] mb-3">
-                Marca las clases donde tus estudiantes podrán ver y chatear con este NeuroBot.
-              </p>
-              <div className="space-y-2">
-                {classes.map(c => {
-                  const isAssigned = assigned.has(c.id);
-                  const busy = saving === c.id;
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => toggleAssign(c.id)}
-                      disabled={!!saving}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
-                        isAssigned
-                          ? 'border-[#2E6FDB] bg-[#EEF3FD]'
-                          : 'border-[#E9E9E7] hover:bg-[#F7F6F3]'
-                      } disabled:opacity-60`}
-                    >
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                        style={{ background: '#2E6FDB' }}>
-                        {c.name.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#191919] truncate">{c.name}</p>
-                        <p className="text-[11px] text-[#787774]">{c.subject}{c.grade ? ` · ${c.grade}` : ''}</p>
-                      </div>
-                      {busy ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-[#2E6FDB]" />
-                      ) : isAssigned ? (
-                        <span className="flex items-center gap-1 text-xs font-medium text-[#2E6FDB]">
-                          <CheckCircle className="w-4 h-4" /> Compartido
-                        </span>
-                      ) : (
-                        <span className="text-xs text-[#AEADAB]">Asignar</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="px-5 py-3 border-t border-[#E9E9E7] flex items-center justify-between">
-          {error ? <p className="text-xs text-[#E03E3E]">{error}</p> : <span />}
-          <button onClick={onClose}
-            className="px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors">
-            Listo
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 interface NeuroBot {
   id: string;
   name: string;
@@ -397,6 +233,7 @@ const UPLOAD_STATUS = {
 function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => void; onUpdate: (b: NeuroBot) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showShare, setShowShare] = useState(false);
+  const [resultsKey, setResultsKey] = useState(0);
   const [docs,      setDocs]      = useState<KnowledgeDoc[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -530,7 +367,8 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
   return (
     <div className="space-y-5">
       {showShare && (
-        <ShareBotModal bot={bot} onClose={() => setShowShare(false)} />
+        <AssignBotModal botId={bot.id} botName={bot.name} onClose={() => setShowShare(false)}
+          onChanged={() => setResultsKey(k => k + 1)} />
       )}
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-[#787774] hover:text-[#37352F] transition-colors">
         ← NeuroBots
@@ -554,10 +392,12 @@ function BotDetail({ bot, onBack, onUpdate }: { bot: NeuroBot; onBack: () => voi
           </div>
           <button onClick={() => setShowShare(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2E6FDB] text-white rounded-lg text-xs font-medium hover:bg-[#255DC0] transition-colors">
-            <Share2 className="w-3.5 h-3.5" /> Compartir con mis clases
+            <Share2 className="w-3.5 h-3.5" /> Asignar a grupos o estudiantes
           </button>
         </div>
       </div>
+
+      <BotResults botId={bot.id} refreshKey={resultsKey} />
 
       {/* Base de conocimiento */}
       <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
@@ -698,6 +538,10 @@ export default function NeuroBotsTab() {
   const [loadingBots, setLoadingBots] = useState(true);
   const [listError,  setListError]  = useState('');
   const [createError, setCreateError] = useState('');
+  // ?bot=<id> (enlace de la notificación «NeuroBot completado»): abre ese bot
+  // con el progreso de los estudiantes.
+  const [searchParams] = useSearchParams();
+  const requestedBot = searchParams.get('bot');
 
   const loadBots = async () => {
     setLoadingBots(true);
@@ -713,6 +557,12 @@ export default function NeuroBotsTab() {
   };
 
   useEffect(() => { loadBots(); }, []);
+
+  useEffect(() => {
+    if (!requestedBot || bots.length === 0) return;
+    const match = bots.find(b => b.id === requestedBot);
+    if (match) setSelected(match);
+  }, [requestedBot, bots]);
 
   const closeCreate = () => {
     setShowModal(false);

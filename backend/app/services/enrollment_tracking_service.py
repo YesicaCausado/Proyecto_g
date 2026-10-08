@@ -84,8 +84,12 @@ class EnrollmentTrackingService:
         # futuros (p. ej. un job periódico), no en este flujo de escritura directa.
         # Se deja la regla aquí para mantener consistencia con super_stats.py.
 
+        previous_risk = enrollment.risk_level
         enrollment.risk_level = risk_level
         enrollment.risk_factors = risk_factors
+
+        if risk_level == "high" and previous_risk != "high":
+            EnrollmentTrackingService._notify_high_risk(db, enrollment, new_avg)
 
         db.commit()
         db.refresh(enrollment)
@@ -96,3 +100,31 @@ class EnrollmentTrackingService:
             f"sessions={enrollment.total_sessions}, risk={enrollment.risk_level}"
         )
         return enrollment
+
+    @staticmethod
+    def _notify_high_risk(db: Session, enrollment: Enrollment, average: float) -> None:
+        """Alerta de riesgo → profesor del aula y Súper Profesor(es) de su
+        institución, solo cuando el estudiante PASA a riesgo alto (misma
+        transacción que la actualización del seguimiento)."""
+        from app.models.classroom import Classroom
+        from app.models.user import User
+        from app.services import notification_service
+
+        classroom = db.get(Classroom, enrollment.classroom_id)
+        student = db.get(User, enrollment.student_id)
+        teacher = db.get(User, classroom.teacher_id) if classroom else None
+        if classroom is None or student is None:
+            return
+        name = student.full_name or student.username
+        message = (f"{name} pasó a riesgo alto en el grupo {classroom.name}: "
+                   f"promedio de {round(average)}% en {enrollment.total_sessions} quizzes.")
+        if teacher is not None:
+            notification_service.notify(
+                db, [teacher.id], "alerta_riesgo", "Estudiante en riesgo alto", message,
+                link=notification_service.alerts_link(teacher.role),
+                resource_type="estudiante", resource_id=student.id)
+        supers = notification_service.super_profesores_of(
+            db, teacher.institution_id if teacher else student.institution_id)
+        notification_service.notify(
+            db, supers, "alerta_riesgo", "Estudiante en riesgo alto", message,
+            link="/super?tab=alertas", resource_type="estudiante", resource_id=student.id)

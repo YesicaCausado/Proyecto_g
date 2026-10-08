@@ -21,10 +21,12 @@ import {
   Play,
   Target,
   ClipboardCheck,
+  Bot,
 } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
 import { navItemStyle } from '../styles/sidebar';
 import { institutionLabel } from '../utils/institution';
+import NotificationBell from './NotificationBell';
 
 interface NavLinkItem {
   id: string;
@@ -68,6 +70,7 @@ const iconMap: Record<string, ReactNode> = {
   desempeno: <TrendingUp className="w-4 h-4" />,
   meta: <Target className="w-4 h-4" />,
   evaluaciones: <ClipboardCheck className="w-4 h-4" />,
+  neurobots: <Bot className="w-4 h-4" />,
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -129,6 +132,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 { id: 'desempeno', type: 'link', to: '/performance', label: 'Desempeño', icon: 'desempeno' },
               ],
             },
+            { id: 'mis-neurobots', type: 'link', to: '/bots', label: 'Mis NeuroBots', icon: 'neurobots' },
             { id: 'material', type: 'link', to: '/material', label: 'Material de Apoyo', icon: 'material' },
           ],
         },
@@ -333,6 +337,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </p>
             <p className="text-[10px] text-[#787774] truncate" title={institutionLabel(user)}>{institutionLabel(user)}</p>
           </div>
+          {!mobile && <NotificationBell panel="sidebar" />}
           <button
             onClick={handleLogout}
             title="Cerrar sesión"
@@ -373,12 +378,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             NeuroLearn
           </span>
         </div>
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-1.5 rounded-md text-[#787774] hover:bg-[#F1F1EF] transition-colors"
-        >
-          {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-1.5 rounded-md text-[#787774] hover:bg-[#F1F1EF] transition-colors"
+          >
+            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* ── Mobile sidebar overlay ── */}

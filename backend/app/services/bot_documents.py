@@ -123,14 +123,23 @@ def can_use_bot(db: Session, user: User, bot: ExpertBot) -> bool:
 
     - Administrador y creador: siempre.
     - Resto: solo dentro de la misma institución del creador, si el bot está
-      activo y además es público o está asignado a un aula del usuario
-      (estudiante inscrito o profesor dueño del aula).
+      activo y además es público, está asignado a un aula del usuario
+      (estudiante inscrito o profesor dueño del aula) o se le asignó
+      individualmente (estudiante asignado o profesor que lo asignó).
     """
     if user.role == UserRole.ADMIN.value or bot.creator_id == user.id:
         return True
     if not bot.is_active or not _same_institution(user, bot):
         return False
     if bot.is_public:
+        return True
+
+    from app.models.neurobot_assignment import StudentBotAssignment
+    individual = db.query(StudentBotAssignment.id).filter(
+        StudentBotAssignment.bot_id == bot.id,
+        (StudentBotAssignment.student_id == user.id) | (StudentBotAssignment.teacher_id == user.id),
+    ).first()
+    if individual is not None:
         return True
 
     classroom_ids = [

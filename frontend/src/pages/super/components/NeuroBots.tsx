@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Bot, Search, Edit3, Trash2, Copy, PowerOff, BarChart2, Globe, Lock, FileText, MessageSquare } from 'lucide-react';
-import api from '../../../services/api';
+import { useState, useEffect, useCallback } from 'react';
+import { Bot, Search, Trash2, PowerOff, BarChart2, Globe, Lock, FileText, MessageSquare, X, AlertCircle, Loader2 } from 'lucide-react';
+import api, { invalidateApiCache } from '../../../services/api';
+import BotResults from '../../teacher/components/neurobots/BotResults';
+
+function apiError(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail;
+  return typeof detail === 'string' && detail.trim() ? detail : fallback;
+}
 
 interface BotItem {
   id: number; name: string; teacher: string; group: string; subject: string;
@@ -13,33 +19,58 @@ export default function NeuroBots() {
   const [search, setSearch]   = useState('');
   const [filter, setFilter]   = useState<Filter>('todos');
   const [bots, setBots]       = useState<BotItem[]>([]);
-  const [toast, setToast]     = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [notice, setNotice]   = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [busy, setBusy]       = useState<number | null>(null);
+  const [progressBot, setProgressBot] = useState<BotItem | null>(null);
 
-  useEffect(() => {
-    api.get('/super/bots')
-      .then(r => setBots(r.data.bots ?? []))
-      .catch(() => setBots([]));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const r = await api.get('/super/bots', { params: { _t: Date.now() } });
+      setBots(r.data.bots ?? []);
+    } catch {
+      setLoadError('No fue posible cargar los NeuroBots de la institución.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+  useEffect(() => { load(); }, [load]);
 
-  const handleDelete = (id: number, name: string) => {
-    if (window.confirm(`¿Eliminar el NeuroBots "${name}"? Esta acción no se puede deshacer.`)) {
-      setBots(prev => prev.filter(b => b.id !== id));
-      showToast(`NeuroBots "${name}" eliminado.`);
+  const handleDelete = async (bot: BotItem) => {
+    if (!window.confirm(`¿Eliminar el NeuroBot "${bot.name}" de ${bot.teacher}? Se quitarán sus asignaciones y documentos. Esta acción no se puede deshacer.`)) return;
+    setBusy(bot.id);
+    setNotice(null);
+    try {
+      await api.delete(`/bots/${bot.id}`);
+      setBots(prev => prev.filter(b => b.id !== bot.id));
+      invalidateApiCache('/bots');
+      setNotice({ kind: 'ok', text: `NeuroBot "${bot.name}" eliminado.` });
+    } catch (err) {
+      setNotice({ kind: 'error', text: apiError(err, 'No fue posible eliminar el NeuroBot.') });
+    } finally {
+      setBusy(null);
     }
   };
 
-  const handleDuplicate = (bot: BotItem) => {
-    const copy = { ...bot, id: Date.now(), name: `${bot.name} (copia)`, queries: 0, created: new Date().toISOString().slice(0,10) };
-    setBots(prev => [copy, ...prev]);
-    showToast(`NeuroBots "${bot.name}" duplicado.`);
-  };
-
-  const handleToggle = (id: number) => {
-    setBots(prev => prev.map(b => b.id === id ? { ...b, status: b.status === 'activo' ? 'inactivo' : 'activo' } : b));
-    const b = bots.find(b => b.id === id);
-    showToast(`NeuroBots "${b?.name}" ${b?.status === 'activo' ? 'desactivado' : 'activado'}.`);
+  const handleToggle = async (bot: BotItem) => {
+    const activate = bot.status !== 'activo';
+    setBusy(bot.id);
+    setNotice(null);
+    try {
+      const r = await api.patch(`/bots/${bot.id}`, { is_active: activate });
+      const status = (r.data?.is_active ?? activate) ? 'activo' : 'inactivo';
+      setBots(prev => prev.map(b => (b.id === bot.id ? { ...b, status } : b)));
+      invalidateApiCache('/bots');
+      setNotice({ kind: 'ok', text: `NeuroBot "${bot.name}" ${status === 'activo' ? 'activado' : 'desactivado'}.` });
+    } catch (err) {
+      setNotice({ kind: 'error', text: apiError(err, 'No fue posible cambiar el estado del NeuroBot.') });
+    } finally {
+      setBusy(null);
+    }
   };
 
   const filtered = bots.filter(b =>
@@ -56,9 +87,30 @@ export default function NeuroBots() {
   return (
     <div className="space-y-6">
 
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 bg-[#37352F] text-white px-4 py-2.5 rounded-lg text-sm shadow-lg flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-400" /> {toast}
+      {progressBot && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => setProgressBot(null)}>
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between bg-white rounded-t-lg border border-b-0 border-[#E9E9E7] px-5 py-3">
+              <p className="text-sm font-semibold text-[#191919]">{progressBot.name} · {progressBot.teacher}</p>
+              <button onClick={() => setProgressBot(null)} aria-label="Cerrar" className="text-[#787774] hover:text-[#37352F]"><X className="w-5 h-5" /></button>
+            </div>
+            <BotResults botId={String(progressBot.id)} refreshKey={0} />
+          </div>
+        </div>
+      )}
+
+      {notice && (
+        <div className={`flex items-center justify-between gap-3 rounded-md border px-4 py-2.5 text-sm ${
+          notice.kind === 'ok' ? 'bg-[#EDF7F5] border-[#B7E1D9] text-[#0F7B6C]' : 'bg-[#FDEEEE] border-[#F5C7C7] text-[#E03E3E]'}`}>
+          <span>{notice.text}</span>
+          <button onClick={() => setNotice(null)} aria-label="Cerrar" className="opacity-70 hover:opacity-100"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="flex items-center justify-between gap-3 bg-[#FDEEEE] border border-[#F5C7C7] text-[#E03E3E] rounded-md px-4 py-2.5 text-sm">
+          <span className="flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {loadError}</span>
+          <button onClick={load} className="font-medium hover:underline">Reintentar</button>
         </div>
       )}
 
@@ -157,18 +209,19 @@ export default function NeuroBots() {
                 </td>
                 <td className="px-4 py-3.5 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => showToast(`Ver estadísticas de "${bot.name}" (próximamente)`)} title="Ver estadísticas" className="p-1.5 rounded hover:bg-purple-50 text-[#787774] hover:text-[#6940A5] transition-colors"><BarChart2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => showToast(`Editar "${bot.name}" (próximamente)`)} title="Editar" className="p-1.5 rounded hover:bg-[#F7F6F3] text-[#787774] hover:text-[#37352F] transition-colors"><Edit3 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDuplicate(bot)} title="Duplicar" className="p-1.5 rounded hover:bg-[#E5F3FF] text-[#787774] hover:text-[#0B6E99] transition-colors"><Copy className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleToggle(bot.id)} title={bot.status === 'activo' ? 'Desactivar' : 'Activar'} className="p-1.5 rounded hover:bg-[#FCF6E5] text-[#787774] hover:text-[#D9730D] transition-colors"><PowerOff className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDelete(bot.id, bot.name)} title="Eliminar" className="p-1.5 rounded hover:bg-[#FDEEEE] text-[#787774] hover:text-[#E03E3E] transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                    {busy === bot.id && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#787774]" />}
+                    <button onClick={() => setProgressBot(bot)} title="Ver progreso de los estudiantes" className="p-1.5 rounded hover:bg-purple-50 text-[#787774] hover:text-[#6940A5] transition-colors"><BarChart2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleToggle(bot)} disabled={busy !== null} title={bot.status === 'activo' ? 'Desactivar' : 'Activar'} className="p-1.5 rounded hover:bg-[#FCF6E5] text-[#787774] hover:text-[#D9730D] disabled:opacity-50 transition-colors"><PowerOff className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDelete(bot)} disabled={busy !== null} title="Eliminar" className="p-1.5 rounded hover:bg-[#FDEEEE] text-[#787774] hover:text-[#E03E3E] disabled:opacity-50 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {filtered.length === 0 && (
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-[#6940A5]" /></div>
+        ) : filtered.length === 0 && !loadError && (
           <div className="text-center py-12 text-[#787774]"><Bot className="w-10 h-10 mx-auto mb-3 opacity-20" /><p>No se encontraron NeuroBots</p></div>
         )}
         <div className="px-4 py-3 border-t border-[#E9E9E7] bg-[#F7F6F3] flex justify-between items-center">

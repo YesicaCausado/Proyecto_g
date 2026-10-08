@@ -47,7 +47,7 @@ from datetime import datetime
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_permission
 from app.core.permissions import Permission
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.learning import LearningSession, CognitiveState
 from app.schemas.schemas import (
     StartSessionRequest,
@@ -128,6 +128,25 @@ def _resolve_chat_bot(db: Session, user: User, bot_id: Optional[int],
             if bot is not None and can_use_bot(db, user, bot):
                 return bot
     return None
+
+def _track_neurobot(db: Session, user: User, bot: Optional[ExpertBot], interaction: bool) -> Optional[dict]:
+    """Progreso del estudiante con un NeuroBot asignado (parche 11B).
+
+    `interaction=False` al abrir el chat (iniciado); `True` cuando el bot
+    respondió con IA real. Nunca rompe el chat: si falla se registra y se sigue.
+    """
+    if bot is None or user.role != UserRole.ESTUDIANTE.value:
+        return None
+    from app.services import neurobot_service
+    try:
+        if interaction:
+            return neurobot_service.record_interaction(db, user, bot)
+        return neurobot_service.record_start(db, user, bot)
+    except Exception:
+        db.rollback()
+        logger.exception("No se pudo registrar el progreso del NeuroBot %s (usuario %s)", bot.id, user.id)
+        return None
+
 
 # Motor de Adaptación Pedagógica (separado del LLM).
 _adaptation_engine = PedagogicalAdaptationEngine()
@@ -1059,6 +1078,8 @@ async def start_session(
         result["response"], {"topic": request.topic, "provider": result["provider"]},
     )
 
+    neurobot_progress = _track_neurobot(db, current_user, bot, interaction=False)
+
     return ChatMessageResponse(
         message=result["response"],
         action="teach",
@@ -1067,7 +1088,8 @@ async def start_session(
         confidence=1.0,
         suggestions=[],
         should_pause=False,
-        metadata={"provider": result["provider"], "knowledge": knowledge_meta},
+        metadata={"provider": result["provider"], "knowledge": knowledge_meta,
+                  "neurobot_progress": neurobot_progress},
     )
 
 
@@ -1491,6 +1513,12 @@ async def send_message(
             clean_message, {"topic": topic, "provider": result["provider"]},
         )
 
+        # Progreso del NeuroBot asignado: solo cuenta si respondió la IA real
+        # (no el mensaje local de «no puedo procesar tu mensaje»).
+        neurobot_progress = None
+        if chat_bot is not None and result.get("provider") != "local":
+            neurobot_progress = _track_neurobot(db, current_user, chat_bot, interaction=True)
+
         # Conectar la recomendación del motor neuroconductual a la dificultad
         # (antes quedaba fija en "medium" aunque el motor calculara should_adapt).
         response_difficulty = "medium"
@@ -1530,6 +1558,7 @@ async def send_message(
                 "should_adapt": bool(analysis.should_adapt) if analysis else False,
                 "adaptation": strategy_meta,
                 "knowledge": knowledge_meta,
+                "neurobot_progress": neurobot_progress,
                 "patterns": {
                     "P1_interaction_rhythm": {
                         "response_time_ms": request.response_time_ms,

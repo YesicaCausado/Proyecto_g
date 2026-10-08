@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Search, Loader2, MessageSquare, PenSquare, X, CheckCheck, Paperclip, Download } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -102,6 +103,9 @@ const ROLE_BADGES: Record<string, { bg: string; text: string; label: string }> =
 export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', emptyHint }: MessagingProps) {
   const { user } = useAuth();
   const myId = user?.id ?? 0;
+  // ?with=<id> (enlace de una notificación de mensaje): abre esa conversación.
+  const [searchParams] = useSearchParams();
+  const withUser = Number(searchParams.get('with')) || null;
 
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [active, setActive] = useState<Conversation | null>(null);
@@ -117,16 +121,18 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.get('/messages/conversations')
+    api.get('/messages/conversations', { params: { _t: Date.now() } })
       .then(res => {
         const list: Conversation[] = (res.data.conversations ?? res.data ?? []).map(mapConv);
         setConvs(list);
-        if (list.length > 0) openConversation(list[0], list);
+        const target = withUser ? list.find(c => c.otherId === withUser) : undefined;
+        if (target) openConversation(target, list);
+        else if (list.length > 0) openConversation(list[0], list);
       })
       .catch(() => setConvs([]))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [withUser]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

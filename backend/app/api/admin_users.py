@@ -210,6 +210,20 @@ async def delete_user(
     if u.role in (UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value):
         raise HTTPException(400, "No se pueden eliminar cuentas de Super Profesor o Admin. Desactívalas en su lugar.")
 
+    # Datos propios del usuario en las tablas del parche 11B (si no, la
+    # eliminación choca con sus llaves foráneas).
+    from app.models.classroom import ClassroomBot
+    from app.models.neurobot_assignment import NeuroBotProgress, StudentBotAssignment
+    from app.models.notification import Notification, NotificationPreference
+    db.query(Notification).filter(Notification.user_id == user_id).delete(synchronize_session=False)
+    db.query(NotificationPreference).filter(NotificationPreference.user_id == user_id).delete(synchronize_session=False)
+    db.query(NeuroBotProgress).filter(NeuroBotProgress.student_id == user_id).delete(synchronize_session=False)
+    db.query(StudentBotAssignment).filter(
+        (StudentBotAssignment.student_id == user_id) | (StudentBotAssignment.teacher_id == user_id)
+    ).delete(synchronize_session=False)
+    db.query(ClassroomBot).filter(ClassroomBot.assigned_by_id == user_id).update(
+        {ClassroomBot.assigned_by_id: None}, synchronize_session=False)
+
     db.delete(u)
     db.commit()
     return {"ok": True, "message": "Usuario eliminado"}

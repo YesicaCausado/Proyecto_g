@@ -36,6 +36,18 @@ def _same_institution_creators(query, user: User):
     )
 
 
+def _is_institution_super(user: User, bot: ExpertBot) -> bool:
+    """Súper Profesor de la institución del creador: supervisa (activa,
+    desactiva o retira) los NeuroBots de su institución, sin editar su contenido."""
+    creator = bot.creator
+    return (
+        user.role == UserRole.SUPER_PROFESOR.value
+        and creator is not None
+        and creator.institution_id is not None
+        and creator.institution_id == user.institution_id
+    )
+
+
 def _query_count(db: Session, bot_id: int) -> int:
     """Consultas reales: mensajes enviados por usuarios en sesiones con este bot."""
     return (
@@ -66,12 +78,6 @@ class BotCreatePayload(BaseModel):
     is_public: bool = False
     knowledge_base: Optional[list] = None
     language: str = "es"
-
-
-class BotSharePayload(BaseModel):
-    bot_id: int
-    share_with: str  # "public" o email
-    access_level: str = "view"  # view, train, admin
 
 
 class BotPatchPayload(BaseModel):
@@ -357,6 +363,20 @@ async def create_bot(
     )
 
     db.add(bot)
+    db.flush()
+    # Actividad institucional → Súper Profesor(es) de la institución (si lo
+    # crea un profesor; un Súper Profesor no se notifica a sí mismo).
+    from app.services import notification_service
+    notification_service.notify(
+        db,
+        notification_service.super_profesores_of(db, current_user.institution_id, exclude=[current_user.id]),
+        "actividad_institucional",
+        "Nuevo NeuroBot",
+        f'{current_user.full_name or current_user.username} creó el NeuroBot "{bot.name}".',
+        link="/super?tab=neurobots",
+        resource_type="neurobot",
+        resource_id=bot.id,
+    )
     db.commit()
     db.refresh(bot)
 
@@ -423,7 +443,11 @@ async def patch_bot(
         raise HTTPException(status_code=404, detail="Bot no encontrado")
 
     if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
-        raise HTTPException(status_code=403, detail="Solo el creador o admin puede editar el bot")
+        content_fields = (payload.name, payload.description, payload.subject_area,
+                          payload.category, payload.is_public, payload.language)
+        only_status = payload.is_active is not None and all(v is None for v in content_fields)
+        if not (only_status and _is_institution_super(current_user, bot)):
+            raise HTTPException(status_code=403, detail="Solo el creador o admin puede editar el bot")
 
     if payload.name is not None:
         bot.name = payload.name
@@ -464,12 +488,18 @@ async def delete_bot(
     if not bot:
         raise HTTPException(status_code=404, detail="Bot no encontrado")
 
-    if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
-        raise HTTPException(status_code=403, detail="Solo el creador o admin puede eliminar el bot")
+    if (bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value
+            and not _is_institution_super(current_user, bot)):
+        raise HTTPException(status_code=403, detail="Solo el creador, el Súper Profesor de su institución o el admin puede eliminar el bot")
 
     # Limpiar referencias FK antes de eliminar para evitar IntegrityError en PostgreSQL.
     # 1. Desasignar el bot de todas las aulas donde esté asignado.
     db.query(ClassroomBot).filter(ClassroomBot.bot_id == bot_id).delete(synchronize_session=False)
+    # Asignaciones individuales y progreso (parche 11B); las notificaciones
+    # ya enviadas se conservan, pero su enlace dejará de abrir el bot.
+    from app.models.neurobot_assignment import NeuroBotProgress, StudentBotAssignment
+    db.query(StudentBotAssignment).filter(StudentBotAssignment.bot_id == bot_id).delete(synchronize_session=False)
+    db.query(NeuroBotProgress).filter(NeuroBotProgress.bot_id == bot_id).delete(synchronize_session=False)
     # 2. Desvincular las sesiones de aprendizaje (se conserva el historial, solo se suelta la FK).
     db.query(LearningSession).filter(LearningSession.bot_id == bot_id).update(
         {"bot_id": None}, synchronize_session=False
@@ -485,60 +515,3 @@ async def delete_bot(
     db.commit()
 
     return {"ok": True, "message": "Bot eliminado correctamente"}
-
-
-# ─── POST /bots/{bot_id}/share ─────────────────────────────────────────────────
-@router.post("/{bot_id}/share")
-async def share_bot(
-    bot_id: int,
-    payload: BotSharePayload,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Comparte un bot con otros usuarios.
-    
-    - bot_id: ID del bot a compartir
-    - share_with: "public" para hacer público, o email de usuario
-    - access_level: "view" (solo lectura), "train" (puede entrenar), "admin" (puede editar)
-    """
-    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
-    if not bot:
-        raise HTTPException(status_code=404, detail="Bot no encontrado")
-
-    # Solo creador o admin puede compartir
-    if bot.creator_id != current_user.id and current_user.role != UserRole.ADMIN.value:
-        raise HTTPException(status_code=403, detail="Solo el creador o admin puede compartir el bot")
-
-    if payload.share_with == "public":
-        bot.is_public = True
-        db.commit()
-        db.refresh(bot)
-
-        return {
-            "ok": True,
-            "message": "Bot ahora es público",
-            "bot": {
-                "id": bot.id,
-                "name": bot.name,
-                "is_public": bot.is_public
-            }
-        }
-    else:
-        # Compartir con usuario específico
-        from app.models.user import User as UserModel
-        user_to_share = db.query(UserModel).filter(UserModel.email == payload.share_with).first()
-        if not user_to_share:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-        # Aquí crearías una relación de compartición en una tabla nueva
-        # share_table: bot_id, user_id, access_level, created_at
-        return {
-            "ok": True,
-            "message": f"Bot compartido con {user_to_share.username} (acceso: {payload.access_level})",
-            "bot": {
-                "id": bot.id,
-                "name": bot.name,
-                "shared_with": payload.share_with
-            }
-        }

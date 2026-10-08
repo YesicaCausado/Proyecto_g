@@ -171,6 +171,19 @@ async def create_classroom(
 
     try:
         db.add(classroom)
+        db.flush()
+        # Actividad institucional → Súper Profesor(es) de la institución.
+        from app.services import notification_service
+        notification_service.notify(
+            db,
+            notification_service.super_profesores_of(db, current_user.institution_id),
+            "actividad_institucional",
+            "Nuevo grupo creado",
+            f'{current_user.full_name or current_user.username} creó el grupo "{classroom.name}".',
+            link="/super?tab=grupos",
+            resource_type="aula",
+            resource_id=classroom.id,
+        )
         db.commit()
         db.refresh(classroom)
 
@@ -742,9 +755,13 @@ async def join_classroom(
                 detail="Ya estás inscrito en esta clase",
             )
 
+        from app.services import neurobot_service
+        bots_before = neurobot_service.bot_ids_of_student(db, current_user.id)
         existing.is_active = True
 
         try:
+            db.flush()
+            neurobot_service.notify_new_member(db, current_user, classroom, bots_before)
             db.commit()
             db.refresh(existing)
 
@@ -789,8 +806,14 @@ async def join_classroom(
         classroom_id=classroom.id,
     )
 
+    from app.services import neurobot_service
+    bots_before = neurobot_service.bot_ids_of_student(db, current_user.id)
+
     try:
         db.add(enrollment)
+        db.flush()
+        # NeuroBots que el grupo ya tenía → notificación al nuevo estudiante.
+        neurobot_service.notify_new_member(db, current_user, classroom, bots_before)
         db.commit()
         db.refresh(enrollment)
 
@@ -1078,16 +1101,34 @@ async def assign_bot_to_classroom(
     # Crear asignación
     # --------------------------------------------------------
 
-    assignment = ClassroomBot(
-        classroom_id=classroom_id,
-        bot_id=request.bot_id,
-        is_required=request.is_required,
-        order_index=request.order_index,
-    )
+    # Mismo servicio que POST /bots/{id}/assignments: guarda la meta, quién
+    # asigna y notifica a los estudiantes del aula en la misma transacción.
+    from app.services import neurobot_service
 
     try:
-        db.add(assignment)
+        neurobot_service.assign(
+            db, current_user, bot, [classroom_id], [],
+            request.goal_interactions or neurobot_service.DEFAULT_GOAL_INTERACTIONS,
+        )
+        assignment = (
+            db.query(ClassroomBot)
+            .filter(
+                ClassroomBot.classroom_id == classroom_id,
+                ClassroomBot.bot_id == request.bot_id,
+            )
+            .first()
+        )
+        assignment.is_required = request.is_required
+        assignment.order_index = request.order_index
         db.commit()
+
+    except neurobot_service.NeuroBotError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.message,
+        )
 
     except Exception:
         db.rollback()

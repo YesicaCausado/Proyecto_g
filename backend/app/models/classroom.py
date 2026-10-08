@@ -90,6 +90,14 @@ class ClassroomBot(Base):
     assigned_at = Column(DateTime, default=datetime.utcnow)
     is_required = Column(Boolean, default=False)  # Obligatorio o complementario
     order_index = Column(Integer, default=0)  # Orden en el que se muestran
+    # Meta de interacciones que fija el profesor al asignar (parche 11B). Las
+    # asignaciones anteriores quedan en NULL y usan la meta por defecto
+    # (app/services/neurobot_service.py: DEFAULT_GOAL_INTERACTIONS).
+    goal_interactions = Column(Integer, nullable=True)
+    # Profesor que hizo la asignación: recibe la notificación cuando un
+    # estudiante completa el NeuroBot. NULL en asignaciones anteriores (se usa
+    # el profesor dueño del aula).
+    assigned_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # Relaciones
     classroom = relationship("Classroom", back_populates="assigned_bots")

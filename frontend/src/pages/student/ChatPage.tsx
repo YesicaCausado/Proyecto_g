@@ -10,6 +10,7 @@ import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import { useVoiceTutor } from "../../hooks/useVoiceTutor";
 import { useConsents, type ConsentType } from "../../hooks/useConsents";
 import ConsentModal from "../../components/ConsentModal";
+import { ProgressBar, StatusBadge, type NeuroBotProgress } from "../../components/neurobots/progress";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
 import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
@@ -314,6 +315,8 @@ export default function ChatPage() {
   const skillParam    = searchParams.get("skill");
   const botIdParam    = searchParams.get("bot_id");
   const botNameParam  = searchParams.get("bot_name");
+  // Retomar una conversación guardada con el NeuroBot (desde «Mis NeuroBots»).
+  const conversationParam = Number(searchParams.get("conversation_id")) || null;
 
   // Competencia activa por subruta (/chat/:slug) — "Competencia → Neuro-Chat".
   const routeCompetency = findCompetency(slug);
@@ -338,6 +341,8 @@ export default function ChatPage() {
   const [selectedSkill, setSelectedSkill] = useState<string>(skillParam || routeCompetency?.key || "");
   const [showNewChatPicker, setShowNewChatPicker] = useState(false);
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
+  // Progreso real del estudiante con el NeuroBot asignado (null si no está asignado).
+  const [botProgress, setBotProgress] = useState<NeuroBotProgress | null>(null);
   const [showDashboard, setShowDashboard] = useState(!isCustomBot);
   const [quizSuggested, setQuizSuggested] = useState(false);
   const [freeInput, setFreeInput] = useState("");
@@ -416,16 +421,26 @@ export default function ChatPage() {
     if (skillParam && !sessionActive) setSelectedSkill(skillParam);
   }, [skillParam]);
 
-  // Auto-start when coming from teacher "Probar" button (?bot_id=...)
+  // Auto-start con ?bot_id=... (NeuroBot asignado o «Probar» del profesor).
+  // Con ?conversation_id=... se retoma la conversación guardada.
   useEffect(() => {
     if (botIdParam && !sessionActive && !sending) {
       const topic = skillParam ? decodeURIComponent(skillParam)
         : botNameParam ? decodeURIComponent(botNameParam)
         : 'General';
       setSelectedSkill(topic);
-      startSession(topic);
+      if (conversationParam) loadConversation(conversationParam);
+      else startSession(topic);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botIdParam]);
+
+  // Progreso guardado del NeuroBot asignado (404 si el bot no está asignado).
+  useEffect(() => {
+    if (!botIdParam) { setBotProgress(null); return; }
+    api.get(`/bots/assigned-to-me/${botIdParam}`, { params: { _t: Date.now() } })
+      .then(res => setBotProgress(res.data?.progress ?? null))
+      .catch(() => setBotProgress(null));
   }, [botIdParam]);
 
   /**
@@ -513,6 +528,8 @@ export default function ChatPage() {
     try {
       setSessionActive(true);
       setLastResponse(data);
+      const startProgress = (data.metadata as { neurobot_progress?: NeuroBotProgress } | undefined)?.neurobot_progress;
+      if (startProgress) setBotProgress(startProgress);
       metrics.onBotMessageReceived();
       setMessages([{
         id: Date.now().toString(),
@@ -676,6 +693,8 @@ export default function ChatPage() {
     // ── Paso 3: procesamiento de UI, separado de errores de red ──
     try {
       setLastResponse(data);
+      const msgProgress = (data.metadata as { neurobot_progress?: NeuroBotProgress } | undefined)?.neurobot_progress;
+      if (msgProgress) setBotProgress(msgProgress);
       metrics.onBotMessageReceived();
 
       setMessages((prev) => [
@@ -1225,6 +1244,19 @@ export default function ChatPage() {
             </button>
           </div>
         </div>
+
+        {botProgress && (
+          <div className="bg-[#FBFBFA] border-b border-[#E9E9E7] px-4 py-2 flex items-center gap-3 flex-shrink-0">
+            <span className="text-xs font-medium text-[#37352F] truncate">
+              NeuroBot asignado{botNameParam ? ` · ${decodeURIComponent(botNameParam)}` : ''}
+            </span>
+            <StatusBadge progress={botProgress} />
+            <div className="flex-1 max-w-xs"><ProgressBar progress={botProgress} compact /></div>
+            {botProgress.just_completed && (
+              <span className="text-xs font-medium text-[#0F7B6C]">¡Completaste la meta! Tu profesor ya puede ver tu resultado.</span>
+            )}
+          </div>
+        )}
 
         {/* Preview de cámara — cuadrito flotante esquina inferior derecha */}
         {facial.isStreaming && (

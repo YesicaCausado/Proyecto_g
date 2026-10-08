@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationsProvider } from './context/NotificationsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
@@ -17,6 +18,7 @@ const ResetPasswordPage    = lazy(() => import('./pages/auth/ResetPasswordPage')
 const StudentDashboard     = lazy(() => import('./pages/student/StudentDashboard'));
 const ChatPage             = lazy(() => import('./pages/student/ChatPage'));
 const BotsPage             = lazy(() => import('./pages/student/BotsPage'));
+const NeuroBotDetailPage    = lazy(() => import('./pages/student/NeuroBotDetailPage'));
 const MyClassesPage        = lazy(() => import('./pages/student/MyClassesPage'));
 const ClassroomPage        = lazy(() => import('./pages/student/ClassroomPage'));
 const QuizzesPage          = lazy(() => import('./pages/student/QuizzesPage'));
@@ -77,6 +79,9 @@ function AppRoutes() {
         {/* Estudiante */}
         <Route path="/bots" element={
           <ProtectedRoute role="estudiante"><Layout><BotsPage /></Layout></ProtectedRoute>
+        } />
+        <Route path="/bots/:botId" element={
+          <ProtectedRoute role="estudiante"><Layout><NeuroBotDetailPage /></Layout></ProtectedRoute>
         } />
         <Route path="/chat" element={
           <ProtectedRoute role="estudiante"><Layout><ChatPage /></Layout></ProtectedRoute>
@@ -167,8 +172,10 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
-        <AppRoutes />
-        <PWAInstallPrompt />
+        <NotificationsProvider>
+          <AppRoutes />
+          <PWAInstallPrompt />
+        </NotificationsProvider>
       </AuthProvider>
     </HashRouter>
   );

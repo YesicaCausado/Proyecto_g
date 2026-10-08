@@ -26,7 +26,7 @@ from app.core.permissions import Permission
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment
 from app.models.institution import AuditLog, Institution
-from app.models.learning import LearningSession, QuizHistory
+from app.models.learning import ChatMessage, LearningSession, QuizHistory
 from app.models.expert_bot import ExpertBot
 from app.models.messages import DirectMessage
 
@@ -628,25 +628,46 @@ async def get_super_bots(
     if not teacher_ids:
         return {"bots": [], "total": 0}
 
-    q = db.query(ExpertBot).filter(
-        ExpertBot.creator_id.in_(teacher_ids),
-        ExpertBot.is_active == True,
-    )
+    # Se listan también los bots inactivos: el Súper Profesor puede reactivarlos.
+    q = db.query(ExpertBot).filter(ExpertBot.creator_id.in_(teacher_ids))
     if search:
         q = q.filter(ExpertBot.name.ilike(f"%{search}%"))
 
     bots = q.order_by(ExpertBot.created_at.desc()).all()
+    bot_ids = [b.id for b in bots]
+    creators = {u.id: u for u in db.query(User).filter(User.id.in_({b.creator_id for b in bots})).all()} if bots else {}
+
+    # Métricas reales en consultas agrupadas (sin N+1).
+    docs, queries, groups = {}, {}, {}
+    if bot_ids:
+        from app.models.bot_document import BotDocument
+        from app.models.classroom import ClassroomBot
+        docs = dict(db.query(BotDocument.bot_id, func.count(BotDocument.id))
+                    .filter(BotDocument.bot_id.in_(bot_ids)).group_by(BotDocument.bot_id).all())
+        queries = dict(db.query(LearningSession.bot_id, func.count(ChatMessage.id))
+                       .join(ChatMessage, ChatMessage.session_id == LearningSession.id)
+                       .filter(LearningSession.bot_id.in_(bot_ids), ChatMessage.role == "user")
+                       .group_by(LearningSession.bot_id).all())
+        for bot_id, name in (db.query(ClassroomBot.bot_id, Classroom.name)
+                             .join(Classroom, Classroom.id == ClassroomBot.classroom_id)
+                             .filter(ClassroomBot.bot_id.in_(bot_ids), Classroom.is_active == True)
+                             .order_by(Classroom.name).all()):
+            groups.setdefault(bot_id, []).append(name)
+
     result = []
     for b in bots:
-        creator = db.query(User).filter(User.id == b.creator_id).first()
+        creator = creators.get(b.creator_id)
         result.append({
             "id":         b.id,
             "name":       b.name,
-            "teacher":    creator.full_name or creator.username if creator else "?",
+            "teacher":    (creator.full_name or creator.username) if creator else "?",
             "subject":    b.category or "—",
+            "group":      ", ".join(groups.get(b.id, [])) or "Sin grupos asignados",
+            "docs":       docs.get(b.id, 0),
+            "queries":    queries.get(b.id, 0),
             "status":     "activo" if b.is_active else "inactivo",
             "visibility": "publico" if b.is_public else "privado",
-            "created":    b.created_at.strftime("%Y-%m-%d"),
+            "created":    b.created_at.strftime("%Y-%m-%d") if b.created_at else "",
         })
 
     return {"bots": result, "total": len(result)}

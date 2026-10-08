@@ -424,6 +424,8 @@ class AssignBotRequest(BaseModel):
     bot_id: int
     is_required: bool = False
     order_index: int = 0
+    # Meta de interacciones para el progreso del estudiante (parche 11B)
+    goal_interactions: Optional[int] = None
 
 
 class StudentProgressResponse(BaseModel):

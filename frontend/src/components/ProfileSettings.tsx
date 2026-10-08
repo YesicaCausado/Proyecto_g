@@ -16,7 +16,6 @@ import { institutionLabel } from '../utils/institution';
  */
 interface ProfileSettingsProps {
   role?: string;
-  prefsStorageKey?: string;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -30,13 +29,21 @@ const DEFAULT_PREFS = { nuevaActividad: true, mensajeDirecto: true };
 type Prefs = typeof DEFAULT_PREFS;
 
 const PREF_LABELS: Record<keyof Prefs, { label: string; sub: string }> = {
-  nuevaActividad: { label: 'Nueva actividad', sub: 'Cuando hay actividad en tus clases' },
+  nuevaActividad: { label: 'Nueva actividad', sub: 'NeuroBots asignados o completados, evaluaciones, alertas y actividad de tus grupos' },
   mensajeDirecto: { label: 'Mensaje directo', sub: 'Cuando recibes un mensaje' },
 };
 
+// Se guardan en el servidor (/notifications/preferences): si una opción está
+// desactivada, no se crean notificaciones de ese grupo para el usuario.
+function fromApi(data: { nueva_actividad?: boolean; mensaje_directo?: boolean }): Prefs {
+  return {
+    nuevaActividad: data.nueva_actividad ?? true,
+    mensajeDirecto: data.mensaje_directo ?? true,
+  };
+}
+
 export default function ProfileSettings({
   role,
-  prefsStorageKey = 'neurolearn_notifications',
 }: ProfileSettingsProps) {
   const { user, updateUser, logout } = useAuth();
   const [avatarPrev, setAvatarPrev] = useState<string | null>(user?.photo ?? null);
@@ -56,12 +63,15 @@ export default function ProfileSettings({
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
 
-  const [prefs, setPrefs] = useState<Prefs>(() => {
-    const stored = localStorage.getItem(prefsStorageKey);
-    if (!stored) return { ...DEFAULT_PREFS };
-    try { return { ...DEFAULT_PREFS, ...JSON.parse(stored) }; }
-    catch { return { ...DEFAULT_PREFS }; }
-  });
+  const [prefs, setPrefs] = useState<Prefs>({ ...DEFAULT_PREFS });
+  const [prefsState, setPrefsState] = useState<'cargando' | 'listo' | 'error'>('cargando');
+  const [savingPrefs, setSavingPrefs] = useState(false);
+
+  useEffect(() => {
+    api.get('/notifications/preferences', { params: { _t: Date.now() } })
+      .then(res => { setPrefs(fromApi(res.data)); setPrefsState('listo'); })
+      .catch(() => setPrefsState('error'));
+  }, []);
 
   const [saved, setSaved] = useState<'perfil' | 'password' | 'prefs' | null>(null);
   const [error, setError] = useState('');
@@ -148,10 +158,22 @@ export default function ProfileSettings({
     }
   };
 
-  const savePrefs = () => {
-    localStorage.setItem(prefsStorageKey, JSON.stringify(prefs));
-    setSaved('prefs');
-    setTimeout(() => setSaved(null), 2000);
+  const savePrefs = async () => {
+    setSavingPrefs(true);
+    setError('');
+    try {
+      const res = await api.put('/notifications/preferences', {
+        nueva_actividad: prefs.nuevaActividad,
+        mensaje_directo: prefs.mensajeDirecto,
+      });
+      setPrefs(fromApi(res.data));
+      setSaved('prefs');
+      setTimeout(() => setSaved(null), 2000);
+    } catch {
+      setError('No fue posible guardar tus preferencias de notificación.');
+    } finally {
+      setSavingPrefs(false);
+    }
   };
 
   const roleLabel = ROLE_LABELS[role ?? user?.role ?? ''] ?? (user?.role ?? 'Usuario');
@@ -276,8 +298,11 @@ export default function ProfileSettings({
             </div>
           );
         })}
-        <button onClick={savePrefs}
-          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm ${saved === 'prefs' ? 'bg-[#0F7B6C] text-white' : 'bg-[#0066FF] text-white hover:bg-[#0052CC]'}`}>
+        {prefsState === 'error' && (
+          <p className="text-xs text-[#E03E3E]">No fue posible cargar tus preferencias. Recarga la página para intentarlo de nuevo.</p>
+        )}
+        <button onClick={savePrefs} disabled={prefsState !== 'listo' || savingPrefs}
+          className={`disabled:opacity-60 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm ${saved === 'prefs' ? 'bg-[#0F7B6C] text-white' : 'bg-[#0066FF] text-white hover:bg-[#0052CC]'}`}>
           {saved === 'prefs' ? <><CheckCircle className="w-4 h-4" /> Guardado</> : <><Save className="w-4 h-4" /> Guardar preferencias</>}
         </button>
       </section>

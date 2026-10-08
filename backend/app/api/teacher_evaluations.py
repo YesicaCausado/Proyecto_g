@@ -297,9 +297,24 @@ async def publish_evaluation(
     ev.status = "publicada"
     ev.active = True
     ev.published_at = svc.utcnow()
+    _notify_published(db, ev, current_user)
     db.commit()
     db.refresh(ev)
     return _eval_out(ev, db)
+
+
+def _notify_published(db: Session, ev: TeacherEvaluation, teacher: User) -> None:
+    """Evaluación publicada → estudiantes activos del aula (misma transacción)."""
+    from app.services import notification_service
+    classroom = db.get(Classroom, ev.classroom_id)
+    student_ids = [r.student_id for r in db.query(Enrollment.student_id).filter(
+        Enrollment.classroom_id == ev.classroom_id, Enrollment.is_active == True)]  # noqa: E712
+    when = f" Fecha límite: {ev.date}." if ev.date else ""
+    notification_service.notify(
+        db, student_ids, "evaluacion_publicada", "Nueva evaluación publicada",
+        f'{teacher.full_name or teacher.username} publicó "{ev.title}" en {classroom.name if classroom else "tu grupo"}.{when}',
+        link=f"/evaluations?id={ev.id}", resource_type="evaluacion", resource_id=ev.id,
+    )
 
 
 @router.post("/evaluations/{eval_id}/close")

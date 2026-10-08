@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
+import NotificationBell from '../../components/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import { navItemStyle } from '../../styles/sidebar';
 import {
@@ -207,6 +208,7 @@ export default function AdminDashboard() {
             <ChevronRight className="w-3 h-3" />
             <span className="text-[#191919] font-medium">NeuroLearn IA</span>
           </div>
+          <NotificationBell className="ml-auto" />
         </header>
 
         {/* Área de contenido scrolleable */}

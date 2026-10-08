@@ -36,6 +36,7 @@ migrations/
 | 008 | `008_documentos_neurobots.sql` | **Aplicada.** Crea `bot_documents` y `bot_document_chunks` (base de conocimiento de los NeuroBots). | Oct 2026 |
 | 009 | `009_evaluaciones_estudiantes.sql` | **Aplicada.** Estado, aula y fechas en `teacher_evaluations`; tabla `evaluation_submissions`. | Oct 2026 |
 | 010 | `010_consentimientos.sql` | **Pendiente de ejecutar** (antes o después del despliegue). Tabla `user_consents` (consentimiento de cámara y micrófono). | Oct 2026 |
+| 011 | `011_neurobots_notificaciones.sql` | **Pendiente de ejecutar — ANTES de desplegar el parche 11B.** Columnas `goal_interactions` y `assigned_by_id` en `classroom_bots`; tablas `student_bot_assignments`, `neurobot_progress`, `notifications` y `notification_preferences` (con RLS). Idempotente. | Oct 2026 |
 
 ## RLS multi-tenant (005)
 
