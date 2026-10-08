@@ -24,14 +24,14 @@ import os
 import re
 import sys
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import tests.entorno_pruebas  # noqa: E402,F401  (BD en memoria, correo a consola, sin IA real)
 
 from fastapi.testclient import TestClient  # noqa: E402
-from jose import jwt  # noqa: E402
+import jwt  # noqa: E402  (PyJWT)
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
@@ -204,6 +204,27 @@ class AuthRolesTests(unittest.TestCase):
         self.assertEqual(self.client.get(me, headers={"Authorization": f"Bearer {expired}"}).status_code, 401)
         ghost = create_access_token({"sub": "usuario_borrado"})
         self.assertEqual(self.client.get(me, headers={"Authorization": f"Bearer {ghost}"}).status_code, 401)
+
+    def test_token_algorithm_and_claims_are_enforced(self):
+        """Solo se acepta HS256 firmado con SECRET_KEY y con «sub» de texto."""
+        me = f"{API}/auth/me"
+        admin = self.usernames["admin"]
+        future = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        def status(token):
+            return self.client.get(me, headers={"Authorization": f"Bearer {token}"}).status_code
+
+        # Token sin firma (alg=none): el ataque clásico de confusión de algoritmo.
+        unsigned = jwt.encode({"sub": admin, "exp": future}, None, algorithm="none")
+        self.assertEqual(status(unsigned), 401)
+        # Firmado con la clave real pero con otro algoritmo HMAC.
+        other_alg = jwt.encode({"sub": admin, "exp": future}, settings.SECRET_KEY, algorithm="HS512")
+        self.assertEqual(status(other_alg), 401)
+        # Firma válida pero sin «sub», o con «sub» que no es texto.
+        self.assertEqual(status(create_access_token({"rol": "admin"})), 401)
+        self.assertEqual(status(create_access_token({"sub": 12345})), 401)
+        # Control: el mismo admin con un token correcto entra.
+        self.assertEqual(status(create_access_token({"sub": admin})), 200)
 
     def test_token_rejected_after_deactivation(self):
         token = create_access_token({"sub": self.usernames["temporal"]})

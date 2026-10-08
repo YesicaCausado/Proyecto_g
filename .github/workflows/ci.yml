@@ -2,9 +2,10 @@
 #
 # En cada push y en cada pull request:
 #   - Backend: instala las dependencias de PRODUCCIÓN (api/requirements.txt,
-#     lo mismo que instala Vercel) + pytest con Python 3.12 y ejecuta la suite
-#     completa (backend/tests). Las pruebas usan SQLite en memoria, correo a
-#     consola y dobles para la IA: no necesitan secretos ni servicios externos.
+#     lo mismo que instala Vercel) + pytest con Python 3.12, ejecuta la suite
+#     completa (backend/tests) y audita esas dependencias con pip-audit. Las
+#     pruebas usan SQLite en memoria, correo a consola y dobles para la IA: no
+#     necesitan secretos ni servicios externos.
 #   - Frontend: npm ci, npm audit (bloqueante para dependencias de
 #     producción) y npm run build (tsc -b && vite build), el mismo comando
 #     que ejecuta Vercel.
@@ -37,7 +38,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend · pruebas (Python 3.12)
+    name: Backend · pruebas y auditoría (Python 3.12)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -65,6 +66,13 @@ jobs:
 
       - name: Ejecutar las pruebas
         run: python -m pytest -v
+
+      # Bloqueante: ninguna vulnerabilidad conocida en lo que instala Vercel
+      # (api/requirements.txt y sus dependencias). Ver docs/SEGURIDAD_DEPENDENCIAS.md
+      - name: Auditoría de seguridad (dependencias de producción)
+        run: |
+          pip install pip-audit==2.10.1
+          pip-audit -r ../api/requirements.txt --progress-spinner off --desc on
 
       - name: Verificar que las pruebas no modificaron archivos versionados
         run: git diff --exit-code --stat

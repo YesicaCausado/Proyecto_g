@@ -90,26 +90,49 @@ el changelog de esa dependencia, se prueba y se documenta aquí.
 | `pytest` (solo pruebas) | 8.3.3 | 9.1.1 | GHSA-6w46-j5rx-g56g (moderada): manejo inseguro de `tmpdir`. Las 119 pruebas pasan con 9.1.1 sin cambios |
 | `backend/requirements.txt` | 21 paquetes fijados a mano | `-r ../api/requirements.txt` + `uvicorn` | `pandas==2.1.4` y `numpy==2.1.0` eran incompatibles (el archivo no podía instalarse). `scikit-learn`, `numpy`, `pandas`, `joblib`, `openpyxl`, `openai` y `alembic` no se importan en ningún archivo del proyecto. Ahora local, Docker, pruebas y Vercel usan las mismas versiones |
 
-### Pendiente: dependencias de producción (`api/requirements.txt`)
+### Corregido en el parche 10B: dependencias de producción (`api/requirements.txt`)
 
-Estas vulnerabilidades afectan lo que corre en Vercel. Se documentan aquí y se
-corrigen en un parche propio, porque varias exigen actualizar FastAPI
-(framework base) y deben probarse con la suite completa:
+Antes del parche, lo que instala Vercel tenía **62 avisos conocidos** en sus
+dependencias directas y 9 más en las indirectas fijadas por FastAPI 0.104.1
+(`starlette` 0.27.x y `anyio` 3.7.x). Después del parche, ninguna de las
+versiones fijadas tiene avisos en la GitHub Advisory Database.
 
-| Dependencia | Versión | Severidad | Resumen | Corregida en | Exposición en NeuroLearn |
+| Dependencia | Antes | Ahora | Avisos que corrige | Exposición en NeuroLearn | Cambio en el código |
 |---|---|---|---|---|---|
-| `python-multipart` | 0.0.6 | Alta (5 altos, 1 moderado, 3 bajos) | DoS y ReDoS al procesar `multipart/form-data` | 0.0.31 | Alta: subida de documentos de NeuroBots y carga masiva CSV |
-| `pypdf` | 5.1.0 | Alta (10 altos, 36 moderados, 3 bajos) | Bucles infinitos y consumo de memoria con PDF manipulados | 6.19.0 | Alta: se extrae texto de los PDF que suben los profesores |
-| `starlette` (vía FastAPI 0.104.1) | 0.27.0 | Alta (3 altos, 3 moderados, 1 bajo) | DoS en formularios multipart, límites ignorados, cabecera Host | 1.3.1 | Alta; exige actualizar FastAPI |
-| `python-jose` | 3.3.0 | Crítica (2 críticas, 1 moderada) | Confusión de algoritmo con claves públicas; una sin corrección | 3.4.0 (parcial) | Baja: los tokens usan HS256 con clave secreta y `jwt.decode(..., algorithms=[settings.ALGORITHM])` (`api/auth.py`). La librería está sin mantenimiento; se recomienda migrar a PyJWT |
-| `anyio` (vía FastAPI 0.104.1) | 3.7.1 | Crítica (1 crítica, 1 moderada) | Codificación IDNA 2003 en TLS; bloqueo de procesos | 4.14.2 | Baja; FastAPI 0.104.1 exige `anyio<4`, se corrige junto con FastAPI |
-| `python-dotenv` | 1.0.0 | Moderada (1) | `set_key` sigue enlaces simbólicos | 1.2.2 | Nula: solo se usa para leer `.env` (a través de `pydantic-settings`); la app no llama a `set_key` |
+| `python-multipart` | 0.0.6 | 0.0.32 | 5 altos, 1 moderado, 3 bajos: DoS y ReDoS al procesar `multipart/form-data` | Alta: subida de documentos de NeuroBots, carga masiva CSV y adjuntos | Ninguno |
+| `pypdf` | 5.1.0 | 6.19.0 | 10 altos, 36 moderados, 3 bajos: bucles infinitos y consumo de memoria con PDF manipulados | Alta: se extrae el texto de los PDF que suben los profesores | `bot_documents.py` atiende `LimitReachedError` (nuevo en pypdf 6) con un 422 y un mensaje claro |
+| `starlette` | 0.27.0 (vía FastAPI) | 1.7.0 (fijada aparte) | 3 altos, 3 moderados, 1 bajo: DoS en formularios, límites ignorados, validación de `Host` | Alta | Ninguno (la app no usa `on_event` ni APIs retiradas en 1.0) |
+| `fastapi` | 0.104.1 | 0.142.4 | Necesario para Starlette 1.x | — | Ninguno: las 166 rutas y el esquema OpenAPI son idénticos |
+| `anyio` | 3.7.1 (vía FastAPI) | 4.x (la última que admite Starlette, ≥ 4.14.2) | 1 crítico, 1 moderado | Baja | Ninguno |
+| `python-jose` | 3.3.0 | **retirada**, reemplazada por `PyJWT` 2.15.1 | 2 críticos (confusión de algoritmo; uno sin corrección) y 1 moderado; la librería está sin mantenimiento. También salen sus dependencias `ecdsa` (Minerva, sin corrección), `rsa` y `pyasn1` | Baja (HS256 con `algorithms=[...]` fijo), pero sin mantenimiento | `api/auth.py`: `import jwt` y `except InvalidTokenError`. Los tokens HS256 ya emitidos siguen siendo válidos |
+| `pydantic` | 2.5.2 | 2.13.5 | Requerido por FastAPI 0.142 | — | Ninguno |
+| `pydantic-settings` | 2.1.0 | 2.15.0 | Compatibilidad con pydantic 2.13 | — | Ninguno |
+| `httpx` | 0.25.2 | 0.28.1 | Starlette 1.x exige ≥ 0.27 | — | Ninguno (la app usa `AsyncClient(timeout)`, `get`/`post`) |
+| `python-dotenv` | 1.0.0 | 1.2.4 | 1 moderado (`set_key` sigue enlaces simbólicos) | Nula (solo se lee `.env`) | Ninguno |
 
-FastAPI 0.104.1 fija `starlette>=0.27.0,<0.28.0` y `anyio>=3.7.1,<4.0.0`, por
-eso esas dos no pueden subir sin actualizar FastAPI. Las demás dependencias
-indirectas (`h11`, `idna`, `certifi`, `pyasn1`…) no están limitadas y pip
-instala su última versión, que ya trae las correcciones; se confirman con
-`pip-audit` (abajo) en el parche de dependencias de Python.
+Sin cambios porque no tienen avisos: `sqlalchemy` 2.0.23, `passlib[bcrypt]`
+1.7.4, `bcrypt` 4.0.1, `psycopg2-binary` 2.9.9 y `cryptography` 50.0.2.
+
+Solo para pruebas (`backend/requirements-dev.txt`) se agrega `httpx2` 2.13.0,
+el cliente que usa `TestClient` desde Starlette 1.x.
+
+**Diferencia de comportamiento con PyJWT:** una `SECRET_KEY` vacía ya no
+firma tokens (`python-jose` lo permitía, lo que equivalía a no tener firma):
+el inicio de sesión responde 500. Al arrancar, el servidor escribe en el log
+`[SEGURIDAD] ERROR` si falta la clave o `[SEGURIDAD] AVISO` si tiene menos de
+32 bytes, sin mostrarla nunca. En Vercel, `SECRET_KEY` debe existir y tener al
+menos 32 caracteres. Si se cambia, las sesiones abiertas se cierran.
+
+**Verificación:**
+
+- Suite completa con las versiones nuevas: 121 pruebas aprobadas. Incluye dos
+  pruebas nuevas:
+  - tokens sin firma (`alg=none`), con otro algoritmo (HS512), sin `sub` o con
+    `sub` no textual → 401;
+  - un PDF que supera los límites de pypdf → 422.
+- Un token emitido con `python-jose` se valida correctamente con PyJWT.
+- Las 166 rutas de la API son las mismas antes y después.
+- CI: `pip-audit -r ../api/requirements.txt` bloqueante en el job *Backend*.
 
 ### Cómo auditar Python
 
@@ -117,6 +140,9 @@ En el entorno con Python 3.12 (ver `docs/PRUEBAS.md`):
 
 ```bash
 cd backend
-uv pip install pip-audit
+uv pip install pip-audit==2.10.1
 pip-audit -r ../api/requirements.txt
 ```
+
+La CI ejecuta lo mismo en cada push: si aparece un aviso nuevo, el job
+*Backend* falla y muestra el paquete, el aviso y la versión que lo corrige.

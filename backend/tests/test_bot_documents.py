@@ -196,6 +196,27 @@ class ServiceTests(unittest.TestCase):
                     svc.extract_text("pdf", raw)
                 self.assertEqual(ctx.exception.status_code, 422)
 
+    def test_pdf_exceeding_reader_limits_is_rejected_cleanly(self):
+        # pypdf 6 lanza LimitReachedError cuando un PDF manipulado supera sus
+        # límites de memoria/tiempo; debe convertirse en un 422 con mensaje claro.
+        from pypdf.errors import LimitReachedError
+
+        class ReaderAtLimit:
+            is_encrypted = False
+
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            @property
+            def pages(self):
+                raise LimitReachedError("Limit reached while decompressing")
+
+        with mock.patch("pypdf.PdfReader", ReaderAtLimit):
+            with self.assertRaises(svc.BotDocumentError) as ctx:
+                svc.extract_text("pdf", make_pdf(["texto"]))
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertIn("demasiado complejo", ctx.exception.message)
+
     def test_chunking_respects_size(self):
         text = svc.normalize_text(TXT_CONTENT.decode() * 40)
         chunks = svc.chunk_text(text)

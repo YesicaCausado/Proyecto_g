@@ -4,24 +4,30 @@
 #   - uvicorn[standard], alembic, mangum                       -> innecesarios
 #   - openai (SDK)                                             -> Groq/Gemini usan httpx
 #   - SDK de correo                                            -> Brevo se llama por REST con httpx
-#   - python-jose[cryptography]                                -> HS256 usa HMAC de stdlib
-#     (cryptography sí se instala aparte: la usa Integraciones, ver abajo)
+#   - python-jose                                              -> reemplazada por PyJWT
+#     (cryptography sí se instala: la usa Integraciones, ver abajo)
 # Las pruebas (backend/requirements-dev.txt) y GitHub Actions instalan este
 # mismo archivo: si falta una librería que use la app, la CI lo detecta
 # (backend/tests/test_dependencias_produccion.py).
-fastapi==0.104.1
+# Versiones revisadas contra la GitHub Advisory Database (parche 10B,
+# docs/SEGURIDAD_DEPENDENCIAS.md). CI ejecuta pip-audit sobre este archivo.
+fastapi==0.142.4
+# Starlette se fija aparte: FastAPI solo exige >=0.46 y las correcciones de
+# DoS en formularios multipart y validación de Host llegan en 1.3.1.
+starlette==1.7.0
 sqlalchemy==2.0.23
-pydantic==2.5.2
-pydantic-settings==2.1.0
-python-jose==3.3.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+# JWT HS256 (reemplaza a python-jose, sin mantenimiento)
+PyJWT==2.15.1
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
-python-multipart==0.0.6
-httpx==0.25.2
-python-dotenv==1.0.0
+python-multipart==0.0.32
+httpx==0.28.1
+python-dotenv==1.2.4
 psycopg2-binary==2.9.9
 # Lectura de PDF para la base de conocimiento de los NeuroBots (Python puro)
-pypdf==5.1.0
+pypdf==6.19.0
 # Cifrado (Fernet) de los tokens OAuth de Google Drive en Integraciones
 # (app/services/integration_service.py). Sin ella, conectar Drive da error 500.
 cryptography==50.0.2

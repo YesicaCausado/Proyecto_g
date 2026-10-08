@@ -27,7 +27,8 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -355,7 +356,9 @@ async def get_current_user(
         if not username:
             raise credentials_exception
 
-    except JWTError:
+    except InvalidTokenError:
+        # Firma inválida, token vencido o mal formado, algoritmo distinto de
+        # settings.ALGORITHM o «sub» que no es texto (PyJWT).
         raise credentials_exception
 
     try:

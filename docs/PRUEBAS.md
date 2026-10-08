@@ -54,7 +54,7 @@ python -m unittest tests.test_flujo_institucional -v
 > importar los scripts manuales antiguos (ver más abajo), que llaman a un
 > servidor en vivo. Use `python -m pytest`.
 
-Resultado esperado: `119 passed` (≈ 10 s). No requiere internet, servidor
+Resultado esperado: `121 passed` (≈ 10 s). No requiere internet, servidor
 levantado, base de datos ni claves de IA o de correo.
 
 ## Aislamiento: qué nunca tocan las pruebas
@@ -78,7 +78,7 @@ PostgreSQL y a Brevo, la suite pasa igual y no se envía ningún correo.
 
 ## Qué cubre
 
-### Autenticación, roles, permisos y aislamiento — `tests/test_auth_roles.py`
+### Autenticación, roles, permisos y aislamiento — `tests/test_auth_roles.py` (12 pruebas)
 
 Reemplaza las pruebas de humo manuales (`test_login.py`, `test_all_logins.py`,
 recorridos por rol y `_audit_live_tests.ps1`). Usa dos instituciones (A y B),
@@ -92,6 +92,7 @@ cada una con Súper Profesor, Profesor y Estudiante, más un Administrador.
 | Contraseña temporal | `must_change_password` en la respuesta |
 | Fuerza bruta | Tras `RATE_LIMIT_MAX_REQUESTS` fallos → 429 |
 | Token | Ausente, basura, alterado, firmado con otra clave, vencido, usuario borrado → 401; usuario desactivado después de emitido → 403 |
+| Algoritmo y claims | Token sin firma (`alg=none`), firmado con HS512, sin `sub` o con `sub` no textual → 401 |
 | Matriz de permisos | Cada endpoint protegido se llama con los 4 roles; solo los roles permitidos reciben 200, el resto 403 (ver tabla abajo) |
 | Generación con IA | `POST /teacher/ai/generate` → 403 para Súper Profesor y Estudiante |
 | Sin autenticación | Endpoints protegidos → 401 |
@@ -133,7 +134,7 @@ paso:
 | `test_dependencias_produccion.py` | 4 | Toda librería que importa `backend/app` está en `api/requirements.txt` (lo que instala Vercel); detecta casos como el de `cryptography` |
 | `test_password_reset_service.py` | 25 | CU-03 a nivel de caso de uso: límites (cooldown, 3/hora), hash del token, expiración, contraseña débil, adaptador de Brevo, plantilla |
 | `test_security.py` | 7 | Validación de origen (CSRF), bloqueo por fuerza bruta, XSS y SQLi en login, cabeceras de seguridad |
-| `test_bot_documents.py` | 14 | Documentos de NeuroBots: validación, extracción PDF/DOCX/TXT, recuperación, permisos por institución |
+| `test_bot_documents.py` | 15 | Documentos de NeuroBots: validación, extracción PDF/DOCX/TXT, PDF que excede los límites del lector, recuperación, permisos por institución |
 | `test_preguntas_ia.py` | 8 | Generación de preguntas con IA (doble), normalización, errores 502/503 sin datos falsos |
 | `test_evaluaciones_estudiantes.py` | 5 | Ciclo borrador → publicada → cerrada, intentos, envío atómico, calificación |
 | `test_consentimientos.py` | 6 | Consentimiento de cámara y micrófono, versiones, retiro, efecto en el chat |
@@ -167,8 +168,8 @@ Los cambios que solo tocan documentación (`*.md`, `docs/`) no lo disparan.
 
 | Job | Qué hace | Falla si… |
 |---|---|---|
-| **Backend · pruebas (Python 3.12)** | Instala `backend/requirements-dev.txt` (dependencias de producción + pytest) y ejecuta `python -m pytest -v` | alguna prueba falla, falta una dependencia en `api/requirements.txt` o una prueba modificó un archivo versionado (por ejemplo `neurolearn.db`) |
-| **Frontend · compilación (Node 22)** | `npm ci` y `npm run build` (`tsc -b && vite build`), el mismo comando de Vercel | hay errores de TypeScript o la compilación de Vite falla |
+| **Backend · pruebas y auditoría (Python 3.12)** | Instala `backend/requirements-dev.txt` (dependencias de producción + pytest), ejecuta `python -m pytest -v` y `pip-audit -r ../api/requirements.txt` | alguna prueba falla, falta una dependencia en `api/requirements.txt`, una dependencia de producción tiene una vulnerabilidad conocida o una prueba modificó un archivo versionado (por ejemplo `neurolearn.db`) |
+| **Frontend · auditoría y compilación (Node 22)** | `npm ci`, `npm audit` y `npm run build` (`tsc -b && vite build`), el mismo comando de Vercel | una dependencia de producción tiene una vulnerabilidad moderada o mayor, hay errores de TypeScript o la compilación de Vite falla |
 
 Cómo ver el resultado:
 

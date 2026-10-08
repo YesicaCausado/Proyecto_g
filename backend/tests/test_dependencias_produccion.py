@@ -30,9 +30,9 @@ API_REQUIREMENTS = BACKEND_DIR.parent / "api" / "requirements.txt"
 # Módulo importado → paquete de PyPI que lo provee (cuando el nombre difiere,
 # o cuando llega como dependencia de otro paquete declarado).
 MODULO_A_PAQUETE = {
-    "jose": "python-jose",
+    "jwt": "pyjwt",
     "pydantic_settings": "pydantic-settings",
-    "starlette": "fastapi",          # dependencia directa de FastAPI
+    "starlette": "starlette",        # se fija aparte de FastAPI (parche 10B)
     "multipart": "python-multipart",
     "dotenv": "python-dotenv",
     "psycopg2": "psycopg2-binary",
@@ -118,7 +118,7 @@ class ProductionDependenciesTest(unittest.TestCase):
                 lineas = (BACKEND_DIR / nombre).read_text(encoding="utf-8").splitlines()
                 self.assertIn("-r ../api/requirements.txt", lineas)
                 fijadas = [l for l in lineas if "==" in l.split("#", 1)[0]]
-                permitidas = {"pytest", "uvicorn"}
+                permitidas = {"pytest", "uvicorn", "httpx2"}
                 self.assertEqual(
                     [l for l in fijadas if re.split(r"[\[=]", l, maxsplit=1)[0].strip() not in permitidas], [],
                     f"{nombre} solo debe agregar herramientas locales; las dependencias de la app van en api/requirements.txt")

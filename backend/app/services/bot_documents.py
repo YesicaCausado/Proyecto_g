@@ -254,7 +254,7 @@ def extract_text(ext: str, raw: bytes) -> Tuple[str, bool]:
 def _extract_pdf(raw: bytes) -> str:
     try:
         from pypdf import PdfReader
-        from pypdf.errors import PdfReadError
+        from pypdf.errors import LimitReachedError, PdfReadError
     except ImportError:  # pragma: no cover - dependencia declarada en requirements
         raise BotDocumentError("El servidor no tiene instalado el lector de PDF (pypdf).", 500)
 
@@ -278,6 +278,13 @@ def _extract_pdf(raw: bytes) -> str:
         return "\n\n".join(parts)
     except BotDocumentError:
         raise
+    except LimitReachedError as exc:
+        # pypdf 6 corta la lectura de PDFs que exceden sus límites de memoria o
+        # tiempo (protección contra archivos manipulados para tumbar el servidor).
+        logger.info("PDF rechazado por límites de pypdf: %s", exc)
+        raise BotDocumentError(
+            "El PDF es demasiado complejo para procesarlo. Guárdalo de nuevo como PDF "
+            "(por ejemplo, «Imprimir → Guardar como PDF») o súbelo como DOCX o TXT.", 422)
     except (PdfReadError, ValueError, KeyError, TypeError, AttributeError) as exc:
         logger.info("PDF ilegible: %s", exc)
         raise BotDocumentError("El PDF está dañado o no se puede leer.", 422)

@@ -128,6 +128,26 @@ def _apply_schema_and_migrations():
 
 
 # ============================================================
+# CLAVE DE FIRMA DE LOS TOKENS
+# ============================================================
+
+# PyJWT rechaza una clave vacía (el inicio de sesión respondería 500) y
+# recomienda al menos 32 bytes para HS256. Se informa en el log del servidor
+# al arrancar, sin mostrar nunca la clave.
+_secret_len = len(settings.SECRET_KEY.encode("utf-8"))
+if _secret_len == 0:
+    print(
+        "[SEGURIDAD] ERROR: SECRET_KEY no está configurada. "
+        "El inicio de sesión fallará hasta definirla en las variables de entorno."
+    )
+elif _secret_len < 32:
+    print(
+        f"[SEGURIDAD] AVISO: SECRET_KEY tiene {_secret_len} bytes; "
+        "se recomiendan al menos 32 para HS256."
+    )
+
+
+# ============================================================
 # INICIALIZACIÓN
 # ============================================================
 
