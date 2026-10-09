@@ -448,3 +448,17 @@ class AddressAndTemplateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class FrontendUrlTests(unittest.TestCase):
+    """El enlace del correo debe abrir la pantalla de nueva contraseña, no la
+    landing: el frontend usa HashRouter (rutas tras «#»)."""
+
+    def test_enlaces_con_hash(self):
+        from unittest import mock
+        from app.services import email_service
+        with mock.patch.object(email_service.settings, "FRONTEND_URL", "https://neurolearn.example/"):
+            self.assertEqual(email_service.frontend_url("/reset-password"),
+                             "https://neurolearn.example/#/reset-password")
+            self.assertEqual(email_service.frontend_url("login"), "https://neurolearn.example/#/login")
+            self.assertEqual(email_service.frontend_url(), "https://neurolearn.example")
