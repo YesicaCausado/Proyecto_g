@@ -1,197 +1,178 @@
-﻿# 🧠 NeuroLearn AI
+# NeuroLearn IA
 
 [![CI](https://github.com/YesicaCausado/Proyecto_g/actions/workflows/ci.yml/badge.svg)](https://github.com/YesicaCausado/Proyecto_g/actions/workflows/ci.yml)
 
-**Plataforma B2B2C de Aprendizaje Adaptativo con Inferencia Neuroconductual Digital**
+**Plataforma de aprendizaje adaptativo con inteligencia artificial para colegios**
 
-> **Proyecto de Grado** | PWA (Progressive Web App) | Colombia — Saber 11 ICFES
-
----
-
-## 📋 Descripción
-
-NeuroLearn AI es una plataforma educativa SaaS institucional que combina **inteligencia artificial adaptativa** y **análisis neuroconductual en tiempo real** para personalizar el aprendizaje de bachilleres colombianos en las 5 habilidades transversales con peores resultados Saber 11.
-
-El sistema analiza 5 patrones de comportamiento digital mediante **fusión bayesiana multimodal** para inferir el estado cognitivo del estudiante (Flujo, Fatiga, Frustración, etc.) y adaptar automáticamente la pedagogía de la IA.
+> Proyecto de grado 2026 · Aplicación web instalable (PWA) · Colombia, preparación Saber 11 (ICFES)
 
 ---
 
-## 🎯 Las 5 Habilidades Transversales (Saber 11)
+## Descripción
 
-| # | Habilidad | Problema detectado |
-|---|-----------|-------------------|
-| 1 | Pensamiento Lógico-Matemático | 60% en niveles 1-2 |
-| 2 | Comprensión Lectora y Pensamiento Crítico | Baja inferencia y análisis |
-| 3 | Inglés Comunicativo | 75% en nivel A- (pre-básico) |
-| 4 | Competencias Ciudadanas y Sociales | No comprenden democracia ni derechos |
-| 5 | Pensamiento Científico | No aplican método científico |
+NeuroLearn IA ayuda a los estudiantes de bachillerato a prepararse para el
+Saber 11 con un tutor de inteligencia artificial que se adapta a cada uno.
 
----
+Mientras el estudiante estudia, el sistema observa cómo interactúa (ritmo de
+escritura, pausas, errores y, si el estudiante lo autoriza, cámara y
+micrófono) para estimar si está concentrado, cansado o frustrado, y ajusta la
+forma de enseñar.
 
-## 👥 Roles del Sistema
-
-| Rol | Descripción |
-|-----|-------------|
-| **Estudiante** | Aprende con el tutor IA adaptativo, visualiza su progreso cognitivo |
-| **Profesor** | Crea bots expertos con su material, monitorea alertas neuroconductuales |
-| **Súper Profesor (Rector)** | Gestiona docentes y estudiantes de su institución, dashboards macro del colegio |
-| **Administrador** | Gestiona instituciones (crear, activar/desactivar), usuarios, configuración del sistema y auditoría |
-| **Sistema IA** | Motor neuroconductual automatizado — analiza y adapta en tiempo real |
+Los colegios usan la plataforma con sus propias cuentas: cada institución
+tiene un Súper Profesor (rector o coordinador), sus profesores y sus
+estudiantes. No hay planes ni licencias: lo que cada usuario puede hacer
+depende solo de su rol.
 
 ---
 
-## 🧠 Patrones Neuroconductuales
+## Competencias del Saber 11
 
-| # | Patrón | Señal capturada |
-|---|--------|----------------|
-| 1 | Ritmo de Interacción | Velocidad de escritura, pausas, CPM |
-| 2 | Secuencia de Decisión | Uso de backspace, tiempo de hesitación |
-| 3 | Microexpresiones Faciales | Atención, frustración, curiosidad (cámara) |
-| 4 | Prosodia de Voz | Tono, temblor, energía vocal (micrófono) |
-| 5 | Patrón Predictivo de Error | Historial + contexto → probabilidad de fallo |
+| # | Competencia |
+|---|---|
+| 1 | Pensamiento lógico-matemático |
+| 2 | Comprensión lectora y pensamiento crítico |
+| 3 | Inglés comunicativo |
+| 4 | Competencias ciudadanas |
+| 5 | Pensamiento científico |
 
 ---
 
-## 🏗️ Arquitectura del Proyecto
+## Roles
+
+| Rol | Qué hace |
+|---|---|
+| **Administrador** | Crea instituciones y la cuenta de su Súper Profesor; activa o desactiva instituciones y usuarios; revisa la auditoría. |
+| **Súper Profesor** | Crea profesores y estudiantes (uno por uno o con CSV); ve el tablero, los grupos, las alertas y los reportes de su institución; envía comunicados. |
+| **Profesor** | Crea grupos y NeuroBots, asigna NeuroBots con una meta, crea evaluaciones, sube materiales y sigue el progreso de sus estudiantes. |
+| **Estudiante** | Se une a grupos con un código, conversa con el tutor y con sus NeuroBots, responde evaluaciones y quizzes y consulta su desempeño. |
+
+Detalle de permisos: [docs/MATRIZ_PERMISOS.md](docs/MATRIZ_PERMISOS.md).
+
+---
+
+## Funciones principales
+
+- **Tutor con IA** para las 5 competencias, que adapta su forma de enseñar según el estado del estudiante.
+- **NeuroBots:** tutores creados por el profesor con sus propios documentos, asignados a grupos o estudiantes, con progreso y resultados.
+- **Evaluaciones:** el profesor crea (a mano o con IA), publica y califica; el estudiante responde con tiempo e intentos.
+- **NeuroAlertas:** avisos de estudiantes con bajo rendimiento o sin actividad.
+- **Notificaciones** con campana en todos los paneles.
+- **Reportes** en PDF y CSV.
+- **Integraciones** con Google Drive y Google Calendar, y automatizaciones.
+- **Privacidad:** la cámara y el micrófono solo se usan con el consentimiento del estudiante.
+
+---
+
+## Tecnologías
+
+| Parte | Tecnología |
+|---|---|
+| Frontend | React 19, TypeScript, Vite y Tailwind CSS (aplicación instalable, PWA) |
+| Backend | Python 3.12 y FastAPI |
+| Base de datos | PostgreSQL en Supabase (SQLite para desarrollo local) |
+| Inicio de sesión | Tokens JWT y contraseñas cifradas con bcrypt |
+| Inteligencia artificial | Groq y, como respaldo, Gemini |
+| Correo | Brevo (recuperación de contraseña y credenciales) |
+| Despliegue | Vercel |
+
+---
+
+## Estructura del proyecto
 
 ```
-proyectog/
-│
-├── backend/                        # ✅ API REST — FastAPI + Python 3.11
+Proyecto_g/
+├── api/              Punto de entrada del backend en Vercel y sus dependencias
+├── backend/
 │   ├── app/
-│   │   ├── main.py                 # Entry point FastAPI
-│   │   ├── api/                    # Endpoints REST
-│   │   │   ├── auth.py             # Login / Registro / JWT
-│   │   │   ├── chat.py             # Sesiones de tutoría IA
-│   │   │   ├── expert_bot.py       # CRUD de bots expertos
-│   │   │   └── classroom.py        # Gestión de aulas / clases
-│   │   ├── ai/                     # Motor de IA
-│   │   │   ├── chatbot/            # Chatbot adaptativo
-│   │   │   ├── cognitive/          # Motor neuroconductual (fusión bayesiana)
-│   │   │   ├── expert_bot/         # Entrenador y persistencia de bots
-│   │   │   └── providers/          # Groq / Gemini / Fallback local
-│   │   ├── core/                   # Configuración central (settings)
-│   │   ├── db/                     # SQLAlchemy + SQLite/PostgreSQL
-│   │   ├── models/                 # ORM: User, LearningSession, ExpertBot, Classroom
-│   │   ├── schemas/                # Validación Pydantic
-│   │   └── services/               # Lógica de negocio reutilizable
-│   ├── data/
-│   │   └── trained_bots/           # Bots pre-entrenados (5 habilidades Saber 11)
-│   ├── tests/                      # Pruebas unitarias e integración
-│   └── requirements.txt
-│
-├── frontend/                       # 🔨 PWA — React 18 + TypeScript + Tailwind CSS
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── auth/               # LoginPage, recuperación y cambio de contraseña
-│   │   │   ├── student/            # StudentDashboard, ChatPage, BotsPage, MyClassesPage
-│   │   │   └── teacher/            # TeacherDashboard, CreateClassroomPage, ClassroomDetailPage
-│   │   ├── components/             # Layout, ProtectedRoute, CognitiveDashboard
-│   │   ├── hooks/                  # useBehavioralMetrics, useFacialDetection, useVoiceProsody
-│   │   ├── context/                # AuthContext
-│   │   ├── services/               # api.ts (cliente HTTP)
-│   │   └── types/                  # Tipos TypeScript globales
-│   └── package.json
-│
-├── docs/                           # 📄 Documentación del proyecto
-│   ├── REQUISITOS_FUNCIONALES.md   # 87 requisitos organizados por actor
-│   ├── IDEA_DEFINITIVA.md          # Concepto y propuesta de valor
-│   ├── DIAGRAMAS_UML.md            # Diagramas de arquitectura
-│   ├── ESTUDIO_VIABILIDAD.md       # Análisis de viabilidad técnica y económica
-│   ├── ANALISIS_GARTNER_MQ.md      # Posicionamiento en el mercado
-│   ├── MATRIZ_COMPETITIVA.md       # Comparación con competidores
-│   ├── CRONOGRAMA.md               # Plan de desarrollo
-│   └── PROMPTS_MOCKUPS_IA.md       # Prompts para generadores de UI/mockups
-│
-└── README.md
+│   │   ├── api/      Rutas de la API (auth, chat, bots, grupos, evaluaciones…)
+│   │   ├── ai/       Motor de análisis del estudiante y conexión con la IA
+│   │   ├── core/     Configuración y permisos por rol
+│   │   ├── models/   Tablas de la base de datos
+│   │   └── services/ Lógica del negocio (notificaciones, NeuroBots, reportes…)
+│   ├── data/         Bots base de las 5 competencias
+│   ├── migrations/   Scripts SQL para Supabase
+│   ├── scripts/      Creación del primer Administrador
+│   └── tests/        Pruebas automáticas
+├── frontend/
+│   └── src/
+│       ├── pages/    Pantallas de cada rol (admin, super, teacher, student)
+│       ├── components/
+│       ├── context/  Sesión y notificaciones
+│       └── services/ Cliente de la API
+├── docs/             Documentación del proyecto
+└── PLAN.md           Estado y pendientes del proyecto
 ```
 
 ---
 
-## 🔧 Stack Tecnológico
-
-| Capa | Tecnología |
-|------|-----------|
-| **Frontend** | React 18 + TypeScript + Vite + Tailwind CSS |
-| **Backend** | Python 3.11 + FastAPI + Uvicorn |
-| **Base de datos** | SQLite (desarrollo) / PostgreSQL (producción) |
-| **ORM** | SQLAlchemy |
-| **Auth** | JWT (python-jose) + Bcrypt (passlib) |
-| **IA Generativa** | Groq (LLaMA 3) → Gemini (fallback) → Local (fallback) |
-| **Análisis conductual** | NumPy + Scikit-learn |
-| **Validación** | Pydantic v2 |
-
----
-
-## 🚀 Instalación y Ejecución
+## Instalación local
 
 ### Backend
 ```bash
-cd backend                      # requiere Python 3.12
-pip install -r requirements.txt  # dependencias de producción + uvicorn
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-# Documentación interactiva: http://localhost:8000/docs
+cd backend                        # requiere Python 3.12
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+# Documentación de la API: http://localhost:8000/docs
 ```
 
+Las variables de entorno necesarias están en `docs/VARIABLES_ENTORNO.md`
+(base de datos, clave de los tokens, claves de IA y de correo).
+
 ### Primer Administrador
-El Administrador global (crea instituciones; no pertenece a ninguna) se da de
-alta con un script, contra la base que indique `DATABASE_URL`. La contraseña
-se pide sin mostrarse y debe cumplir la política del sistema:
+No hay cuentas de demostración. El Administrador se crea con un script; la
+contraseña se pide sin mostrarse:
 ```bash
 cd backend
 python -m scripts.crear_admin --usuario admin.neurolearn --correo admin@colegio.edu.co --nombre "Nombre Apellido"
 python -m scripts.crear_admin --usuario admin.neurolearn --restablecer   # cambiar su contraseña
 ```
-Desde el panel del Administrador se crean las instituciones (y su Súper
-Profesor); el Súper Profesor crea profesores y estudiantes. No hay cuentas de
-demostración con contraseñas conocidas.
+Desde su panel se crean las instituciones; el Súper Profesor de cada una crea
+a los profesores y estudiantes.
 
 ### Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
-# App en: http://localhost:5173
+# Aplicación en http://localhost:5173
 ```
 
-### Pruebas automáticas (backend)
+### Pruebas
 ```bash
 cd backend
-uv venv --python 3.12 .venv && source .venv/bin/activate   # Python 3.12
-uv pip install -r requirements-dev.txt                      # dependencias de producción + pytest
-python -m pytest -v
-# BD en memoria, sin correos reales ni IA real. Detalle: docs/PRUEBAS.md
+uv venv --python 3.12 .venv && source .venv/bin/activate
+uv pip install -r requirements-dev.txt
+python -m pytest -q
 ```
-
-GitHub Actions ejecuta estas pruebas y la compilación del frontend en cada push (`.github/workflows/ci.yml`).
-
----
-
-## 📊 Estado del Proyecto
-
-| Módulo | Estado |
-|--------|--------|
-| API REST (auth, chat, bots, classroom) | ✅ Implementado |
-| Motor Neuroconductual (5 patrones + fusión bayesiana) | ✅ Implementado |
-| Chatbot Adaptativo con decisiones pedagógicas | ✅ Implementado |
-| Bots pre-entrenados (5 habilidades Saber 11) | ✅ Implementado |
-| Frontend React PWA (6 vistas principales) | 🔨 En desarrollo |
-| Integración IA Generativa (Groq / Gemini) | ⏳ Pendiente |
-| Despliegue en producción | ⏳ Pendiente |
+Usan una base de datos en memoria, sin correos ni IA reales. GitHub Actions
+las ejecuta en cada cambio, junto con la compilación del frontend. Detalle en
+[docs/PRUEBAS.md](docs/PRUEBAS.md).
 
 ---
 
-## 📖 Documentación
+## Estado
 
-- 📋 [Requisitos Funcionales (87 RF)](docs/REQUISITOS_FUNCIONALES.md)
-- 💡 [Idea Definitiva del Proyecto](docs/IDEA_DEFINITIVA.md)
-- 📐 [Diagramas UML y Arquitectura](docs/DIAGRAMAS_UML.md)
-- 🤖 [NeuroBots asignados y notificaciones](docs/NEUROBOTS_NOTIFICACIONES.md)
-- 🧪 [Pruebas automáticas](docs/PRUEBAS.md)
-- 🔒 [Seguridad de dependencias](docs/SEGURIDAD_DEPENDENCIAS.md)
-- 📊 [Análisis de Viabilidad](docs/ESTUDIO_VIABILIDAD.md)
-- 🗓️ [Cronograma de Desarrollo](docs/CRONOGRAMA.md)
+La programación está prácticamente terminada y la aplicación funciona en
+Vercel. Falta la revisión final de seguridad y las pruebas manuales antes de
+la entrega. El detalle está en [PLAN.md](PLAN.md).
 
 ---
 
-*NeuroLearn AI — Proyecto de Grado 2026 🇨🇴*
+## Documentación
+
+- [Plan y estado del proyecto](PLAN.md)
+- [Requisitos funcionales y no funcionales](<docs/Requisitos funcionales y no funcionales version3 (1).md>)
+- [Idea del proyecto](docs/IDEA_DEFINITIVA.md)
+- [Diagramas UML](docs/DIAGRAMAS_UML.md)
+- [EDT del proyecto](docs/diccionario_edt_neurolearn.md)
+- [Permisos por rol](docs/MATRIZ_PERMISOS.md)
+- [NeuroBots y notificaciones](docs/NEUROBOTS_NOTIFICACIONES.md)
+- [Evaluaciones](docs/EVALUACIONES.md)
+- [Pruebas automáticas](docs/PRUEBAS.md)
+- [Despliegue en Vercel](docs/DEPLOYMENT_VERCEL.md)
+- [Seguridad de dependencias](docs/SEGURIDAD_DEPENDENCIAS.md)
+- [Estudio de viabilidad](docs/ESTUDIO_VIABILIDAD.md)
+
+---
+
+*NeuroLearn IA — Proyecto de grado 2026*
