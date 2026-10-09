@@ -118,17 +118,6 @@ uvicorn app.main:app --reload --port 8000
 Las variables de entorno necesarias están en `docs/VARIABLES_ENTORNO.md`
 (base de datos, clave de los tokens, claves de IA y de correo).
 
-### Primer Administrador
-No hay cuentas de demostración. El Administrador se crea con un script; la
-contraseña se pide sin mostrarse:
-```bash
-cd backend
-python -m scripts.crear_admin --usuario admin.neurolearn --correo admin@colegio.edu.co --nombre "Nombre Apellido"
-python -m scripts.crear_admin --usuario admin.neurolearn --restablecer   # cambiar su contraseña
-```
-Desde su panel se crean las instituciones; el Súper Profesor de cada una crea
-a los profesores y estudiantes.
-
 ### Frontend
 ```bash
 cd frontend
