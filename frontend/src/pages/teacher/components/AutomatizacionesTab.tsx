@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Loader2, Plus, Zap, Play, Trash2, History, AlertTriangle, Check,
-  X, Power, ChevronRight, FlaskConical, Brain, RefreshCw,
+  X, Power, ChevronRight, FlaskConical, Brain, RefreshCw, Pencil,
 } from 'lucide-react';
 import api from '../../../services/api';
 
@@ -14,6 +14,7 @@ interface Automation {
   action: string;
   configuration: Record<string, any>;
   enabled: boolean;
+  can_edit?: boolean;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -33,8 +34,19 @@ const ACTIONS: Record<string, { label: string; displayConfig?: boolean }> = {
   crear_alerta:        { label: 'Crear alerta',        displayConfig: true },
   enviar_notificacion: { label: 'Enviar notificación', displayConfig: false },
   google_calendar:     { label: 'Google Calendar',     displayConfig: false },
-  webhook:             { label: 'Webhook',             displayConfig: false },
+  // Solo para mostrar automatizaciones antiguas: el profesor ya no puede
+  // elegir Webhook (lo gestiona el Súper Profesor).
+  webhook:             { label: 'Webhook (institucional)', displayConfig: false },
 };
+
+const EMPTY_FORM = { name: '', trigger: 'nueva_actividad', action: 'crear_alerta', enabled: true, threshold: 60 };
+
+function apiError(e: any, fallback: string): string {
+  const d = e?.response?.data?.detail;
+  if (typeof d === 'string' && d.trim()) return d;
+  if (Array.isArray(d) && d.length) return d.map((x: any) => x?.msg).filter(Boolean).join(' · ') || fallback;
+  return fallback;
+}
 
 const TRIGGER_EMOJI: Record<string, string> = {
   nuevo_estudiante: '👨‍🎓', nueva_actividad: '📝', bajo_rendimiento: '📉', reporte_generado: '📊',
@@ -46,32 +58,35 @@ const ACTION_EMOJI: Record<string, string> = {
 
 export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: string) => void }) {
   const [automations, setAutomations] = useState<Automation[]>([]);
-  const [options,     setOptions]     = useState<{ actions: AutomationOption[]; calendar_connected: boolean; webhook_configured: boolean } | null>(null);
+  const [options,     setOptions]     = useState<{ actions: AutomationOption[]; calendar_connected: boolean } | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [busyKey,     setBusyKey]     = useState<string | null>(null);
   const [error,       setError]       = useState<string | null>(null);
   const [success,     setSuccess]     = useState<string | null>(null);
 
   const [showModal,   setShowModal]   = useState(false);
-  const [form,        setForm]        = useState({ name: '', trigger: 'nueva_actividad', action: 'crear_alerta', enabled: true, threshold: 60 });
+  const [form,        setForm]        = useState(EMPTY_FORM);
+  const [editingId,   setEditingId]   = useState<number | null>(null);
   const [executionsOf, setExecutionsOf] = useState<number | null>(null);
   const [executions,  setExecutions]  = useState<Execution[]>([]);
   const [execLoading, setExecLoading]  = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
+      // _t evita la caché de lecturas: tras crear, activar o borrar se ve
+      // el estado real (antes la lista quedaba desactualizada 15 s).
+      const params = { _t: Date.now() };
       const [autoRes, optRes] = await Promise.all([
-        api.get('/automations'),
-        api.get('/automation-options'),
+        api.get('/automations', { params }),
+        api.get('/automation-options', { params }),
       ]);
       setAutomations(autoRes.data?.automations ?? []);
       setOptions({
-        actions: optRes.data?.actions ?? [],
+        actions: (optRes.data?.actions ?? []).filter((a: AutomationOption) => a.value !== 'webhook'),
         calendar_connected: !!optRes.data?.calendar_connected,
-        webhook_configured: !!optRes.data?.webhook_configured,
       });
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'No pudimos cargar las automatizaciones.');
+      setError(apiError(e, 'No pudimos cargar las automatizaciones.'));
     } finally {
       setLoading(false);
     }
@@ -89,29 +104,42 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
   // ── Crear / editar ──────────────────────────────────────────────────────────
   const availableActions = (options?.actions ?? []).filter(a => a.available !== false);
 
+  const openCreate = (preset?: Partial<typeof EMPTY_FORM>) => {
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM, ...preset });
+    setShowModal(true);
+  };
+
+  const openEdit = (a: Automation) => {
+    setEditingId(a.id);
+    setForm({
+      name: a.name, trigger: a.trigger, action: a.action, enabled: a.enabled,
+      threshold: Number(a.configuration?.threshold ?? 60),
+    });
+    setShowModal(true);
+  };
+
   const saveAutomation = async () => {
     if (!form.name.trim()) { flash('error', 'El nombre es obligatorio.'); return; }
+    if (form.trigger === 'bajo_rendimiento' && !(form.threshold >= 0 && form.threshold <= 100)) {
+      flash('error', 'El umbral debe estar entre 0 y 100.'); return;
+    }
     setBusyKey('save');
     setError(null);
     setSuccess(null);
     try {
       const configuration: Record<string, any> = {};
-      if (form.trigger === 'bajo_rendimiento' && ACTIONS[form.action]?.displayConfig) {
-        configuration.threshold = Number(form.threshold) || 60;
-      }
-      await api.post('/automations', {
-        name: form.name.trim(),
-        trigger: form.trigger,
-        action: form.action,
-        configuration,
-        enabled: form.enabled,
-      });
+      if (form.trigger === 'bajo_rendimiento') configuration.threshold = Number(form.threshold);
+      const payload = { name: form.name.trim(), trigger: form.trigger, action: form.action, configuration, enabled: form.enabled };
+      if (editingId != null) await api.put(`/automations/${editingId}`, payload);
+      else await api.post('/automations', payload);
       setShowModal(false);
-      setForm({ name: '', trigger: 'nueva_actividad', action: 'crear_alerta', enabled: true, threshold: 60 });
-      flash('success', 'Automatización creada y guardada.');
+      setForm(EMPTY_FORM);
+      flash('success', editingId != null ? 'Automatización actualizada.' : 'Automatización creada.');
+      setEditingId(null);
       await loadAll();
     } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos guardar la automatización.');
+      flash('error', apiError(e, 'No pudimos guardar la automatización.'));
     } finally { setBusyKey(null); }
   };
 
@@ -122,7 +150,7 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
       await api.post(`/automations/${a.id}/toggle`, { enabled: !a.enabled });
       await loadAll();
     } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos cambiar el estado.');
+      flash('error', apiError(e, 'No pudimos cambiar el estado.'));
     } finally { setBusyKey(null); }
   };
 
@@ -131,9 +159,10 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
     try {
       const res = await api.post(`/automations/${a.id}/run`);
       const ok = res.data?.ok;
-      flash(ok ? 'success' : 'error', ok ? `Automatización ejecutada: ${res.data?.detail || 'ok'}` : `Error: ${res.data?.detail || 'desconocido'}`);
+      flash(ok ? 'success' : 'error', ok ? `Automatización ejecutada: ${res.data?.detail || 'ok'}` : `No se pudo ejecutar: ${res.data?.detail || 'error desconocido'}`);
+      if (executionsOf === a.id) await openHistory(a.id);
     } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos ejecutar la automatización.');
+      flash('error', apiError(e, 'No pudimos ejecutar la automatización.'));
     } finally { setBusyKey(null); }
   };
 
@@ -145,7 +174,7 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
       await loadAll();
       flash('success', 'Automatización eliminada.');
     } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos eliminar la automatización.');
+      flash('error', apiError(e, 'No pudimos eliminar la automatización.'));
     } finally { setBusyKey(null); }
   };
 
@@ -154,10 +183,10 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
     setExecLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/automations/${id}/executions`);
+      const res = await api.get(`/automations/${id}/executions`, { params: { _t: Date.now() } });
       setExecutions(res.data?.executions ?? []);
     } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos cargar el historial.');
+      flash('error', apiError(e, 'No pudimos cargar el historial.'));
     } finally { setExecLoading(false); }
   };
 
@@ -165,13 +194,18 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
     setBusyKey('check-low');
     setError(null); setSuccess(null);
     try {
-      const res = await api.post('/automations/check-low-performance', { threshold: 60 });
+      // Cada automatización usa su propio umbral (antes se enviaba 60 fijo).
+      const res = await api.post('/automations/check-low-performance', {});
       const d = res.data;
-      flash('success',
-        d?.count ? `Se detectaron ${d.count} estudiante(s) con bajo rendimiento y se ejecutaron ${(d.executions ?? []).length} alerta(s).`
-                 : (d?.message || 'No se detectaron estudiantes por debajo del umbral.'));
+      const execs: { ok?: boolean }[] = d?.executions ?? [];
+      const failed = execs.filter(x => !x.ok).length;
+      if (d?.message && !d?.count) flash('success', d.message);
+      else if (!d?.count) flash('success', 'Ningún estudiante con actividad está por debajo del umbral.');
+      else flash(failed ? 'error' : 'success',
+        `${d.count} estudiante(s) por debajo del umbral · ${execs.length - failed} acción(es) ejecutada(s)` +
+        (failed ? ` · ${failed} con error (revisa el historial).` : '.'));
     } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos evaluar el rendimiento.');
+      flash('error', apiError(e, 'No pudimos evaluar el rendimiento.'));
     } finally { setBusyKey(null); }
   };
 
@@ -202,7 +236,7 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
             {isBusy('check-low') ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
             Evaluar bajo rendimiento
           </button>
-          <button onClick={() => setShowModal(true)}
+          <button onClick={() => openCreate()}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors shadow-sm">
             <Plus className="w-4 h-4" /> Nueva automatización
           </button>
@@ -218,7 +252,7 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
           <FlaskConical className="w-10 h-10 text-[#E9E9E7] mx-auto mb-3" />
           <p className="text-sm text-[#787774]">Aún no tienes automatizaciones.</p>
           <p className="text-xs text-[#AEADAB] mt-1 mb-4">Crea una para que NeuroLearn actúe automáticamente cuando ocurra un evento.</p>
-          <button onClick={() => setShowModal(true)}
+          <button onClick={() => openCreate()}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] transition-colors">
             <Plus className="w-4 h-4" /> Nueva automatización
           </button>
@@ -256,12 +290,19 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
                     className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#EEF3FD] text-[#2E6FDB] transition-colors">
                     <History className="w-4 h-4" />
                   </button>
+                  {a.can_edit === false ? (
+                    <span className="text-[10px] text-[#AEADAB] px-2">Creada por otro docente</span>
+                  ) : (<>
+                  <button onClick={() => openEdit(a)} title="Editar"
+                    className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#EEF3FD] text-[#787774] transition-colors">
+                    <Pencil className="w-4 h-4" />
+                  </button>
                   <button onClick={() => runAutomation(a)} disabled={isBusy(`run-${a.id}`)}
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#0F7B6C] hover:bg-emerald-50 transition-colors">
                     {isBusy(`run-${a.id}`) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                     Ejecutar
                   </button>
-                  <button onClick={() => toggleAutomation(a)} title={a.enabled ? 'Desactivar' : 'Activar'}
+                  <button onClick={() => toggleAutomation(a)} disabled={isBusy(`toggle-${a.id}`)} title={a.enabled ? 'Desactivar' : 'Activar'}
                     className={`w-9 h-8 flex items-center justify-center rounded-lg border transition-colors ${a.enabled ? 'bg-[#0F7B6C] text-white border-[#0F7B6C]' : 'bg-[#F7F6F3] text-[#AEADAB] border-[#E9E9E7]'}`}>
                     <Power className="w-4 h-4" />
                   </button>
@@ -269,6 +310,7 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
                     className="w-8 h-8 flex items-center justify-center rounded-lg text-[#AEADAB] hover:text-[#E03E3E] hover:bg-red-50 transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
+                  </>)}
                 </div>
               </div>
             );
@@ -312,13 +354,17 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
           {[
             { e: 'Bajo rendimiento', a: 'Crear alerta', d: 'Cuando el promedio de un estudiante baje del umbral, crea una alerta para el docente.' },
             { e: 'Nueva actividad', a: 'Google Calendar', d: 'Cuando publiques una actividad, crea un evento en tu calendario conectado.', disabled: !options?.calendar_connected },
-            { e: 'Nueva actividad', a: 'Webhook', d: 'Cuando publiques una actividad, envía un POST real a tu webhook.', disabled: !options?.webhook_configured },
+            { e: 'Reporte generado', a: 'Enviar notificación', d: 'Cuando exportes un reporte, recibe una notificación con el resumen.' },
           ].map((eg, i) => (
             <div key={i} className="border border-[#E9E9E7] rounded-lg p-4 bg-[#F7F6F3]/40">
               <p className="text-[10px] font-bold uppercase text-[#787774]">{eg.e} → {eg.a}</p>
               <p className="text-xs text-[#787774] mt-1.5 leading-relaxed">{eg.d}</p>
               {eg.disabled && <p className="text-[10px] text-[#D9730D] mt-2">Conecta la integración para usar esta acción.</p>}
-              <button onClick={() => { setForm({ name: `${eg.e} → ${eg.a}`, trigger: eg.e === 'Bajo rendimiento' ? 'bajo_rendimiento' : 'nueva_actividad', action: eg.a === 'Google Calendar' ? 'google_calendar' : eg.a === 'Webhook' ? 'webhook' : 'crear_alerta', enabled: true, threshold: 60 }); setShowModal(true); }}
+              <button onClick={() => openCreate({
+                  name: `${eg.e} → ${eg.a}`,
+                  trigger: eg.e === 'Bajo rendimiento' ? 'bajo_rendimiento' : eg.e === 'Reporte generado' ? 'reporte_generado' : 'nueva_actividad',
+                  action: eg.a === 'Google Calendar' ? 'google_calendar' : eg.a === 'Enviar notificación' ? 'enviar_notificacion' : 'crear_alerta',
+                })}
                 disabled={!!eg.disabled}
                 className="mt-3 flex items-center gap-1 text-xs text-[#2E6FDB] hover:underline font-medium disabled:opacity-40 disabled:no-underline cursor-pointer disabled:cursor-not-allowed">
                 <RefreshCw className="w-3 h-3" /> Usar esta plantilla
@@ -338,8 +384,8 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-[#191919]">Nueva automatización</h3>
-              <button onClick={() => setShowModal(false)}><X className="w-4 h-4 text-[#787774]" /></button>
+              <h3 className="font-semibold text-[#191919]">{editingId != null ? 'Editar automatización' : 'Nueva automatización'}</h3>
+              <button onClick={() => { setShowModal(false); setEditingId(null); }}><X className="w-4 h-4 text-[#787774]" /></button>
             </div>
 
             <div>
@@ -361,25 +407,21 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
                 <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Acción</label>
                 <select value={form.action} onChange={e => setForm(p => ({ ...p, action: e.target.value }))}
                   className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm bg-white">
-                  {availableActions.length === 0 ? (
-                    <option value="crear_alerta">Crear alerta</option>
-                  ) : (
-                    availableActions.map(a => <option key={a.value} value={a.value}>{ACTIONS[a.value]?.label ?? a.label}</option>))
-                    }
-                  {availableActions.length === 0 && (
-                    <option value="enviar_notificacion" disabled>Enviar notificación</option>
+                  {availableActions.map(a => <option key={a.value} value={a.value}>{ACTIONS[a.value]?.label ?? a.label}</option>)}
+                  {!availableActions.some(a => a.value === form.action) && (
+                    <option value={form.action}>{ACTIONS[form.action]?.label ?? form.action}</option>
                   )}
                 </select>
                 {form.action === 'google_calendar' && !options?.calendar_connected && (
                   <p className="text-[10px] text-[#D9730D] mt-1">Conecta Google Calendar para usar esta acción.</p>
                 )}
-                {form.action === 'webhook' && !options?.webhook_configured && (
-                  <p className="text-[10px] text-[#D9730D] mt-1">Configura un webhook para usar esta acción.</p>
+                {(form.action === 'crear_alerta' || form.action === 'enviar_notificacion') && (
+                  <p className="text-[10px] text-[#AEADAB] mt-1">Te llega a la campana 🔔 de notificaciones.</p>
                 )}
               </div>
             </div>
 
-            {form.trigger === 'bajo_rendimiento' && ACTIONS[form.action]?.displayConfig && (
+            {form.trigger === 'bajo_rendimiento' && (
               <div>
                 <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Umbral de rendimiento (%)</label>
                 <input type="number" min={0} max={100} value={form.threshold}
@@ -401,10 +443,10 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
+              <button onClick={() => { setShowModal(false); setEditingId(null); }} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">Cancelar</button>
               <button onClick={saveAutomation} disabled={!form.name.trim() || isBusy('save')}
                 className="flex items-center gap-1.5 px-5 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors">
-                {isBusy('save') ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Guardar
+                {isBusy('save') ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} {editingId != null ? 'Guardar cambios' : 'Guardar'}
               </button>
             </div>
           </div>

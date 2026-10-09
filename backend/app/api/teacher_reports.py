@@ -64,6 +64,19 @@ async def export_reports(
         content, media_type, ext = to_csv(data), "text/csv; charset=utf-8", "csv"
 
     filename = f"{data.filename_base}.{ext}"
+
+    # Automatizaciones «Reporte generado» del docente (antes nunca se disparaba).
+    try:
+        from app.services import integration_service as _isvc
+        _isvc.dispatch_trigger(db, current_user, "reporte_generado", {
+            "event_desc": f"Reporte generado: {filename}",
+            "message": f"Generaste el reporte «{filename}» ({len(data.rows)} filas).",
+            "title": f"Reporte {filename}",
+            "report": data.kind, "format": ext, "rows": len(data.rows),
+        }, owner_id=current_user.id)
+    except Exception:  # noqa: BLE001 — una automatización no impide descargar
+        logger.exception("No se pudieron ejecutar las automatizaciones del reporte")
+        db.rollback()
     logger.info(
         "Reporte %s (%s) exportado por usuario %s: %d filas",
         data.kind, ext, current_user.id, len(data.rows),

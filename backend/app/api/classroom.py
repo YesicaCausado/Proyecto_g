@@ -846,6 +846,7 @@ async def join_classroom(
                 "classroom_id": classroom.id,
                 "classroom_name": classroom.name,
             },
+            owner_id=classroom.teacher_id,
         )
 
     except Exception:

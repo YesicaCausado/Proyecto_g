@@ -54,7 +54,7 @@ python -m unittest tests.test_flujo_institucional -v
 > importar los scripts manuales antiguos (ver más abajo), que llaman a un
 > servidor en vivo. Use `python -m pytest`.
 
-Resultado esperado: `142 passed` (≈ 12 s). No requiere internet, servidor
+Resultado esperado: `151 passed` (≈ 12 s). No requiere internet, servidor
 levantado, base de datos ni claves de IA o de correo.
 
 ## Aislamiento: qué nunca tocan las pruebas
@@ -146,6 +146,7 @@ paso:
 | `test_crear_admin.py` | 5 | Alta del Administrador global con `scripts/crear_admin.py`: inicia sesión y crea instituciones, política de contraseñas, no pisa cuentas ni cambia roles, nunca imprime la contraseña |
 | `test_neurobots_notificaciones.py` | 13 | Parche 11B: flujo completo profesor asigna NeuroBot → notificación → Mis NeuroBots → chat → progreso → completado → resultado al profesor; el respaldo local no cuenta como interacción; meta y desasignación; roles y aislamiento por institución; asignación + notificación atómicas; estado leído y contador persistidos; mensajes directos agrupados y preferencias; evaluación publicada; alerta de riesgo alto; grupo nuevo y estudiante que se une; racha persistida una vez; moderación del Súper Profesor |
 | `test_vercel_bundle.py` | 3 | `vercel.json` excluye de la función Python el frontend (≈ 140 MB de `frontend/public`), la documentación y las pruebas, sin excluir nada que el backend use; los archivos del proyecto en la función suman menos de 25 MB (límite de Vercel: 225 MB con dependencias) |
+| `test_integraciones_profesor.py` | 8 | Webhook fuera del profesor; «Crear alerta» y «Enviar notificación» reales; solo el autor modifica una automatización; «Evaluar bajo rendimiento» sin error 500 y con el umbral de cada automatización; «Reporte generado» se dispara al exportar; importar de Drive como enlace; regreso de Google con «#»; riesgo y uso de NeuroBots reales en Analítica |
 
 ## Scripts manuales que no forman parte de la suite
 

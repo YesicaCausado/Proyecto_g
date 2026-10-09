@@ -281,10 +281,7 @@ export default function TeacherPanel() {
 
   const navigate = useNavigate();
 
-  const [
-    searchParams,
-    setSearchParams,
-  ] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   // ----------------------------------------------------------
   // PESTAÑA INICIAL
@@ -431,36 +428,13 @@ export default function TeacherPanel() {
   // CALLBACK DE INTEGRACIONES
   // ----------------------------------------------------------
 
+  // Regreso de Google OAuth (?tab=integraciones&integration_ok=1 o
+  // &integration_error=…): se abre Integraciones, que muestra el resultado.
   useEffect(() => {
-    const ok =
-      searchParams.get(
-        'integration_ok'
-      );
-
-    const provider =
-      searchParams.get(
-        'integration'
-      );
-
-    if (
-      ok === '1' &&
-      provider
-    ) {
-      setActiveTab(
-        'integraciones'
-      );
-
-      setSearchParams(
-        {},
-        {
-          replace: true,
-        }
-      );
+    if (searchParams.get('integration_ok') || searchParams.get('integration_error')) {
+      setActiveTab('integraciones');
     }
-  }, [
-    searchParams,
-    setSearchParams,
-  ]);
+  }, [searchParams]);
 
   // ----------------------------------------------------------
   // LOGOUT

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -13,9 +13,9 @@ import ExportReportModal from './ExportReportModal';
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface GroupPerf { name: string; avg: number; count: number; color: string; }
 interface TopStudent { name: string; group: string; avg: number; trend: string | null; }
-interface AiUsage { name: string; pct: number; color: string; }
+interface AiUsage { name: string; pct: number; color: string; users?: number; }
 interface TopicPerf { topic: string; avg: number; attempts: number; color: string; }
-interface RiskDist { bajo: number; medio: number; alto: number; }
+interface RiskDist { bajo: number; medio: number; alto: number; sin_actividad?: number; }
 interface WeeklyActivity { label: string; count: number; pct: number; }
 
 interface TeacherStats {
@@ -60,7 +60,7 @@ function HealthGauge({ score }: { score: number }) {
     return (
       <div className="relative w-40 h-40 mx-auto flex flex-col items-center justify-center">
         <ShieldCheck className="w-10 h-10 text-[#AEADAB]" />
-        <p className="text-[11px] text-[#AEADAB] mt-2 text-center px-3">Sin evaluaciones reales todavía</p>
+        <p className="text-[11px] text-[#AEADAB] mt-2 text-center px-3">Sin quizzes registrados todavía</p>
       </div>
     );
   }
@@ -298,16 +298,27 @@ function CmdPanel({ title, icon: Icon, accent, right, children, center }: CmdPan
 export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [stats, setStats] = useState<TeacherStats | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
-  useEffect(() => {
-    api.get('/teacher/stats').then(r => setStats(r.data)).catch(() => {});
+  const load = useCallback(() => {
+    setLoadError('');
+    setStats(null);
+    api.get('/teacher/stats', { params: { _t: Date.now() } })
+      .then(r => setStats(r.data))
+      .catch((err: any) => {
+        const detail = err?.response?.data?.detail;
+        setLoadError(typeof detail === 'string' && detail ? detail : 'No fue posible cargar la analítica.');
+      });
   }, []);
 
-  const loading = !stats;
+  useEffect(() => { load(); }, [load]);
+
+  const loading = !stats && !loadError;
   const hasData = stats?.has_data ?? false;
   const avg = stats?.avg_global ?? 0;
   const score = stats?.score ?? null;
-  const risk = stats?.risk_dist ?? { bajo: 0, medio: 0, alto: 0 };
+  const risk = stats?.risk_dist ?? { bajo: 0, medio: 0, alto: 0, sin_actividad: 0 };
+  const noActivity = risk.sin_actividad ?? 0;
   const heat = stats?.weekly_activity ?? [];
   const topics = stats?.topics_perf ?? [];
   const groups = stats?.groups_perf ?? [];
@@ -372,7 +383,7 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
             {avg >= 7 ? <ArrowUpRight className="w-4 h-4 text-[#0F7B6C]" /> : <ArrowDownRight className="w-4 h-4 text-[#E03E3E]" />}
             Promedio global <span className="text-[#0F7B6C]">{avg}/10</span>
           </div>
-          <p className="text-[11px] text-[#787774] mt-1 text-center">promedio real del historial de evaluaciones de tus estudiantes</p>
+          <p className="text-[11px] text-[#787774] mt-1 text-center">promedio real del historial de quizzes de tus estudiantes</p>
         </motion.div>
 
         {/* Modelos */}
@@ -404,11 +415,18 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
         </div>
       </div>
 
+      {loadError && (
+        <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 text-[#E03E3E] rounded-lg px-4 py-3 text-sm">
+          <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> {loadError}</span>
+          <button onClick={load} className="font-medium hover:underline">Reintentar</button>
+        </div>
+      )}
+
       {/* ══ Fila: Rendimiento por tema + Participación semanal ══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <CmdPanel title="Rendimiento por tema" icon={BarChart2} accent={ACCENTS.primary}
           right={<span className="text-[11px] text-[#787774]">promedio real por tema</span>}>
-          {topics.length > 0 ? <TopicsChart data={topics} /> : emptyState('Aún no hay evaluaciones por tema registradas.')}
+          {topics.length > 0 ? <TopicsChart data={topics} /> : emptyState('Aún no hay quizzes por tema registrados.')}
         </CmdPanel>
         <CmdPanel title="Participación semanal" icon={Activity} accent={ACCENTS.primary}
           right={<span className="text-[11px] text-[#787774]">últimos 6 días</span>}>
@@ -428,13 +446,14 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
         <CmdPanel title="Distribución de riesgo" icon={AlertTriangle} accent={ACCENTS.rose} center>
           <RiskDonut dist={risk} />
           {risk.bajo + risk.medio + risk.alto === 0 && (
-            <p className="text-[11px] text-[#AEADAB] text-center mt-1">Sin niveles de riesgo registrados aún.</p>
+            <p className="text-[11px] text-[#AEADAB] text-center mt-1">Tus estudiantes aún no tienen quizzes registrados.</p>
           )}
-          <div className="w-full grid grid-cols-3 gap-2 mt-4">
+          <div className="w-full grid grid-cols-4 gap-2 mt-4">
             {[
               { label: 'Bajo', v: risk.bajo, c: ACCENTS.mint },
               { label: 'Medio', v: risk.medio, c: ACCENTS.amber },
               { label: 'Alto', v: risk.alto, c: ACCENTS.rose },
+              { label: 'Sin actividad', v: noActivity, c: '#AEADAB' },
             ].map(r => (
               <div key={r.label} className="text-center">
                 <p className="text-lg font-bold text-[#191919]">{r.v}</p>
@@ -449,7 +468,7 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
               onClick={() => onNavigate?.('alertas')}
               className="mt-4 w-full flex items-center justify-center gap-1 text-xs font-medium py-2 rounded-lg border border-red-200 text-[#E03E3E] hover:bg-red-50 transition-colors"
             >
-              Atender {highRisk} alertas activas <ArrowUpRight className="w-3.5 h-3.5" />
+              Ver NeuroAlertas ({highRisk} en riesgo alto) <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
           )}
         </CmdPanel>
@@ -468,14 +487,13 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
               ))}
             </div>
           ) : (
-            emptyState('Los grupos aún no tienen evaluaciones.')
+            emptyState('Los grupos aún no tienen quizzes registrados.')
           )}
           <p className="text-[11px] text-[#787774] mt-4 text-center">promedio real por grupo · solo los que registran actividad</p>
         </CmdPanel>
 
         {/* Top estudiantes */}
-        <CmdPanel title="Tendencia de estudiantes" icon={Award} accent={ACCENTS.amber}
-          right={<button onClick={() => onNavigate?.('alertas')} className="text-[11px] text-[#2E6FDB] hover:underline">detalle</button>}>
+        <CmdPanel title="Tendencia de estudiantes" icon={Award} accent={ACCENTS.amber}>
           <div className="space-y-2.5">
             {top.map((s, i) => {
               const trendClass = s.trend == null ? 'text-[#AEADAB]'
@@ -508,7 +526,7 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
 
       {/* ══ Fila inferior: NeuroBots + nota metodológica ══ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <CmdPanel title="Uso de NeuroBots por grupo" icon={Bot} accent={ACCENTS.violet}
+        <CmdPanel title="Uso de tus NeuroBots" icon={Bot} accent={ACCENTS.violet}
           right={<TrendingUp className="w-4 h-4 text-[#0F7B6C]" />}
           center>
           <div className="w-full space-y-3">
@@ -517,7 +535,7 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
                 <div key={a.name} className="w-full">
                   <div className="flex items-center justify-between text-[11px] mb-1">
                     <span className="text-[#787774] truncate">{a.name}</span>
-                    <span className="text-[#191919] font-semibold">{a.pct}%</span>
+                    <span className="text-[#191919] font-semibold">{a.users ?? 0} estudiante(s)</span>
                   </div>
                   <div className="h-1.5 bg-[#F7F6F3] rounded-full overflow-hidden">
                     <motion.div
@@ -557,8 +575,9 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
             <p className="leading-relaxed">
               Todas las métricas se calculan en el backend con el servicio {''}
               <span className="font-mono text-[#2E6FDB]">/teacher/stats</span> a partir de registros reales de
-              clases, inscripciones, evaluaciones (QuizHistory), sesiones de aprendizaje y niveles de riesgo
-              (Enrollment.risk_level). Si no hay datos, se muestra "sin datos" en vez de inventar valores.
+              grupos, inscripciones, quizzes de tus estudiantes y conversaciones con tus NeuroBots. El riesgo se
+              calcula con el promedio y la última actividad de cada estudiante. Si no hay datos, se muestra
+              "sin datos" en vez de inventar valores.
             </p>
           </div>
         </div>

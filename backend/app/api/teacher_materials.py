@@ -65,11 +65,13 @@ def _folder_out(folder: TeacherFolder) -> dict:
                 "type":         f.file_type,
                 "size":         f.size,
                 "date":         f.created_at.strftime("%Y-%m-%d"),
-                "sharedWith":   f.shared_with or [],
+                "sharedWith":   [x for x in (f.shared_with or []) if isinstance(x, str)],
                 "hasFile":      bool(f.has_file),
                 "mimeType":     f.mime_type,
                 "originalName": f.original_name,
                 "downloadUrl":  f"/api/v1/teacher/materials/files/{f.id}/download" if f.has_file else None,
+                # Archivo importado de Google Drive: enlace para abrirlo allí.
+                "url":          f.original_name if f.mime_type == "drive-link" else None,
             }
             for f in folder.files
         ],
@@ -113,7 +115,7 @@ def _material_out(m: TeacherMaterial) -> dict:
         "type":         m.file_type,
         "size":         m.size,
         "date":         m.created_at.strftime("%Y-%m-%d"),
-        "sharedWith":   m.shared_with or [],
+        "sharedWith":   [x for x in (m.shared_with or []) if isinstance(x, str)],
         "hasFile":      bool(m.has_file),
         "mimeType":     m.mime_type,
         "originalName": m.original_name,

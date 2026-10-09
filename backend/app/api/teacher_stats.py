@@ -136,10 +136,7 @@ def get_teacher_stats(
 
         raise HTTPException(
             status_code=503,
-            detail=(
-                "Servicio de estadísticas no disponible. "
-                f"{type(exc).__name__}: {str(exc)[:300]}"
-            ),
+            detail="No fue posible calcular las estadísticas en este momento. Intenta de nuevo.",
         )
 
 
@@ -390,53 +387,46 @@ def _compute_teacher_stats(
     # 6. DISTRIBUCIÓN DE RIESGO
     # ========================================================
 
-    risk_dist = {
-        "bajo": 0,
-        "medio": 0,
-        "alto": 0,
-    }
+    # Se calcula con el historial REAL de quizzes de cada estudiante (antes
+    # leía Enrollment.risk_level, que solo tomaba «none»/«high» y casi nunca
+    # se actualizaba: «bajo» y «medio» salían siempre en 0). Mismos umbrales
+    # que el servicio de seguimiento (enrollment_tracking_service).
+    from app.services.enrollment_tracking_service import (
+        INACTIVITY_HIGH_RISK_DAYS, INACTIVITY_MEDIUM_RISK_DAYS,
+        LOW_SCORE_THRESHOLD, MIN_SESSIONS_FOR_SCORE_RISK,
+    )
+    risk_dist = {"bajo": 0, "medio": 0, "alto": 0, "sin_actividad": 0}
 
     if student_ids:
-
-        enrollments = (
-            db.query(Enrollment)
-            .filter(
-                Enrollment.student_id.in_(
-                    student_ids
-                ),
-                Enrollment.classroom_id.in_(
-                    classroom_ids
-                ),
-                Enrollment.is_active.is_(True),
+        rows = (
+            db.query(
+                QuizHistory.user_id,
+                func.avg(QuizHistory.performance_score),
+                func.count(QuizHistory.id),
+                func.max(QuizHistory.completed_at),
             )
+            .filter(
+                QuizHistory.user_id.in_(student_ids),
+                QuizHistory.completed_at.isnot(None),
+                QuizHistory.performance_score.isnot(None),
+            )
+            .group_by(QuizHistory.user_id)
             .all()
         )
-
-        # Evitar contar dos veces al mismo estudiante
-        # si pertenece a más de un grupo.
-        processed_students = set()
-
-        for enrollment in enrollments:
-
-            if enrollment.student_id in processed_students:
+        by_student = {uid: (float(avg or 0), int(n or 0), last) for uid, avg, n, last in rows}
+        now = datetime.utcnow()
+        for sid in set(student_ids):
+            if sid not in by_student:
+                risk_dist["sin_actividad"] += 1
                 continue
-
-            processed_students.add(
-                enrollment.student_id
-            )
-
-            risk = (
-                enrollment.risk_level
-                or ""
-            ).lower()
-
-            if risk in ("high", "alto"):
+            avg, n, last = by_student[sid]
+            idle_days = (now - last).days if last else 0
+            if idle_days >= INACTIVITY_HIGH_RISK_DAYS or (
+                    n >= MIN_SESSIONS_FOR_SCORE_RISK and avg < LOW_SCORE_THRESHOLD):
                 risk_dist["alto"] += 1
-
-            elif risk in ("medium", "medio"):
+            elif idle_days >= INACTIVITY_MEDIUM_RISK_DAYS or avg < 60:
                 risk_dist["medio"] += 1
-
-            elif risk in ("low", "bajo"):
+            else:
                 risk_dist["bajo"] += 1
 
     alert_count = (
@@ -867,41 +857,26 @@ def _compute_teacher_stats(
     )
 
     if my_bots:
-
-        selected_bots = my_bots[:3]
-
-        max_users = max(
-            (
-                int(bot.total_users or 0)
-                for bot in selected_bots
-            ),
-            default=0,
+        # Uso real: estudiantes distintos que conversaron con cada NeuroBot
+        # (antes ExpertBot.total_users, que nunca se actualizaba: siempre 0 %).
+        from app.models.learning import LearningSession
+        bot_ids = [b.id for b in my_bots]
+        users_by_bot = dict(
+            db.query(LearningSession.bot_id, func.count(func.distinct(LearningSession.user_id)))
+            .filter(LearningSession.bot_id.in_(bot_ids))
+            .group_by(LearningSession.bot_id)
+            .all()
         )
-
-        for bot in selected_bots:
-
-            total_users = int(
-                bot.total_users or 0
-            )
-
-            percentage = (
-                round(
-                    (
-                        total_users
-                        / max_users
-                    ) * 100
-                )
-                if max_users > 0
-                else 0
-            )
-
-            ai_usage.append(
-                {
-                    "name": bot.name,
-                    "pct": percentage,
-                    "color": "bg-[#6940A5]",
-                }
-            )
+        ranked = sorted(my_bots, key=lambda b: -int(users_by_bot.get(b.id, 0)))[:5]
+        max_users = max((int(users_by_bot.get(b.id, 0)) for b in ranked), default=0)
+        for bot in ranked:
+            users = int(users_by_bot.get(bot.id, 0))
+            ai_usage.append({
+                "name": bot.name,
+                "users": users,
+                "pct": round(users / max_users * 100) if max_users else 0,
+                "color": "bg-[#6940A5]",
+            })
 
     # ========================================================
     # 11. ¿HAY DATOS?

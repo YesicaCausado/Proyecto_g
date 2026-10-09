@@ -19,6 +19,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -35,6 +37,7 @@ from app.models.integration import (
 from app.models.classroom import Classroom, Enrollment
 from app.services import integration_service as isvc
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Integraciones y Automatizaciones"])
 
 
@@ -75,6 +78,40 @@ def _require_institution(user: User) -> int:
     return user.institution_id
 
 
+def _is_manager(user: User) -> bool:
+    return user.role in (UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value)
+
+
+def _require_webhook_manager(user: User) -> int:
+    """El webhook es institucional: lo configura el Súper Profesor (o el
+    Administrador). Se retiró de la interfaz del profesor."""
+    inst_id = _require_institution(user)
+    if not _is_manager(user):
+        raise HTTPException(status_code=403,
+                            detail="El webhook de la institución lo gestiona el Súper Profesor.")
+    return inst_id
+
+
+def _own_automation(db: Session, user: User, automation_id: int) -> Automation:
+    """Editar, activar, ejecutar o eliminar: quien la creó (o el Súper
+    Profesor / Administrador). Antes cualquier docente de la institución."""
+    inst_id = _require_institution(user)
+    autom = db.query(Automation).filter(
+        Automation.id == automation_id, Automation.institution_id == inst_id).first()
+    if not autom:
+        raise HTTPException(status_code=404, detail="Automatización no encontrada.")
+    if autom.created_by != user.id and not _is_manager(user):
+        raise HTTPException(status_code=403,
+                            detail="Solo quien creó la automatización puede modificarla.")
+    return autom
+
+
+def _check_action_allowed(user: User, action: str) -> None:
+    if action == AutomationAction.WEBHOOK and not _is_manager(user):
+        raise HTTPException(status_code=400,
+                            detail="La acción Webhook no está disponible para el profesor.")
+
+
 def _serialize_integration(integ: Integration, expose_tokens: bool = False) -> dict:
     cfg = dict(integ.config or {})
     cfg.pop("access_token", None)
@@ -91,9 +128,11 @@ def _serialize_integration(integ: Integration, expose_tokens: bool = False) -> d
     }
 
 
-def _serialize_automation(a: Automation) -> dict:
+def _serialize_automation(a: Automation, user: Optional[User] = None) -> dict:
     return {
         "id": a.id,
+        "created_by": a.created_by,
+        "can_edit": bool(user is not None and (a.created_by == user.id or _is_manager(user))),
         "name": a.name,
         "trigger": a.trigger,
         "action": a.action,
@@ -126,9 +165,16 @@ async def list_integrations(
     except Exception as e:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
-            detail=f"No se pudieron listar las integraciones (base de datos). {str(e)[:160]}",
+            detail="No se pudieron cargar las integraciones en este momento. Intenta de nuevo.",
         ) from e
-    return {"integrations": [_serialize_integration(r) for r in rows]}
+    if not _is_manager(current_user):
+        rows = [r for r in rows if r.provider != IntegrationProvider.WEBHOOK]
+    from app.core.config import settings as _settings
+    return {
+        "integrations": [_serialize_integration(r) for r in rows],
+        "google_configured": bool(getattr(_settings, "GOOGLE_CLIENT_ID", "") and
+                                  getattr(_settings, "GOOGLE_CLIENT_SECRET", "")),
+    }
 
 
 @router.get("/automation-options")
@@ -161,8 +207,9 @@ async def automation_options(
             {"value": AutomationAction.CREAR_ALERTA, "label": "Crear alerta", "available": True},
             {"value": AutomationAction.ENVIAR_NOTIFICACION, "label": "Enviar notificación", "available": True},
             {"value": AutomationAction.GOOGLE_CALENDAR, "label": "Google Calendar", "available": calendar is not None},
+        ] + ([
             {"value": AutomationAction.WEBHOOK, "label": "Webhook", "available": webhook is not None and bool((webhook.config or {}).get("url"))},
-        ],
+        ] if _is_manager(current_user) else []),
         "calendar_connected": calendar is not None,
         "webhook_configured": webhook is not None and bool((webhook.config or {}).get("url")),
     }
@@ -218,7 +265,9 @@ async def google_callback(
     y redirige al frontend.
     """
     from fastapi.responses import RedirectResponse
-    fallback = f"{settings_frontend()}/teacher"
+    # Con «#» (HashRouter): sin él, el regreso de Google abría la landing.
+    from app.services.email_service import frontend_url
+    fallback = frontend_url("/teacher")
 
     if error:
         return _redirect_with_params(fallback, {"integration_error": "El usuario canceló la autorización o hubo un error."})
@@ -240,7 +289,8 @@ async def google_callback(
     try:
         tokens = isvc.exchange_code_for_tokens(code)
     except Exception as e:  # noqa: BLE001
-        return _redirect_with_params(fallback, {"integration_error": f"No pudimos conectar Google. {str(e)[:120]}"})
+        logger.exception("Error al completar la conexión con Google")
+        return _redirect_with_params(fallback, {"integration_error": "No pudimos conectar Google. Inténtalo de nuevo."})
 
     access = tokens.get("access_token")
     refresh = tokens.get("refresh_token")
@@ -438,13 +488,22 @@ async def drive_import_files(
 
     imported = []
     for f in files:
+        file_id = str(f.get("id") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{10,200}", file_id):
+            raise HTTPException(status_code=400, detail="Archivo de Drive no válido.")
+        # Se guarda como ENLACE al archivo en Drive (el binario no se copia):
+        # «Abrir en Drive» desde Materiales. Antes se mezclaban metadatos con
+        # shared_with («[object Object]») y el archivo no se podía abrir.
         mat = TeacherMaterial(
             folder_id=target.id,
             teacher_id=current_user.id,
             name=(f.get("name") or "Archivo de Drive")[:200],
-            file_type=(f.get("type") or "file"),
-            size=str(f.get("size") or "—"),
-            shared_with=[{"drive_file_id": f.get("id"), "source": "google_drive"}],
+            file_type="link",
+            size="—",
+            shared_with=[],
+            original_name=f"https://drive.google.com/file/d/{file_id}/view",
+            mime_type="drive-link",
+            has_file=False,
         )
         db.add(mat)
         imported.append({"name": mat.name, "type": mat.file_type})
@@ -528,7 +587,7 @@ async def get_webhook(
     db: Session = Depends(get_db),
 ):
     """Devuelve la integración webhook de la institución (sin secretos)."""
-    inst_id = _require_institution(current_user)
+    inst_id = _require_webhook_manager(current_user)
     integ = db.query(Integration).filter(
         Integration.institution_id == inst_id,
         Integration.provider == IntegrationProvider.WEBHOOK,
@@ -546,7 +605,7 @@ async def get_webhook(
         "url": (integ.config or {}).get("url"),
         "status": integ.status,
         "account_label": integ.account_label,
-        "config": integ.config,
+        "config": {k: v for k, v in (integ.config or {}).items() if k not in ("secret", "token")},
     }
 
 
@@ -558,7 +617,7 @@ async def save_webhook(
     db: Session = Depends(get_db),
 ):
     """Guarda o crea la configuración de webhook de la institución."""
-    inst_id = _require_institution(current_user)
+    inst_id = _require_webhook_manager(current_user)
     url = (body.url or "").strip()
     if not url.startswith(("https://", "http://")):
         raise HTTPException(status_code=400, detail="La URL del webhook debe empezar por http(s)://")
@@ -606,7 +665,7 @@ async def test_webhook_endpoint(
     db: Session = Depends(get_db),
 ):
     """Envía un POST real de prueba al webhook configurado y captura la respuesta."""
-    inst_id = _require_institution(current_user)
+    inst_id = _require_webhook_manager(current_user)
     integ = db.query(Integration).filter(
         Integration.institution_id == inst_id,
         Integration.provider == IntegrationProvider.WEBHOOK,
@@ -633,7 +692,7 @@ async def toggle_webhook(
     db: Session = Depends(get_db),
 ):
     """Activa/desactiva el webhook configurado."""
-    inst_id = _require_institution(current_user)
+    inst_id = _require_webhook_manager(current_user)
     enabled = bool(body.get("enabled", True))
     integ = db.query(Integration).filter(
         Integration.institution_id == inst_id,
@@ -663,7 +722,7 @@ async def list_automations(
         .order_by(Automation.created_at.desc())
         .all()
     )
-    return {"automations": [_serialize_automation(a) for a in items]}
+    return {"automations": [_serialize_automation(a, current_user) for a in items]}
 
 
 @router.post("/automations", status_code=status.HTTP_201_CREATED)
@@ -681,6 +740,7 @@ async def create_automation(
         raise HTTPException(status_code=400, detail="Trigger no válido.")
     if body.action not in _ACTIONS:
         raise HTTPException(status_code=400, detail="Acción no válida.")
+    _check_action_allowed(current_user, body.action)
 
     autom = Automation(
         institution_id=inst_id,
@@ -694,7 +754,7 @@ async def create_automation(
     db.add(autom)
     db.commit()
     db.refresh(autom)
-    return _serialize_automation(autom)
+    return _serialize_automation(autom, current_user)
 
 
 @router.put("/automations/{automation_id}")
@@ -705,18 +765,18 @@ async def update_automation(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
-    inst_id = _require_institution(current_user)
-    autom = db.query(Automation).filter(
-        Automation.id == automation_id,
-        Automation.institution_id == inst_id,
-    ).first()
-    if not autom:
-        raise HTTPException(status_code=404, detail="Automatización no encontrada.")
+    autom = _own_automation(db, current_user, automation_id)
     if body.name is not None:
         autom.name = body.name.strip() or autom.name
     if body.trigger is not None and body.trigger in _TRIGGERS:
         autom.trigger = body.trigger
-    if body.action is not None and body.action in _ACTIONS:
+    if body.trigger is not None and body.trigger not in _TRIGGERS:
+        raise HTTPException(status_code=400, detail="Disparador no válido.")
+    if body.action is not None:
+        if body.action not in _ACTIONS:
+            raise HTTPException(status_code=400, detail="Acción no válida.")
+        if body.action != autom.action:
+            _check_action_allowed(current_user, body.action)
         autom.action = body.action
     if body.configuration is not None:
         autom.configuration = body.configuration
@@ -724,7 +784,7 @@ async def update_automation(
         autom.enabled = body.enabled
     db.commit()
     db.refresh(autom)
-    return _serialize_automation(autom)
+    return _serialize_automation(autom, current_user)
 
 
 @router.delete("/automations/{automation_id}")
@@ -734,13 +794,7 @@ async def delete_automation(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
-    inst_id = _require_institution(current_user)
-    autom = db.query(Automation).filter(
-        Automation.id == automation_id,
-        Automation.institution_id == inst_id,
-    ).first()
-    if not autom:
-        raise HTTPException(status_code=404, detail="Automatización no encontrada.")
+    autom = _own_automation(db, current_user, automation_id)
     db.delete(autom)
     db.commit()
     return {"message": "Automatización eliminada."}
@@ -754,17 +808,11 @@ async def toggle_automation(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
 ):
-    inst_id = _require_institution(current_user)
-    autom = db.query(Automation).filter(
-        Automation.id == automation_id,
-        Automation.institution_id == inst_id,
-    ).first()
-    if not autom:
-        raise HTTPException(status_code=404, detail="Automatización no encontrada.")
+    autom = _own_automation(db, current_user, automation_id)
     autom.enabled = bool(body.get("enabled", not autom.enabled))
     db.commit()
     db.refresh(autom)
-    return _serialize_automation(autom)
+    return _serialize_automation(autom, current_user)
 
 
 @router.get("/automations/{automation_id}/executions")
@@ -807,13 +855,7 @@ async def run_automation_manual(
     db: Session = Depends(get_db),
 ):
     """Ejecuta una automatización manualmente (útil para probar)."""
-    inst_id = _require_institution(current_user)
-    autom = db.query(Automation).filter(
-        Automation.id == automation_id,
-        Automation.institution_id == inst_id,
-    ).first()
-    if not autom:
-        raise HTTPException(status_code=404, detail="Automatización no encontrada.")
+    autom = _own_automation(db, current_user, automation_id)
     trigger_data = {"event_desc": f"Ejecución manual de «{autom.name}»", "title": autom.name}
     result = isvc.run_automation_action(db, autom, current_user, trigger_data["event_desc"], trigger_data)
     return {"ok": result["ok"], "action": result["action"], "detail": result.get("detail")}
@@ -833,53 +875,76 @@ async def check_low_performance(
     de la alerta (usa datos reales de Enrollment.average_score / quiz_history).
     """
     inst_id = _require_institution(current_user)
-    threshold = float(body.get("threshold", 60.0))
+    try:
+        default_threshold = float(body.get("threshold", 60.0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="El umbral debe ser un número entre 0 y 100.")
 
-    # Clases del profesor.
+    # Grupos del profesor.
     classrooms = db.query(Classroom).filter(
         Classroom.teacher_id == current_user.id,
         Classroom.is_active == True,  # noqa: E712
     ).all()
     cids = [c.id for c in classrooms]
 
+    # Solo las automatizaciones del propio profesor (no las de otros docentes).
     automations = db.query(Automation).filter(
         Automation.institution_id == inst_id,
+        Automation.created_by == current_user.id,
         Automation.trigger == AutomationTrigger.BAJO_RENDIMIENTO,
         Automation.enabled == True,  # noqa: E712
     ).all()
 
     if not automations:
-        return {"ok": True, "executions": [], "message": "No hay automatizaciones de bajo rendimiento activas."}
+        return {"ok": True, "detected": [], "count": 0, "executions": [],
+                "message": "No tienes automatizaciones de bajo rendimiento activas."}
 
-    # Estudiantes + promedio real.
-    found = []
+    # Promedio real por estudiante (solo quienes tienen actividad: un
+    # estudiante sin quizzes no tiene «bajo rendimiento», no tiene datos).
+    avg_by_student: dict = {}
     if cids:
         enrolls = db.query(Enrollment).filter(
             Enrollment.classroom_id.in_(cids),
             Enrollment.is_active == True,  # noqa: E712
         ).all()
-        # Agrupar promedio por estudiante.
-        from collections import defaultdict
-        avg_by_student = defaultdict(int)
         for e in enrolls:
-            avg_by_student[e.student_id] = e.average_score or 0.0
+            if (e.total_sessions or 0) > 0:
+                avg_by_student[e.student_id] = min(avg_by_student.get(e.student_id, 100.0),
+                                                   float(e.average_score or 0.0))
+    students = db.query(User).filter(
+        User.id.in_(list(avg_by_student.keys())),
+        User.role == UserRole.ESTUDIANTE.value,
+        User.is_active == True,  # noqa: E712
+    ).all() if avg_by_student else []
 
-        students = db.query(User).filter(
-            User.id.in_(list(avg_by_student.keys())),
-            User.role == UserRole.ESTUDIANTE.value,
-        ).all()
-        for s in students:
-            score = avg_by_student[s.student_id]
-            if score < threshold:
-                found.append({"student_id": s.id, "name": s.full_name or s.username, "score": round(score, 1)})
+    def threshold_of(autom) -> float:
+        try:
+            return float((autom.configuration or {}).get("threshold", default_threshold))
+        except (TypeError, ValueError):
+            return default_threshold
+
+    found = []
+    found_by_autom: dict = {}
+    for autom in automations:
+        limit = threshold_of(autom)
+        rows = [{"student_id": s.id, "name": s.full_name or s.username,
+                 "score": round(avg_by_student[s.id], 1), "threshold": limit}
+                for s in students if avg_by_student[s.id] < limit]
+        found_by_autom[autom.id] = rows
+        for r in rows:
+            if all(f["student_id"] != r["student_id"] for f in found):
+                found.append(r)
 
     all_results = []
     for autom in automations:
-        for stu in found[:20]:
+        for stu in found_by_autom.get(autom.id, [])[:20]:
             res = isvc.run_automation_action(
                 db, autom, current_user,
                 event_desc=f"Bajo rendimiento: {stu['name']} ({stu['score']}%)",
-                trigger_data={**stu, "resolution": "automatización de alerta"},
+                trigger_data={**stu, "resolution": "automatización de alerta",
+                              "alert_title": f"Bajo rendimiento: {stu['name']}",
+                              "alert_message": f"{stu['name']} tiene un promedio de {stu['score']}% "
+                                               f"(umbral {stu['threshold']:g}%)."},
             )
             all_results.append({"automation_id": autom.id, "automation": autom.name, **res})
 
@@ -908,6 +973,7 @@ _ACTIONS = {
 def _redirect_with_params(base: str, params: dict) -> "RedirectResponse":
     from fastapi.responses import RedirectResponse
     import urllib.parse
+    params = {"tab": "integraciones", **params}
     qs = "&".join(f"{urllib.parse.quote(k)}={urllib.parse.quote(str(v))}" for k, v in params.items() if v)
     return RedirectResponse(f"{base}?{qs}" if qs else base)
 

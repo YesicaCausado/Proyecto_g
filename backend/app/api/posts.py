@@ -203,7 +203,7 @@ async def create_post(
             "post_type": post.post_type or "anuncio",
             "date": post.due_date,
             "classroom_id": post.classroom_id,
-        })
+        }, owner_id=current_user.id)
     except Exception:
         # Una automatización que falla no debe romper la publicación.
         db.rollback()

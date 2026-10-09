@@ -16,6 +16,8 @@ interface MaterialFile {
   sharedWith: string[];
   hasFile?: boolean;
   downloadUrl?: string | null;
+  /** Archivo importado de Google Drive: se abre allí. */
+  url?: string | null;
   originalName?: string;
 }
 
@@ -74,6 +76,7 @@ export default function MaterialesTab() {
           sharedWith:   m.sharedWith ?? [],
           hasFile:      !!m.hasFile,
           downloadUrl:  m.downloadUrl ?? null,
+          url:          m.url ?? null,
           originalName: m.originalName,
         })),
       }))))
@@ -111,6 +114,7 @@ export default function MaterialesTab() {
           sharedWith:   r.data.sharedWith ?? [],
           hasFile:      !!r.data.hasFile,
           downloadUrl:  r.data.downloadUrl ?? null,
+          url:          r.data.url ?? null,
           originalName: r.data.originalName,
         };
         setFolders(prev => prev.map(fo => fo.id === folderId ? { ...fo, files: [...fo.files, newFile] } : fo));
@@ -153,8 +157,10 @@ export default function MaterialesTab() {
   const handleDownload = async (file: MaterialFile) => {
     // Enlace: abrir la URL si existe
     if (file.type === 'link') {
-      const url = (file.sharedWith ?? []).find((x: any) => typeof x === 'string' && /^https?:\/\//i.test(x));
+      const url = (file.url && /^https:\/\//i.test(file.url) ? file.url : null)
+        ?? (file.sharedWith ?? []).find((x: any) => typeof x === 'string' && /^https?:\/\//i.test(x));
       if (url) { window.open(url, '_blank', 'noopener,noreferrer'); return; }
+      window.alert('Este enlace no tiene una dirección válida.');
       return;
     }
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Loader2, Calendar as CalendarIcon, AlertTriangle, Check,
-  Link2, Power, Send, Folder, Upload, Plus, ChevronRight, X, Zap,
+  Link2, Folder, Upload, Plus, ChevronRight, X, Zap,
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../../services/api';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -24,16 +25,7 @@ interface Cal { id: string; name: string; primary?: boolean; }
 interface IntegrationState {
   googleDrive?: Integration;
   googleCalendar?: Integration;
-  webhook?: Integration;
 }
-
-// ── Constantes de tarjetas futuras ────────────────────────────────────────────
-
-const FUTURE = [
-  { icon: '🎓', name: 'Google Classroom', desc: 'Sincroniza clases, tareas y estudiantes desde Google Classroom.' },
-  { icon: '💬', name: 'Microsoft Teams',  desc: 'Conecta equipos y canales para colaboración y mensajería.' },
-  { icon: '📚', name: 'Moodle',           desc: 'Integra cursos, matriculaciones y calificaciones de Moodle.' },
-];
 
 const STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
   connected:      { label: 'Conectado',           color: 'text-[#0F7B6C]', bg: 'bg-emerald-50 border-emerald-200' },
@@ -55,28 +47,37 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get('/integrations');
+      const res = await api.get('/integrations', { params: { _t: Date.now() } });
       const ints: Integration[] = res.data?.integrations ?? [];
       const byProvider: IntegrationState = {};
       for (const i of ints) {
         if (i.provider === 'google_drive')   byProvider.googleDrive   = i;
         if (i.provider === 'google_calendar') byProvider.googleCalendar = i;
-        if (i.provider === 'webhook')        byProvider.webhook        = i;
       }
       setState(byProvider);
+      setGoogleReady(res.data?.google_configured !== false);
     } catch (e: any) {
-      if (e?.response?.status === 503) {
-        setGoogleReady(false);
-        setError('Google no está configurado en el servidor. Pide al administrador que configure las credenciales de OAuth.');
-      } else {
-        setError('No pudimos cargar las integraciones. Inténtalo nuevamente.');
-      }
+      const detail = e?.response?.data?.detail;
+      setError(typeof detail === 'string' && detail ? detail : 'No pudimos cargar las integraciones. Inténtalo nuevamente.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Resultado del regreso de Google OAuth (antes un error se perdía en silencio).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const oauthError = searchParams.get('integration_error');
+    const oauthOk = searchParams.get('integration_ok');
+    if (!oauthError && !oauthOk) return;
+    if (oauthError) { setError(oauthError); setSuccess(null); }
+    else { setSuccess('Cuenta de Google conectada correctamente.'); setError(null); }
+    const next = new URLSearchParams(searchParams);
+    ['integration_error', 'integration_ok', 'integration'].forEach(k => next.delete(k));
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const flash = (kind: 'error' | 'success', msg: string) => {
     if (kind === 'error') { setError(msg); setSuccess(null); }
@@ -88,7 +89,8 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
     setError(null);
     setSuccess(null);
     try { await fn(); } catch (e: any) {
-      flash('error', e?.response?.data?.detail || e?.message || 'Ocurrió un error al conectar. Inténtalo nuevamente.');
+      const detail = e?.response?.data?.detail;
+      flash('error', typeof detail === 'string' && detail ? detail : 'Ocurrió un error. Inténtalo nuevamente.');
     } finally { setBusyKey(null); }
   };
 
@@ -105,13 +107,14 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
       else flash('error', 'No pudimos generar el enlace de Google.');
     } catch (e: any) {
       const d = e?.response?.status === 503
-        ? 'Google no está configurado en el servidor. Configura GOOGLE_CLIENT_ID en el backend.'
+        ? 'Google no está configurado en el servidor (faltan GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET).'
         : (e?.response?.data?.detail || 'No pudimos conectar Google. Inténtalo nuevamente.');
       flash('error', d);
     } finally { setBusyKey(null); }
   };
 
-  const disconnect = async (provider: 'google_drive' | 'google_calendar' | 'webhook') => {
+  const disconnect = async (provider: 'google_drive' | 'google_calendar') => {
+    if (!window.confirm('¿Desconectar esta integración? Se revocarán las credenciales de Google.')) return;
     await wrap(`disconnect-${provider}`, async () => {
       await api.delete(`/integrations/${provider}`);
       await loadAll();
@@ -144,9 +147,9 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
     setError(null);
     try {
       const res = await api.get(`/integrations/google/drive/folders/${f.id}/files`);
+      // Solo se exploran los archivos: abrir una carpeta ya no la guarda
+      // como carpeta predeterminada (era un efecto lateral no pedido).
       setDriveFiles(res.data?.files ?? []);
-      await api.post('/integrations/google/drive/folder', { folder_id: f.id, folder_name: f.name });
-      await loadAll();
     } catch (e: any) {
       flash('error', e?.response?.data?.detail || 'No pudimos listar los archivos de la carpeta.');
     } finally { setFolderLoading(false); }
@@ -160,7 +163,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
         files,
         folder_id: folderId || undefined,
       });
-      flash('success', `${res.data?.count ?? files.length} archivo(s) importado(s) a tus Materiales.`);
+      flash('success', `${res.data?.count ?? files.length} archivo(s) agregado(s) a Materiales › «Desde Google Drive» como enlace (se abren en Drive).`);
     });
   };
 
@@ -205,52 +208,6 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
       setShowCalForm(false);
       setCalForm({ title: '', calendar_id: '', event_date: '', event_time: '', description: '' });
       flash('success', 'Evento creado en Google Calendar.');
-    });
-  };
-
-  // ── Webhook ─────────────────────────────────────────────────────────────────
-  const webhook = state.webhook;
-  const webhookUrl = webhook?.config?.url || '';
-  const webhookStatus = webhook?.status || 'not_configured';
-  const webhookConfigured = webhook && webhook.config?.url;
-  const [whUrl, setWhUrl] = useState(webhookUrl);
-  const [whEnabled, setWhEnabled] = useState(webhookStatus === 'connected');
-  const [whBusy, setWhBusy] = useState(false);
-
-  useEffect(() => { setWhUrl(webhookUrl); }, [webhookUrl]);
-  useEffect(() => { setWhEnabled(webhookStatus === 'connected'); }, [webhookStatus]);
-
-  const saveWebhook = async () => {
-    if (!whUrl.trim()) { flash('error', 'Ingresa una URL de webhook.'); return; }
-    setWhBusy(true); setError(null); setSuccess(null);
-    try {
-      const res = await api.post('/integrations/webhook', { url: whUrl.trim(), enabled: true });
-      await loadAll();
-      flash('success', res.data?.test?.ok !== false
-        ? 'Webhook guardado y conectado correctamente.'
-        : `Webhook guardado. El servidor respondió ${res.data?.test?.status_code ?? 'err'}.`);
-    } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos guardar el webhook. Verifica la URL.');
-    } finally { setWhBusy(false); }
-  };
-
-  const testWebhook = async () => {
-    setWhBusy(true); setError(null); setSuccess(null);
-    try {
-      const res = await api.post('/integrations/webhook/test', { url: whUrl.trim() || undefined });
-      const t = res.data;
-      flash(t?.ok ? 'success' : 'error',
-        t?.ok ? `Webhook respondió ${t.status_code} correctamente.` : `El webhook falló (${t.status_code}): ${t.response || 'sin respuesta'}`);
-    } catch (e: any) {
-      flash('error', e?.response?.data?.detail || 'No pudimos probar el webhook.');
-    } finally { setWhBusy(false); }
-  };
-
-  const toggleWebhook = async () => {
-    await wrap('webhook-toggle', async () => {
-      await api.post('/integrations/webhook/toggle', { enabled: !whEnabled });
-      setWhEnabled(e => !e);
-      flash('success', whEnabled ? 'Webhook desactivado.' : 'Webhook activado.');
     });
   };
 
@@ -452,75 +409,6 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
                 </div>
               </div>
             )}
-          </div>
-
-          {/* ── Webhooks ──────────────────────────────────────────────────── */}
-          <div className="bg-white border border-[#E9E9E7] rounded-xl overflow-hidden">
-            <div className="p-5 flex items-center gap-4 border-b border-[#E9E9E7]">
-              <div className="w-11 h-11 rounded-lg bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center flex-shrink-0 text-xl">🔗</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-bold text-[#191919]">Webhooks</h3>
-                  {webhookConfigured && badge('webhook', webhookStatus)}
-                </div>
-                <p className="text-xs text-[#787774] mt-0.5">Envía notificaciones HTTP reales a tu servidor cuando ocurran automatizaciones.</p>
-              </div>
-              {webhookConfigured && (
-                <button onClick={toggleWebhook} disabled={busy('webhook-toggle')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 bg-[#F7F6F3] text-[#787774] hover:bg-[#E9E9E7]">
-                  <Power className="w-3.5 h-3.5" /> {whEnabled ? 'Activo' : 'Inactivo'}
-                </button>
-              )}
-            </div>
-
-            <div className="p-5 space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">URL del webhook</label>
-                <div className="flex gap-2">
-                  <input
-                    value={whUrl}
-                    onChange={e => setWhUrl(e.target.value)}
-                    placeholder="https://miservidor.com/webhook/neurolearn"
-                    className="flex-1 px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB]"
-                  />
-                  <button onClick={saveWebhook} disabled={whBusy || !whUrl.trim()}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50 transition-colors flex-shrink-0">
-                    {whBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    Guardar
-                  </button>
-                </div>
-              </div>
-              {webhookConfigured && (
-                <div className="flex items-center gap-3">
-                  <button onClick={testWebhook} disabled={whBusy}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-[#E9E9E7] text-[#2E6FDB] hover:bg-[#EEF3FD] transition-colors">
-                    <Send className="w-3.5 h-3.5" /> Probar conexión
-                  </button>
-                  {webhook.config?.last_status != null && (
-                    <span className="text-xs text-[#787774]">
-                      Última respuesta: <strong className={Number(webhook.config.last_status) < 400 ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}>{webhook.config.last_status}</strong>
-                      {webhook.config.last_response ? ' · ' + String(webhook.config.last_response).slice(0, 60) : ''}
-                    </span>
-                  )}
-                </div>
-              )}
-              {!webhookConfigured && <p className="text-xs text-[#AEADAB]">Guarda una URL para poder usarla en tus automatizaciones.</p>}
-            </div>
-          </div>
-
-          {/* ── Futuras ───────────────────────────────────────────────────── */}
-          <div>
-            <h3 className="font-bold text-[#191919] text-sm mb-3">Próximamente</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {FUTURE.map(item => (
-                <div key={item.name} className="bg-[#F7F6F3] border border-dashed border-[#E9E9E7] rounded-xl p-5">
-                  <div className="text-2xl mb-2">{item.icon}</div>
-                  <h4 className="font-semibold text-[#191919] text-sm">{item.name}</h4>
-                  <p className="text-xs text-[#787774] mt-1 leading-relaxed">{item.desc}</p>
-                  <span className="inline-block mt-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E9E9E7] text-[#787774]">Próximamente</span>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Sugerencia de automatizaciones */}

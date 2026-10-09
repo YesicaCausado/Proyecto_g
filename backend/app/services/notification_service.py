@@ -37,6 +37,7 @@ NOTIFICATION_TYPES: Dict[str, tuple] = {
     "racha":                   ("nueva_actividad", "flame"),
     "rendimiento":             ("nueva_actividad", "star"),
     "mensaje_directo":         ("mensaje_directo", "message"),
+    "automatizacion":          ("nueva_actividad", "alert"),
 }
 PREFERENCE_FIELDS = ("nueva_actividad", "mensaje_directo")
 
