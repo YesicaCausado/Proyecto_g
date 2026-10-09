@@ -6,7 +6,7 @@
 
 Este documento resume en qué estado está el proyecto, qué se hizo en cada
 parche y qué falta para la entrega. Reemplaza la versión anterior (22 de
-septiembre), que todavía hablaba de licencias, de datos de demostración y de
+septiembre), que todavía hablaba de licencias (Lo cual se dio de baja), de datos de demostración y de
 funciones que ya cambiaron.
 
 ---
@@ -123,7 +123,7 @@ Base de datos: las migraciones 001 a 011 están aplicadas en Supabase (carpeta
 
 ## 5. Cómo trabajar en el proyecto
 
-- Cada cambio se entrega como un parche (`.patch`) que se aplica en GitHub Codespaces con `git am`, se prueba y se sube.
+- Cada cambio final (Distribuido en 14 parches) se entrega como un parche (`.patch`) que se aplica en GitHub Codespaces con `git am`, se prueba y se sube.
 - Antes de subir: `cd backend && python -m pytest -q` debe pasar completo.
 - Si un parche trae una migración, se ejecuta primero en Supabase y luego se mueve a `backend/migrations/applied/`.
 - Guía de pruebas: `docs/PRUEBAS.md`. Guía de despliegue: `docs/DEPLOYMENT_VERCEL.md`.
