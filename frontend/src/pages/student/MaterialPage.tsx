@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import TeacherMaterials from './TeacherMaterials';
 import {
   FileText, Download, Eye, Search,
   BookOpen, Calculator, MessageSquare,
@@ -450,8 +451,12 @@ export default function MaterialPage() {
           </div>
           Material de Apoyo para el Saber 11
         </h1>
-        <p className="text-[#787774] mt-1 text-sm">Documentos oficiales y guías de estudio para fortalecer tus conocimientos</p>
+        <p className="text-[#787774] mt-1 text-sm">El material que comparten tus profesores y la biblioteca general de documentos y guías del Saber 11</p>
       </div>
+
+      <TeacherMaterials search={search} />
+
+      <h2 className="font-semibold text-[#37352F] text-sm mb-3">Biblioteca general</h2>
 
       {/* ── Stats banner ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

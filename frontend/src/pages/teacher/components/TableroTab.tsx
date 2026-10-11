@@ -26,9 +26,12 @@ interface Post {
   group: string;
   reactions: { emoji: string; count: number }[];
   comments: Comment[];
-  attachments: string[];
+  attachments: Attachment[];
   dueDate?: string;
 }
+
+/** Adjunto real (material del profesor) o antiguo (solo nombre, id null). */
+interface Attachment { id: number | null; name: string; }
 
 interface Classroom {
   id: string;
@@ -49,7 +52,7 @@ function mapPost(raw: any): Post {
     comments:    Array.isArray(raw.comments) ? raw.comments.map((c: any) => ({
       id: String(c.id), author: c.author_name ?? c.author, text: c.content ?? c.text, date: c.created_at ?? c.date,
     })) : [],
-    attachments: raw.attachments ?? [],
+    attachments: (raw.attachments ?? []).map((a: any) => (typeof a === 'string' ? { id: null, name: a } : { id: a.id ?? null, name: a.name ?? 'Adjunto' })),
   };
 }
 
@@ -78,7 +81,7 @@ export default function TableroTab({ onNavigate }: { onNavigate?: (tab: string) 
   const [publishError, setPublishError] = useState('');
 
   const fileRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ type:'anuncio' as PostType, title:'', content:'', classroomId:'', dueDate:'', attachments: [] as string[] });
+  const [form, setForm] = useState({ type:'anuncio' as PostType, title:'', content:'', classroomId:'', dueDate:'', attachments: [] as File[] });
 
   useEffect(() => {
     api.get('/classrooms/my-classes')
@@ -140,6 +143,20 @@ export default function TableroTab({ onNavigate }: { onNavigate?: (tab: string) 
     setMenuPostId(null);
   };
 
+  const downloadAttachment = async (a: Attachment) => {
+    if (a.id == null) return;
+    try {
+      const r = await api.get(`/teacher/materials/files/${a.id}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(r.data as Blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = a.name;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      window.alert('No fue posible descargar el adjunto. Puede que se haya eliminado de Materiales.');
+    }
+  };
+
   const handlePublish = async () => {
     if (!form.title.trim() || !form.content.trim()) return;
     if (!form.classroomId) {
@@ -149,19 +166,30 @@ export default function TableroTab({ onNavigate }: { onNavigate?: (tab: string) 
     setPublishing(true);
     setPublishError('');
     try {
+      // Cada adjunto se sube primero como material del grupo (antes solo se
+      // guardaba su nombre y nadie podía abrirlo).
+      const uploaded: Attachment[] = [];
+      for (const f of form.attachments) {
+        if (f.size > 4 * 1024 * 1024) throw { message: `«${f.name}» supera el máximo de 4 MB.` };
+        const fd = new FormData();
+        fd.append('classroom_id', form.classroomId);
+        fd.append('file', f, f.name);
+        const up = await api.post('/teacher/materials/attachments', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        uploaded.push({ id: up.data.id, name: up.data.name });
+      }
       const res = await api.post('/posts', {
         classroom_id: Number(form.classroomId),
         post_type: form.type,
         title:     form.title.trim(),
         content:   form.content.trim(),
         due_date:  form.dueDate || null,
-        attachments: form.attachments,
+        attachments: uploaded,
       });
       setPosts(prev => [mapPost(res.data), ...prev]);
       setShowCompose(false);
       setForm({ type:'anuncio', title:'', content:'', classroomId:'', dueDate:'', attachments:[] });
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? 'No se pudo guardar la publicación. Intenta de nuevo.';
+      const msg = err?.response?.data?.detail ?? err?.message ?? 'No se pudo guardar la publicación. Intenta de nuevo.';
       setPublishError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setPublishing(false);
@@ -269,9 +297,15 @@ export default function TableroTab({ onNavigate }: { onNavigate?: (tab: string) 
 
                   {post.attachments.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {post.attachments.map(a => (
-                        <span key={a} className="flex items-center gap-1 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded text-xs text-[#787774]">
-                          <Paperclip className="w-3 h-3" />{a}
+                      {post.attachments.map((a, i) => a.id != null ? (
+                        <button key={`${a.id}-${i}`} onClick={() => downloadAttachment(a)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded text-xs text-[#2E6FDB] hover:bg-[#EEF3FD]">
+                          <Paperclip className="w-3 h-3" />{a.name}
+                        </button>
+                      ) : (
+                        <span key={`n-${i}`} title="Adjunto antiguo sin archivo guardado"
+                          className="flex items-center gap-1 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded text-xs text-[#AEADAB]">
+                          <Paperclip className="w-3 h-3" />{a.name}
                         </span>
                       ))}
                     </div>
@@ -403,13 +437,23 @@ export default function TableroTab({ onNavigate }: { onNavigate?: (tab: string) 
               {/* Adjuntar */}
               <div>
                 <input ref={fileRef} type="file" multiple className="hidden"
-                  onChange={e => { const names = Array.from(e.target.files||[]).map(f=>f.name); setForm(p=>({...p,attachments:[...p.attachments,...names]})); }} />
+                  onChange={e => { const files = Array.from(e.target.files || []); setForm(p => ({ ...p, attachments: [...p.attachments, ...files] })); e.target.value = ''; }} />
                 <button onClick={() => fileRef.current?.click()}
                   className="flex items-center gap-2 text-xs text-[#787774] hover:text-[#37352F] transition-colors">
                   <Paperclip className="w-3.5 h-3.5" />
                   Adjuntar archivos
                   {form.attachments.length > 0 && <span className="text-[#2E6FDB] font-medium">({form.attachments.length})</span>}
                 </button>
+                {form.attachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {form.attachments.map((f, i) => (
+                      <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[#F7F6F3] border border-[#E9E9E7] rounded text-[11px] text-[#787774]">
+                        {f.name}
+                        <button onClick={() => setForm(p => ({ ...p, attachments: p.attachments.filter((_, j) => j !== i) }))} aria-label="Quitar">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="px-6 pb-5 flex flex-col gap-2">

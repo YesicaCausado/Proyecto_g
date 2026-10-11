@@ -98,7 +98,13 @@ def _post_to_dict(post: Post, current_user_id: int, db: Session) -> dict:
         "title": post.title,
         "content": post.content,
         "due_date": post.due_date,
-        "attachments": post.attachments or [],
+        # [{id, name}] = material real descargable; los antiguos (solo
+        # nombre) se marcan sin id para que no aparenten ser descargables.
+        "attachments": [
+            {"id": a.get("id"), "name": a.get("name") or "Adjunto"} if isinstance(a, dict)
+            else {"id": None, "name": str(a)}
+            for a in (post.attachments or [])
+        ],
         "is_pinned": post.is_pinned,
         "created_at": post.created_at.isoformat(),
         "updated_at": post.updated_at.isoformat(),
@@ -176,6 +182,22 @@ async def create_post(
     if not classroom:
         raise HTTPException(status_code=404, detail="Clase no encontrada o sin permiso")
 
+    # Adjuntos: solo materiales reales del profesor compartidos con este grupo
+    # (se suben con POST /teacher/materials/attachments). Antes se guardaba
+    # solo el nombre del archivo y el estudiante no podía abrir nada.
+    attachments = []
+    if body.attachments:
+        from app.api.teacher_materials import TeacherMaterial, shared_ids
+        for a in body.attachments:
+            mid = a.get("id") if isinstance(a, dict) else None
+            mat = db.query(TeacherMaterial).filter(
+                TeacherMaterial.id == mid, TeacherMaterial.teacher_id == current_user.id,
+            ).first() if isinstance(mid, int) else None
+            if mat is None or body.classroom_id not in shared_ids(mat):
+                raise HTTPException(status_code=400,
+                                    detail="Los adjuntos deben subirse primero y pertenecer a este grupo.")
+            attachments.append({"id": mat.id, "name": mat.name})
+
     post = Post(
         classroom_id=body.classroom_id,
         teacher_id=current_user.id,
@@ -183,7 +205,7 @@ async def create_post(
         title=body.title,
         content=body.content,
         due_date=body.due_date,
-        attachments=body.attachments or [],
+        attachments=attachments,
     )
     db.add(post)
     db.commit()

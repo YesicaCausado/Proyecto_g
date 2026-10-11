@@ -31,6 +31,7 @@ from app.api import messages
 from app.api import super_stats
 from app.api import teacher_stats
 from app.api import teacher_materials
+from app.api import student_materials
 from app.api import teacher_evaluations
 from app.api import student_evaluations
 from app.api import consents
@@ -349,6 +350,11 @@ app.include_router(
 
 app.include_router(
     teacher_materials.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    student_materials.router,
     prefix="/api/v1",
 )
 
