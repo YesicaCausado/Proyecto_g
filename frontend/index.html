@@ -14,6 +14,23 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Nunito:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
     <title>NeuroLearn AI</title>
+    <script>
+      // Rescate (parche 14A): si una versión anterior de la app quedó
+      // instalada y respondió una ruta del backend (p. ej. el regreso de
+      // Google en /api/v1/integrations/google/callback), se retira esa
+      // versión y se vuelve a pedir la URL al servidor.
+      (function () {
+        var p = window.location.pathname;
+        if (!/^\/(api|docs|redoc|health)(\/|$)/.test(p) || !('serviceWorker' in navigator)) return;
+        try {
+          if (sessionStorage.getItem('sw-rescate') === p) return;
+          sessionStorage.setItem('sw-rescate', p);
+        } catch (e) { return; }
+        navigator.serviceWorker.getRegistrations()
+          .then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })
+          .then(function () { window.location.reload(); });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

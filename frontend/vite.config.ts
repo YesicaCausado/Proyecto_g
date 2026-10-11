@@ -38,6 +38,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
+        // Las rutas del backend NUNCA se responden con la app guardada.
+        // Sin esto, al volver de Google (/api/v1/integrations/google/callback)
+        // el service worker devolvía index.html; sus estilos relativos se
+        // pedían a /api/v1/.../assets/*.css, el backend respondía JSON
+        // («MIME type application/json») y la página quedaba en blanco.
+        navigateFallbackDenylist: [/^\/api\//, /^\/docs/, /^\/redoc/, /^\/openapi\.json/, /^\/health/],
       }
     })
   ],

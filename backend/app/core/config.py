@@ -95,9 +95,13 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     # URL de callback registrada en Google (apunta al backend).
-    GOOGLE_REDIRECT_URI: str = os.getenv(
-        "GOOGLE_REDIRECT_URI",
-        "http://localhost:8000/api/v1/integrations/google/callback",
+    # Si no se define, en Vercel se usa el dominio de producción del proyecto
+    # (antes quedaba localhost y Google devolvía al usuario a una URL rota).
+    # Debe coincidir EXACTAMENTE con la URI autorizada en Google Cloud.
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI") or (
+        f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}/api/v1/integrations/google/callback"
+        if os.getenv("VERCEL_PROJECT_PRODUCTION_URL")
+        else "http://localhost:8000/api/v1/integrations/google/callback"
     )
     # Alcances mínimos para Drive + Calendar.
     GOOGLE_SCOPES: str = os.getenv(

@@ -115,6 +115,25 @@ Tu proyecto tiene **12 variables de entorno principales** distribuidas en el bac
 
 ---
 
+## **4B. GOOGLE DRIVE Y CALENDAR (integraciones)**
+
+### `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`
+- Credenciales OAuth del proyecto en Google Cloud (tipo «Aplicación web»).
+- Sin ellas, «Conectar Drive/Calendar» avisa que Google no está configurado.
+
+### `GOOGLE_REDIRECT_URI`
+- Dirección a la que Google devuelve al usuario tras autorizar. Apunta al **backend**:
+  `https://<tu-dominio>/api/v1/integrations/google/callback`
+- Debe estar registrada **exactamente igual** en Google Cloud → Credenciales →
+  «URI de redireccionamiento autorizados».
+- Si no se define, en Vercel se usa `https://<dominio de producción>/api/v1/integrations/google/callback`.
+
+### `FRONTEND_URL`
+- Dirección pública de la app (sin `/` final). Tras autorizar, el backend envía
+  al profesor a `FRONTEND_URL/#/teacher?tab=integraciones`.
+
+---
+
 ## **5. VARIABLES DE UMBRALES COGNITIVOS**
 
 ### `FATIGUE_THRESHOLD`
