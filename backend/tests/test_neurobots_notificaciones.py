@@ -491,5 +491,32 @@ class NeuroBotsNotificationsTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"{API}/bots/assigned-to-me", headers=self.h("est1")).json()["bots"], [])
 
 
+    # ── Mis NeuroBots: historial propio, separado de las competencias ──────
+    def test_historial_del_neurobot_separado_de_competencias(self):
+        bot_id = self.create_bot()
+        self.assertEqual(self.assign(bot_id, classrooms=[self.c9a_id]).status_code, 200)
+        conv_bot, _ = self.open_chat("est1", bot_id)
+        self.say("est1", bot_id, conv_bot)
+        h = self.h("est1")
+        conv_comp = self.client.post(f"{API}/chat/conversations", headers=h,
+                                     json={"topic": "Lectura crítica"}).json()["id"]
+
+        detail = self.client.get(f"{API}/bots/assigned-to-me/{bot_id}", headers=h).json()
+        self.assertEqual([c["id"] for c in detail["conversations"]], [conv_bot])
+        self.assertEqual(detail["last_conversation_id"], conv_bot)
+
+        only_bot = self.client.get(f"{API}/chat/conversations", headers=h, params={"bot_id": bot_id}).json()
+        self.assertEqual([c["id"] for c in only_bot["conversations"]], [conv_bot])
+        self.assertEqual(only_bot["conversations"][0]["bot_id"], bot_id)
+        comp = self.client.get(f"{API}/chat/conversations", headers=h, params={"scope": "competencias"}).json()
+        self.assertEqual([c["id"] for c in comp["conversations"]], [conv_comp])
+
+        # Otro estudiante no ve ese historial ni puede abrir el NeuroBot sin asignación.
+        self.assertEqual(self.client.get(f"{API}/chat/conversations", headers=self.h("est3"),
+                                         params={"bot_id": bot_id}).json()["conversations"], [])
+        self.assertEqual(self.client.get(f"{API}/bots/assigned-to-me/{bot_id}",
+                                         headers=self.h("est3")).status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

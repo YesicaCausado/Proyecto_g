@@ -102,6 +102,28 @@ export default function NeuroBotDetailPage() {
             </div>
           </div>
 
+          <div className="bg-white border border-[#E9E9E7] rounded-lg">
+            <h2 className="px-5 pt-4 pb-2 text-sm font-semibold text-[#37352F]">Tus conversaciones con este NeuroBot</h2>
+            {(bot.conversations ?? []).length === 0 ? (
+              <p className="px-5 pb-4 text-sm text-[#787774]">Aún no has conversado con este NeuroBot. Usa «Empezar» para iniciar.</p>
+            ) : (
+              <ul className="divide-y divide-[#F7F6F3]">
+                {(bot.conversations ?? []).map(c => (
+                  <li key={c.id}>
+                    <Link to={chatLink(bot, c.id)}
+                      className="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-[#F7F6F3]">
+                      <span className="flex items-center gap-2 min-w-0 text-[#37352F]">
+                        <MessageSquare className="w-4 h-4 text-[#9B9A97] flex-shrink-0" />
+                        <span className="truncate">{c.title}</span>
+                      </span>
+                      <span className="text-xs text-[#9B9A97] whitespace-nowrap">{formatDateTime(c.last_interaction)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="bg-white border border-[#E9E9E7] rounded-lg divide-y divide-[#F7F6F3] text-sm">
             <Row label="Asignado por">
               {bot.sources.map((s, i) => (

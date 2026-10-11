@@ -418,7 +418,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {(() => {
             const items: { to: string; label: string; icon: ReactNode; active: boolean }[] = [
               { to: '/dashboard', label: 'Inicio', icon: <Home className="w-5 h-5" />, active: exact('/dashboard') },
-              { to: '/chat', label: 'Competencias', icon: <BookOpen className="w-5 h-5" />, active: location.pathname.startsWith('/chat') },
+              { to: '/chat', label: 'Competencias', icon: <BookOpen className="w-5 h-5" />, active: location.pathname.startsWith('/chat') && !location.pathname.startsWith('/chat/custom') },
+              { to: '/bots', label: 'NeuroBots', icon: <Bot className="w-5 h-5" />, active: location.pathname.startsWith('/bots') || location.pathname.startsWith('/chat/custom') },
               { to: '/quizzes', label: 'Desafíos', icon: <Trophy className="w-5 h-5" />, active: location.pathname.startsWith('/quizzes') || exact('/performance') },
               { to: '/my-classes', label: 'Clases', icon: <Users className="w-5 h-5" />, active: location.pathname.startsWith('/my-classes') },
               { to: '/settings', label: 'Perfil', icon: <Settings className="w-5 h-5" />, active: exact('/settings') },
@@ -428,7 +429,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 key={item.to}
                 to={item.to}
                 onClick={() => setSidebarOpen(false)}
-                className="flex flex-col items-center gap-0.5 px-2 py-1 min-w-[56px]"
+                className="flex flex-col items-center gap-0.5 px-1 py-1 min-w-[48px]"
               >
                 <span className={`transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: THEME.accent } : undefined}>{item.icon}</span>
                 <span className={`text-[10px] font-medium transition-colors ${item.active ? '' : 'text-[#AEADAB]'}`} style={item.active ? { color: THEME.accent } : undefined}>{item.label}</span>

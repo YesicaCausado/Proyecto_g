@@ -8,7 +8,8 @@ Memoria completa de conversaciones (tipo ChatGPT):
   POST /chat/conversations/{id}/rename    → renombrar
   DELETE /chat/conversations/{id}         → eliminar
 """
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import Query, APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List
@@ -41,20 +42,33 @@ def _to_meta(conv: Conversation) -> ConversationMeta:
         created_at=conv.created_at or datetime.utcnow(),
         updated_at=conv.updated_at or datetime.utcnow(),
         last_interaction=conv.last_interaction or datetime.utcnow(),
+        bot_id=conv.bot_id,
     )
 
 
 @router.get("", response_model=ConversationListResponse)
 async def list_conversations(
+    bot_id: Optional[int] = Query(None, description="Solo las conversaciones con este NeuroBot"),
+    scope: Optional[str] = Query(None, description="competencias = solo chats sin NeuroBot; neurobots = solo con NeuroBot"),
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
-    """Lista las conversaciones del estudiante (más recientes primero)."""
-    rows = db.query(Conversation).filter(
+    """Lista las conversaciones del estudiante (más recientes primero).
+
+    Los chats de competencias y los de NeuroBots se listan por separado
+    (bot_id / scope) para que cada módulo muestre solo su historial."""
+    q = db.query(Conversation).filter(
         Conversation.student_id == current_user.id,
         Conversation.is_active == True,
-    ).order_by(Conversation.last_interaction.desc()).all()
+    )
+    if bot_id is not None:
+        q = q.filter(Conversation.bot_id == bot_id)
+    elif scope == "competencias":
+        q = q.filter(Conversation.bot_id.is_(None))
+    elif scope == "neurobots":
+        q = q.filter(Conversation.bot_id.isnot(None))
+    rows = q.order_by(Conversation.last_interaction.desc()).all()
     return ConversationListResponse(
         conversations=[_to_meta(r) for r in rows],
         total=len(rows),

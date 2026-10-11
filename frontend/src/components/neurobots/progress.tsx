@@ -35,6 +35,8 @@ export interface AssignedBot {
   document_count: number;
   progress: NeuroBotProgress;
   last_conversation_id?: number | null;
+  /** Historial de conversaciones con este NeuroBot (más recientes primero). */
+  conversations?: { id: number; title: string; last_interaction: string | null }[];
 }
 
 export const STATUS_STYLE: Record<NeuroBotStatus, string> = {

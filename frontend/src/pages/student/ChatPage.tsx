@@ -765,7 +765,10 @@ export default function ChatPage() {
       // Cache-busting: el adapter de GET cachea también listas vacías durante
       // 15s, lo que hacía que el historial saliera vacío justo después de crear
       // una conversación. `_t` fuerza una lectura fresca del servidor.
-      const res = await api.get<any>("/chat/conversations", { params: { _t: Date.now() } });
+      // Cada módulo ve solo su historial: con un NeuroBot, sus conversaciones;
+      // en Competencias, solo los chats sin NeuroBot.
+      const scope = botIdParam ? { bot_id: Number(botIdParam) } : { scope: "competencias" };
+      const res = await api.get<any>("/chat/conversations", { params: { ...scope, _t: Date.now() } });
       const list = res.data?.conversations ?? res.data ?? [];
       setConversations(Array.isArray(list) ? list : []);
     } catch (e) {

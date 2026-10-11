@@ -141,6 +141,7 @@ class ConversationMeta(BaseModel):
     created_at: datetime
     updated_at: datetime
     last_interaction: datetime
+    bot_id: Optional[int] = None    # NeuroBot de la conversación (None = competencia)
 
 
 class ConversationListResponse(BaseModel):

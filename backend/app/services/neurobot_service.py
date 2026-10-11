@@ -344,8 +344,14 @@ def student_bot_detail(db: Session, student: User, bot_id: int) -> dict:
     last = db.query(Conversation).filter(
         Conversation.student_id == student.id, Conversation.bot_id == bot_id,
         Conversation.is_active == True,  # noqa: E712
-    ).order_by(Conversation.last_interaction.desc()).first()
-    card["last_conversation_id"] = last.id if last else None
+    ).order_by(Conversation.last_interaction.desc()).limit(20).all()
+    card["last_conversation_id"] = last[0].id if last else None
+    # Historial de conversaciones con este NeuroBot (las 20 más recientes).
+    card["conversations"] = [{
+        "id": c.id,
+        "title": c.title or "Conversación",
+        "last_interaction": c.last_interaction.isoformat() + "Z" if c.last_interaction else None,
+    } for c in last]
     return card
 
 
