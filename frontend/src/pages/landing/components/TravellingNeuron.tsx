@@ -54,7 +54,15 @@ export default function TravellingNeuron({ stops }: Props) {
     let currentY = window.innerHeight / 2;   // posición actual
     let targetY = currentY;
 
-    const update = () => {
+    // El bucle se detiene cuando Neuron llega a su sitio y se reanuda al
+    // hacer scroll (antes corría siempre, aunque nada se moviera).
+    const loop = () => {
+      currentY += (targetY - currentY) * 0.12;
+      glyph.style.transform = `translate3d(0, ${currentY - glyph.offsetHeight / 2}px, 0)`;
+      raf = Math.abs(targetY - currentY) > 0.5 ? requestAnimationFrame(loop) : 0;
+    };
+
+    const measure = () => {
       // Sección activa = la que tiene su centro más cercano al centro del viewport.
       let best = stops[0] ?? null;
       let bestDist = Infinity;
@@ -75,22 +83,29 @@ export default function TravellingNeuron({ stops }: Props) {
         const center = r.top + r.height / 2;
         targetY = Math.max(120, Math.min(window.innerHeight - 220, center));
       }
-      if (label && best) label.textContent = best.label;
+      if (label && best && label.textContent !== best.label) label.textContent = best.label;
     };
 
-    const loop = () => {
-      currentY += (targetY - currentY) * 0.12;
-      glyph.style.transform = `translate3d(0, ${currentY - glyph.offsetHeight / 2}px, 0)`;
-      raf = requestAnimationFrame(loop);
+    // Mide como máximo una vez por cuadro aunque lleguen muchos eventos de scroll.
+    let measureQueued = 0;
+    const update = () => {
+      if (measureQueued) return;
+      measureQueued = requestAnimationFrame(() => {
+        measureQueued = 0;
+        measure();
+        if (!raf) raf = requestAnimationFrame(loop);
+      });
     };
 
-    update();
+    measure();
     raf = requestAnimationFrame(loop);
     window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', () => { update(); });
+    window.addEventListener('resize', update);
     return () => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(measureQueued);
       window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
     };
   }, [enabled, stops]);
 

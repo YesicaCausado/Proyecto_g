@@ -32,20 +32,8 @@ export default function LandingNavbar() {
           </span>
         </a>
 
-        {/* Acciones */}
+        {/* Acción única: entrar a la plataforma */}
         <div className="flex items-center gap-4 sm:gap-5">
-          <a
-            href="#capacidades"
-            className="hidden rounded-full px-4 py-2 text-sm font-semibold text-neutral-700 transition-colors hover:text-black lg:inline-flex"
-          >
-            Competencias
-          </a>
-          <a
-            href="#chattutor"
-            className="hidden rounded-full px-4 py-2 text-sm font-semibold text-neutral-700 transition-colors hover:text-black lg:inline-flex"
-          >
-            NeuroChat
-          </a>
           <a
             href="#/login"
             className="hero-cta hero-cta-primary inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold text-white"

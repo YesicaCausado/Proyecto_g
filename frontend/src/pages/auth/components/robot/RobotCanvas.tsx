@@ -21,6 +21,9 @@ import RobotGeometric       from './RobotGeometric';
 import RobotAnimatedScene   from './RobotAnimatedScene';
 import { useRobotContextSafe } from '../../../../context/RobotContext';
 
+// Resolución máxima en modo liviano: suficiente para un robot decorativo.
+const LOW_POWER_DPR: [number, number] = [1, 1.5];
+
 // ── Props públicas ────────────────────────────────────────────
 
 export interface RobotCanvasProps {
@@ -30,6 +33,13 @@ export interface RobotCanvasProps {
   /** Si true, el canvas renderiza con fondo transparente (útil en banners con gradiente) */
   transparent?:  boolean;
   onSceneReady?: () => void;
+  /**
+   * Modo liviano (landing): menos resolución, sin sombras ni buffer
+   * logarítmico. Reduce mucho la memoria de la GPU. El login no lo usa.
+   */
+  lowPower?:     boolean;
+  /** Si true, deja de dibujar cuadros (el robot queda quieto, sin gastar GPU). */
+  paused?:       boolean;
 }
 
 // ── Componente interno de la escena ──────────────────────────
@@ -89,6 +99,8 @@ export default function RobotCanvas({
   enabled      = true,
   transparent  = false,
   onSceneReady,
+  lowPower     = false,
+  paused       = false,
 }: RobotCanvasProps) {
   const robotCtx   = useRobotContextSafe();
   const robotState: RobotState = robotStateProp ?? robotCtx?.state ?? 'idle';
@@ -198,8 +210,8 @@ export default function RobotCanvas({
     >
       <Canvas
         key={webglEpoch}
-        shadows={CANVAS_CONFIG.shadows}
-        dpr={CANVAS_CONFIG.dpr}
+        shadows={lowPower ? false : CANVAS_CONFIG.shadows}
+        dpr={lowPower ? LOW_POWER_DPR : CANVAS_CONFIG.dpr}
         onCreated={handleCreated}
         gl={{
           antialias:             true,
@@ -208,15 +220,15 @@ export default function RobotCanvas({
           // Con failIfMajorPerformanceCaveat:false permitimos que el navegador
           // use el renderer por software (swiftshader) en vez de negar el
           // contexto → evita "Context Lost" silencioso en hardware débil.
-          powerPreference:       'high-performance',
+          powerPreference:       lowPower ? 'default' : 'high-performance',
           failIfMajorPerformanceCaveat: false,
           preserveDrawingBuffer: false,
           stencil:               false,
           depth:                 true,
-          logarithmicDepthBuffer: true,
+          logarithmicDepthBuffer: !lowPower,
         }}
         style={transparent ? undefined : { background: CANVAS_CONFIG.backgroundColor }}
-        frameloop="always"
+        frameloop={paused ? 'never' : 'always'}
         performance={{ min: 0.8 }}
       >
         <SceneContent

@@ -83,7 +83,6 @@ export default defineConfig({
           if (/daisyui|tailwindcss/.test(id)) return 'css';
           if (/react|react-dom/.test(id)) return 'react-vendor';
           if (/axios/.test(id)) return 'http';
-          if (/lenis/.test(id)) return 'scroll';
 
           return 'vendor';
         },
