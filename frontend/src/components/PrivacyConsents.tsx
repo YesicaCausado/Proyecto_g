@@ -18,7 +18,7 @@ function formatDate(iso: string | null): string {
  * Para aceptarlos se usa el botón de cámara/micrófono del chat, que muestra el texto completo.
  */
 export default function PrivacyConsents() {
-  const { consents, loading, error, load, revoke, errorText } = useConsents();
+  const { consents, guardian, loading, error, load, revoke, errorText } = useConsents();
   const [busy, setBusy] = useState<ConsentType | null>(null);
   const [actionError, setActionError] = useState('');
 
@@ -51,6 +51,11 @@ export default function PrivacyConsents() {
         </div>
       ) : consents && (
         <div className="divide-y divide-[#F7F6F3]">
+          {guardian?.blocked && guardian.message && (
+            <p className="px-5 py-3 text-xs text-[#9A6700] bg-[#FCF6E5] flex gap-2">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /> <span>{guardian.message}</span>
+            </p>
+          )}
           {(Object.keys(LABELS) as ConsentType[]).map(type => {
             const st = consents[type];
             const Icon = LABELS[type].icon;

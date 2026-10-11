@@ -74,7 +74,7 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   calendario:    { title: 'Calendario Institucional', subtitle: 'Eventos, exámenes y fechas importantes' },
   auditoria:     { title: 'Auditoría',             subtitle: 'Registro de todas las acciones del sistema' },
   configuracion: { title: 'Configuración',         subtitle: 'Datos y personalización de la institución' },
-  seguridad:     { title: 'Seguridad',             subtitle: 'Sesiones, 2FA e historial de accesos' },
+  seguridad:     { title: 'Seguridad',             subtitle: 'Contraseña, sesiones e historial de accesos' },
   perfil:        { title: 'Mi Perfil',             subtitle: 'Tu información personal y preferencias' },
 };
 

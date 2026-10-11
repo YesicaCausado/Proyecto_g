@@ -102,9 +102,21 @@ Base de datos: las migraciones 001 a 011 están aplicadas en Supabase (carpeta
 
 ## 4. Lo que falta
 
-### Parche 14 — revisión final de seguridad
-- La clave del servicio de voz de Azure (`VITE_AZURE_SPEECH_KEY`) queda visible en el navegador. Hay que moverla al backend.
-- Autorización de padres o acudientes para estudiantes menores de edad.
+### Parche 14 — auditoría final (hecho en el código)
+Resultado completo en `docs/AUDITORIA_FINAL.md`. Se corrigió:
+- La voz de Azure ahora pasa por el backend; la clave ya no llega al navegador.
+- Autorización del acudiente para que los menores usen cámara y micrófono.
+- Un Súper Profesor ya no ve grupos, publicaciones ni usuarios de otra institución.
+- Grupos del Súper Profesor: ver detalle, activar o desactivar y transferir se guardan de verdad.
+- Seguridad del Súper Profesor: cierre real de sesiones e historial de accesos real; se quitó el interruptor de 2FA que no hacía nada.
+- La configuración del sistema del Administrador es de solo lectura (antes los cambios se perdían).
+- El frontend ya no muestra datos de otra cuenta ni datos viejos después de guardar.
+- Los quizzes ya no inventan la respuesta correcta.
+
+Falta hacer fuera del código:
+- Ejecutar la migración `012_auditoria_sesiones_acudiente.sql` en Supabase antes de desplegar.
+- En Vercel, renombrar `VITE_AZURE_SPEECH_KEY` a `AZURE_SPEECH_KEY` (y la región) y rotar la clave en Azure.
+- Registrar la autorización del acudiente de cada estudiante menor en el panel del Súper Profesor.
 - Revisión final de contraseñas, cuentas de prueba y variables de entorno.
 
 ### Antes de la entrega
@@ -114,6 +126,7 @@ Base de datos: las migraciones 001 a 011 están aplicadas en Supabase (carpeta
 
 ### Pendientes menores (decisión del equipo)
 - El Súper Profesor todavía no tiene una pantalla para configurar el webhook de la institución (solo existe por la API).
+- La verificación en dos pasos (2FA) no está implementada; se quitó el interruptor que la simulaba.
 - El Administrador puede abrir los paneles de los demás roles, pero el backend no le permite todo dentro de ellos. Hay que decidir si se amplía su acceso o se restringe la navegación.
 - Las notificaciones se revisan cada 60 segundos; no llegan al instante.
 - Vercel limita cada archivo enviado a unos 4,5 MB, aunque el backend acepta adjuntos de mensajes de hasta 25 MB.

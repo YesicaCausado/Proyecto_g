@@ -115,6 +115,22 @@ Tu proyecto tiene **12 variables de entorno principales** distribuidas en el bac
 
 ---
 
+## **4A. VOZ DEL TUTOR (Azure Speech)**
+
+### `AZURE_SPEECH_KEY` y `AZURE_SPEECH_REGION`
+- **Tipo**: String (opcional). Región por defecto: `eastus`.
+- **Ubicación**: solo en el **backend** (Vercel → Environment Variables).
+- **Propósito**: voz natural del tutor. El navegador pide el audio a
+  `POST /api/v1/voice/tts`; la clave nunca llega al navegador.
+- **Sin clave**: el tutor usa la voz del propio navegador.
+- **Importante**: antes se usaban `VITE_AZURE_SPEECH_KEY` y
+  `VITE_AZURE_SPEECH_REGION`, que quedaban dentro del JavaScript público. El
+  backend todavía las lee como respaldo, pero hay que **renombrarlas** a
+  `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` y **rotar la clave en el portal de
+  Azure**, porque la anterior estuvo expuesta.
+
+---
+
 ## **4B. GOOGLE DRIVE Y CALENDAR (integraciones)**
 
 ### `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`

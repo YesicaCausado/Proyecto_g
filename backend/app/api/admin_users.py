@@ -522,50 +522,8 @@ async def admin_get_config(
     }
 
 
-# ─── PATCH /admin/config ──────────────────────────────────────────────────────
-
-class ConfigUpdatePayload(BaseModel):
-    token_expire_minutes: Optional[int] = None   # 60–43200
-    debug_mode: Optional[bool] = None
-    email_from: Optional[str] = None
-
-
-@router.patch("/config")
-async def admin_update_config(
-    payload: ConfigUpdatePayload,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Actualiza ajustes del sistema en memoria (persiste hasta el próximo reinicio).
-    Para cambios permanentes en producción, actualiza las variables de entorno en Vercel.
-    """
-    _require_admin(current_user)
-
-    from app.core.config import settings
-
-    changes: list = []
-
-    if payload.token_expire_minutes is not None:
-        if not (60 <= payload.token_expire_minutes <= 43200):
-            raise HTTPException(400, "token_expire_minutes debe estar entre 60 y 43200")
-        settings.ACCESS_TOKEN_EXPIRE_MINUTES = payload.token_expire_minutes
-        changes.append(f"token_expire_minutes → {payload.token_expire_minutes}")
-
-    if payload.debug_mode is not None:
-        settings.DEBUG = payload.debug_mode
-        changes.append(f"debug_mode → {payload.debug_mode}")
-
-    if payload.email_from is not None:
-        settings.EMAIL_FROM = payload.email_from.strip()
-        changes.append(f"email_from → {payload.email_from}")
-
-
-    if not changes:
-        return {"ok": True, "message": "Sin cambios aplicados", "changes": []}
-
-    return {
-        "ok": True,
-        "message": f"{len(changes)} ajuste(s) aplicado(s). Nota: estos cambios son en memoria; para persistirlos actualiza las variables de entorno en Vercel.",
-        "changes": changes,
-    }
+# PATCH /admin/config se eliminó en la auditoría final: cambiaba ajustes solo en
+# la memoria de una instancia (en Vercel se perdían al instante y cada
+# instancia podía tener valores distintos) y permitía activar el modo debug en
+# producción. Estos valores se configuran con variables de entorno en Vercel
+# (docs/VARIABLES_ENTORNO.md); la pantalla del Administrador solo los muestra.

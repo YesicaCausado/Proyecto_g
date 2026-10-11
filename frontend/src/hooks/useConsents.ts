@@ -31,6 +31,14 @@ export interface ConsentState {
 
 type ConsentMap = Record<ConsentType, ConsentState>;
 
+/** Autorización del acudiente (estudiantes menores o sin fecha de nacimiento). */
+export interface GuardianState {
+  required: boolean;
+  authorized: boolean;
+  blocked: boolean;
+  message: string | null;
+}
+
 function errorText(err: any, fallback: string): string {
   const detail = err?.response?.data?.detail;
   if (typeof detail === 'string' && detail.trim()) return detail;
@@ -40,6 +48,7 @@ function errorText(err: any, fallback: string): string {
 
 export function useConsents() {
   const [consents, setConsents] = useState<ConsentMap | null>(null);
+  const [guardian, setGuardian] = useState<GuardianState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -50,6 +59,7 @@ export function useConsents() {
     try {
       const res = await api.get('/consents/me');
       setConsents(res.data.consents);
+      setGuardian(res.data.guardian ?? null);
     } catch (err) {
       setError(errorText(err, 'No se pudo consultar tu consentimiento.'));
     } finally {
@@ -75,5 +85,5 @@ export function useConsents() {
 
   const granted = useCallback((type: ConsentType) => !!consents?.[type]?.granted, [consents]);
 
-  return { consents, loading, error, load, accept, revoke, granted, errorText };
+  return { consents, guardian, loading, error, load, accept, revoke, granted, errorText };
 }

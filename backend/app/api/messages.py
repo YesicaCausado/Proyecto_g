@@ -88,13 +88,15 @@ def _can_message(sender: User, receiver: User, db: Session) -> bool:
     s_role = sender.role
     r_role = receiver.role
 
-    # Super puede hablar con cualquiera
-    if s_role == UserRole.SUPER_PROFESOR.value:
-        return True
+    same_institution = (
+        sender.institution_id is not None
+        and sender.institution_id == receiver.institution_id
+    )
 
-    # Cualquiera puede hablar con super
-    if r_role == UserRole.SUPER_PROFESOR.value:
-        return True
+    # Super ↔ cualquiera de SU institución (antes no se comprobaba la
+    # institución y se podía escribir a usuarios de otros colegios).
+    if s_role == UserRole.SUPER_PROFESOR.value or r_role == UserRole.SUPER_PROFESOR.value:
+        return same_institution
 
     # Profesor ↔ Profesor (misma institución)
     if s_role == UserRole.PROFESOR.value and r_role == UserRole.PROFESOR.value:
@@ -380,7 +382,8 @@ async def get_messages(
     ).order_by(DirectMessage.created_at).all()
 
     other = db.query(User).filter(User.id == other_user_id).first()
-    if not other:
+    # Sin historial ni permiso para escribirle: no se revela quién es.
+    if not other or (not msgs and not _can_message(current_user, other, db)):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     return {

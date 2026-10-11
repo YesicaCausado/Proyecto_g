@@ -1069,6 +1069,7 @@ export default function ChatPage() {
           type={consentPrompt}
           state={consents.consents?.[consentPrompt] ?? null}
           loadError={consents.error}
+          blockedMessage={consents.guardian?.blocked ? (consents.guardian.message ?? '') : ''}
           onAccept={acceptConsent}
           onDecline={declineConsent}
           onRetry={consents.load}

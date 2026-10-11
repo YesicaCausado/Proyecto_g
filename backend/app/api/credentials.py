@@ -91,6 +91,16 @@ def _log(db: Session, action: str, performed_by: User, institution_id: Optional[
     db.add(entry)
 
 
+def _guardian_fields(student: User) -> dict:
+    from app.services.consent_service import guardian_status
+    st = guardian_status(student)
+    return {
+        "guardian_required": st["required"],
+        "guardian_authorized": st["authorized"],
+        "guardian_name": student.guardian_name,
+    }
+
+
 def _client_ip(request: Request) -> str:
     return (request.headers.get("X-Forwarded-For") or
             getattr(request.client, "host", "unknown"))
@@ -613,6 +623,7 @@ async def list_students(
             "grade": s.grade or "",
             "birth_date": s.birth_date or "",
             "is_active": s.is_active,
+            **_guardian_fields(s),
         }
         for s in students
     ]
@@ -771,10 +782,24 @@ async def update_student(
         student.email = updates["email"]
     if "is_active" in updates:
         student.is_active = updates["is_active"]
+    guardian_note = ""
+    if "guardian_name" in updates:
+        student.guardian_name = (updates["guardian_name"] or "").strip() or None
+    if "guardian_authorized" in updates:
+        if updates["guardian_authorized"]:
+            if not student.guardian_name:
+                raise HTTPException(400, "Escribe el nombre del acudiente que firmó la autorización.")
+            student.guardian_authorized_at = datetime.utcnow()
+            student.guardian_authorized_by_id = current_user.id
+            guardian_note = f" · autorización del acudiente registrada ({student.guardian_name})"
+        else:
+            student.guardian_authorized_at = None
+            student.guardian_authorized_by_id = None
+            guardian_note = " · autorización del acudiente retirada"
 
     db.commit()
     _log(db, "update_student", current_user, institution.id,
-         student.id, "estudiante", _client_ip(request), notes="Edición de estudiante")
+         student.id, "estudiante", _client_ip(request), notes="Edición de estudiante" + guardian_note)
     db.refresh(student)
     return StudentListItem(
         id=student.id,
@@ -786,6 +811,7 @@ async def update_student(
         grade=student.grade or "",
         birth_date=student.birth_date or "",
         is_active=student.is_active,
+        **_guardian_fields(student),
     )
 
 

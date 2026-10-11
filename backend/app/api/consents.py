@@ -38,16 +38,22 @@ def _iso(dt):
 
 def _state(db: Session, user: User) -> dict:
     items = {}
+    guardian = svc.guardian_status(user)
+    blocked = guardian["required"] and not guardian["authorized"]
     for ctype in CONSENT_TYPES:
         record = svc.active_consent(db, user.id, ctype)
         items[ctype] = {
-            "granted": record is not None,
+            # Sin autorización del acudiente el consentimiento no surte efecto.
+            "granted": record is not None and not blocked,
             "version": record.version if record else None,
             "granted_at": _iso(record.granted_at) if record else None,
             "current_version": svc.current_version(ctype),
             "document": svc.CONSENT_DOCUMENTS[ctype],
         }
-    return {"consents": items}
+    return {
+        "consents": items,
+        "guardian": {**guardian, "blocked": blocked, "message": svc.GUARDIAN_MESSAGE if blocked else None},
+    }
 
 
 @router.get("/me")
@@ -74,11 +80,14 @@ async def accept_consent(
             status_code=409,
             detail="El texto del consentimiento cambió. Vuelve a leerlo y acéptalo de nuevo.",
         )
-    svc.grant(
-        db, current_user.id, payload.consent_type, payload.version,
-        ip_address=get_client_ip(request),
-        user_agent=request.headers.get("user-agent"),
-    )
+    try:
+        svc.grant(
+            db, current_user.id, payload.consent_type, payload.version,
+            ip_address=get_client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
+    except svc.GuardianAuthorizationRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     return _state(db, current_user)
 
 

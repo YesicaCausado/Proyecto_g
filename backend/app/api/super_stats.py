@@ -6,7 +6,9 @@ Endpoints:
   GET  /super/stats/alerts     - NeuroAlertas agregadas de todas las clases
   GET  /super/audit            - Logs de auditoría (tabla audit_logs)
   GET  /super/stats/security   - Sesiones activas e historial de accesos
-  GET  /super/classrooms       - Todos los grupos/aulas de la institución
+  GET  /super/classrooms       - Todos los grupos/aulas de la institución (activos e inactivos)
+  GET  /super/classrooms/{id}  - Detalle de un grupo (profesor y estudiantes)
+  PATCH /super/classrooms/{id} - Activar/desactivar o transferir a otro profesor
   GET  /super/bots             - Todos los NeuroBots de la institución
   GET  /super/broadcasts       - Mensajes institucionales enviados
   POST /super/broadcasts       - Enviar mensaje institucional
@@ -503,15 +505,24 @@ async def get_security_stats(
 
     day_ago = datetime.utcnow() - timedelta(hours=24)
 
-    # Sesiones activas: last_login en las últimas 24 h
+    # Usuarios que iniciaron sesión en las últimas 24 h (no se inventa la
+    # ubicación: antes se mostraba «Colombia» para todos).
     active_sessions = []
-    for u in users:
-        if u.last_login and u.last_login > day_ago:
+    def _naive(dt):
+        return dt.replace(tzinfo=None) if dt is not None and dt.tzinfo else dt
+
+    for u in sorted(users, key=lambda x: _naive(x.last_login) or datetime.min, reverse=True):
+        last = _naive(u.last_login)
+        if last and last > day_ago:
+            cutoff = _naive(u.sessions_valid_after)
+            revoked = bool(cutoff and cutoff >= last)
             active_sessions.append({
-                "user":      u.full_name or u.username,
-                "role":      u.role,
-                "last_login": u.last_login.isoformat(),
-                "location":  "Colombia",   # sin geolocalización real por ahora
+                "id":         u.id,
+                "user":       u.full_name or u.username,
+                "role":       u.role,
+                "last_login": last.isoformat(),
+                "current":    u.id == current_user.id,
+                "revoked":    revoked,
             })
 
     # Historial de accesos recientes (last 30 días)
@@ -539,6 +550,37 @@ async def get_security_stats(
     }
 
 
+# ── POST /super/users/{id}/revoke-sessions ────────────────────────────────────
+
+@router.post("/users/{user_id}/revoke-sessions")
+async def revoke_institution_user_sessions(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cierra todas las sesiones abiertas de un usuario de la institución."""
+    _require_super(current_user)
+    from app.api.auth import revoke_user_sessions
+    target = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == current_user.institution_id,
+    ).first()
+    if not target:
+        raise HTTPException(404, "Usuario no encontrado")
+    if target.id == current_user.id:
+        raise HTTPException(400, "Para tus propias sesiones usa «Cerrar mis otras sesiones».")
+    revoke_user_sessions(target)
+    db.add(AuditLog(
+        action="revoke_sessions",
+        performed_by_id=current_user.id,
+        target_user_id=target.id,
+        institution_id=current_user.institution_id,
+        notes=f"Sesiones cerradas: {target.full_name or target.username}",
+    ))
+    db.commit()
+    return {"ok": True}
+
+
 # ── GET /super/classrooms ─────────────────────────────────────────────────────
 
 @router.get("/classrooms")
@@ -550,10 +592,11 @@ async def get_super_classrooms(
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
 
+    # Todos los grupos de profesores de la institución, activos e
+    # inactivos: la pantalla filtra por estado y permite reactivarlos.
     teacher_ids = [t.id for t in db.query(User).filter(
-        User.role == UserRole.PROFESOR.value,
+        User.role.in_([UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value]),
         User.institution_id == inst_id,
-        User.is_active == True,
     ).all()]
 
     if not teacher_ids:
@@ -561,7 +604,6 @@ async def get_super_classrooms(
 
     q = db.query(Classroom).filter(
         Classroom.teacher_id.in_(teacher_ids),
-        Classroom.is_active == True,
     )
     if search:
         q = q.filter(Classroom.name.ilike(f"%{search}%"))
@@ -596,6 +638,7 @@ async def get_super_classrooms(
             "id":          c.id,
             "name":        c.name,
             "teacher":     teacher.full_name or teacher.username if teacher else "?",
+            "teacherId":   c.teacher_id,
             "subject":     c.subject,
             "grade":       c.grade or "—",
             "students":    student_count,
@@ -606,6 +649,100 @@ async def get_super_classrooms(
         })
 
     return {"classrooms": result, "total": len(result)}
+
+
+def _institution_classroom(db: Session, current_user: User, classroom_id: int) -> Classroom:
+    """Grupo de la institución del Súper Profesor (404 si es de otra)."""
+    classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+    teacher = db.query(User).filter(User.id == classroom.teacher_id).first() if classroom else None
+    if not classroom or not teacher or teacher.institution_id != current_user.institution_id:
+        raise HTTPException(404, "Grupo no encontrado")
+    return classroom
+
+
+@router.get("/classrooms/{classroom_id}")
+async def get_super_classroom_detail(
+    classroom_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_super(current_user)
+    c = _institution_classroom(db, current_user, classroom_id)
+    teacher = db.query(User).filter(User.id == c.teacher_id).first()
+    rows = (
+        db.query(Enrollment, User)
+        .join(User, User.id == Enrollment.student_id)
+        .filter(Enrollment.classroom_id == c.id, Enrollment.is_active == True)  # noqa: E712
+        .order_by(User.full_name)
+        .all()
+    )
+    students = [{
+        "id":           u.id,
+        "name":         u.full_name or u.username,
+        "email":        u.email,
+        "avg":          round((e.average_score or 0) / 10, 1),
+        "lastActivity": e.last_activity.strftime("%Y-%m-%d") if e.last_activity else None,
+    } for e, u in rows]
+    return {
+        "id":          c.id,
+        "name":        c.name,
+        "subject":     c.subject,
+        "grade":       c.grade or "—",
+        "description": c.description or "",
+        "code":        c.invite_code,
+        "status":      "activo" if c.is_active else "inactivo",
+        "createdAt":   c.created_at.strftime("%Y-%m-%d") if c.created_at else None,
+        "teacher":     {"id": teacher.id, "name": teacher.full_name or teacher.username} if teacher else None,
+        "students":    students,
+    }
+
+
+class SuperClassroomUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    teacher_id: Optional[int] = None
+
+
+@router.patch("/classrooms/{classroom_id}")
+async def update_super_classroom(
+    classroom_id: int,
+    data: SuperClassroomUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Activa/desactiva un grupo o lo transfiere a otro profesor de la institución."""
+    _require_super(current_user)
+    c = _institution_classroom(db, current_user, classroom_id)
+    notes = []
+    if data.teacher_id is not None and data.teacher_id != c.teacher_id:
+        new_teacher = db.query(User).filter(
+            User.id == data.teacher_id,
+            User.role == UserRole.PROFESOR.value,
+            User.institution_id == current_user.institution_id,
+            User.is_active == True,  # noqa: E712
+        ).first()
+        if not new_teacher:
+            raise HTTPException(400, "El profesor elegido no existe o no pertenece a tu institución.")
+        notes.append(f"transferido a {new_teacher.full_name or new_teacher.username}")
+        c.teacher_id = new_teacher.id
+    if data.is_active is not None and data.is_active != c.is_active:
+        c.is_active = data.is_active
+        notes.append("activado" if data.is_active else "desactivado")
+    if not notes:
+        raise HTTPException(400, "No hay cambios para guardar.")
+    db.add(AuditLog(
+        action="update_classroom",
+        performed_by_id=current_user.id,
+        institution_id=current_user.institution_id,
+        notes=f"Grupo «{c.name}» " + ", ".join(notes),
+    ))
+    db.commit()
+    teacher = db.query(User).filter(User.id == c.teacher_id).first()
+    return {
+        "id":        c.id,
+        "status":    "activo" if c.is_active else "inactivo",
+        "teacherId": c.teacher_id,
+        "teacher":   (teacher.full_name or teacher.username) if teacher else "?",
+    }
 
 
 # ── GET /super/bots ───────────────────────────────────────────────────────────

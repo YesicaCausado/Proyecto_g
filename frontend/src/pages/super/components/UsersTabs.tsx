@@ -962,6 +962,13 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
       if (values.is_active !== editingStudent.is_active) {
         payload.is_active = values.is_active === true || values.is_active === 'true';
       }
+      if ((values.guardian_name ?? '') !== (editingStudent.guardian_name || '')) {
+        payload.guardian_name = values.guardian_name?.trim() || '';
+      }
+      const guardianAuthorized = values.guardian_authorized === true || values.guardian_authorized === 'true';
+      if (guardianAuthorized !== Boolean(editingStudent.guardian_authorized)) {
+        payload.guardian_authorized = guardianAuthorized;
+      }
       if (Object.keys(payload).length === 0) {
         throw new Error('No hay cambios para guardar.');
       }
@@ -1526,6 +1533,14 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                           {s.is_active ? 'Activo' : 'Inactivo'}
                         </span>
+                        {s.guardian_required && !s.guardian_authorized && (
+                          <span
+                            className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700"
+                            title="Menor de edad o sin fecha de nacimiento: no puede usar cámara ni micrófono hasta registrar la autorización del acudiente."
+                          >
+                            Falta autorización del acudiente
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-3 text-right">
                         <div className="flex justify-end items-center gap-2">
@@ -1577,6 +1592,8 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
             birth_date: editingStudent.birth_date || '',
             document_type: editingStudent.document_type || 'TI',
             is_active: editingStudent.is_active,
+            guardian_name: editingStudent.guardian_name || '',
+            guardian_authorized: Boolean(editingStudent.guardian_authorized),
           }}
           fields={[
             { key: 'full_name', label: 'Nombre completo', required: true },
@@ -1597,6 +1614,16 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
               options: [
                 { value: true, label: 'Activo' },
                 { value: false, label: 'Inactivo' },
+              ],
+            },
+            // Ley 1581: los menores necesitan la autorización de su acudiente
+            // para usar cámara y micrófono en el chat.
+            { key: 'guardian_name', label: 'Acudiente que autorizó (madre, padre o acudiente)' },
+            {
+              key: 'guardian_authorized', label: 'Autorización firmada para cámara y micrófono', type: 'select',
+              options: [
+                { value: true, label: 'Sí, la institución la recibió' },
+                { value: false, label: 'No' },
               ],
             },
           ]}

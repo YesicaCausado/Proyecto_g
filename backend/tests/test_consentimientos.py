@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+from datetime import datetime
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -62,8 +63,12 @@ class ConsentTests(unittest.TestCase):
         inst = Institution(name="Colegio C", dane_code="44400000001", is_active=True)
         db.add(inst)
         db.flush()
+        # La institución ya registró la autorización del acudiente (parche 14):
+        # sin ella un estudiante menor o sin fecha de nacimiento no puede
+        # aceptar (ver tests/test_auditoria_final.py).
         student = User(username="est_consent", email="est_consent@test.edu.co", full_name="Est",
-                       hashed_password="x", role=UserRole.ESTUDIANTE.value, institution_id=inst.id, is_active=True)
+                       hashed_password="x", role=UserRole.ESTUDIANTE.value, institution_id=inst.id, is_active=True,
+                       guardian_name="Acudiente de prueba", guardian_authorized_at=datetime.utcnow())
         db.add(student)
         db.commit()
         cls.user_id = student.id

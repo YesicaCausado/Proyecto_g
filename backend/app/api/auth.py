@@ -167,6 +167,47 @@ def validate_password_strength(
 # JWT
 # ============================================================
 
+def _login_audit(user, action: str, ip: str):
+    from app.models.institution import AuditLog
+    return AuditLog(
+        action=action,
+        performed_by_id=user.id,
+        institution_id=user.institution_id,
+        ip_address=(ip or "")[:45] or None,
+    )
+
+
+def _record_login(db: Session, user, action: str, ip: str) -> None:
+    """Registra un intento de inicio de sesión sin interrumpir el login si falla."""
+    try:
+        db.add(_login_audit(user, action, ip))
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+
+
+def _epoch(dt: datetime) -> int:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
+
+
+def token_still_valid(user, payload: dict) -> bool:
+    """False si el token se emitió antes del último cierre de sesiones."""
+    cutoff = getattr(user, "sessions_valid_after", None)
+    if not cutoff:
+        return True
+    iat = payload.get("iat")
+    if not isinstance(iat, (int, float)):
+        return False  # token antiguo sin fecha de emisión
+    return int(iat) >= _epoch(cutoff)
+
+
+def revoke_user_sessions(user) -> None:
+    """Invalida todos los tokens emitidos hasta ahora para este usuario."""
+    user.sessions_valid_after = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+
+
 def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
@@ -187,6 +228,9 @@ def create_access_token(
     to_encode.update(
         {
             "exp": expire,
+            # Fecha de emisión: permite invalidar tokens anteriores a un
+            # cierre de sesión global (users.sessions_valid_after).
+            "iat": int(datetime.now(timezone.utc).timestamp()),
         }
     )
 
@@ -380,6 +424,11 @@ async def get_current_user(
         )
 
     if user is None:
+        raise credentials_exception
+
+    # Sesión cerrada desde otro dispositivo o por el Súper Profesor:
+    # los tokens emitidos antes de esa fecha ya no sirven.
+    if not token_still_valid(user, payload):
         raise credentials_exception
 
     # IMPORTANTE:
@@ -708,6 +757,10 @@ async def login(
 
     if not user or not password_valid:
 
+        if user:
+            # Historial de accesos del Súper Profesor (Seguridad).
+            _record_login(db, user, "login_failed", ip)
+
         locked = failed_login_tracker.on_failure(
             user_data.username,
             ip,
@@ -765,7 +818,8 @@ async def login(
     # --------------------------------------------------------
 
     try:
-        user.last_login = datetime.now(timezone.utc)
+        user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.add(_login_audit(user, "login", ip))
 
         db.commit()
 
@@ -976,6 +1030,27 @@ async def update_me(
         )
 
     return current_user
+
+
+# ============================================================
+# CERRAR LAS DEMÁS SESIONES
+# ============================================================
+
+@router.post("/logout-all")
+async def logout_all_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """
+    Cierra la sesión en todos los dispositivos. Devuelve un token nuevo
+    para que el dispositivo actual siga conectado.
+    """
+    check_origin(request)
+    revoke_user_sessions(current_user)
+    db.commit()
+    token = create_access_token({"sub": current_user.username})
+    return {"access_token": token, "token_type": "bearer"}
 
 
 # ============================================================

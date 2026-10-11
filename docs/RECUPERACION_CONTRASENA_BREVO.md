@@ -82,4 +82,5 @@ python -m pytest tests/test_password_reset_service.py -v
 
 - Cambiar la contraseña no cierra las sesiones ya abiertas: los JWT emitidos siguen válidos hasta vencer (24 h). Requiere guardar `password_changed_at` en `users` y compararlo con la fecha de emisión del token.
 - El límite global por IP (`check_rate_limit`) vive en memoria de cada instancia de Vercel; el límite por cuenta (RN-CU03-04) sí es persistente.
-- El remitente configurado desde el panel del Administrador (`PATCH /admin/config`) solo dura mientras viva la instancia serverless; el valor permanente es la variable `EMAIL_FROM`.
+- El remitente se configura con la variable `EMAIL_FROM` (el panel del Administrador solo lo muestra; desde el parche 14 ya no permite cambiarlo en memoria).
+- Al restablecer la contraseña por correo se cierran todas las sesiones abiertas de esa cuenta.

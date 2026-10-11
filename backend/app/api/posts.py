@@ -30,8 +30,15 @@ def _check_post_access(post: Post, current_user: User, db: Session) -> None:
     """Verifica que el usuario tiene acceso al aula del post (anti cross-tenant).
     Lanza 403 si el usuario no es dueño del aula ni está inscrito activamente en ella.
     """
-    if current_user.role in (UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value):
-        return  # Super y admin tienen acceso completo
+    if current_user.role == UserRole.ADMIN.value:
+        return
+    if current_user.role == UserRole.SUPER_PROFESOR.value:
+        # Solo publicaciones de grupos de su propia institución.
+        classroom = db.query(Classroom).filter(Classroom.id == post.classroom_id).first()
+        teacher = classroom.teacher if classroom else None
+        if not teacher or teacher.institution_id != current_user.institution_id:
+            raise HTTPException(status_code=403, detail="No tienes acceso a este post")
+        return
     if current_user.role == UserRole.PROFESOR.value:
         classroom = db.query(Classroom).filter(Classroom.id == post.classroom_id).first()
         if not classroom or classroom.teacher_id != current_user.id:

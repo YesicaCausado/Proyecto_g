@@ -115,6 +115,11 @@ def run_migrations(engine) -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name   VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMP",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS cognitive_profile JSONB",
+        # Parche 14 (auditoría): cierre de sesiones y autorización del acudiente
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_valid_after      TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS guardian_name             VARCHAR(150)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS guardian_authorized_at    TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS guardian_authorized_by_id INTEGER",
 
         # Índice único parcial en document_number
         """

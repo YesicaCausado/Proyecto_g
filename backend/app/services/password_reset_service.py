@@ -284,6 +284,10 @@ class PasswordResetService:
 
             user.hashed_password = self._hash_password(new_password)
             user.must_change_password = False
+            # Quien tenía la sesión abierta con la contraseña anterior
+            # (por ejemplo, alguien que la robó) queda desconectado.
+            if hasattr(user, "sessions_valid_after"):
+                user.sessions_valid_after = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
             token.used = True
             self._tokens.invalidate_active(user.id)
             self._audit.record(action="password_reset_completed", user=user, ip_address=ip_address)

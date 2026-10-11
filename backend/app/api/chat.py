@@ -1843,8 +1843,16 @@ async def generate_cognitive_quiz(
     except Exception as ai_error:
         logger.error(f"Error llamando a AI manager: {ai_error}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Error al conectar con el servicio de IA: {str(ai_error)}"
+            status_code=503,
+            detail="El servicio de IA no respondió. Intenta de nuevo en unos minutos."
+        )
+
+    # Sin proveedor externo la respuesta local no es un quiz real: se informa
+    # en vez de mostrar preguntas inventadas.
+    if result.get("provider") == "local":
+        raise HTTPException(
+            status_code=503,
+            detail="El servicio de IA no está disponible en este momento. No se pudo generar el quiz.",
         )
 
     try:
@@ -1888,23 +1896,29 @@ async def generate_cognitive_quiz(
         if not quiz_data["questions"] or len(quiz_data["questions"]) == 0:
             raise ValueError("No se generaron preguntas")
 
-        for i, question in enumerate(quiz_data["questions"]):
-            if "answer" not in question or question["answer"] is None:
-                if "options" in question and len(question["options"]) > 0:
-                    question["answer"] = question["options"][0]
-                    logger.warning(f"Pregunta {i+1}: Falta 'answer', usando opción 1 como fallback")
-                else:
-                    raise ValueError(f"Pregunta {i+1} no tiene 'answer' ni 'options' válidos")
-
-            if "options" in question and isinstance(question["options"], list):
-                if question["answer"] not in question["options"]:
-                    logger.warning(f"Pregunta {i+1}: answer '{question['answer']}' no está en options, usando opción 1")
-                    question["answer"] = question["options"][0]
-
-            if "explanation" not in question:
-                question["explanation"] = "Sin explicación disponible"
-            if "id" not in question:
-                question["id"] = i + 1
+        # Solo se aceptan preguntas cuya respuesta correcta sea una de sus
+        # opciones. Antes, si la IA no la daba (o no coincidía), se marcaba
+        # como correcta la primera opción: el estudiante podía recibir una
+        # calificación basada en una respuesta inventada.
+        valid_questions = []
+        for question in quiz_data["questions"]:
+            options = question.get("options")
+            if not isinstance(options, list) or len(options) < 2 or not question.get("question"):
+                continue
+            answer = question.get("answer")
+            if answer not in options:
+                match = [o for o in options if _normalize_text(o) == _normalize_text(answer)]
+                if len(match) != 1:
+                    logger.warning("Pregunta descartada: la respuesta '%s' no está entre las opciones", answer)
+                    continue
+                question["answer"] = match[0]
+            question.setdefault("explanation", "")
+            valid_questions.append(question)
+        if not valid_questions:
+            raise ValueError("La IA no devolvió preguntas válidas")
+        for idx, question in enumerate(valid_questions, start=1):
+            question["id"] = idx
+        quiz_data["questions"] = valid_questions
 
         try:
             quiz_history_entry = QuizHistory(

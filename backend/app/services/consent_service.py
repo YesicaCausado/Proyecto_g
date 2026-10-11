@@ -15,7 +15,7 @@ consentimientos de versiones anteriores dejan de ser válidos.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -109,13 +109,90 @@ def active_consent(db: Session, user_id: int, consent_type: str) -> Optional[Use
     )
 
 
+# ── Autorización del acudiente (menores de edad) ───────────────────────────
+#
+# La Ley 1581 de 2012 exige la autorización del representante legal para
+# tratar datos de menores. La institución la recoge en físico y el Súper
+# Profesor la registra en la ficha del estudiante. Mientras no esté
+# registrada, un estudiante menor de edad —o sin fecha de nacimiento, porque
+# no se puede comprobar que sea mayor— no puede activar cámara ni micrófono.
+
+ADULT_AGE = 18
+
+
+def _parse_birth_date(value) -> Optional[date]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()[:10]
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def age_on(birth: date, today: Optional[date] = None) -> int:
+    today = today or date.today()
+    return today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+
+
+def guardian_status(user) -> dict:
+    """¿Necesita este usuario la autorización del acudiente y la tiene?"""
+    role = getattr(user, "role", None)
+    role = getattr(role, "value", role)
+    authorized_at = getattr(user, "guardian_authorized_at", None)
+    status = {
+        "required": False,
+        "authorized": authorized_at is not None,
+        "reason": None,
+        "name": getattr(user, "guardian_name", None),
+        "authorized_at": authorized_at.replace(microsecond=0).isoformat() + "Z" if authorized_at else None,
+    }
+    if role != "estudiante":
+        return status
+    birth = _parse_birth_date(getattr(user, "birth_date", None))
+    if birth is None:
+        status.update(required=True, reason="sin_fecha")
+    elif age_on(birth) < ADULT_AGE:
+        status.update(required=True, reason="menor")
+    return status
+
+
+def blocked_by_guardian(user) -> bool:
+    st = guardian_status(user)
+    return st["required"] and not st["authorized"]
+
+
+GUARDIAN_MESSAGE = (
+    "Para activar la cámara o el micrófono, tu institución debe registrar la "
+    "autorización de tu madre, padre o acudiente. Pídesela a tu coordinador."
+)
+
+
+class GuardianAuthorizationRequired(Exception):
+    pass
+
+
 def has_consent(db: Session, user_id: int, consent_type: str) -> bool:
-    return active_consent(db, user_id, consent_type) is not None
+    if active_consent(db, user_id, consent_type) is None:
+        return False
+    from app.models.user import User
+    user = db.query(User).filter(User.id == user_id).first()
+    return user is not None and not blocked_by_guardian(user)
 
 
 def grant(db: Session, user_id: int, consent_type: str, version: str,
           ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> UserConsent:
     """Registra la aceptación (si ya hay una vigente, la devuelve sin duplicar)."""
+    from app.models.user import User
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is not None and blocked_by_guardian(user):
+        raise GuardianAuthorizationRequired(GUARDIAN_MESSAGE)
     existing = active_consent(db, user_id, consent_type)
     if existing is not None and existing.version == version:
         return existing

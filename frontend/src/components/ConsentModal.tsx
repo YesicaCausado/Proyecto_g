@@ -8,10 +8,12 @@ import type { ConsentState, ConsentType } from '../hooks/useConsents';
  * (casilla + botón). No toca la cámara ni el micrófono: eso lo hace quien lo
  * abre, y solo después de que el backend registró la aceptación.
  */
-export default function ConsentModal({ type, state, loadError, onAccept, onDecline, onRetry }: {
+export default function ConsentModal({ type, state, loadError, blockedMessage = '', onAccept, onDecline, onRetry }: {
   type: ConsentType;
   state: ConsentState | null;
   loadError: string;
+  /** Falta la autorización del acudiente: no se puede aceptar todavía. */
+  blockedMessage?: string;
   onAccept: (version: string) => Promise<void>;
   onDecline: () => void;
   onRetry: () => void;
@@ -23,7 +25,7 @@ export default function ConsentModal({ type, state, loadError, onAccept, onDecli
   const doc = state?.document;
 
   const accept = async () => {
-    if (!doc || !checked || saving) return;
+    if (!doc || !checked || saving || blockedMessage) return;
     setSaving(true);
     setError('');
     try {
@@ -82,6 +84,11 @@ export default function ConsentModal({ type, state, loadError, onAccept, onDecli
                 <p>{doc.voluntary}</p>
                 <p>{doc.minors}</p>
               </div>
+              {blockedMessage && (
+                <p className="p-3 rounded-lg bg-[#FCF6E5] text-xs text-[#9A6700] flex gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /> <span>{blockedMessage}</span>
+                </p>
+              )}
               <label className="flex items-start gap-2 cursor-pointer">
                 <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} className="mt-0.5 w-4 h-4" />
                 <span className="text-sm">He leído la información anterior y acepto que NeuroLearn use mi {type === 'camara_facial' ? 'cámara' : 'micrófono'} de esta forma.</span>
@@ -93,7 +100,7 @@ export default function ConsentModal({ type, state, loadError, onAccept, onDecli
 
         <div className="px-5 py-3 border-t border-[#E9E9E7] flex justify-end gap-2">
           <button onClick={onDecline} className="px-4 py-2 text-sm text-[#787774] hover:bg-[#F7F6F3] rounded-lg">No acepto</button>
-          <button onClick={accept} disabled={!doc || !checked || saving}
+          <button onClick={accept} disabled={!doc || !checked || saving || !!blockedMessage}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm font-medium hover:bg-[#255DC0] disabled:opacity-50">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />} Acepto y activar
           </button>

@@ -37,6 +37,7 @@ migrations/
 | 009 | `009_evaluaciones_estudiantes.sql` | **Aplicada.** Estado, aula y fechas en `teacher_evaluations`; tabla `evaluation_submissions`. | Oct 2026 |
 | 010 | `010_consentimientos.sql` | **Pendiente de ejecutar** (antes o después del despliegue). Tabla `user_consents` (consentimiento de cámara y micrófono). | Oct 2026 |
 | 011 | `011_neurobots_notificaciones.sql` | **Pendiente de ejecutar — ANTES de desplegar el parche 11B.** Columnas `goal_interactions` y `assigned_by_id` en `classroom_bots`; tablas `student_bot_assignments`, `neurobot_progress`, `notifications` y `notification_preferences` (con RLS). Idempotente. | Oct 2026 |
+| 012 | `012_auditoria_sesiones_acudiente.sql` | **Pendiente de ejecutar — ANTES de desplegar el parche 14.** Columnas en `users` para cerrar sesiones (`sessions_valid_after`) y registrar la autorización del acudiente (`guardian_name`, `guardian_authorized_at`, `guardian_authorized_by_id`). Idempotente. | Oct 2026 |
 
 ## RLS multi-tenant (005)
 

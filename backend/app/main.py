@@ -41,6 +41,7 @@ from app.api import admin_users
 from app.api import notifications
 from app.api import admin_bots
 from app.api import integrations
+from app.api import voice
 
 
 # ============================================================
@@ -437,6 +438,16 @@ app.include_router(
 
 app.include_router(
     integrations.router,
+    prefix="/api/v1",
+)
+
+
+# ------------------------------------------------------------
+# VOZ DEL TUTOR (Azure Speech por el servidor)
+# ------------------------------------------------------------
+
+app.include_router(
+    voice.router,
     prefix="/api/v1",
 )
 

@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
+    # Azure Speech (voz del tutor). La clave vive SOLO en el servidor; el
+    # navegador pide el audio a /api/v1/voice/tts. Se aceptan los nombres
+    # antiguos VITE_* como respaldo para no romper despliegues existentes,
+    # pero conviene renombrarlos (y rotar la clave, que estuvo expuesta).
+    AZURE_SPEECH_KEY: Optional[str] = os.getenv("AZURE_SPEECH_KEY") or os.getenv("VITE_AZURE_SPEECH_KEY")
+    AZURE_SPEECH_REGION: str = (
+        os.getenv("AZURE_SPEECH_REGION") or os.getenv("VITE_AZURE_SPEECH_REGION") or "eastus"
+    )
+
     # Timeout (segundos) de las llamadas HTTP a Groq/Gemini. Debe quedar por
     # debajo del maxDuration de la función de Vercel para no morir en frío.
     AI_HTTP_TIMEOUT: float = float(os.getenv("AI_HTTP_TIMEOUT", "15"))

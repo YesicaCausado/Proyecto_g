@@ -202,6 +202,37 @@ class User(Base):
         nullable=True,
     )
 
+    # Tokens emitidos antes de esta fecha dejan de ser válidos
+    # ("cerrar sesión en todos los dispositivos" / cierre forzado).
+    sessions_valid_after = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    # =========================================================
+    # AUTORIZACIÓN DEL ACUDIENTE (estudiantes menores de edad)
+    # =========================================================
+    #
+    # La institución registra que recibió la autorización firmada del
+    # padre, madre o acudiente. Sin ella, un estudiante menor de edad
+    # (o sin fecha de nacimiento registrada) no puede activar la cámara
+    # ni el micrófono.
+
+    guardian_name = Column(
+        String(150),
+        nullable=True,
+    )
+
+    guardian_authorized_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    guardian_authorized_by_id = Column(
+        Integer,
+        nullable=True,
+    )
+
     # =========================================================
     # RELACIONES
     # =========================================================

@@ -615,6 +615,9 @@ class StudentUpdate(BaseModel):
     grade: Optional[str] = Field(None, max_length=20)
     birth_date: Optional[str] = Field(None, max_length=20)
     is_active: Optional[bool] = None
+    # Autorización del acudiente para cámara y micrófono (menores de edad)
+    guardian_authorized: Optional[bool] = None
+    guardian_name: Optional[str] = Field(None, max_length=150)
 
 
 class StudentListItem(BaseModel):
@@ -627,6 +630,9 @@ class StudentListItem(BaseModel):
     grade: Optional[str] = None
     birth_date: Optional[str] = None
     is_active: bool = True
+    guardian_required: bool = False
+    guardian_authorized: bool = False
+    guardian_name: Optional[str] = None
 
     class Config:
         from_attributes = True

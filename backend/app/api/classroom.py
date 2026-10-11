@@ -86,18 +86,25 @@ def can_manage_classroom(
 
     Puede hacerlo:
     - El profesor propietario.
-    - Un Super Profesor.
+    - Un Super Profesor de la MISMA institución que el profesor del grupo.
     - Un Administrador.
     """
 
     if classroom.teacher_id == current_user.id:
         return True
 
-    if current_user.role in (
-        UserRole.SUPER_PROFESOR.value,
-        UserRole.ADMIN.value,
-    ):
+    if current_user.role == UserRole.ADMIN.value:
         return True
+
+    if current_user.role == UserRole.SUPER_PROFESOR.value:
+        # Antes cualquier Súper Profesor podía ver o gestionar grupos de
+        # otras instituciones (incluido su código de invitación).
+        teacher = classroom.teacher
+        return (
+            teacher is not None
+            and current_user.institution_id is not None
+            and teacher.institution_id == current_user.institution_id
+        )
 
     return False
 

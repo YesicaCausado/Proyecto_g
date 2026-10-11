@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import api from '../services/api';
+import api, { clearApiCache } from '../services/api';
 
 import type {
   User,
@@ -87,6 +87,7 @@ function storeUser(user: User): void {
  * Limpia todos los datos locales relacionados con la sesión.
  */
 function clearStoredSession(): void {
+  clearApiCache();
   localStorage.removeItem('token');
   localStorage.removeItem('user');
 }

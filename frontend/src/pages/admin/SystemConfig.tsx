@@ -1,12 +1,17 @@
 /**
  * NeuroLearn AI — Admin: Configuración del Sistema
  * Secciones: Sistema, Seguridad, IA
+ *
+ * Solo lectura. Antes permitía editar la expiración del token, el modo debug
+ * y el remitente de correo, pero esos cambios vivían en la memoria de una
+ * instancia del servidor: en Vercel se perdían enseguida. Ahora se muestran
+ * los valores reales y se explica dónde se cambian (variables de entorno).
  */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Settings, RefreshCw, CheckCircle2, AlertTriangle,
+  Settings, RefreshCw, AlertTriangle,
   Server, Shield, Brain,
-  Info, Save,
+  Info,
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -44,32 +49,12 @@ export default function SystemConfig() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Campos editables
-  const [tokenExpire, setTokenExpire]   = useState(1440);
-  const [emailFrom,   setEmailFrom]     = useState('');
-  const [debugMode,   setDebugMode]     = useState(false);
-
-  // Feedback
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
-  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showNotice = (type: 'ok' | 'err', msg: string) => {
-    setNotice({ type, msg });
-    if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(null), 5000);
-  };
-
   const fetchConfig = async () => {
     setLoading(true);
     setError('');
     try {
       const res = await api.get('/admin/config');
-      const c: Config = res.data;
-      setConfig(c);
-      setTokenExpire(c.token_expire_minutes);
-      setEmailFrom(c.email_from);
-      setDebugMode(c.debug_mode);
+      setConfig(res.data as Config);
     } catch {
       setError('No se pudo cargar la configuración del sistema.');
     } finally {
@@ -78,23 +63,6 @@ export default function SystemConfig() {
   };
 
   useEffect(() => { fetchConfig(); }, []);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const res = await api.patch('/admin/config', {
-        token_expire_minutes:   tokenExpire,
-        debug_mode:             debugMode,
-        email_from:             emailFrom,
-      });
-      showNotice('ok', res.data.message);
-      fetchConfig();
-    } catch (e: any) {
-      showNotice('err', e?.response?.data?.detail ?? 'Error al guardar la configuración');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -138,26 +106,13 @@ export default function SystemConfig() {
         </button>
       </div>
 
-      {/* ── Notificación ───────────────────────── */}
-      {notice && (
-        <div className={`flex items-center gap-2 text-sm rounded-md p-3 border ${
-          notice.type === 'ok'
-            ? 'bg-[#EEF7F4] border-[#0F7B6C]/30 text-[#0F7B6C]'
-            : 'bg-[#FDECEA] border-[#D44C47]/30 text-[#D44C47]'
-        }`}>
-          {notice.type === 'ok'
-            ? <CheckCircle2 className="w-4 h-4 shrink-0" />
-            : <AlertTriangle className="w-4 h-4 shrink-0" />}
-          {notice.msg}
-        </div>
-      )}
-
       {/* ── Aviso entorno ──────────────────────── */}
       <div className="bg-[#FEF9ED] border border-[#EDD88A] rounded-md p-3 flex items-start gap-2 text-sm text-[#D9730D]">
         <Info className="w-4 h-4 shrink-0 mt-0.5" />
         <span>
-          Los cambios se aplican <strong>en memoria</strong> hasta el próximo reinicio del servidor.
-          Para persistirlos, actualiza las variables de entorno en Vercel.
+          Estos valores se leen de las variables de entorno del servidor. Para cambiarlos, edítalas en
+          Vercel (Settings → Environment Variables) y vuelve a desplegar. La lista está en
+          <span className="font-mono"> docs/VARIABLES_ENTORNO.md</span>.
         </span>
       </div>
 
@@ -203,43 +158,13 @@ export default function SystemConfig() {
           </div>
           <div className="px-5 py-3">
             <InfoRow label="Algoritmo JWT" value={<span className="font-mono">{config?.algorithm}</span>} />
-            <div className="flex items-center justify-between py-2.5 border-b border-[#F3F3F1]">
-              <span className="text-sm text-[#787774]">Expiración del token</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={60}
-                  max={43200}
-                  value={tokenExpire}
-                  onChange={e => setTokenExpire(Number(e.target.value))}
-                  className="w-20 text-right border border-[#E9E9E7] rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B6E99]/40"
-                />
-                <span className="text-xs text-[#9B9A97]">min</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between py-2.5 border-b border-[#F3F3F1]">
-              <span className="text-sm text-[#787774]">Modo debug</span>
-              <button
-                onClick={() => setDebugMode(v => !v)}
-                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors cursor-pointer ${
-                  debugMode ? 'bg-[#D9730D]' : 'bg-[#E9E9E7]'
-                }`}
-              >
-                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                  debugMode ? 'translate-x-5' : 'translate-x-0'
-                }`} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between py-2.5">
-              <span className="text-sm text-[#787774]">Remitente de email</span>
-              <input
-                type="text"
-                value={emailFrom}
-                onChange={e => setEmailFrom(e.target.value)}
-                className="w-48 border border-[#E9E9E7] rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#0B6E99]/40"
-                placeholder="Nombre <email@dominio>"
-              />
-            </div>
+            <InfoRow label="Expiración de la sesión" value={`${config?.token_expire_minutes} min`} />
+            <InfoRow label="Modo debug" value={
+              <span className={`text-xs font-medium ${config?.debug_mode ? 'text-[#D9730D]' : 'text-[#0F7B6C]'}`}>
+                {config?.debug_mode ? 'Activado' : 'Desactivado'}
+              </span>
+            } />
+            <InfoRow label="Remitente de correo" value={<span className="text-xs">{config?.email_from || '—'}</span>} />
           </div>
         </div>
 
@@ -272,19 +197,6 @@ export default function SystemConfig() {
           </div>
         </div>
 
-      </div>
-
-      {/* ── Botón Guardar ──────────────────────── */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#191919] text-white text-sm font-medium rounded-md hover:bg-[#37352F] disabled:opacity-50 transition-colors"
-        >
-          {saving
-            ? <><RefreshCw className="w-4 h-4 animate-spin" />Guardando…</>
-            : <><Save className="w-4 h-4" />Guardar cambios</>}
-        </button>
       </div>
 
     </div>
