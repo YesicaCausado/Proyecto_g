@@ -52,22 +52,6 @@ class Classroom(Base):
         return uuid.uuid4().hex[:8].upper()
 
 
-class ClassroomUser(Base):
-    """Usuario asociado a una clase (estudiante, profesor, etc.)"""
-    __tablename__ = "classroom_users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=False)
-    role = Column(String(20), nullable=False)  # student, teacher, assistant, etc.
-    is_active = Column(Boolean, default=True)
-    joined_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relaciones
-    user = relationship("User", backref="classroom_memberships")
-    classroom = relationship("Classroom", backref="classroom_users")
-
-
 class Enrollment(Base):
     """Inscripción de un estudiante en una clase"""
     __tablename__ = "enrollments"
@@ -106,6 +90,14 @@ class ClassroomBot(Base):
     assigned_at = Column(DateTime, default=datetime.utcnow)
     is_required = Column(Boolean, default=False)  # Obligatorio o complementario
     order_index = Column(Integer, default=0)  # Orden en el que se muestran
+    # Meta de interacciones que fija el profesor al asignar (parche 11B). Las
+    # asignaciones anteriores quedan en NULL y usan la meta por defecto
+    # (app/services/neurobot_service.py: DEFAULT_GOAL_INTERACTIONS).
+    goal_interactions = Column(Integer, nullable=True)
+    # Profesor que hizo la asignación: recibe la notificación cuando un
+    # estudiante completa el NeuroBot. NULL en asignaciones anteriores (se usa
+    # el profesor dueño del aula).
+    assigned_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # Relaciones
     classroom = relationship("Classroom", back_populates="assigned_bots")

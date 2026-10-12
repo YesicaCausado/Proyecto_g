@@ -128,7 +128,7 @@ function makeLinks(nodes: PNode[]): PLink[] {
   return links;
 }
 
-export default function NeuronField({ mouseX = 0, mouseY = 0 }: { mouseX?: number; mouseY?: number } = {}) {
+export default function NeuronField() {
   const { nodes, links } = useMemo(() => {
     const q = typeof window !== 'undefined' && window.innerWidth < 768
       ? Math.round(BASE_NODE_COUNT * 0.45)
@@ -137,14 +137,11 @@ export default function NeuronField({ mouseX = 0, mouseY = 0 }: { mouseX?: numbe
     return { nodes: ns, links: makeLinks(ns) };
   }, []);
 
-  // Influyen del ratón en píxeles: el desplazamiento máximo es
-  // MAX_PARALLAX px y se modula por la profundidad de cada nodo (más
-  // cerca del centro → más recorrido = parallax de profundidad). Se
-  // inyecta como variables CSS (--px/--py) que los keyframes de
-  // `nodeFloat` suman a su propia flotación, de modo que ningún
-  // transform pisa al otro y el coste por frame es mínimo.
-  const mox = (mouseX || 0) * MAX_PARALLAX;
-  const moy = (mouseY || 0) * MAX_PARALLAX;
+  // Influjo del ratón: el Hero escribe --mx/--my (de -1 a 1) en el
+  // contenedor; cada nodo calcula su desplazamiento con CSS
+  // (MAX_PARALLAX px × profundidad) y los keyframes de `nodeFloat` lo
+  // suman a su flotación. Así mover el ratón no vuelve a renderizar
+  // los nodos con React.
 
   return (
     <div
@@ -159,16 +156,17 @@ export default function NeuronField({ mouseX = 0, mouseY = 0 }: { mouseX?: numbe
         willChange: 'opacity, transform',
       }}
     >
-      {/* Conexiones de la constelación — SVG estático en gris tenue.
-          Comparte la clase .hero-node para aparecer con el stagger de GSAP. */}
-      {links.map((l) => (
-        <svg
-          key={l.key}
-          className="hero-node hero-link"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0 }}
-          aria-hidden="true"
-        >
+      {/* Conexiones de la constelación en un único SVG (antes era un SVG
+          a pantalla completa por cada línea). Comparte la clase .hero-node
+          para aparecer con el stagger de GSAP. */}
+      <svg
+        className="hero-node hero-link"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0 }}
+        aria-hidden="true"
+      >
+        {links.map((l) => (
           <line
+            key={l.key}
             x1={`${l.x1}%`}
             y1={`${l.y1}%`}
             x2={`${l.x2}%`}
@@ -177,8 +175,8 @@ export default function NeuronField({ mouseX = 0, mouseY = 0 }: { mouseX?: numbe
             strokeOpacity={l.o}
             strokeWidth="0.5"
           />
-        </svg>
-      ))}
+        ))}
+      </svg>
 
       {/* Nodos — puntos rellenos, anillos y gotas cuadradas */}
       {nodes.map((n) => (
@@ -198,8 +196,8 @@ export default function NeuronField({ mouseX = 0, mouseY = 0 }: { mouseX?: numbe
             // Desplazamiento paraláctico por el ratón vía variables CSS:
             // los keyframes de `nodeFloat` las consumen, sin romper el
             // determinismo de las posiciones base ni pisar la flotación.
-            ['--px' as string]: `${(mox * n.depth).toFixed(1)}px`,
-            ['--py' as string]: `${(moy * n.depth).toFixed(1)}px`,
+            ['--px' as string]: `calc(var(--mx, 0) * ${(MAX_PARALLAX * n.depth).toFixed(1)}px)`,
+            ['--py' as string]: `calc(var(--my, 0) * ${(MAX_PARALLAX * n.depth).toFixed(1)}px)`,
             opacity: 0,
             animation: `nodeFloat ${n.dur}s ease-in-out ${n.delay}s infinite`,
           }}

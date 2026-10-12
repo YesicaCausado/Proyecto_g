@@ -9,7 +9,8 @@
     "api/index.py": {
       "maxDuration": 30,
       "memory": 1024,
-      "includeFiles": "api/**/*.py,backend/app/**/*.py,backend/data/**/*.json"
+      "includeFiles": "api/**/*.py,backend/app/**/*.py,backend/data/**/*.json",
+      "excludeFiles": "{frontend/**,docs/**,scripts/**,.github/**,.npm-cache/**,audit-output/**,backend/tests/**,backend/scripts/**,backend/migrations/**,backend/docs/**,backend/*.db,backend/*.sqlite*}"
     }
   },
 

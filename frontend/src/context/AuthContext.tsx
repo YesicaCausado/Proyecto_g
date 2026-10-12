@@ -6,12 +6,11 @@ import {
   type ReactNode,
 } from 'react';
 
-import api from '../services/api';
+import api, { clearApiCache } from '../services/api';
 
 import type {
   User,
   LoginRequest,
-  RegisterRequest,
   Token,
 } from '../types';
 
@@ -26,7 +25,6 @@ interface AuthContextType {
   loading: boolean;
 
   login: (data: LoginRequest) => Promise<void>;
-  register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
 
   updateUser: (updates: Partial<User>) => void;
@@ -89,13 +87,9 @@ function storeUser(user: User): void {
  * Limpia todos los datos locales relacionados con la sesión.
  */
 function clearStoredSession(): void {
+  clearApiCache();
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-
-  // La licencia pertenece a la sesión del usuario.
-  // Si LicenseContext utiliza cache local en el futuro,
-  // este espacio evita que una licencia anterior se reutilice.
-  localStorage.removeItem('license');
 }
 
 
@@ -364,6 +358,10 @@ export function AuthProvider({
         tokenData.institution_id ??
         undefined,
 
+      institution_name:
+        tokenData.institution_name ??
+        null,
+
       document_number:
         tokenData.document_number ??
         undefined,
@@ -379,45 +377,6 @@ export function AuthProvider({
     setUser(userData);
 
 
-    // ------------------------------------------------------------------------
-    // IMPORTANTE:
-    //
-    // NO cargamos aquí la licencia.
-    //
-    // AuthContext = identidad.
-    // LicenseContext = permisos/licencia.
-    //
-    // LicenseContext debe consultar:
-    //
-    //     GET /license/my-license
-    //
-    // después de que el usuario esté autenticado.
-    // ------------------------------------------------------------------------
-  };
-
-
-  // ==========================================================================
-  // REGISTRO
-  // ==========================================================================
-
-  const register = async (
-    registerData: RegisterRequest,
-  ): Promise<void> => {
-
-    await api.post(
-      '/auth/register',
-      registerData,
-    );
-
-
-    // ------------------------------------------------------------------------
-    // Después de registrar, iniciar sesión
-    // ------------------------------------------------------------------------
-
-    await login({
-      username: registerData.username,
-      password: registerData.password,
-    });
   };
 
 
@@ -492,7 +451,6 @@ export function AuthProvider({
 
     login,
 
-    register,
 
     logout,
 

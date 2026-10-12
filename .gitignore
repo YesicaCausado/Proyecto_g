@@ -25,15 +25,20 @@ __pycache__/
 .pytest_cache/
 
 # === BASE DE DATOS ===
+# Las bases SQLite locales se crean solas al iniciar el backend y contienen
+# datos de usuarios: nunca se versionan (producción usa Supabase).
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
 
 # === VARIABLES DE ENTORNO ===
 .env
 .env.local
 .env.production
 .env.*.local
+# La plantilla sin valores sí se versiona
+!.env.example
 
 # === EDITORES E IDEs ===
 .vscode/
@@ -53,3 +58,32 @@ htmlcov/
 # === FRONTEND BUILD ===
 frontend/dist/
 frontend/.env
+
+# === CACHÉS Y TEMPORALES ===
+# Caché de npm (si se configura cache=./.npm-cache); se regenera sola
+.npm-cache/
+.eslintcache
+*.tsbuildinfo
+.coverage
+.mypy_cache/
+.ruff_cache/
+*.tmp
+*.bak
+*.swp
+*~
+
+# === AUDITORÍAS Y PARCHES LOCALES ===
+# Resultados de auditorías y scripts de un solo uso (pueden contener datos
+# reales); los hallazgos que importan se documentan en docs/.
+audit-output/
+backend/_audit_*
+*.patch
+npm-audit.json
+npm-lint.txt
+
+# === CREDENCIALES ===
+*.pem
+*.key
+*.p12
+*credentials*.json
+*service-account*.json

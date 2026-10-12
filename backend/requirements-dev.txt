@@ -1,0 +1,9 @@
+# Dependencias de desarrollo y pruebas.
+# Usa EXACTAMENTE las dependencias de producción (las que instala Vercel desde
+# api/requirements.txt) más pytest, para que las pruebas corran con lo mismo
+# que corre en producción. Requiere Python 3.12 (ver docs/PRUEBAS.md).
+#   pip install -r requirements-dev.txt
+-r ../api/requirements.txt
+pytest==9.1.1
+# Cliente HTTP que usa starlette.testclient (TestClient) desde Starlette 1.x
+httpx2==2.13.0

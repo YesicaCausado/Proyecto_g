@@ -1,19 +1,38 @@
-"""
+r"""
 NeuroLearn AI — Pruebas del motor de Integraciones y Automatizaciones
-=====================================================================
+======================================================================
+Valida los mecanismos reales que usa la página Profesor → Integraciones:
 
-Actualizado para eliminar el sistema de licencias.
+1. Cifrado/descifrado de tokens con la SECRET_KEY del servidor (roundtrip).
+2. Webhook: envío de una petición HTTP POST real a un servidor local de
+   prueba y verificación de la respuesta (conexión real de extremo a extremo).
+3. Motor de automatizaciones: una automatización "crear_alerta" se configura,
+   se persiste y se dispara, y queda registrada una ejecución en la tabla
+   automation_executions (trazabilidad real).
+4. Acción "webhook": una automatización webhook ejecuta un POST real y se
+   marca como ok/error según la respuesta del servidor.
+
+Uso de una base SQLite en memoria — NO toca la base real de Supabase.
+
+Ejecutar (sin necesidad de `pytest`):
+
+    cd backend
+    .venv\Scripts\python.exe tests\test_integration_service.py
+
+O con pytest (si está instalado):
+
+    .venv\Scripts\python.exe -m pytest tests\test_integration_service.py -v
 """
 import os
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timezone
 
 # La clave del servidor debe existir ANTES de importar integration_service
-# (Settings lee variables de entorno).
-os.environ.setdefault("SECRET_KEY", "test-secret-key-para-pruebas-0123456789")
-
+# (Settings lee variables de entorno): la fija tests/entorno_pruebas.py.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import tests.entorno_pruebas  # noqa: E402,F401  (BD en memoria, correo a consola, sin IA real)
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -21,7 +40,7 @@ except Exception:
     pass
 
 
-# ── 0. Servidor HTTP local para probar el webhook real ─────────────────────
+# ── 0. Servidor HTTP local para probar el webhook real ────────────────────────
 class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))

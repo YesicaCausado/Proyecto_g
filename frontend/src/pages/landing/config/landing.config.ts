@@ -229,9 +229,7 @@ export const CTA_FINAL = {
   headline: 'El futuro del aprendizaje',
   highlight: 'comienza contigo.',
   subline:
-    'Únete a la plataforma donde la inteligencia artificial entiende cómo aprende cada estudiante. Empieza gratis.',
-  primary:  'Crear cuenta gratis',
-  secondary:'Hablar con Neuron',
+    'Únete a la plataforma donde la inteligencia artificial entiende cómo aprende cada estudiante.',
   footer:   'neurolearn · aprendizaje adaptativo · inteligencia artificial',
 } as const;
 

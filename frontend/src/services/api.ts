@@ -34,15 +34,25 @@ const _cache = new Map<string, CacheEntry>();
 const defaultAdapter = axios.getAdapter(api.defaults.adapter);
 
 function cacheKey(config: AxiosRequestConfig): string {
-  return `${config.method?.toUpperCase() ?? 'GET'} ${config.baseURL}${config.url}::${JSON.stringify(config.params ?? null)}`;
+  // El token forma parte de la clave: si otra persona inicia sesión en el
+  // mismo equipo antes de 15 s, no debe ver las respuestas de la cuenta
+  // anterior. (El texto completo del token no se guarda, solo su final.)
+  const auth = String((config.headers as any)?.Authorization ?? '').slice(-24);
+  return `${config.method?.toUpperCase() ?? 'GET'} ${config.baseURL}${config.url}::${JSON.stringify(config.params ?? null)}::${auth}`;
 }
 
 const cachedAdapter: AxiosAdapter = async (config) => {
   const method = (config.method ?? 'get').toLowerCase();
 
-  // Sólo cacheamos GET idempotentes.
+  // Sólo cacheamos GET idempotentes. Cualquier escritura (crear, editar,
+  // borrar) vacía la caché: así la pantalla que se recarga después muestra
+  // el dato guardado y no la copia vieja.
   if (method !== 'get') {
-    return defaultAdapter(config);
+    try {
+      return await defaultAdapter(config);
+    } finally {
+      _cache.clear();
+    }
   }
 
   const key = cacheKey(config);
@@ -84,6 +94,7 @@ api.interceptors.response.use(
     const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
     // Solo redirigir a login si NO es una llamada de autenticación y hay un token real
     if (error.response?.status === 401 && !isAuthEndpoint && localStorage.getItem('token')) {
+      _cache.clear();
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       // HashRouter: navegar vía hash para que funcione también en GitHub Pages
@@ -94,3 +105,19 @@ api.interceptors.response.use(
 );
 
 export default api;
+/**
+ * Invalida las lecturas GET cacheadas cuyo URL empiece por `prefix`
+ * (p. ej. '/bots' después de subir o eliminar un documento de un NeuroBot).
+ */
+/** Vacía toda la caché de lecturas (al iniciar o cerrar sesión). */
+export function clearApiCache(): void {
+  _cache.clear();
+}
+
+export function invalidateApiCache(prefix: string): void {
+  for (const key of Array.from(_cache.keys())) {
+    if (key.includes(` /api/v1${prefix}`)) {
+      _cache.delete(key);
+    }
+  }
+}

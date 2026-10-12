@@ -26,11 +26,18 @@ logger = logging.getLogger(__name__)
 
 
 def frontend_url(path: str = "") -> str:
-    """URL pública del frontend (``FRONTEND_URL``) con la ruta indicada."""
+    """URL pública de una pantalla del frontend (``FRONTEND_URL``).
+
+    El frontend usa HashRouter: las rutas van después de ``#``
+    (``https://app/#/reset-password``). Sin el ``#`` el navegador abre la
+    landing y la pantalla nunca recibe el token (CU-03).
+    """
     base = settings.FRONTEND_URL.rstrip("/")
-    if path and not path.startswith("/"):
+    if not path:
+        return base
+    if not path.startswith("/"):
         path = "/" + path
-    return f"{base}{path}"
+    return f"{base}/#{path}"
 
 
 def send_credentials_email(

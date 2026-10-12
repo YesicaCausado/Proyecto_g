@@ -14,6 +14,40 @@ const KIND_META: { id: Kind; label: string; icon: any; desc: string }[] = [
   { id: 'rubrica', label: 'Rúbrica de evaluación', icon: SlidersHorizontal, desc: 'Criterios y niveles de desempeño' },
 ];
 
+/** Mensaje legible de un error de la API (detail puede ser texto o lista de 422). */
+function apiError(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map((d: any) => d?.msg).filter(Boolean).join(' · ') || fallback;
+  }
+  return fallback;
+}
+
+const LABELS: Record<string, string> = {
+  titulo: 'Título', duracion_minutos: 'Duración (min)', grado: 'Grado', objetivos: 'Objetivos',
+  indicadores_desempeno: 'Indicadores de desempeño', questions: 'Preguntas', question: 'Pregunta',
+  options: 'Opciones', correct: 'Respuesta correcta', explanation: 'Explicación',
+};
+
+/** Convierte el contenido generado (JSON) en texto legible para copiar. */
+function contentToText(value: unknown, depth = 0): string {
+  const pad = '  '.repeat(depth);
+  if (value == null) return '';
+  if (typeof value !== 'object') return `${pad}${String(value)}`;
+  if (Array.isArray(value)) {
+    return value.map((v, i) => (typeof v === 'object' && v !== null
+      ? `${pad}${i + 1}.\n${contentToText(v, depth + 1)}`
+      : `${pad}- ${String(v)}`)).join('\n');
+  }
+  return Object.entries(value as Record<string, unknown>).map(([k, v]) => {
+    const label = LABELS[k] ?? k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+    return typeof v === 'object' && v !== null
+      ? `${pad}${label}:\n${contentToText(v, depth + 1)}`
+      : `${pad}${label}: ${String(v)}`;
+  }).join('\n');
+}
+
 const GRADES = ['1°', '2°', '3°', '4°', '5°', '6°', '7°', '8°', '9°', '10°', '11°'];
 
 interface GenResult {
@@ -49,22 +83,25 @@ export default function IAGenerativaTab() {
       });
       setResult({ content: r.data.content, provider: r.data.provider, ai_used: r.data.ai_used, kind: r.data.kind, topic: r.data.topic });
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'No se pudo generar el contenido. Intenta de nuevo.');
+      setError(apiError(err, 'No se pudo generar el contenido. Intenta de nuevo.'));
     } finally {
       setLoading(false);
     }
   };
 
-  const copyResult = () => {
+  const copyResult = async () => {
     if (!result) return;
-    navigator.clipboard.writeText(JSON.stringify(result.content, null, 2)).then(() => {
+    try {
+      await navigator.clipboard.writeText(contentToText(result.content));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    } catch {
+      setError('No se pudo copiar al portapapeles. Selecciona el texto y cópialo manualmente.');
+    }
   };
 
-  const providerLabel = result?.provider === 'local' ? 'Local (sin IA configurada)' : `IA · ${result?.provider ?? ''}`;
-  const providerStyle = result?.provider === 'local' ? 'bg-[#F7F6F3] text-[#AEADAB] border-[#E9E9E7]' : 'bg-[#EEF3FD] text-[#2E6FDB] border-[#C5D9F7]';
+  const providerLabel = `IA · ${result?.provider ?? ''}`;
+  const providerStyle = 'bg-[#EEF3FD] text-[#2E6FDB] border-[#C5D9F7]';
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -164,7 +201,7 @@ export default function IAGenerativaTab() {
                 {KIND_META.find(k => k.id === result.kind)?.label} — {result.topic}
               </span>
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${providerStyle}`}>
-                {result.provider === 'local' ? <CircleAlert className="w-3 h-3" /> : <Brain className="w-3 h-3" />}
+                <Brain className="w-3 h-3" />
                 {providerLabel}
               </span>
             </div>
@@ -288,7 +325,7 @@ function ContentRenderer({ content, kind }: { content: any; kind: Kind }) {
   }
 
   // Fallback genérico
-  return <pre className="whitespace-pre-wrap text-sm text-[#37352F] bg-[#F7F6F3] p-4 rounded-lg">{JSON.stringify(content, null, 2)}</pre>;
+  return <pre className="whitespace-pre-wrap text-sm text-[#37352F] bg-[#F7F6F3] p-4 rounded-lg">{contentToText(content)}</pre>;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

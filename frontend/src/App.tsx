@@ -1,7 +1,7 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { LicenseProvider } from './context/LicenseContext';
+import { NotificationsProvider } from './context/NotificationsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
@@ -18,9 +18,11 @@ const ResetPasswordPage    = lazy(() => import('./pages/auth/ResetPasswordPage')
 const StudentDashboard     = lazy(() => import('./pages/student/StudentDashboard'));
 const ChatPage             = lazy(() => import('./pages/student/ChatPage'));
 const BotsPage             = lazy(() => import('./pages/student/BotsPage'));
+const NeuroBotDetailPage    = lazy(() => import('./pages/student/NeuroBotDetailPage'));
 const MyClassesPage        = lazy(() => import('./pages/student/MyClassesPage'));
 const ClassroomPage        = lazy(() => import('./pages/student/ClassroomPage'));
 const QuizzesPage          = lazy(() => import('./pages/student/QuizzesPage'));
+const EvaluationsPage      = lazy(() => import('./pages/student/EvaluationsPage'));
 const DesempenoPage        = lazy(() => import('./pages/student/DesempenoPage'));
 const MaterialPage         = lazy(() => import('./pages/student/MaterialPage'));
 const TableroPage          = lazy(() => import('./pages/student/TableroPage'));
@@ -78,6 +80,9 @@ function AppRoutes() {
         <Route path="/bots" element={
           <ProtectedRoute role="estudiante"><Layout><BotsPage /></Layout></ProtectedRoute>
         } />
+        <Route path="/bots/:botId" element={
+          <ProtectedRoute role="estudiante"><Layout><NeuroBotDetailPage /></Layout></ProtectedRoute>
+        } />
         <Route path="/chat" element={
           <ProtectedRoute role="estudiante"><Layout><ChatPage /></Layout></ProtectedRoute>
         } />
@@ -94,6 +99,10 @@ function AppRoutes() {
         } />
         <Route path="/quizzes" element={
           <ProtectedRoute role="estudiante"><Layout><QuizzesPage /></Layout></ProtectedRoute>
+        } />
+        {/* Evaluaciones publicadas por los profesores (lista, responder, resultado) */}
+        <Route path="/evaluations" element={
+          <ProtectedRoute role="estudiante"><Layout><EvaluationsPage /></Layout></ProtectedRoute>
         } />
         {/* Historial de quizzes dentro de la sección Desafíos */}
         <Route path="/quizzes/history" element={
@@ -163,10 +172,10 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
-        <LicenseProvider>
+        <NotificationsProvider>
           <AppRoutes />
           <PWAInstallPrompt />
-        </LicenseProvider>
+        </NotificationsProvider>
       </AuthProvider>
     </HashRouter>
   );

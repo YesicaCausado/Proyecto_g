@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
+import NotificationBell from '../../components/NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 import { navItemStyle } from '../../styles/sidebar';
 import {
@@ -16,6 +17,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import AdminHome from './AdminHome';
+import { institutionLabel } from '../../utils/institution';
 import CreateInstitution from './CreateInstitution';
 import InstitutionList from './InstitutionList';
 import UserManagement from './UserManagement';
@@ -97,7 +99,7 @@ export default function AdminDashboard() {
           />
           <div className="min-w-0">
             <p className="font-bold text-sm leading-tight">NeuroLearn IA</p>
-            <p className="text-xs text-[#0B6E99] leading-tight">Panel Administrador</p>
+            <p className="text-xs text-[#0B6E99] leading-tight">Panel Administrador · {institutionLabel(user)}</p>
           </div>
         </div>
       </div>
@@ -206,6 +208,7 @@ export default function AdminDashboard() {
             <ChevronRight className="w-3 h-3" />
             <span className="text-[#191919] font-medium">NeuroLearn IA</span>
           </div>
+          <NotificationBell className="ml-auto" />
         </header>
 
         {/* Área de contenido scrolleable */}

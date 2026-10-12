@@ -141,7 +141,7 @@ export default function SectionFinalCTA() {
           <div ref={floatRef} className="relative" style={{ width: 'min(78vw, 460px)', height: 'clamp(320px, 48vh, 440px)' }}>
             <div className="absolute inset-0 flex items-center justify-center">
               {inView && (
-                <RobotCanvas robotState="idle" transparent className="h-full w-full" />
+                <RobotCanvas robotState="idle" transparent lowPower className="h-full w-full" />
               )}
             </div>
             <div className="nl-orbit" style={{ width: 320, height: 320, left: '50%', top: '50%', transform: 'translate(-50%,-50%)', opacity: 0.35 }} />
@@ -186,16 +186,6 @@ export default function SectionFinalCTA() {
         >
           {CTA_FINAL.subline}
         </p>
-
-        <div data-cta className="mt-9 flex flex-wrap items-center justify-center gap-4">
-          <a href="#/login" className="nl-btn nl-btn-primary" style={{ padding: '17px 36px', fontSize: '16px' }}>
-            {CTA_FINAL.primary}
-            <span className="nl-btn-arrow" aria-hidden="true">→</span>
-          </a>
-          <a href="#instituciones" className="nl-btn nl-btn-outline-dark">
-            {CTA_FINAL.secondary}
-          </a>
-        </div>
 
         <p data-cta className="nl-mono" style={{ marginTop: 44, fontSize: '11px', letterSpacing: '0.28em', textTransform: 'uppercase', color: '#8a8a8a' }}>
           {CTA_FINAL.footer}

@@ -136,17 +136,40 @@ const NeuronParticleSystem = forwardRef<NeuronParticleSystemHandle, Props>(
 
       if (reduce) { draw(); return () => {}; }
 
+      // Las partículas son estáticas: solo se redibuja cuando cambia el
+      // progreso de conexión o el tamaño, y solo mientras el lienzo está en
+      // pantalla (antes se redibujaba 60 veces por segundo desde que abría
+      // la página, aunque la sección estuviera lejos).
+      let dirty = true;
+      let lastConn = -1, lastGlow = -1;
       const step = () => {
-        draw();
+        const { connect, glow } = stateRef.current;
+        if (dirty || connect !== lastConn || glow !== lastGlow) {
+          draw();
+          dirty = false; lastConn = connect; lastGlow = glow;
+        }
         raf = requestAnimationFrame(step);
       };
-      raf = requestAnimationFrame(step);
+      const start = () => { if (!raf) raf = requestAnimationFrame(step); };
+      const stop = () => { cancelAnimationFrame(raf); raf = 0; };
       seed();
 
-      const onResize = seed;
+      let observer: IntersectionObserver | null = null;
+      if (typeof IntersectionObserver === 'undefined') {
+        start();
+      } else {
+        observer = new IntersectionObserver(
+          (entries) => { if (entries.some((e) => e.isIntersecting)) start(); else stop(); },
+          { rootMargin: '100px 0px' },
+        );
+        observer.observe(canvas);
+      }
+
+      const onResize = () => { seed(); dirty = true; };
       window.addEventListener('resize', onResize);
       return () => {
-        cancelAnimationFrame(raf);
+        stop();
+        observer?.disconnect();
         window.removeEventListener('resize', onResize);
       };
     }, []);

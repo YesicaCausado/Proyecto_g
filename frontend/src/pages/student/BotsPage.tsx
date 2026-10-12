@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import NeuronAvatar from '../../components/NeuronAvatar';
-import { COMPETENCIES } from '../../data/competencies';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
-import { Bot, Loader2 } from 'lucide-react';
+import { AlertCircle, Bot, Loader2, RotateCcw, Search, BookOpen } from 'lucide-react';
+import {
+  ProgressBar, StatusBadge, chatLink, sourceLabel, type AssignedBot,
+} from '../../components/neurobots/progress';
 
 interface SharedBot {
   id: number;
@@ -11,130 +12,149 @@ interface SharedBot {
   description: string;
   subject: string;
   creator_name: string;
-  classroom_name: string | null;
-  is_required: boolean;
   source: string;
 }
 
+/**
+ * «Mis NeuroBots»: módulo independiente con los NeuroBots que los profesores
+ * asignaron al estudiante (por grupo o individualmente), con su estado y
+ * progreso reales, y los NeuroBots públicos de su institución. Los chats de
+ * competencias del Saber 11 están en su propio módulo («Competencias»).
+ */
 export default function BotsPage() {
-  const SKILLS = COMPETENCIES;
-  const [customBots, setCustomBots] = useState<SharedBot[]>([]);
+  const [assigned, setAssigned] = useState<AssignedBot[]>([]);
+  const [publicBots, setPublicBots] = useState<SharedBot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
 
-  useEffect(() => {
-    const fetchBots = async () => {
-      try {
-        const res = await api.get('/bots/shared-with-me');
-        setCustomBots(res.data?.bots || []);
-      } catch (err) {
-        console.error('Error fetching shared bots:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBots();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [mine, shared] = await Promise.all([
+        api.get('/bots/assigned-to-me', { params: { _t: Date.now() } }),
+        api.get('/bots/shared-with-me'),
+      ]);
+      const list: AssignedBot[] = mine.data?.bots ?? [];
+      const ids = new Set(list.map(b => b.id));
+      setAssigned(list);
+      setPublicBots((shared.data?.bots ?? []).filter((b: SharedBot) => b.source === 'public' && !ids.has(b.id)));
+    } catch {
+      setError('No fue posible cargar tus NeuroBots.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const pending = assigned.filter(b => b.progress.status !== 'completado').length;
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const matches = (b: { name: string; subject?: string; description?: string; creator_name?: string }) => {
+    const q = norm(query.trim());
+    return !q || [b.name, b.subject, b.description, b.creator_name].some(v => v && norm(v).includes(q));
+  };
+  const shownAssigned = assigned.filter(matches);
+  const shownPublic = publicBots.filter(matches);
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <div className="pb-5 mb-6 border-b border-[#E9E9E7]">
-        <div className="flex items-center gap-4 bg-[#1a1a1a] rounded-md p-5 mb-6 text-white">
-          <NeuronAvatar size={52} online variant="gradient" />
-          <div>
-            <p className="text-[#9B9A97] text-[10px] uppercase tracking-widest font-semibold mb-0.5">
-              Tu asistente inteligente
-            </p>
-            <h2 className="text-base font-bold text-white leading-tight">
-              Neuron <span className="text-[#60C8FF] font-normal text-sm">· NeuroLearn AI</span>
-            </h2>
-            <p className="text-[#787774] text-xs mt-1">
-              Selecciona una habilidad o un bot personalizado y empieza a practicar
-            </p>
-          </div>
+      {/* ── Mis NeuroBots (asignados) ─────────────────────────────────── */}
+      <div className="pb-3 mb-4 border-b border-[#E9E9E7] flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-[#37352F]">Mis NeuroBots</h1>
+          <p className="text-[#787774] text-sm mt-1">
+            NeuroBots que tus profesores te asignaron. Completa la meta de interacciones de cada uno.
+          </p>
         </div>
-        <h1 className="text-xl font-semibold text-[#37352F]">Competencias Generales</h1>
-        <p className="text-[#787774] text-sm mt-1">
-          5 competencias clave para el Saber 11. Selecciona una para practicar con Neuron.
-        </p>
+        {!loading && !error && assigned.length > 0 && (
+          <span className="text-xs text-[#787774] whitespace-nowrap">{pending} pendiente(s) de {assigned.length}</span>
+        )}
       </div>
 
-      <div className="space-y-3 mb-10">
-        {SKILLS.map((skill) => (
-          <Link
-            key={skill.key}
-            to={`/chat/${skill.slug}`}
-            className="flex items-start gap-4 bg-white border border-[#E9E9E7] rounded-md p-5 hover:border-[#9B9A97] transition-colors group"
-          >
-            <div className={`w-12 h-12 ${skill.bg} border border-[#E9E9E7] rounded-md flex items-center justify-center text-2xl flex-shrink-0`}>
-              {skill.iconEmoji}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-[#37352F] text-[15px] group-hover:text-[#37352F] transition-colors">
-                {skill.name}
-              </h3>
-              <p className="text-sm text-[#787774] mt-0.5">{skill.desc}</p>
-              <div className="flex flex-wrap gap-2 mt-3">
-                {skill.topics.map((topic) => (
-                  <span
-                    key={topic}
-                    className="text-xs bg-[#F7F6F3] text-[#787774] px-2.5 py-1 rounded-md border border-[#E9E9E7]"
-                  >
-                    {topic}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="hidden sm:flex items-center text-[#9B9A97] opacity-0 group-hover:opacity-100 transition-opacity text-sm">
-              Practicar →
-            </div>
-          </Link>
-        ))}
-      </div>
+      {!loading && !error && (assigned.length + publicBots.length) > 0 && (
+        <div className="relative mb-5">
+          <Search className="w-4 h-4 text-[#9B9A97] absolute left-3 top-1/2 -translate-y-1/2" />
+          <input value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar por nombre, materia o profesor…"
+            className="w-full pl-9 pr-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:outline-none focus:border-[#2E6FDB]" />
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-10 text-[#9B9A97]">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Cargando bots de tus profesores...
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Cargando tus NeuroBots…
         </div>
-      ) : customBots.length > 0 ? (
+      ) : error ? (
+        <div className="flex items-center justify-between gap-3 bg-[#FDEEEE] border border-[#F5C7C7] text-[#E03E3E] rounded-md p-4 mb-10 text-sm">
+          <span className="flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {error}</span>
+          <button onClick={load} className="flex items-center gap-1 font-medium hover:underline">
+            <RotateCcw className="w-3.5 h-3.5" /> Reintentar
+          </button>
+        </div>
+      ) : assigned.length === 0 ? (
+        <div className="text-center py-8 mb-10 border border-dashed border-[#E9E9E7] rounded-md">
+          <Bot className="w-8 h-8 text-[#E9E9E7] mx-auto mb-2" />
+          <p className="text-sm text-[#787774]">Tus profesores todavía no te han asignado NeuroBots.</p>
+          <p className="text-xs text-[#AEADAB] mt-1">Cuando lo hagan, recibirás una notificación.</p>
+        </div>
+      ) : shownAssigned.length === 0 ? (
+        <p className="text-sm text-[#787774] text-center py-6 mb-10">Ningún NeuroBot asignado coincide con «{query}».</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+          {shownAssigned.map(bot => (
+            <Link key={bot.id} to={`/bots/${bot.id}`}
+              className="flex flex-col bg-white border border-[#E9E9E7] rounded-md p-5 hover:border-[#9B9A97] transition-colors">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-10 h-10 bg-[#EEF3FD] border border-[#C5D9F7] rounded-md flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-5 h-5 text-[#2E6FDB]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-[#37352F] text-[15px] truncate">{bot.name}</h3>
+                  <p className="text-[11px] text-[#9B9A97] truncate">{bot.subject || 'General'} · {sourceLabel(bot)}</p>
+                </div>
+                <StatusBadge progress={bot.progress} />
+              </div>
+              <p className="text-sm text-[#787774] flex-1 mb-4 line-clamp-2">{bot.description || 'Sin descripción'}</p>
+              <ProgressBar progress={bot.progress} compact />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* ── Otros NeuroBots públicos de la institución ─────────────────── */}
+      {!loading && !error && shownPublic.length > 0 && (
         <>
           <div className="pb-3 mb-4 border-b border-[#E9E9E7]">
-            <h2 className="text-lg font-semibold text-[#37352F]">Bots de tus Profesores</h2>
-            <p className="text-[#787774] text-sm mt-1">
-              Asistentes creados por tus profesores para clases específicas.
-            </p>
+            <h2 className="text-lg font-semibold text-[#37352F]">Explorar NeuroBots de tu institución</h2>
+            <p className="text-[#787774] text-sm mt-1">Bots públicos de tus profesores. No tienen meta ni seguimiento.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {customBots.map((bot) => (
-              <Link
-                key={bot.id}
-                to={`/chat/custom?bot_id=${bot.id}&bot_name=${encodeURIComponent(bot.name)}`}
-                className="flex flex-col bg-white border border-[#E9E9E7] rounded-md p-5 hover:border-[#9B9A97] transition-colors group"
-              >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+            {shownPublic.map(bot => (
+              <Link key={bot.id} to={chatLink(bot)}
+                className="flex flex-col bg-white border border-[#E9E9E7] rounded-md p-5 hover:border-[#9B9A97] transition-colors">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-[#EEF3FD] border border-[#C5D9F7] rounded-md flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-5 h-5 text-[#2E6FDB]" />
+                  <div className="w-10 h-10 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-5 h-5 text-[#787774]" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-[#37352F] text-[15px] truncate">{bot.name}</h3>
                     <p className="text-[11px] text-[#9B9A97] truncate">{bot.subject}</p>
                   </div>
                 </div>
-                <p className="text-sm text-[#787774] flex-1 mb-4 line-clamp-2">
-                  {bot.description || 'Sin descripción'}
-                </p>
-                <div className="flex items-center justify-between text-xs mt-auto pt-3 border-t border-[#F7F6F3]">
-                  <span className="text-[#9B9A97]">Por: {bot.creator_name || 'Profesor'}</span>
-                  {bot.classroom_name && (
-                    <span className="bg-[#F7F6F3] text-[#787774] px-2 py-0.5 rounded-md border border-[#E9E9E7] truncate max-w-[120px]">
-                      {bot.classroom_name}
-                    </span>
-                  )}
-                </div>
+                <p className="text-sm text-[#787774] flex-1 mb-3 line-clamp-2">{bot.description || 'Sin descripción'}</p>
+                <span className="text-xs text-[#9B9A97]">Por: {bot.creator_name || 'Profesor'}</span>
               </Link>
             ))}
           </div>
         </>
-      ) : null}
+      )}
+
+      {/* Los chats de competencias tienen su propio módulo. */}
+      <Link to="/chat" className="flex items-center gap-2 text-sm text-[#787774] hover:text-[#37352F] mb-10">
+        <BookOpen className="w-4 h-4" /> ¿Buscas practicar las competencias del Saber 11? Ve a Competencias →
+      </Link>
     </div>
   );
 }

@@ -6,6 +6,7 @@
  * STT: Web Speech API (SpeechRecognition) — nativa del navegador, gratuita.
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
+import api from '../services/api';
 
 // ── Tipos de Web Speech API ──────────────────────────────────────────────────
 interface ISpeechRecognition extends EventTarget {
@@ -123,53 +124,28 @@ function pickEnglishVoice(): SpeechSynthesisVoice | null {
   );
 }
 
-// ── Azure TTS ─────────────────────────────────────────────────────────────────
-// Claves configuradas en frontend/.env.local  o  Vercel Environment Variables
-const AZURE_KEY    = import.meta.env.VITE_AZURE_SPEECH_KEY    as string | undefined;
-const AZURE_REGION = (import.meta.env.VITE_AZURE_SPEECH_REGION as string) || 'eastus';
+// ── Azure TTS (a través del backend) ──────────────────────────────────────────
+// La clave de Azure vive solo en el servidor (POST /api/v1/voice/tts). Antes
+// se leía de una variable VITE_ y quedaba visible en el navegador.
+// Si el servidor responde 503 (Azure no configurado o caído), se deja de
+// intentar durante la sesión y se usa la voz del navegador.
+let azureAvailable = true;
 
-// Voces neurales de Azure: naturales, sin robótica
-const AZURE_VOICES: Record<'es' | 'en', { name: string; lang: string }> = {
-  es: { name: 'es-ES-IreneNeural',   lang: 'es-ES' },  // España, femenino
-  en: { name: 'en-US-JennyNeural',   lang: 'en-US' },  // US English, femenino
-};
-
-/** Sintetiza texto con Azure TTS y devuelve el HTMLAudioElement listo para reproducir */
+/** Pide el audio al backend y devuelve el HTMLAudioElement listo para reproducir */
 async function azureSynth(text: string, lang: 'es' | 'en'): Promise<HTMLAudioElement | null> {
-  if (!AZURE_KEY) return null;
-  const { name, lang: xmlLang } = AZURE_VOICES[lang];
-  const escaped = text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-  const ssml =
-    `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${xmlLang}'>` +
-    `<voice name='${name}'><prosody rate='1.05'>${escaped}</prosody></voice></speak>`;
+  if (!azureAvailable) return null;
   try {
-    const res = await fetch(
-      `https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`,
-      {
-        method: 'POST',
-        headers: {
-          'Ocp-Apim-Subscription-Key': AZURE_KEY,
-          'Content-Type': 'application/ssml+xml',
-          'X-Microsoft-OutputFormat': 'audio-24khz-160kbitrate-mono-mp3',
-        },
-        body: ssml,
-      },
-    );
-    if (!res.ok) {
-      console.warn(`[Azure TTS] Error ${res.status}:`, await res.text().catch(() => ''));
-      return null;
-    }
-    const url   = URL.createObjectURL(await res.blob());
+    const res = await api.post('/voice/tts', { text: text.slice(0, 1500), lang }, { responseType: 'blob' });
+    const url   = URL.createObjectURL(res.data as Blob);
     const audio = new Audio(url);
     // Liberar la URL de objeto cuando el audio termine
     const cleanup = () => URL.revokeObjectURL(url);
     audio.addEventListener('ended',  cleanup, { once: true });
     audio.addEventListener('error',  cleanup, { once: true });
     return audio;
-  } catch (err) {
-    console.warn('[Azure TTS] fetch error:', err);
+  } catch (err: any) {
+    if (err?.response?.status === 503) azureAvailable = false;
+    console.warn('[Voz] Se usa la voz del navegador:', err?.response?.status ?? err?.message);
     return null;
   }
 }
@@ -280,8 +256,8 @@ export function useVoiceTutor(
       window.speechSynthesis.speak(utterance);
     }
 
-    // 8. Azure TTS (principal) → Web Speech (fallback)
-    if (AZURE_KEY) {
+    // 8. Azure TTS por el servidor (principal) → Web Speech (fallback)
+    if (azureAvailable) {
       azureSynth(clean, detectedLang).then(audio => {
         if (!audio) { useWebSpeech(); return; }
         audioRef.current = audio;

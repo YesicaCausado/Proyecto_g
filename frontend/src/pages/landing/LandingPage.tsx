@@ -9,17 +9,15 @@
  *   CTA final → Footer
  *
  * Técnica:
- *   · Lenis (smooth scroll) sincronizado con ScrollTrigger.
+ *   · Scroll nativo del navegador (rueda, touchpad y barra). Antes se
+ *     usaba Lenis, pero su bucle de animación se detenía tras el
+ *     primer cuadro y la rueda del ratón dejaba de desplazar la página.
  *   · La sección de patrones se pinnea y recorre horizontalmente
  *     los 5 patrones neurodigitales (GSAP + ScrollTrigger).
  *   · props: reutiliza Hero (Neuron 3D), NeuronGlyph, TravellingNeuron,
  *     useCustomCursor y respeta prefers-reduced-motion.
  * ─────────────────────────────────────────────────────────────
  */
-import { useEffect } from 'react';
-import Lenis from 'lenis';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-
 import './landing.css';
 import LandingNavbar from './components/LandingNavbar';
 import Hero from './components/Hero';
@@ -45,28 +43,6 @@ const NEURON_STOPS: NeuronStop[] = [
 
 export default function LandingPage() {
   const cursor = useCustomCursor();
-
-  // Smooth scroll (Lenis) + sincronización con ScrollTrigger.
-  useEffect(() => {
-    const reduce =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) return;
-
-    const lenis = new Lenis({ lerp: 0.09, smoothWheel: true });
-    const raf = (time: number) => lenis.raf(time);
-    lenis.on('scroll', ScrollTrigger.update);
-    const rafId = requestAnimationFrame(raf);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__lenis = lenis;
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      lenis.destroy();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      delete (window as any).__lenis;
-    };
-  }, []);
 
   return (
     <div className="nl-app">

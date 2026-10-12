@@ -14,6 +14,8 @@ export interface User {
   // B2B fields
   must_change_password?: boolean;
   institution_id?: number | null;
+  /** Nombre real de la institución (null para el Administrador o si no tiene). */
+  institution_name?: string | null;
   document_number?: string | null;
 }
 
@@ -31,6 +33,7 @@ export interface Token {
   is_expert?: boolean;
   photo?: string | null;
   institution_id?: number | null;
+  institution_name?: string | null;
   document_number?: string | null;
   cognitive_profile?: Record<string, unknown> | null;
   created_at?: string;
@@ -41,13 +44,6 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface RegisterRequest {
-  username: string;
-  email: string;
-  password: string;
-  full_name?: string;
-  role: 'estudiante' | 'profesor' | 'super_profesor';
-}
 // ===== Chat =====
 
 export interface StartSessionRequest {

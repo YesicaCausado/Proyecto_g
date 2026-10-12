@@ -1,4 +1,5 @@
 import ProfileSettings from '../../components/ProfileSettings';
+import PrivacyConsents from '../../components/PrivacyConsents';
 
 export default function SettingsPage() {
   return (
@@ -7,7 +8,8 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-[#37352F]">Configuración</h1>
         <p className="text-[#787774] text-sm mt-1">Tu perfil, seguridad y preferencias</p>
       </div>
-      <ProfileSettings role="estudiante" prefsStorageKey="student_notifications" />
+      <ProfileSettings role="estudiante" />
+      <PrivacyConsents />
     </div>
   );
 }

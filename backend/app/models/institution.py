@@ -1,9 +1,18 @@
 """
-NeuroLearn AI - Modelos de Institución (MODIFICADO)
-====================================================
+NeuroLearn AI - Modelos de Institución y Auditoría
 
-Actualizado para eliminar el sistema de licencias.
+Sistema B2B:
+Administrador
+    ↓
+Super Profesor
+    ↓
+Profesor
+    ↓
+Estudiante
 """
+
+from datetime import datetime
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -14,14 +23,9 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import relationship
-from datetime import datetime
 
 from app.db.database import Base
 
-
-# =========================================================
-# INSTITUCIÓN
-# =========================================================
 
 class Institution(Base):
     __tablename__ = "institutions"
@@ -42,6 +46,18 @@ class Institution(Base):
         String(20),
         unique=True,
         index=True,
+        nullable=False,
+    )
+
+    # =====================================================
+    # ESTADO
+    # =====================================================
+
+    # Una institución desactivada por el Administrador bloquea el acceso
+    # de todos sus usuarios (ver auth.ensure_institution_active).
+    is_active = Column(
+        Boolean,
+        default=True,
         nullable=False,
     )
 
@@ -149,7 +165,6 @@ class AuditLog(Base):
     # create_teacher
     # create_student
     # delete_teacher
-    # change_license
     # login
     # logout
     action = Column(

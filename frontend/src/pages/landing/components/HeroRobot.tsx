@@ -33,10 +33,12 @@ interface HeroRobotProps {
   /** Posicionamiento del robot dentro del hero */
   top:    number;
   scale:  number;
+  /** Deja de dibujar cuando el hero no está en pantalla */
+  paused?: boolean;
 }
 
 const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
-  function HeroRobot({ top, scale }, ref) {
+  function HeroRobot({ top, scale, paused = false }, ref) {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const floatRef   = useRef<HTMLDivElement>(null);
 
@@ -69,6 +71,8 @@ const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
           <RobotCanvas
             robotState="idle"
             transparent
+            lowPower
+            paused={paused}
             className="w-full h-full"
           />
         </div>

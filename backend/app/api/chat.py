@@ -45,10 +45,10 @@ from typing import Dict, List, Optional
 from datetime import datetime
 
 from app.db.database import get_db
-from app.api.auth import get_current_user
-from app.models.user import User
+from app.api.auth import get_current_user, require_permission
+from app.core.permissions import Permission
+from app.models.user import User, UserRole
 from app.models.learning import LearningSession, CognitiveState
-from app.api.auth import require_chat_access
 from app.schemas.schemas import (
     StartSessionRequest,
     ChatMessageRequest,
@@ -78,10 +78,75 @@ from app.ai.adaptive.student_model import StudentModel
 from app.services.student_model_service import StudentModelService
 from app.services.llm_context import build_adaptation_context
 from app.core.config import settings
+from app.core.permissions import FORBIDDEN_MESSAGE
+from app.models.expert_bot import ExpertBot
+from app.services.bot_documents import build_bot_context, can_use_bot
+from app.services.consent_service import has_consent
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat Adaptativo"])
+
+
+def _enforce_media_consent(db: Session, user: User, payload) -> None:
+    """
+    Descarta los indicadores de cámara/micrófono si el usuario no tiene el
+    consentimiento vigente (la interfaz ya no activa los dispositivos sin él;
+    esto lo garantiza también en el servidor).
+    """
+    if getattr(payload, "facial_data", None) and not has_consent(db, user.id, "camara_facial"):
+        logger.info("facial_data ignorado: usuario %s sin consentimiento de cámara", user.id)
+        payload.facial_data = None
+    if getattr(payload, "voice_data", None) and not has_consent(db, user.id, "microfono_voz"):
+        logger.info("voice_data ignorado: usuario %s sin consentimiento de micrófono", user.id)
+        payload.voice_data = None
+
+
+def _resolve_chat_bot(db: Session, user: User, bot_id: Optional[int],
+                      conversation_id: Optional[int] = None) -> Optional[ExpertBot]:
+    """
+    NeuroBot de la conversación: el `bot_id` explícito o, si no llega, el bot
+    asociado a la conversación del propio usuario. Valida que el usuario pueda
+    usarlo (misma institución, aula asignada, público o creador).
+    """
+    if bot_id is not None:
+        bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
+        if bot is None:
+            raise HTTPException(status_code=404, detail="NeuroBot no encontrado")
+        if not can_use_bot(db, user, bot):
+            raise HTTPException(status_code=403, detail=FORBIDDEN_MESSAGE)
+        return bot
+
+    if conversation_id is not None:
+        from app.models.adaptive import Conversation
+        conversation = db.query(Conversation).filter(
+            Conversation.id == conversation_id,
+            Conversation.student_id == user.id,
+        ).first()
+        if conversation is not None and conversation.bot_id:
+            bot = db.query(ExpertBot).filter(ExpertBot.id == conversation.bot_id).first()
+            if bot is not None and can_use_bot(db, user, bot):
+                return bot
+    return None
+
+def _track_neurobot(db: Session, user: User, bot: Optional[ExpertBot], interaction: bool) -> Optional[dict]:
+    """Progreso del estudiante con un NeuroBot asignado (parche 11B).
+
+    `interaction=False` al abrir el chat (iniciado); `True` cuando el bot
+    respondió con IA real. Nunca rompe el chat: si falla se registra y se sigue.
+    """
+    if bot is None or user.role != UserRole.ESTUDIANTE.value:
+        return None
+    from app.services import neurobot_service
+    try:
+        if interaction:
+            return neurobot_service.record_interaction(db, user, bot)
+        return neurobot_service.record_start(db, user, bot)
+    except Exception:
+        db.rollback()
+        logger.exception("No se pudo registrar el progreso del NeuroBot %s (usuario %s)", bot.id, user.id)
+        return None
+
 
 # Motor de Adaptación Pedagógica (separado del LLM).
 _adaptation_engine = PedagogicalAdaptationEngine()
@@ -872,10 +937,11 @@ def _quiz_suggested(response_text: str) -> bool:
 async def save_pattern_data(
     payload: ChatPatternPayload,
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """Guarda los datos de los 5 patrones por usuario y tema."""
+    _enforce_media_consent(db, current_user, payload)
     normalized_state = _normalize_cognitive_state(payload.cognitive_state)
     session = _get_or_create_learning_session(db, current_user.id, payload.topic)
     event_data = {
@@ -920,7 +986,7 @@ async def get_pattern_history(
     topic: Optional[str] = None,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """Trae los patrones guardados del usuario por tema."""
@@ -967,11 +1033,16 @@ async def get_pattern_history(
 async def start_session(
     request: StartSessionRequest,
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """Inicia sesión: la IA genera un mensaje de bienvenida al tema."""
+    bot = _resolve_chat_bot(db, current_user, request.bot_id, request.conversation_id)
     system_prompt = _build_system_prompt(request.topic)
+    knowledge_meta = None
+    if bot is not None:
+        bot_context, knowledge_meta = build_bot_context(db, bot, request.topic)
+        system_prompt += bot_context
     result = await ai_manager.generate(
         prompt=f"El estudiante empieza a estudiar: {request.topic}. Preséntate brevemente y comienza con una introducción motivadora al tema. Luego haz la primera pregunta de diagnóstico.",
         system_prompt=system_prompt,
@@ -991,7 +1062,8 @@ async def start_session(
         )
         result["provider"] = "local"
 
-    session = _get_or_create_learning_session(db, current_user.id, request.topic, request.bot_id)
+    session = _get_or_create_learning_session(
+        db, current_user.id, request.topic, bot.id if bot is not None else None)
     _save_chat_message(
         db,
         session.id,
@@ -1006,6 +1078,8 @@ async def start_session(
         result["response"], {"topic": request.topic, "provider": result["provider"]},
     )
 
+    neurobot_progress = _track_neurobot(db, current_user, bot, interaction=False)
+
     return ChatMessageResponse(
         message=result["response"],
         action="teach",
@@ -1014,7 +1088,8 @@ async def start_session(
         confidence=1.0,
         suggestions=[],
         should_pause=False,
-        metadata={"provider": result["provider"]},
+        metadata={"provider": result["provider"], "knowledge": knowledge_meta,
+                  "neurobot_progress": neurobot_progress},
     )
 
 
@@ -1022,7 +1097,7 @@ async def start_session(
 async def send_message(
     request: ChatMessageRequest,
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """
@@ -1039,6 +1114,11 @@ async def send_message(
 
         topic = request.topic or "Preparación Saber 11"
         cognitive_state = _normalize_cognitive_state(request.cognitive_state)
+        # Cámara/micrófono solo con consentimiento vigente.
+        _enforce_media_consent(db, current_user, request)
+        # NeuroBot (opcional): se valida antes de cualquier procesamiento.
+        chat_bot = _resolve_chat_bot(db, current_user, request.bot_id, request.conversation_id)
+        knowledge_meta = None
         active_modalities: List[str] = []
         error_risk = 0.0
 
@@ -1164,7 +1244,8 @@ async def send_message(
                     pause_ratio=float(request.voice_data.get("pause_ratio", 0.0) or 0.0),
                 )
 
-            session = _get_or_create_learning_session(db, current_user.id, topic)
+            session = _get_or_create_learning_session(
+                db, current_user.id, topic, chat_bot.id if chat_bot is not None else None)
 
             user_engine = _get_user_engine(current_user.id)
             # Re-siembra la predicción de error con lo respondido en el chat
@@ -1369,6 +1450,19 @@ async def send_message(
             # Nunca debe romper el chat; degradar con tronco sin inventar datos.
             logger.warning("⚠️ Motor de adaptación pedagógica falló: %s", adapt_err)
 
+        # ═══ Base de conocimiento del NeuroBot (documentos del docente) ═══
+        if chat_bot is not None:
+            try:
+                bot_context, knowledge_meta = build_bot_context(db, chat_bot, request.message)
+                system_prompt += bot_context
+            except Exception as kb_err:
+                logger.warning("⚠️ No se pudo cargar la base de conocimiento del bot %s: %s",
+                               chat_bot.id, kb_err)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
         # Reconstruir historial de conversación
         context_messages: List[Dict] = []
         if request.history:
@@ -1419,6 +1513,12 @@ async def send_message(
             clean_message, {"topic": topic, "provider": result["provider"]},
         )
 
+        # Progreso del NeuroBot asignado: solo cuenta si respondió la IA real
+        # (no el mensaje local de «no puedo procesar tu mensaje»).
+        neurobot_progress = None
+        if chat_bot is not None and result.get("provider") != "local":
+            neurobot_progress = _track_neurobot(db, current_user, chat_bot, interaction=True)
+
         # Conectar la recomendación del motor neuroconductual a la dificultad
         # (antes quedaba fija en "medium" aunque el motor calculara should_adapt).
         response_difficulty = "medium"
@@ -1457,6 +1557,8 @@ async def send_message(
                 "suggested_difficulty": suggested_difficulty,
                 "should_adapt": bool(analysis.should_adapt) if analysis else False,
                 "adaptation": strategy_meta,
+                "knowledge": knowledge_meta,
+                "neurobot_progress": neurobot_progress,
                 "patterns": {
                     "P1_interaction_rhythm": {
                         "response_time_ms": request.response_time_ms,
@@ -1526,7 +1628,7 @@ async def send_message(
 @router.get("/stats", response_model=SessionStatsResponse)
 async def get_session_stats(
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
     """
@@ -1595,7 +1697,7 @@ async def get_session_stats(
 async def generate_cognitive_quiz(
     request: QuizRequest,
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db)
 ):
     """
@@ -1741,8 +1843,16 @@ async def generate_cognitive_quiz(
     except Exception as ai_error:
         logger.error(f"Error llamando a AI manager: {ai_error}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Error al conectar con el servicio de IA: {str(ai_error)}"
+            status_code=503,
+            detail="El servicio de IA no respondió. Intenta de nuevo en unos minutos."
+        )
+
+    # Sin proveedor externo la respuesta local no es un quiz real: se informa
+    # en vez de mostrar preguntas inventadas.
+    if result.get("provider") == "local":
+        raise HTTPException(
+            status_code=503,
+            detail="El servicio de IA no está disponible en este momento. No se pudo generar el quiz.",
         )
 
     try:
@@ -1786,23 +1896,29 @@ async def generate_cognitive_quiz(
         if not quiz_data["questions"] or len(quiz_data["questions"]) == 0:
             raise ValueError("No se generaron preguntas")
 
-        for i, question in enumerate(quiz_data["questions"]):
-            if "answer" not in question or question["answer"] is None:
-                if "options" in question and len(question["options"]) > 0:
-                    question["answer"] = question["options"][0]
-                    logger.warning(f"Pregunta {i+1}: Falta 'answer', usando opción 1 como fallback")
-                else:
-                    raise ValueError(f"Pregunta {i+1} no tiene 'answer' ni 'options' válidos")
-
-            if "options" in question and isinstance(question["options"], list):
-                if question["answer"] not in question["options"]:
-                    logger.warning(f"Pregunta {i+1}: answer '{question['answer']}' no está en options, usando opción 1")
-                    question["answer"] = question["options"][0]
-
-            if "explanation" not in question:
-                question["explanation"] = "Sin explicación disponible"
-            if "id" not in question:
-                question["id"] = i + 1
+        # Solo se aceptan preguntas cuya respuesta correcta sea una de sus
+        # opciones. Antes, si la IA no la daba (o no coincidía), se marcaba
+        # como correcta la primera opción: el estudiante podía recibir una
+        # calificación basada en una respuesta inventada.
+        valid_questions = []
+        for question in quiz_data["questions"]:
+            options = question.get("options")
+            if not isinstance(options, list) or len(options) < 2 or not question.get("question"):
+                continue
+            answer = question.get("answer")
+            if answer not in options:
+                match = [o for o in options if _normalize_text(o) == _normalize_text(answer)]
+                if len(match) != 1:
+                    logger.warning("Pregunta descartada: la respuesta '%s' no está entre las opciones", answer)
+                    continue
+                question["answer"] = match[0]
+            question.setdefault("explanation", "")
+            valid_questions.append(question)
+        if not valid_questions:
+            raise ValueError("La IA no devolvió preguntas válidas")
+        for idx, question in enumerate(valid_questions, start=1):
+            question["id"] = idx
+        quiz_data["questions"] = valid_questions
 
         try:
             quiz_history_entry = QuizHistory(
@@ -1892,7 +2008,7 @@ def _is_quiz_answer_correct(user_answer, correct_answer, options=None):
 async def submit_quiz_answers(
     submission: QuizSubmission,
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_chat_access),
+    _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db)
 ):
     """
@@ -1926,8 +2042,11 @@ async def submit_quiz_answers(
 
         # user_answers puede llegar con claves int o string dependiendo de
         # cómo lo serializó el cliente (JSON siempre usa strings como
-        # respuestas válidas (el frontend envía claves de objeto como strings).
-        user_answer = submission.user_answers.get(str(question_id))
+        # claves de objeto). Probamos ambas formas para no perder
+        # respuestas válidas.
+        user_answer = submission.user_answers.get(question_id)
+        if user_answer is None:
+            user_answer = submission.user_answers.get(str(question_id))
 
         # Valida de forma robusta (letra o texto, case/acentos/espacios) para
         # que la nota sea REAL y coincida con la que ve el estudiante.

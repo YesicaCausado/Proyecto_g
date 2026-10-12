@@ -19,6 +19,8 @@ from app.db.database import (
 from app.api import auth
 from app.api import chat
 from app.api import expert_bot
+from app.api import bot_documents
+from app.api import neurobot_assignments
 from app.api import classroom
 from app.api import stats
 from app.api import conversations
@@ -29,14 +31,17 @@ from app.api import messages
 from app.api import super_stats
 from app.api import teacher_stats
 from app.api import teacher_materials
+from app.api import student_materials
 from app.api import teacher_evaluations
+from app.api import student_evaluations
+from app.api import consents
 from app.api import teacher_reports
 from app.api import teacher_ai
-from app.api import access
 from app.api import admin_users
 from app.api import notifications
 from app.api import admin_bots
 from app.api import integrations
+from app.api import voice
 
 
 # ============================================================
@@ -107,6 +112,14 @@ def _apply_schema_and_migrations():
             bind=engine
         )
 
+        # SQLite local: create_all no agrega columnas nuevas a tablas que ya
+        # existen; se completan aquí para que la base de desarrollo no quede
+        # desincronizada. En PostgreSQL las columnas se agregan con las
+        # migraciones de backend/migrations/ (Supabase).
+        if engine.dialect.name == "sqlite":
+            from app.db.migrate import _add_missing_sqlite_columns
+            _add_missing_sqlite_columns(engine)
+
         print("[DB] Schema inicializado correctamente.")
 
     except Exception as exc:
@@ -115,6 +128,26 @@ def _apply_schema_and_migrations():
             "[DB] ERROR inicializando schema:",
             repr(exc),
         )
+
+
+# ============================================================
+# CLAVE DE FIRMA DE LOS TOKENS
+# ============================================================
+
+# PyJWT rechaza una clave vacía (el inicio de sesión respondería 500) y
+# recomienda al menos 32 bytes para HS256. Se informa en el log del servidor
+# al arrancar, sin mostrar nunca la clave.
+_secret_len = len(settings.SECRET_KEY.encode("utf-8"))
+if _secret_len == 0:
+    print(
+        "[SEGURIDAD] ERROR: SECRET_KEY no está configurada. "
+        "El inicio de sesión fallará hasta definirla en las variables de entorno."
+    )
+elif _secret_len < 32:
+    print(
+        f"[SEGURIDAD] AVISO: SECRET_KEY tiene {_secret_len} bytes; "
+        "se recomiendan al menos 32 para HS256."
+    )
 
 
 # ============================================================
@@ -192,8 +225,22 @@ app.include_router(
 # /api/v1/bots/...
 # ------------------------------------------------------------
 
+# Asignación, «Mis NeuroBots» y resultados: ANTES de expert_bot para que
+# /bots/assigned-to-me no lo capture /bots/{bot_id}.
+app.include_router(
+    neurobot_assignments.router,
+    prefix="/api/v1/bots",
+)
+
 app.include_router(
     expert_bot.router,
+    prefix="/api/v1/bots",
+)
+
+# Documentos de la base de conocimiento de cada NeuroBot:
+# /api/v1/bots/{bot_id}/documents...
+app.include_router(
+    bot_documents.router,
     prefix="/api/v1/bots",
 )
 
@@ -307,6 +354,11 @@ app.include_router(
     prefix="/api/v1",
 )
 
+app.include_router(
+    student_materials.router,
+    prefix="/api/v1",
+)
+
 
 # ------------------------------------------------------------
 # TEACHER EVALUATIONS
@@ -314,6 +366,18 @@ app.include_router(
 
 app.include_router(
     teacher_evaluations.router,
+    prefix="/api/v1",
+)
+
+# Evaluaciones del estudiante: /api/v1/student/evaluations...
+app.include_router(
+    student_evaluations.router,
+    prefix="/api/v1",
+)
+
+# Consentimientos de cámara y micrófono: /api/v1/consents...
+app.include_router(
+    consents.router,
     prefix="/api/v1",
 )
 
@@ -334,16 +398,6 @@ app.include_router(
 
 app.include_router(
     teacher_reports.router,
-    prefix="/api/v1",
-)
-
-
-# ------------------------------------------------------------
-# ACCESS
-# ------------------------------------------------------------
-
-app.include_router(
-    access.router,
     prefix="/api/v1",
 )
 
@@ -384,6 +438,16 @@ app.include_router(
 
 app.include_router(
     integrations.router,
+    prefix="/api/v1",
+)
+
+
+# ------------------------------------------------------------
+# VOZ DEL TUTOR (Azure Speech por el servidor)
+# ------------------------------------------------------------
+
+app.include_router(
+    voice.router,
     prefix="/api/v1",
 )
 

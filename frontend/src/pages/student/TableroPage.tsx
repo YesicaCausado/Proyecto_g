@@ -4,6 +4,7 @@ import {
   MessageCircle, Send, Paperclip, ThumbsUp, Loader2,
 } from 'lucide-react';
 import api from '../../services/api';
+import { downloadStudentMaterial } from './materialDownload';
 
 type PostType = 'anuncio' | 'tarea' | 'recordatorio' | 'enlace' | 'material';
 
@@ -26,7 +27,7 @@ interface Post {
   reactions: number;
   userReacted: boolean;
   comments: Comment[];
-  attachments: string[];
+  attachments: { id: number | null; name: string; url?: string }[];
   dueDate?: string;
 }
 
@@ -59,7 +60,9 @@ function mapPost(raw: any): Post {
     reactions:   raw.reactions_count ?? 0,
     userReacted: raw.user_reacted ?? false,
     comments:    (raw.comments ?? []).map(mapComment),
-    attachments: (raw.attachments ?? []).map((a: any) => typeof a === 'string' ? a : (a.name ?? a.url ?? '')),
+    attachments: (raw.attachments ?? []).map((a: any) => (typeof a === 'string'
+      ? (a.startsWith('http') ? { id: null, name: 'Abrir enlace', url: a } : { id: null, name: a })
+      : { id: a.id ?? null, name: a.name ?? 'Adjunto' })),
     dueDate:     raw.due_date ?? undefined,
   };
 }
@@ -251,23 +254,22 @@ export default function TableroPage() {
                   {/* Adjuntos */}
                   {post.attachments.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {post.attachments.map(a => (
-                        a.startsWith('http') ? (
-                          <a key={a}
-                            href={a}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#787774] hover:bg-[#E9E9E7] transition-colors">
-                            <Paperclip className="w-3 h-3" />
-                            Abrir enlace
-                          </a>
-                        ) : (
-                          <span key={a}
-                            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#787774]">
-                            <Paperclip className="w-3 h-3" />
-                            {a}
-                          </span>
-                        )
+                      {post.attachments.map((a, idx) => a.url ? (
+                        <a key={`u-${idx}`} href={a.url} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#787774] hover:bg-[#E9E9E7]">
+                          <Paperclip className="w-3 h-3" /> {a.name}
+                        </a>
+                      ) : a.id != null ? (
+                        <button key={`m-${a.id}-${idx}`}
+                          onClick={() => downloadStudentMaterial(a.id as number, a.name).catch(() => window.alert('No fue posible descargar el adjunto.'))}
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#2E6FDB] hover:bg-[#EEF3FD]">
+                          <Paperclip className="w-3 h-3" /> {a.name}
+                        </button>
+                      ) : (
+                        <span key={`n-${idx}`} title="Adjunto sin archivo guardado"
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md text-xs text-[#AEADAB]">
+                          <Paperclip className="w-3 h-3" /> {a.name}
+                        </span>
                       ))}
                     </div>
                   )}

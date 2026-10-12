@@ -171,7 +171,7 @@ export default function SectionInstitutions() {
               <div ref={neuronFloatRef} className="inst-neuron-chip">
                 <div ref={neuronInnerRef} className="inst-neuron-3d">
                   {inView && (
-                    <RobotCanvas robotState="idle" transparent className="h-full w-full" />
+                    <RobotCanvas robotState="idle" transparent lowPower className="h-full w-full" />
                   )}
                 </div>
               </div>

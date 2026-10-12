@@ -8,6 +8,9 @@ import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import { useVoiceTutor } from "../../hooks/useVoiceTutor";
+import { useConsents, type ConsentType } from "../../hooks/useConsents";
+import ConsentModal from "../../components/ConsentModal";
+import { ProgressBar, StatusBadge, type NeuroBotProgress } from "../../components/neurobots/progress";
 import CognitiveDashboard from "../../components/CognitiveDashboard";
 import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
@@ -312,12 +315,19 @@ export default function ChatPage() {
   const skillParam    = searchParams.get("skill");
   const botIdParam    = searchParams.get("bot_id");
   const botNameParam  = searchParams.get("bot_name");
+  // Retomar una conversación guardada con el NeuroBot (desde «Mis NeuroBots»).
+  const conversationParam = Number(searchParams.get("conversation_id")) || null;
 
   // Competencia activa por subruta (/chat/:slug) — "Competencia → Neuro-Chat".
   const routeCompetency = findCompetency(slug);
 
   // If bot_id is present (teacher testing their own bot), start directly
   const isCustomBot = !!botIdParam;
+  // Tema de la sesión con un NeuroBot: el mismo en /chat/start y /chat/message
+  // para que los mensajes queden en la sesión asociada al bot.
+  const botTopic = botIdParam
+    ? (skillParam ? decodeURIComponent(skillParam) : botNameParam ? decodeURIComponent(botNameParam) : 'General')
+    : null;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -331,6 +341,8 @@ export default function ChatPage() {
   const [selectedSkill, setSelectedSkill] = useState<string>(skillParam || routeCompetency?.key || "");
   const [showNewChatPicker, setShowNewChatPicker] = useState(false);
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
+  // Progreso real del estudiante con el NeuroBot asignado (null si no está asignado).
+  const [botProgress, setBotProgress] = useState<NeuroBotProgress | null>(null);
   const [showDashboard, setShowDashboard] = useState(!isCustomBot);
   const [quizSuggested, setQuizSuggested] = useState(false);
   const [freeInput, setFreeInput] = useState("");
@@ -343,6 +355,39 @@ export default function ChatPage() {
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
+  // Consentimiento previo: la cámara y el micrófono solo se encienden con un
+  // consentimiento vigente registrado en el backend.
+  const consents = useConsents();
+  const [consentPrompt, setConsentPrompt] = useState<ConsentType | null>(null);
+  const [consentNotice, setConsentNotice] = useState("");
+
+  const activateDevice = (type: ConsentType) => {
+    setConsentNotice("");
+    if (type === "camara_facial") facial.startCamera();
+    else voice.startMic();
+  };
+
+  const requestDevice = (type: ConsentType) => {
+    if (consents.granted(type)) activateDevice(type);
+    else setConsentPrompt(type);
+  };
+
+  const acceptConsent = async (version: string) => {
+    if (!consentPrompt) return;
+    const type = consentPrompt;
+    await consents.accept(type, version);
+    setConsentPrompt(null);
+    activateDevice(type);
+  };
+
+  const declineConsent = () => {
+    if (consentPrompt) {
+      setConsentNotice(consentPrompt === "camara_facial"
+        ? "No se activó la cámara: el consentimiento no fue aceptado."
+        : "No se activó el micrófono: el consentimiento no fue aceptado.");
+    }
+    setConsentPrompt(null);
+  };
 
   // Tutor de Voz — STT escucha al usuario, TTS responde en voz alta
   const voiceTutor = useVoiceTutor(async (transcript) => {
@@ -376,16 +421,26 @@ export default function ChatPage() {
     if (skillParam && !sessionActive) setSelectedSkill(skillParam);
   }, [skillParam]);
 
-  // Auto-start when coming from teacher "Probar" button (?bot_id=...)
+  // Auto-start con ?bot_id=... (NeuroBot asignado o «Probar» del profesor).
+  // Con ?conversation_id=... se retoma la conversación guardada.
   useEffect(() => {
     if (botIdParam && !sessionActive && !sending) {
       const topic = skillParam ? decodeURIComponent(skillParam)
         : botNameParam ? decodeURIComponent(botNameParam)
         : 'General';
       setSelectedSkill(topic);
-      startSession(topic);
+      if (conversationParam) loadConversation(conversationParam);
+      else startSession(topic);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botIdParam]);
+
+  // Progreso guardado del NeuroBot asignado (404 si el bot no está asignado).
+  useEffect(() => {
+    if (!botIdParam) { setBotProgress(null); return; }
+    api.get(`/bots/assigned-to-me/${botIdParam}`, { params: { _t: Date.now() } })
+      .then(res => setBotProgress(res.data?.progress ?? null))
+      .catch(() => setBotProgress(null));
   }, [botIdParam]);
 
   /**
@@ -398,9 +453,7 @@ export default function ChatPage() {
   const startSession = async (skillKey: string, initialMessage?: string) => {
     const skill = SKILLS.find((s) => s.key === skillKey);
     // For custom bots, use the bot's subject as topic even if skill not in list
-    const topicForBot = botIdParam
-      ? (skillParam ? decodeURIComponent(skillParam) : botNameParam ? decodeURIComponent(botNameParam) : 'General')
-      : null;
+    const topicForBot = botTopic;
     const topic = topicForBot ?? skill?.topic;
     if (!topic) return;
     setSending(true);
@@ -475,6 +528,8 @@ export default function ChatPage() {
     try {
       setSessionActive(true);
       setLastResponse(data);
+      const startProgress = (data.metadata as { neurobot_progress?: NeuroBotProgress } | undefined)?.neurobot_progress;
+      if (startProgress) setBotProgress(startProgress);
       metrics.onBotMessageReceived();
       setMessages([{
         id: Date.now().toString(),
@@ -550,7 +605,9 @@ export default function ChatPage() {
       const skill = SKILLS.find((s) => s.key === (skillKeyOverride ?? selectedSkill));
       const res = await api.post<ChatMessageResponse>("/chat/message", {
         message: msgContent,
-        topic: skill?.topic ?? "Tema general",
+        topic: botTopic ?? skill?.topic ?? "Tema general",
+        // NeuroBot: el backend agrega al contexto los documentos del docente.
+        bot_id: botIdParam ? Number(botIdParam) : undefined,
         conversation_id: conversationId ?? undefined,
         cognitive_state: lastResponse?.cognitive_state || "normal",
         history: messages.slice(-10).map((m) => ({
@@ -636,6 +693,8 @@ export default function ChatPage() {
     // ── Paso 3: procesamiento de UI, separado de errores de red ──
     try {
       setLastResponse(data);
+      const msgProgress = (data.metadata as { neurobot_progress?: NeuroBotProgress } | undefined)?.neurobot_progress;
+      if (msgProgress) setBotProgress(msgProgress);
       metrics.onBotMessageReceived();
 
       setMessages((prev) => [
@@ -706,7 +765,10 @@ export default function ChatPage() {
       // Cache-busting: el adapter de GET cachea también listas vacías durante
       // 15s, lo que hacía que el historial saliera vacío justo después de crear
       // una conversación. `_t` fuerza una lectura fresca del servidor.
-      const res = await api.get<any>("/chat/conversations", { params: { _t: Date.now() } });
+      // Cada módulo ve solo su historial: con un NeuroBot, sus conversaciones;
+      // en Competencias, solo los chats sin NeuroBot.
+      const scope = botIdParam ? { bot_id: Number(botIdParam) } : { scope: "competencias" };
+      const res = await api.get<any>("/chat/conversations", { params: { ...scope, _t: Date.now() } });
       const list = res.data?.conversations ?? res.data ?? [];
       setConversations(Array.isArray(list) ? list : []);
     } catch (e) {
@@ -1002,6 +1064,23 @@ export default function ChatPage() {
   return (
     <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
       {newChatPicker}
+      {consentPrompt && (
+        <ConsentModal
+          type={consentPrompt}
+          state={consents.consents?.[consentPrompt] ?? null}
+          loadError={consents.error}
+          blockedMessage={consents.guardian?.blocked ? (consents.guardian.message ?? '') : ''}
+          onAccept={acceptConsent}
+          onDecline={declineConsent}
+          onRetry={consents.load}
+        />
+      )}
+      {consentNotice && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-[#191919] text-white text-xs rounded-lg px-4 py-2.5 shadow-lg">
+          <span>{consentNotice}</span>
+          <button onClick={() => setConsentNotice("")} className="text-[#AEADAB] hover:text-white" aria-label="Cerrar">×</button>
+        </div>
+      )}
       {/* Sidebar historial de chats (estilo ChatGPT) */}
       <ChatHistorySidebar
         conversations={conversations}
@@ -1050,7 +1129,7 @@ export default function ChatPage() {
                 <button
                   onClick={() => {
                     if (facial.errorMessage) facial.resetError();
-                    facial.isStreaming ? facial.stopCamera() : facial.startCamera();
+                    facial.isStreaming ? facial.stopCamera() : requestDevice("camara_facial");
                   }}
                   title={
                     facial.errorMessage ? facial.errorMessage
@@ -1094,7 +1173,7 @@ export default function ChatPage() {
                 <button
                   onClick={() => {
                     if (voice.errorMessage) voice.resetError();
-                    voice.isStreaming ? voice.stopMic() : voice.startMic();
+                    voice.isStreaming ? voice.stopMic() : requestDevice("microfono_voz");
                   }}
                   title={
                     voice.errorMessage ? voice.errorMessage
@@ -1169,6 +1248,19 @@ export default function ChatPage() {
             </button>
           </div>
         </div>
+
+        {botProgress && (
+          <div className="bg-[#FBFBFA] border-b border-[#E9E9E7] px-4 py-2 flex items-center gap-3 flex-shrink-0">
+            <span className="text-xs font-medium text-[#37352F] truncate">
+              NeuroBot asignado{botNameParam ? ` · ${decodeURIComponent(botNameParam)}` : ''}
+            </span>
+            <StatusBadge progress={botProgress} />
+            <div className="flex-1 max-w-xs"><ProgressBar progress={botProgress} compact /></div>
+            {botProgress.just_completed && (
+              <span className="text-xs font-medium text-[#0F7B6C]">¡Completaste la meta! Tu profesor ya puede ver tu resultado.</span>
+            )}
+          </div>
+        )}
 
         {/* Preview de cámara — cuadrito flotante esquina inferior derecha */}
         {facial.isStreaming && (

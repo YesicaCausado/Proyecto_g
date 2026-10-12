@@ -1,150 +1,122 @@
 """
-NeuroLearn AI - API de Notificaciones (MODIFICADO)
-===================================================
+NeuroLearn IA — Notificaciones persistentes del usuario autenticado.
 
-Actualizado para eliminar el sistema de licencias.
+    GET   /notifications                  Lista (más recientes primero) + no leídas
+    GET   /notifications/unread-count     Solo el contador (para la campana)
+    POST  /notifications/{id}/read        Marca una como leída (persiste)
+    POST  /notifications/read-all         Marca todas como leídas
+    GET   /notifications/preferences      Preferencias del perfil
+    PUT   /notifications/preferences
+
+Las notificaciones se crean desde los eventos reales del sistema
+(app/services/notification_service.py). Cada usuario solo ve y modifica las
+suyas. Para el estudiante, al consultar se evalúan además la racha y el
+rendimiento de sus quizzes; se guardan una sola vez por condición.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
+from __future__ import annotations
 
-from app.db.database import get_db
-from app.api.auth import get_current_user
-from app.models.user import User, UserRole
+import logging
+from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/notifications", tags=["Notificaciones"])
+from app.api.auth import get_current_user
+from app.db.database import get_db
+from app.models.notification import Notification
+from app.models.user import User
+from app.services import notification_service as svc
 
-
-# ── Esquemas ────────────────────────────────────────────────────────────────
-
-class NotificationBase(BaseModel):
-    id: str
-    type: str  # info, warning, error, success
-    title: str
-    message: str
-    icon: str
-    read: bool
-    created_at: str  # ISO format datetime string
-
-class NotificationCreate(NotificationBase):
-    user_id: int
-
-class NotificationResponse(NotificationBase):
-    id: int
-    user_id: int
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+logger = logging.getLogger(__name__)
+router = APIRouter(tags=["Notificaciones"])
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+class PreferencesPayload(BaseModel):
+    nueva_actividad: Optional[bool] = None
+    mensaje_directo: Optional[bool] = None
 
-@router.get("")
-def get_notifications(
+
+@router.get("/notifications")
+def list_notifications(
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    unread_only: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Retorna notificaciones contextuales del usuario autenticado.
-    NOTA: Ya no se bloquean notificaciones por licencia suspendida 
-    ya que el sistema ya no usa licencias.
-    """
     try:
-        notifs = _build_notifications(current_user, db)
-    except Exception:
-        notifs = [{
-            "id": "fallback",
-            "type": "info",
-            "title": "¡Bienvenido a NeuroLearn!",
-            "message": "Tu asistente Neuron está listo para ayudarte.",
-            "icon": "bot",
-            "read": False,
-            "created_at": datetime.utcnow().isoformat(),
-        }]
-    
-    return notifs
+        if svc.ensure_activity_notifications(db, current_user):
+            db.commit()
+    except Exception:  # la lista no depende de estas notificaciones derivadas
+        db.rollback()
+        logger.exception("No se pudieron evaluar racha/rendimiento del usuario %s", current_user.id)
+
+    q = db.query(Notification).filter(Notification.user_id == current_user.id)
+    if unread_only:
+        q = q.filter(Notification.is_read == False)  # noqa: E712
+    total = q.count()
+    rows = q.order_by(Notification.created_at.desc(), Notification.id.desc()).offset(offset).limit(limit).all()
+    return {
+        "notifications": [svc.serialize(n) for n in rows],
+        "unread_count": svc.unread_count(db, current_user.id),
+        "total": total,
+        "has_more": offset + len(rows) < total,
+    }
 
 
-def _build_notifications(current_user: User, db: Session) -> List[dict]:
-    """
-    Construye notificaciones contextuales basado en el rol y estado del usuario.
-    """
-    notifs = []
-    now = datetime.utcnow()
-    
-    # Notificaciones de bienvenida para nuevos usuarios
-    if current_user.created_at and (now - current_user.created_at).days < 1:
-        notifs.append({
-            "id": "welcome",
-            "type": "info",
-            "title": "¡Bienvenido a NeuroLearn!",
-            "message": "Comienza tu jornada explorando el tablero y descubriendo todas las herramientas disponibles.",
-            "icon": "bot",
-            "read": False,
-            "created_at": current_user.created_at.isoformat(),
-        })
-    
-    # Notificaciones específicas por rol
-    if current_user.role == UserRole.ESTUDIANTE.value:
-        # Notificaciones para estudiantes
-        notifs.extend(_get_student_notifications(current_user, db))
-    elif current_user.role == UserRole.PROFESOR.value:
-        # Notificaciones para profesores
-        notifs.extend(_get_teacher_notifications(current_user, db))
-    elif current_user.role == UserRole.SUPER_PROFESOR.value:
-        # Notificaciones para super profesores
-        notifs.extend(_get_super_teacher_notifications(current_user, db))
-    elif current_user.role == UserRole.ADMIN.value:
-        # Notificaciones para administradores
-        notifs.extend(_get_admin_notifications(current_user, db))
-    
-    # Notificaciones de sistema
-    notifs.extend(_get_system_notifications(current_user, db))
-    
-    return notifs
+@router.get("/notifications/unread-count")
+def get_unread_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return {"unread_count": svc.unread_count(db, current_user.id)}
 
 
-def _get_student_notifications(current_user: User, db: Session) -> List[dict]:
-    """Notificaciones específicas para estudiantes."""
-    notifs = []
-    # Ejemplo: notificaciones sobre tareas pendientes, etc.
-    # Implementación simplificada
-    return notifs
+@router.post("/notifications/read-all")
+def mark_all_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    updated = db.query(Notification).filter(
+        Notification.user_id == current_user.id, Notification.is_read == False,  # noqa: E712
+    ).update({Notification.is_read: True, Notification.read_at: svc.utcnow()}, synchronize_session=False)
+    db.commit()
+    return {"updated": updated, "unread_count": 0}
 
 
-def _get_teacher_notifications(current_user: User, db: Session) -> List[dict]:
-    """Notificaciones específicas para profesores."""
-    notifs = []
-    # Ejemplo: notificaciones sobre actividades para calificar, etc.
-    # Implementación simplificada
-    return notifs
+@router.post("/notifications/{notification_id}/read")
+def mark_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    n = db.query(Notification).filter(
+        Notification.id == notification_id, Notification.user_id == current_user.id).first()
+    if n is None:  # inexistente o de otro usuario: misma respuesta
+        raise HTTPException(status_code=404, detail="Notificación no encontrada")
+    if not n.is_read:
+        n.is_read = True
+        n.read_at = svc.utcnow()
+        db.commit()
+        db.refresh(n)
+    return {"notification": svc.serialize(n), "unread_count": svc.unread_count(db, current_user.id)}
 
 
-def _get_super_teacher_notifications(current_user: User, db: Session) -> List[dict]:
-    """Notificaciones específicas para super profesores."""
-    notifs = []
-    # Ejemplo: notificaciones sobre reportes institucionales, etc.
-    # Implementación simplificada
-    return notifs
+@router.get("/notifications/preferences")
+def get_preferences(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return svc.get_preferences(db, current_user.id)
 
 
-def _get_admin_notifications(current_user: User, db: Session) -> List[dict]:
-    """Notificaciones específicas para administradores."""
-    notifs = []
-    # Ejemplo: notificaciones sobre instituciones que necesitan atención, etc.
-    # Implementación simplificada
-    return notifs
-
-
-def _get_system_notifications(current_user: User, db: Session) -> List[dict]:
-    """Notificaciones de sistema aplicables a todos los usuarios."""
-    notifs = []
-    # Ejemplo: notificaciones de mantenimiento, actualizaciones, etc.
-    # Implementación simplificada
-    return notifs
-
-
+@router.put("/notifications/preferences")
+def update_preferences(
+    payload: PreferencesPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prefs = svc.set_preferences(db, current_user.id, payload.model_dump())
+    db.commit()
+    return prefs

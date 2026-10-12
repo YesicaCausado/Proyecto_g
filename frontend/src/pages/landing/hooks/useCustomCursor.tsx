@@ -35,17 +35,26 @@ export default function useCustomCursor() {
     let rx = -100, ry = -100;
     let raf = 0;
     let hover = false;
+    dot.style.transform = ring.style.transform = 'translate3d(-100px, -100px, 0)';
 
-    const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; };
-
+    // El bucle solo corre mientras el anillo alcanza al puntero; cuando
+    // el ratón se queda quieto se detiene (antes corría siempre).
     const loop = () => {
       rx += (mx - rx) * 0.16;
       ry += (my - ry) * 0.16;
       dot.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
       ring.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
-      raf = requestAnimationFrame(loop);
+      if (Math.abs(mx - rx) > 0.3 || Math.abs(my - ry) > 0.3) {
+        raf = requestAnimationFrame(loop);
+      } else {
+        raf = 0;
+      }
     };
-    raf = requestAnimationFrame(loop);
+
+    const onMove = (e: MouseEvent) => {
+      mx = e.clientX; my = e.clientY;
+      if (!raf) raf = requestAnimationFrame(loop);
+    };
 
     const onOver = (e: MouseEvent) => {
       const t = (e.target as HTMLElement)?.closest?.(INTERACTIVE);

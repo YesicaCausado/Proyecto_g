@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { institutionLabel } from '../../utils/institution';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useLicense } from '../../context/LicenseContext';
-import { planColor } from '../../styles/plan';
+import { THEME } from '../../styles/theme';
 import api from '../../services/api';
 import DashboardGeneral from './components/DashboardGeneral';
 import { TeachersTab, StudentsTab } from './components/UsersTabs';
 import NeuroAlertasTab from './components/NeuroAlertasTab';
 import GruposTab from './components/GruposTab';
 import ConfiguracionTab from './components/ConfiguracionTab';
-import LicenciaTab from './components/LicenciaTab';
 import ReportesTab from './components/ReportesTab';
 import NeuroBots from './components/NeuroBots';
 import MensajeriaTab from './components/MensajeriaTab';
@@ -18,10 +17,11 @@ import AuditoriaTab from './components/AuditoriaTab';
 import SeguridadTab from './components/SeguridadTab';
 import ProfileSettings from '../../components/ProfileSettings';
 import NeuronWelcome from '../../components/NeuronWelcome';
+import NotificationBell from '../../components/NotificationBell';
 import {
   ShieldCheck, LogOut, Users, GraduationCap, LayoutDashboard,
-  BrainCircuit, Settings, Bell, BookOpen, Bot, FileText,
-  MessageSquare, Calendar, Shield, CreditCard, Lock, ChevronRight,
+  BrainCircuit, Settings, BookOpen, Bot, FileText,
+  MessageSquare, Calendar, Shield, Lock, ChevronRight,
   Menu, X, UserRound
 } from 'lucide-react';
 import { navItemStyle } from '../../styles/sidebar';
@@ -51,7 +51,6 @@ const NAV_SECTIONS = [
     label: 'INSTITUCIÓN',
     items: [
       { id: 'configuracion', label: 'Configuración', icon: Settings },
-      { id: 'licencia',      label: 'Licencia',      icon: CreditCard },
       { id: 'seguridad',     label: 'Seguridad',     icon: Lock },
     ],
   },
@@ -75,86 +74,55 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   calendario:    { title: 'Calendario Institucional', subtitle: 'Eventos, exámenes y fechas importantes' },
   auditoria:     { title: 'Auditoría',             subtitle: 'Registro de todas las acciones del sistema' },
   configuracion: { title: 'Configuración',         subtitle: 'Datos y personalización de la institución' },
-  licencia:      { title: 'Gestión de Licencia',   subtitle: 'Plan, uso y renovación de licencia' },
-  seguridad:     { title: 'Seguridad',             subtitle: 'Sesiones, 2FA e historial de accesos' },
+  seguridad:     { title: 'Seguridad',             subtitle: 'Contraseña, sesiones e historial de accesos' },
   perfil:        { title: 'Mi Perfil',             subtitle: 'Tu información personal y preferencias' },
 };
 
 export default function SuperDashboard() {
   const { user, logout } = useAuth();
-  const { licenseType } = useLicense();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [license, setLicense] = useState<any>(null);
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(
+    requestedTab && requestedTab in TAB_TITLES ? requestedTab : 'dashboard');
   const [teachers, setTeachers] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [accessNotice, setAccessNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      api.get('/super/license-usage').then(r => r.data).catch(() => null),
-      api.get('/super/teachers').then(r => r.data).catch(() => []),
-    ]).then(([licenseData, teachersData]) => {
-      setLicense(licenseData);
-      setTeachers(teachersData);
-    });
+    api.get('/super/teachers')
+      .then(r => setTeachers(r.data))
+      .catch(() => setTeachers([]));
   }, []);
+
+  // Enlaces de las notificaciones (/super?tab=...): abren la pestaña indicada
+  // también cuando el panel ya está abierto.
+  useEffect(() => {
+    if (requestedTab && requestedTab in TAB_TITLES) setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
-  // Plan vigente: prioriza el dato del endpoint /super/license-usage y, como
-  // respaldo, el LicenseContext (ambos exponen license_type).
-  const plan = planColor(license?.license_type ?? licenseType);
-
-  // ── Habilitación de módulos según licencia (1.2.1.6 / 1.2.1.10 / 1.2.1.11) ──
-  const ALL_TAB_IDS = NAV_SECTIONS.flatMap(s => s.items.map(i => i.id));
-  // "perfil" es una función común a todos los roles y planes: nunca se bloquea.
-  const ALWAYS_ENABLED_IDS = new Set<string>(['perfil']);
-  // Si el backend no entrega super_modules (versión antigua), dejamos todo habilitado.
-  const enabledTabIds = new Set<string>(license?.super_modules?.length
-    ? [...license.super_modules, ...ALWAYS_ENABLED_IDS]
-    : ALL_TAB_IDS);
-  const isModuleLocked = (id: string) => !enabledTabIds.has(id);
-
-  // Listado de módulos habilitados/bloqueados por licencia — solo se muestra
-  // al final del Dashboard (no en todas las páginas) para no molestar al usuario.
-  const dashboardModules = {
-    licenseType:  license?.license_type ?? null,
-    enabled:      ALL_TAB_IDS.filter(id => enabledTabIds.has(id)),
-    locked:       ALL_TAB_IDS.filter(id => !enabledTabIds.has(id)),
-  };
-
-  // Muestra del listado de módulos habilitados por licencia (1.2.1.6).
   const currentMeta = TAB_TITLES[activeTab] ?? { title: activeTab, subtitle: '' };
 
   const handleNav = (id: string) => {
-    if (isModuleLocked(id)) {
-      setAccessNotice(`«${TAB_TITLES[id]?.title ?? id}» no está disponible en tu licencia ${license?.license_type ? `«${license.license_type}»` : 'actual'}. Actualiza tu plan para desbloquearlo.`);
-      return;
-    }
-    setAccessNotice(null);
     setActiveTab(id);
     setSidebarOpen(false);
   };
 
   const NavButton = ({ id, label, icon: Icon, badge }: any) => {
-    const locked = isModuleLocked(id);
+    const tokens = navItemStyle('light', activeTab === id);
     return (
       <button
         key={id}
-        aria-disabled={locked}
-        title={locked ? `No disponible en tu licencia ${license?.license_type ? `«${license.license_type}»` : ''}` : label}
+        title={label}
         onClick={() => handleNav(id)}
-        className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${
-          navItemStyle('light', activeTab === id, { disabled: locked, planType: licenseType }).stateClass
-        }`}
-        style={navItemStyle('light', activeTab === id, { disabled: locked, planType: licenseType }).style}
+        className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${tokens.stateClass}`}
+        style={tokens.style}
       >
-        <Icon className={`w-4 h-4 flex-shrink-0 ${navItemStyle('light', activeTab === id, { disabled: locked, planType: licenseType }).iconClass}`} />
+        <Icon className={`w-4 h-4 flex-shrink-0 ${tokens.iconClass}`} />
         <span className="flex-1 text-left truncate">{label}</span>
-        {locked && <Lock className="w-3.5 h-3.5 text-[#D5D4D2] flex-shrink-0" />}
-        {!locked && badge === 'red' && <span className="w-2 h-2 rounded-full bg-[#E03E3E] animate-pulse flex-shrink-0" />}
-        {!locked && activeTab === id && <ChevronRight className="w-3 h-3 text-[#9B9A97] flex-shrink-0" />}
+        {badge === 'red' && <span className="w-2 h-2 rounded-full bg-[#E03E3E] animate-pulse flex-shrink-0" />}
+        {activeTab === id && <ChevronRight className="w-3 h-3 text-[#9B9A97] flex-shrink-0" />}
       </button>
     );
   };
@@ -167,7 +135,7 @@ export default function SuperDashboard() {
           <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white flex-shrink-0" />
           <div>
             <p className="text-[13px] font-bold text-[#191919] leading-tight">NeuroLearn</p>
-            <p className="text-[10px] text-[#787774]">Panel Institucional</p>
+            <p className="text-[10px] text-[#787774] truncate" title={institutionLabel(user)}>{institutionLabel(user)}</p>
           </div>
         </div>
 
@@ -179,12 +147,7 @@ export default function SuperDashboard() {
           </div>
           <div className="overflow-hidden flex-1">
             <p className="text-[12.5px] font-semibold text-[#37352F] truncate leading-tight">{user?.full_name}</p>
-            <div className="flex items-center gap-1.5">
-              <p className="text-[10px] text-[#787774] truncate">{user?.role?.replace('_', ' ')}</p>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${plan.className}`}>
-                {plan.label}
-              </span>
-            </div>
+            <p className="text-[10px] text-[#787774] truncate">{user?.role?.replace('_', ' ')}</p>
           </div>
           <ShieldCheck className="w-3.5 h-3.5 text-[#6940A5] flex-shrink-0" />
         </div>
@@ -206,13 +169,7 @@ export default function SuperDashboard() {
 
       {/* Pie del sidebar */}
       <div className="px-2 pb-3 pt-2 border-t border-[#E9E9E7] space-y-0.5">
-        <button
-          onClick={() => handleNav('alertas')}
-          className="w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] rounded-md transition-colors"
-        >
-          <Bell className="w-4 h-4" />
-          <span>Notificaciones</span>
-        </button>
+        <NotificationBell variant="sidebar" />
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-[#787774] hover:bg-[#FDEEEE] hover:text-[#E03E3E] rounded-md transition-colors"
@@ -228,7 +185,7 @@ export default function SuperDashboard() {
     <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
 
       {/* ══ SIDEBAR DESKTOP ══ */}
-      <aside className="hidden lg:flex lg:flex-col w-60 border-r border-[#E9E9E7] flex-shrink-0" style={{ background: plan.background }}>
+      <aside className="hidden lg:flex lg:flex-col w-60 border-r border-[#E9E9E7] flex-shrink-0" style={{ background: THEME.background }}>
         <SidebarContent />
       </aside>
 
@@ -255,7 +212,7 @@ export default function SuperDashboard() {
         <div className="lg:hidden fixed inset-0 z-30 bg-black/30" onClick={() => setSidebarOpen(false)}>
           <div
             className="absolute left-0 top-12 bottom-0 w-64 border-r border-[#E9E9E7] flex flex-col overflow-y-auto"
-            style={{ background: plan.background }}
+            style={{ background: THEME.background }}
             onClick={e => e.stopPropagation()}
           >
             <SidebarContent />
@@ -285,21 +242,9 @@ export default function SuperDashboard() {
         <main className="flex-1 overflow-y-auto">
           <div className="pt-12 lg:pt-0 p-4 sm:p-6 xl:p-8 max-w-7xl mx-auto">
 
-            {/* Aviso de acceso a módulo no disponible (1.2.1.10) */}
-            {accessNotice && (
-              <div className="mb-4 bg-[#FDEEEE] border border-[#F4BDBD] rounded-lg p-4 flex items-start gap-3">
-                <Lock className="w-5 h-5 text-[#E03E3E] flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-semibold text-[#E03E3E]">Módulo no disponible en tu licencia</p>
-                  <p className="text-sm text-[#E03E3E]/80 mt-0.5">{accessNotice}</p>
-                </div>
-                <button onClick={() => setAccessNotice(null)} className="text-[#787774] hover:text-[#37352F] text-sm">Cerrar</button>
-              </div>
-            )}
-
-            {activeTab === 'dashboard'    && <DashboardGeneral license={license} onNavigate={setActiveTab} modules={dashboardModules} />}
-            {activeTab === 'profesores'   && <TeachersTab license={license} />}
-            {activeTab === 'estudiantes'  && <StudentsTab license={license} teachers={teachers} />}
+            {activeTab === 'dashboard'    && <DashboardGeneral onNavigate={setActiveTab} />}
+            {activeTab === 'profesores'   && <TeachersTab />}
+            {activeTab === 'estudiantes'  && <StudentsTab teachers={teachers} />}
             {activeTab === 'grupos'       && <GruposTab />}
             {activeTab === 'neurobots'    && <NeuroBots />}
             {activeTab === 'alertas'      && <NeuroAlertasTab />}
@@ -308,9 +253,8 @@ export default function SuperDashboard() {
             {activeTab === 'calendario'   && <CalendarioTab />}
             {activeTab === 'auditoria'    && <AuditoriaTab />}
             {activeTab === 'configuracion' && <ConfiguracionTab />}
-            {activeTab === 'licencia'     && <LicenciaTab license={license} />}
             {activeTab === 'seguridad'    && <SeguridadTab />}
-            {activeTab === 'perfil'       && <ProfileSettings role="super_profesor" prefsStorageKey="super_notifications" />}
+            {activeTab === 'perfil'       && <ProfileSettings role="super_profesor" />}
 
           </div>
         </main>

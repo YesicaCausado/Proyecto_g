@@ -24,6 +24,17 @@ if (import.meta.env.DEV) {
   };
 }
 
+// La app usa HashRouter (rutas tras «#»). Los enlaces enviados por correo
+// antes de la corrección llegaban como /reset-password?token=… (sin «#») y
+// abrían la landing: se reescriben a /#/reset-password?token=… sin recargar.
+{
+  const { pathname, search, hash } = window.location;
+  const routes = ['/reset-password', '/login', '/forgot-password'];
+  if (!hash && routes.includes(pathname.replace(/\/+$/, ''))) {
+    window.history.replaceState(null, '', `/#${pathname.replace(/\/+$/, '')}${search}`);
+  }
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

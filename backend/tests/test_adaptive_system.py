@@ -23,6 +23,7 @@ Ejecutar:
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import tests.entorno_pruebas  # noqa: E402,F401  (BD en memoria, correo a consola, sin IA real)
 
 from datetime import datetime
 from sqlalchemy import create_engine

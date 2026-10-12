@@ -1,20 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Lock, Shield, Smartphone, LogOut, Eye, EyeOff, CheckCircle, AlertTriangle, Clock, Globe, Monitor } from 'lucide-react';
-import api from '../../../services/api';
+import { Lock, LogOut, Eye, EyeOff, CheckCircle, AlertTriangle, Clock, Globe, Loader2 } from 'lucide-react';
+import api, { invalidateApiCache } from '../../../services/api';
 
+// Usuarios de la institución que iniciaron sesión en las últimas 24 h.
 interface ActiveSession {
-  id: number; device: string; icon: any; ip: string;
-  location: string; lastActive: string; current: boolean;
+  id: number; user: string; role: string; lastActive: string; current: boolean; revoked: boolean;
 }
 
 interface LoginEntry {
-  date: string; ip: string; browser: string; status: string; location: string;
+  date: string; user: string; ip: string; status: 'exitoso' | 'fallido';
 }
+
+const ROLE_LABEL: Record<string, string> = {
+  super_profesor: 'Súper Profesor', profesor: 'Profesor', estudiante: 'Estudiante', admin: 'Administrador',
+};
+
+const fmtDate = (iso: string) => (iso ?? '').replace('T', ' ').slice(0, 16);
 
 export default function SeguridadTab() {
   const [sessions, setSessions]           = useState<ActiveSession[]>([]);
   const [loginHistory, setLoginHistory]   = useState<LoginEntry[]>([]);
-  const twoFAEnabled                      = false;
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [pwForm, setPwForm]               = useState({ current: '', newPw: '', confirm: '' });
   const [showCurrent, setShowCurrent]     = useState(false);
@@ -23,44 +28,74 @@ export default function SeguridadTab() {
   const [pwError, setPwError]             = useState('');
   const [pwLoading, setPwLoading]         = useState(false);
 
-  useEffect(() => {
-    api.get('/super/stats/security')
+  const [loadError, setLoadError]         = useState('');
+  const [busy, setBusy]                   = useState<number | 'me' | null>(null);
+  const [sessionMsg, setSessionMsg]       = useState('');
+
+  const loadSecurity = () => {
+    setLoadError('');
+    return api.get('/super/stats/security')
       .then(r => {
         const raw = r.data ?? {};
-        // Map active_sessions: assign icon based on device string
         setSessions(
-          (raw.active_sessions ?? []).map((s: any, i: number): ActiveSession => ({
-            id:         s.id ?? i + 1,
-            device:     s.user ?? s.device ?? '—',
-            icon:       (s.device ?? '').toLowerCase().includes('mobile') ? Smartphone : Monitor,
-            ip:         s.ip ?? s.ip_address ?? '—',
-            location:   s.location ?? '—',
-            lastActive: s.last_login ?? s.last_active ?? '—',
-            current:    s.current ?? i === 0,
+          (raw.active_sessions ?? []).map((s: any): ActiveSession => ({
+            id:         s.id,
+            user:       s.user ?? '—',
+            role:       ROLE_LABEL[s.role] ?? s.role ?? '',
+            lastActive: fmtDate(s.last_login),
+            current:    Boolean(s.current),
+            revoked:    Boolean(s.revoked),
           }))
         );
-        // Map login_history
         setLoginHistory(
           (raw.login_history ?? []).map((h: any): LoginEntry => ({
-            date:     (h.created_at ?? h.date ?? '').replace('T', ' ').slice(0, 16),
-            ip:       h.ip ?? h.ip_address ?? '—',
-            browser:  h.browser ?? '—',
-            status:   h.action === 'login' ? 'exitoso' : (h.status ?? 'exitoso'),
-            location: h.location ?? '—',
+            date:   fmtDate(h.created_at),
+            user:   h.user ?? '—',
+            ip:     h.ip ?? '—',
+            // Antes los intentos fallidos aparecían como «exitoso».
+            status: h.action === 'login_failed' ? 'fallido' : 'exitoso',
           }))
         );
       })
-      .catch(() => { setSessions([]); setLoginHistory([]); });
-  }, []);
-
-  const revokeSession = (_id: number) => {
-    // No existe endpoint que revoque una sesión remota; se notifica en vez de
-    // fingir un cierre que no se persiste en el servidor.
-    window.alert('No se puede cerrar la sesión de forma remota: esta acción aún no está disponible en el servidor.');
+      .catch(err => {
+        setSessions([]); setLoginHistory([]);
+        setLoadError(err?.response?.data?.detail || 'No se pudo cargar la información de seguridad.');
+      });
   };
 
-  const revokeAllSessions = () => {
-    window.alert('No se pueden cerrar las demás sesiones: esta acción aún no está disponible en el servidor.');
+  useEffect(() => { loadSecurity(); }, []);
+
+  // Cierre real: los tokens de ese usuario dejan de funcionar en el servidor.
+  const revokeSession = async (s: ActiveSession) => {
+    if (!window.confirm(`¿Cerrar todas las sesiones de ${s.user}? Tendrá que volver a iniciar sesión.`)) return;
+    setBusy(s.id);
+    setSessionMsg('');
+    try {
+      await api.post(`/super/users/${s.id}/revoke-sessions`);
+      invalidateApiCache('/super/stats/security');
+      setSessionMsg(`Se cerraron las sesiones de ${s.user}.`);
+      await loadSecurity();
+    } catch (err: any) {
+      setSessionMsg(err?.response?.data?.detail || 'No se pudo cerrar la sesión.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Cierra las sesiones propias en los demás dispositivos; este sigue conectado.
+  const revokeMyOtherSessions = async () => {
+    if (!window.confirm('¿Cerrar tu sesión en todos los demás dispositivos?')) return;
+    setBusy('me');
+    setSessionMsg('');
+    try {
+      const { data } = await api.post('/auth/logout-all');
+      if (data?.access_token) localStorage.setItem('token', data.access_token);
+      setSessionMsg('Se cerró tu sesión en los demás dispositivos.');
+    } catch (err: any) {
+      setSessionMsg(err?.response?.data?.detail || 'No se pudieron cerrar tus otras sesiones.');
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -108,39 +143,44 @@ export default function SeguridadTab() {
         </div>
       )}
 
-      {/* ── Sesiones activas ── */}
+      {/* ── Sesiones ── */}
       <section className="bg-white border border-[#E9E9E7] rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
           <h3 className="font-semibold text-[#191919] flex items-center gap-2">
-            <Globe className="w-4 h-4 text-[#787774]" /> Sesiones activas
+            <Globe className="w-4 h-4 text-[#787774]" /> Usuarios conectados (últimas 24 h)
           </h3>
-          {sessions.filter(s => !s.current).length > 0 && (
-            <button onClick={revokeAllSessions}
-              className="flex items-center gap-1.5 text-xs text-[#E03E3E] hover:underline font-medium">
-              <LogOut className="w-3.5 h-3.5" /> Cerrar todas las demás
-            </button>
-          )}
+          <button onClick={revokeMyOtherSessions} disabled={busy === 'me'}
+            className="flex items-center gap-1.5 text-xs text-[#E03E3E] hover:underline font-medium disabled:opacity-50">
+            {busy === 'me' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
+            Cerrar mis otras sesiones
+          </button>
         </div>
+        <p className="text-xs text-[#787774] mb-4">
+          Si un usuario dejó la sesión abierta en un equipo compartido, puedes cerrársela aquí.
+        </p>
+        {sessionMsg && <p className="text-xs text-[#37352F] bg-[#F7F6F3] rounded-md px-3 py-2 mb-3">{sessionMsg}</p>}
+        {loadError && <p className="text-xs text-[#E03E3E] mb-3">{loadError}</p>}
         <div className="space-y-3">
+          {sessions.length === 0 && !loadError && (
+            <p className="text-xs text-[#AEADAB]">Nadie de la institución ha iniciado sesión en las últimas 24 horas.</p>
+          )}
           {sessions.map(s => (
             <div key={s.id} className={`flex items-center justify-between p-3.5 rounded-lg border ${s.current ? 'border-[#A6DDD6] bg-[#EEF8F6]' : 'border-[#E9E9E7] bg-white'}`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-md flex items-center justify-center ${s.current ? 'bg-[#0F7B6C]/10' : 'bg-[#F7F6F3]'}`}>
-                  <s.icon className={`w-5 h-5 ${s.current ? 'text-[#0F7B6C]' : 'text-[#787774]'}`} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-[#191919]">
-                    {s.device} {s.current && <span className="ml-2 text-[10px] bg-[#0F7B6C] text-white px-1.5 py-0.5 rounded-full font-bold">Actual</span>}
-                  </p>
-                  <p className="text-xs text-[#787774]">{s.ip} · {s.location} · {s.lastActive}</p>
-                </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[#191919]">
+                  {s.user}
+                  {s.current && <span className="ml-2 text-[10px] bg-[#0F7B6C] text-white px-1.5 py-0.5 rounded-full font-bold">Tú</span>}
+                </p>
+                <p className="text-xs text-[#787774]">{s.role} · último inicio {s.lastActive}</p>
               </div>
-              {!s.current && (
-                <button onClick={() => revokeSession(s.id)}
-                  className="flex items-center gap-1 text-xs text-[#787774] hover:text-[#E03E3E] transition-colors font-medium">
-                  <LogOut className="w-3.5 h-3.5" /> Cerrar
+              {!s.current && (s.revoked ? (
+                <span className="text-xs text-[#AEADAB]">Sesión cerrada</span>
+              ) : (
+                <button onClick={() => revokeSession(s)} disabled={busy === s.id}
+                  className="flex items-center gap-1 text-xs text-[#787774] hover:text-[#E03E3E] transition-colors font-medium disabled:opacity-50">
+                  {busy === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />} Cerrar sesión
                 </button>
-              )}
+              ))}
             </div>
           ))}
         </div>
@@ -205,30 +245,6 @@ export default function SeguridadTab() {
         )}
       </section>
 
-      {/* ── Autenticación en dos pasos ── */}
-      <section className="bg-white border border-[#E9E9E7] rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-start gap-3">
-            <div className={`w-9 h-9 rounded-md flex items-center justify-center ${twoFAEnabled ? 'bg-[#EEF8F6]' : 'bg-[#F7F6F3]'}`}>
-              <Shield className={`w-5 h-5 ${twoFAEnabled ? 'text-[#0F7B6C]' : 'text-[#787774]'}`} />
-            </div>
-            <div>
-              <h3 className="font-semibold text-[#191919]">Autenticación en dos pasos (2FA)</h3>
-              <p className="text-xs text-[#787774] mt-0.5">Agrega una capa adicional de seguridad con una app como Google Authenticator.</p>
-              <p className="text-xs text-[#787774] mt-1 flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Aún no disponible en esta versión.
-              </p>
-            </div>
-          </div>
-          <button
-            disabled
-            className={`relative inline-flex h-6 w-11 items-center rounded-full opacity-40 cursor-not-allowed ${twoFAEnabled ? 'bg-[#0F7B6C]' : 'bg-[#E9E9E7]'}`}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${twoFAEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-        </div>
-      </section>
-
       {/* ── Historial de inicios de sesión ── */}
       <section className="bg-white border border-[#E9E9E7] rounded-lg overflow-x-auto">
         <div className="px-5 py-4 border-b border-[#E9E9E7] flex items-center gap-2">
@@ -238,7 +254,7 @@ export default function SeguridadTab() {
         <table className="w-full text-sm">
           <thead className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
             <tr>
-              {['Fecha y hora','IP','Navegador','Ubicación','Estado'].map(h => (
+              {['Fecha y hora','Usuario','IP','Estado'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[#787774] uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -247,9 +263,8 @@ export default function SeguridadTab() {
             {loginHistory.map((h: LoginEntry, i: number) => (
               <tr key={i} className="hover:bg-[#F7F6F3]/50 transition-colors">
                 <td className="px-4 py-3 text-xs text-[#37352F] font-mono">{h.date}</td>
+                <td className="px-4 py-3 text-xs text-[#37352F]">{h.user}</td>
                 <td className="px-4 py-3 text-xs font-mono text-[#787774]">{h.ip}</td>
-                <td className="px-4 py-3 text-xs text-[#787774]">{h.browser}</td>
-                <td className="px-4 py-3 text-xs text-[#787774]">{h.location}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${h.status === 'exitoso' ? 'bg-[#EEF8F6] text-[#0F7B6C]' : 'bg-[#FDEEEE] text-[#E03E3E]'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${h.status === 'exitoso' ? 'bg-[#0F7B6C]' : 'bg-[#E03E3E]'}`} />
@@ -260,6 +275,9 @@ export default function SeguridadTab() {
             ))}
           </tbody>
         </table>
+        {loginHistory.length === 0 && (
+          <p className="px-5 py-6 text-xs text-[#AEADAB]">No hay inicios de sesión registrados en los últimos 30 días.</p>
+        )}
       </section>
     </div>
   );

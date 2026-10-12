@@ -22,7 +22,7 @@
  * sin animación y evita parallax/flotación.
  * ─────────────────────────────────────────────────────────────
  */
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import gsap    from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -54,12 +54,11 @@ export default function Hero() {
   const reduceMotion = usePrefersReducedMotion();
 
   // Refs
-  const sectionRef    = useRef<HTMLElement>(null);
-  // Lazily mount the 3D robot: libera el contexto WebGL al salir del
-  // viewport, para que solo exista 1 Canvas activo en toda la landing
-  // (evita "Context Lost" por saturación de GPU).
-  const { inView: heroInView } = useInViewport<HTMLElement>({
-    rootMargin: '0px 0px 200px 0px',
+  // El robot 3D deja de dibujar cuando el hero sale de la pantalla
+  // (antes seguía dibujando 60 cuadros por segundo aunque no se viera).
+  // Se mantiene montado para no reconstruir el modelo ni las animaciones.
+  const { ref: sectionRef, inView: heroVisible } = useInViewport<HTMLElement>({
+    rootMargin: '0px',
     defaultInView: true,
   });
   const bgLightRef    = useRef<HTMLDivElement>(null);
@@ -72,14 +71,14 @@ export default function Hero() {
   const brandRef      = useRef<HTMLHeadingElement>(null);
   const headlineRef   = useRef<HTMLHeadingElement>(null);
   const subRef        = useRef<HTMLParagraphElement>(null);
-  const ctaRef        = useRef<HTMLDivElement>(null);
   const scrollHintRef = useRef<HTMLDivElement>(null);
 
-  // Mouse position for neuronal field interaction. Estado React (no un
-  // ref) para que NeuronField re-renderice y aplique el parallax a cada
-  // nodo vía transform; normalizado a [-1, 1].
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
-  const isMouseTrackingEnabled = useRef<boolean>(true);
+  // Posición del ratón para el campo de nodos, normalizada a [-1, 1].
+  // Se escribe como variables CSS (--mx/--my) en el contenedor de nodos,
+  // sin estado de React: antes cada movimiento del ratón volvía a
+  // renderizar todo el hero.
+  const heroVisibleRef = useRef(true);
+  heroVisibleRef.current = heroVisible;
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < HERO_RESPONSIVE.mobileBreakpoint;
 
@@ -89,16 +88,16 @@ export default function Hero() {
 
   // Track mouse position for neuronal field. Throttled por rAF.
   useLayoutEffect(() => {
-    if (!isMouseTrackingEnabled.current) return;
+    if (reduceMotion || isMobile) return;
     let raf = 0;
     const handleMouseMove = (e: MouseEvent) => {
-      if (raf) return;
+      if (raf || !heroVisibleRef.current) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        setMouse({
-          x: (e.clientX / window.innerWidth) * 2 - 1,
-          y: (e.clientY / window.innerHeight) * 2 - 1,
-        });
+        const el = nodesRef.current;
+        if (!el) return;
+        el.style.setProperty('--mx', ((e.clientX / window.innerWidth) * 2 - 1).toFixed(3));
+        el.style.setProperty('--my', ((e.clientY / window.innerHeight) * 2 - 1).toFixed(3));
       });
     };
 
@@ -112,9 +111,6 @@ export default function Hero() {
   useLayoutEffect(() => {
     const section   = sectionRef.current;
     if (!section) return;
-    // Si el robot aún no está montado (hero fuera de viewport), no
-    // construimos animaciones; se reconstruirán al volver a entrar.
-    if (!heroInView) return;
 
     const robot    = robotWrapRef.current?.wrapper ?? null;
     const robotFloat = robotWrapRef.current?.float ?? null;
@@ -122,7 +118,6 @@ export default function Hero() {
     const brand    = brandRef.current;
     const headline = headlineRef.current;
     const sub      = subRef.current;
-    const cta      = ctaRef.current;
     const scrollHint = scrollHintRef.current;
     const bgLight  = bgLightRef.current;
     const bgDark   = bgDarkRef.current;
@@ -130,7 +125,7 @@ export default function Hero() {
     const glow     = glowRef.current;
     const fade     = fadeRef.current;
 
-    const contentTargets = [brand, headline, sub, cta, scrollHint].filter(
+    const contentTargets = [brand, headline, sub, scrollHint].filter(
       Boolean,
     ) as Element[];
 
@@ -201,11 +196,6 @@ export default function Hero() {
           y: 0, opacity: 1, duration: 0.8,
         }, HERO_TIMING.step5Copy + HERO_TIMING.stagger);
       }
-      if (cta) {
-        tl.fromTo(cta, { y: 16, opacity: 0 }, {
-          y: 0, opacity: 1, duration: 0.7,
-        }, HERO_TIMING.step5Copy + HERO_TIMING.stagger * 2);
-      }
 
       if (scrollHint) {
         tl.fromTo(scrollHint, { opacity: 0 }, { opacity: 1, duration: 0.6 },
@@ -271,7 +261,7 @@ export default function Hero() {
       scrollTl?.kill();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heroInView]);
+  }, []);
 
   return (
     <section
@@ -340,13 +330,12 @@ export default function Hero() {
       />
 
       {/* ── Neurón real (wrapper animado por GSAP) ───────────── */}
-      {heroInView && (
-        <HeroRobot
-          ref={robotWrapRef}
-          top={isMobile ? HERO_RESPONSIVE.mobileTop : HERO_ROBOT.top}
-          scale={isMobile ? HERO_RESPONSIVE.mobileRobotScale : HERO_ROBOT.scale}
-        />
-      )}
+      <HeroRobot
+        ref={robotWrapRef}
+        top={isMobile ? HERO_RESPONSIVE.mobileTop : HERO_ROBOT.top}
+        scale={isMobile ? HERO_RESPONSIVE.mobileRobotScale : HERO_ROBOT.scale}
+        paused={!heroVisible}
+      />
 
       {/* Halo monocromo sutil tras Neurón */}
       <div
@@ -378,7 +367,7 @@ export default function Hero() {
         data-hero="nodes"
         aria-hidden="true"
       >
-        <NeuronField mouseX={mouse.x} mouseY={mouse.y} />
+        <NeuronField />
       </div>
 
       {/* ── Contenido del hero ───────────────────────────────── */}
@@ -453,28 +442,6 @@ export default function Hero() {
           >
             {HERO_COPY.subline}
           </p>
-        </div>
-
-        {/* CTAs con microinteracción */}
-        <div ref={ctaRef} className="mt-6 flex flex-wrap items-center justify-center gap-3 sm:gap-4"
-          style={{ pointerEvents: 'auto' }}>
-          <a
-            href="#capacidades"
-            className="hero-cta hero-cta-primary group relative inline-flex items-center gap-2.5 overflow-hidden rounded-full px-7 py-3 text-[15px] font-semibold text-white transition-none"
-            style={{ background: '#0c0d10' }}
-          >
-            <span className="hero-cta-shine" aria-hidden="true" />
-            {HERO_COPY.ctaPrimary}
-            <span aria-hidden="true" className="hero-cta-arrow">→</span>
-          </a>
-          <a
-            href="#analisis"
-            className="hero-cta hero-cta-secondary group inline-flex items-center gap-2.5 rounded-full border px-7 py-3 text-[15px] font-semibold transition-none"
-            style={{ borderColor: '#0c0d10', color: '#0c0d10', backgroundColor: 'rgba(255,255,255,0.6)' }}
-          >
-            {HERO_COPY.ctaSecondary}
-            <span aria-hidden="true" className="hero-cta-arrow opacity-60">↗</span>
-          </a>
         </div>
 
         {/* Indicador de scroll */}

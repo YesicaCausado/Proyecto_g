@@ -35,7 +35,7 @@ El proyecto NeuroLearn AI ha sido separado en dos microservicios independientes:
 
 ### Auth Service - Neon PostgreSQL
 ```
-Conexión: postgresql://neondb_owner:npg_MAed8LuD7yOz@ep-restless-river-am0m57yj-pooler.c-5.us-east-1.aws.neon.tech/neondb
+Conexión: postgresql://<usuario>:<contraseña>@<host>.neon.tech/neondb
 ```
 
 **Tablas**:

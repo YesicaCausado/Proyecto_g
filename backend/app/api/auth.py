@@ -1,5 +1,6 @@
 """
 NeuroLearn AI - API de Autenticación
+
 Soporta autenticación mediante base de datos:
 - Local
 - Producción / Supabase / PostgreSQL
@@ -15,6 +16,7 @@ Endpoints principales:
 - POST /auth/reset-password/validate   (CU-03 paso 2)
 - POST /auth/reset-password            (CU-03 paso 3)
 """
+
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import base64
@@ -25,7 +27,8 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -37,6 +40,7 @@ from app.core.security import (
     check_rate_limit,
     failed_login_tracker,
 )
+from app.core.permissions import FORBIDDEN_MESSAGE, Permission, has_permission
 from app.models.user import User as UserModel, UserRole
 from app.schemas.schemas import (
     UserCreate,
@@ -52,7 +56,6 @@ from app.repositories.password_reset_repository import (
     SqlAlchemyPasswordResetTokenRepository,
     SqlAlchemyUserRepository,
 )
-from app.services.permission_service import features_for_user
 from app.services.email_service import frontend_url
 from app.services.mail.factory import get_email_sender
 from app.services.password_reset_service import (
@@ -164,6 +167,47 @@ def validate_password_strength(
 # JWT
 # ============================================================
 
+def _login_audit(user, action: str, ip: str):
+    from app.models.institution import AuditLog
+    return AuditLog(
+        action=action,
+        performed_by_id=user.id,
+        institution_id=user.institution_id,
+        ip_address=(ip or "")[:45] or None,
+    )
+
+
+def _record_login(db: Session, user, action: str, ip: str) -> None:
+    """Registra un intento de inicio de sesión sin interrumpir el login si falla."""
+    try:
+        db.add(_login_audit(user, action, ip))
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+
+
+def _epoch(dt: datetime) -> int:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
+
+
+def token_still_valid(user, payload: dict) -> bool:
+    """False si el token se emitió antes del último cierre de sesiones."""
+    cutoff = getattr(user, "sessions_valid_after", None)
+    if not cutoff:
+        return True
+    iat = payload.get("iat")
+    if not isinstance(iat, (int, float)):
+        return False  # token antiguo sin fecha de emisión
+    return int(iat) >= _epoch(cutoff)
+
+
+def revoke_user_sessions(user) -> None:
+    """Invalida todos los tokens emitidos hasta ahora para este usuario."""
+    user.sessions_valid_after = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+
+
 def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
@@ -184,6 +228,9 @@ def create_access_token(
     to_encode.update(
         {
             "exp": expire,
+            # Fecha de emisión: permite invalidar tokens anteriores a un
+            # cierre de sesión global (users.sessions_valid_after).
+            "iat": int(datetime.now(timezone.utc).timestamp()),
         }
     )
 
@@ -353,7 +400,9 @@ async def get_current_user(
         if not username:
             raise credentials_exception
 
-    except JWTError:
+    except InvalidTokenError:
+        # Firma inválida, token vencido o mal formado, algoritmo distinto de
+        # settings.ALGORITHM o «sub» que no es texto (PyJWT).
         raise credentials_exception
 
     try:
@@ -377,6 +426,11 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
+    # Sesión cerrada desde otro dispositivo o por el Súper Profesor:
+    # los tokens emitidos antes de esa fecha ya no sirven.
+    if not token_still_valid(user, payload):
+        raise credentials_exception
+
     # IMPORTANTE:
     # Un usuario desactivado no puede continuar
     # usando un token antiguo.
@@ -389,7 +443,51 @@ async def get_current_user(
             ),
         )
 
+    ensure_institution_active(user)
+
     return user
+
+
+INSTITUTION_INACTIVE_MESSAGE = (
+    "La institución está desactivada. "
+    "Contacta al administrador."
+)
+
+
+def ensure_institution_active(user: UserModel) -> None:
+    """
+    Bloquea a los usuarios de una institución desactivada por el
+    Administrador. El Administrador no pertenece a ninguna institución.
+    """
+    if user.role == UserRole.ADMIN.value or user.institution_id is None:
+        return
+    institution = user.institution
+    if institution is not None and not institution.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=INSTITUTION_INACTIVE_MESSAGE,
+        )
+
+
+def require_permission(permission: Permission):
+    """
+    Dependencia de FastAPI: exige que el rol del usuario tenga el permiso.
+
+    Uso:
+        current_user: UserModel = Depends(require_permission(Permission.GESTIONAR_AULAS))
+    """
+
+    def dependency(
+        current_user: UserModel = Depends(get_current_user),
+    ) -> UserModel:
+        if not has_permission(current_user.role, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=FORBIDDEN_MESSAGE,
+            )
+        return current_user
+
+    return dependency
 
 
 # ============================================================
@@ -416,15 +514,15 @@ async def register(
 
     ADMIN:
         Puede crear:
-            estudiante
-            profesor
-            super_profesor
-            admin
+        - estudiante
+        - profesor
+        - super_profesor
+        - admin
 
     SUPER_PROFESOR:
         Puede crear:
-            estudiante
-            profesor
+        - estudiante
+        - profesor
 
     El flujo B2B principal utiliza:
         /admin/institutions
@@ -528,7 +626,7 @@ async def register(
         db_user = UserModel(
             username=user_data.username,
             email=user_data.email,
-            hashed_token=get_password_hash(
+            hashed_password=get_password_hash(
                 user_data.password
             ),
             full_name=user_data.full_name,
@@ -547,6 +645,7 @@ async def register(
 
     except SQLAlchemyError:
         db.rollback()
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
@@ -658,6 +757,10 @@ async def login(
 
     if not user or not password_valid:
 
+        if user:
+            # Historial de accesos del Súper Profesor (Seguridad).
+            _record_login(db, user, "login_failed", ip)
+
         locked = failed_login_tracker.on_failure(
             user_data.username,
             ip,
@@ -699,6 +802,8 @@ async def login(
             ),
         )
 
+    ensure_institution_active(user)
+
     # --------------------------------------------------------
     # 7. Login correcto
     # --------------------------------------------------------
@@ -713,7 +818,9 @@ async def login(
     # --------------------------------------------------------
 
     try:
-        user.last_login = datetime.now(timezone.utc)
+        user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.add(_login_audit(user, "login", ip))
+
         db.commit()
 
     except SQLAlchemyError:
@@ -771,6 +878,7 @@ async def login(
             "institution_id",
             None,
         ),
+        institution_name=user.institution_name,
         document_number=getattr(
             user,
             "document_number",
@@ -925,6 +1033,27 @@ async def update_me(
 
 
 # ============================================================
+# CERRAR LAS DEMÁS SESIONES
+# ============================================================
+
+@router.post("/logout-all")
+async def logout_all_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """
+    Cierra la sesión en todos los dispositivos. Devuelve un token nuevo
+    para que el dispositivo actual siga conectado.
+    """
+    check_origin(request)
+    revoke_user_sessions(current_user)
+    db.commit()
+    token = create_access_token({"sub": current_user.username})
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# ============================================================
 # CAMBIAR CONTRASEÑA
 # ============================================================
 
@@ -1037,6 +1166,13 @@ async def change_password(
 # ============================================================
 # CU-03 RECUPERAR CONTRASEÑA
 # ============================================================
+#
+# Los endpoints solo traducen HTTP ⇄ caso de uso. La lógica y las reglas de
+# negocio viven en app/services/password_reset_service.py.
+#
+# Son funciones síncronas (def) a propósito: la sesión SQLAlchemy y el
+# cliente HTTP de Brevo son bloqueantes, y FastAPI ejecuta los "def" en un
+# hilo aparte sin bloquear el event loop.
 
 FORGOT_PASSWORD_MESSAGE = (
     "Si los datos corresponden a una cuenta con correo registrado, "
@@ -1083,6 +1219,7 @@ def forgot_password(
     Siempre responde lo mismo y con una duración mínima similar, exista o
     no la cuenta, para no revelar qué usuarios están registrados.
     """
+    started = time.monotonic()
 
     check_origin(request)
     check_rate_limit(request, f"forgot:{payload.username.strip().lower()}")
@@ -1113,7 +1250,6 @@ def validate_reset_token(
     service: PasswordResetService = Depends(get_password_reset_service),
 ):
     """CU-03 paso 2 — Comprobar que el enlace exista, no esté usado ni vencido."""
-
     check_origin(request)
     check_rate_limit(request)
 
@@ -1124,7 +1260,7 @@ def validate_reset_token(
     except SQLAlchemyError:
         raise HTTPException(
             status_code=503,
-            detail="No fue posible validar el enlace. Intenta más tarde."
+            detail="No fue posible validar el enlace. Intenta más tarde.",
         )
 
     return {"valid": True, "message": "Enlace válido."}
@@ -1141,7 +1277,6 @@ def reset_password(
     service: PasswordResetService = Depends(get_password_reset_service),
 ):
     """CU-03 paso 3 — Fijar la nueva contraseña con el token recibido."""
-
     check_origin(request)
     check_rate_limit(request)
 
@@ -1158,7 +1293,7 @@ def reset_password(
         logger.exception("CU-03: error de BD al restablecer contraseña")
         raise HTTPException(
             status_code=503,
-            detail="No fue posible restablecer la contraseña. Intenta más tarde."
+            detail="No fue posible restablecer la contraseña. Intenta más tarde.",
         )
 
     return {
@@ -1167,42 +1302,3 @@ def reset_password(
             "Ya puedes iniciar sesión."
         )
     }
-
-
-def require_role(*allowed_roles: UserRole):
-    def role_checker(current_user: User = Depends(get_current_user)):
-        if current_user.role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Se requiere uno de los roles: {[r.value for r in allowed_roles]}",
-            )
-        return current_user
-    return role_checker
-
-
-def require_chat_access(current_user: User = Depends(get_current_user)):
-    """Dependency to check if the user has access to the chat feature.
-    Access is granted based on role and the associated feature:
-    - Administradores: acceso total
-    - Estudiantes: requieren la característica 'tutor_ia'
-    - Profesores y Super Profesores: requieren la característica 'teacher_ai'
-    """
-    from app.models.user import UserRole  # Import here to avoid circular import issues
-    user_role = current_user.role
-    features = features_for_user(user_role)
-    
-    if user_role == UserRole.ADMIN.value:
-        return current_user
-    
-    if user_role == UserRole.ESTUDIANTE.value:
-        if "tutor_ia" in features:
-            return current_user
-    
-    if user_role in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
-        if "teacher_ai" in features:
-            return current_user
-    
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Access to chat is not allowed for your role.",
-    )

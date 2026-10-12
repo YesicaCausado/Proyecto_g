@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Settings, Upload, Globe, Clock, Building2, Phone, Mail, MapPin, Save, RefreshCw, Loader2 } from 'lucide-react';
 import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 const normalizeInstitutionData = (data: any) => ({
   name: data?.name ?? '',
@@ -16,6 +17,7 @@ const normalizeInstitutionData = (data: any) => ({
 });
 
 export default function ConfiguracionTab() {
+  const { updateUser } = useAuth();
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -104,6 +106,8 @@ export default function ConfiguracionTab() {
       setOrigForm(nextForm);
       setLogoPreview(nextForm.logoUrl || null);
       window.dispatchEvent(new CustomEvent('institution-config-updated', { detail: savedData }));
+      // El nombre de la institución también se muestra en los encabezados.
+      if (nextForm.name) updateUser({ institution_name: nextForm.name });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {

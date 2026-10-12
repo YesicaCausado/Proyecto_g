@@ -115,6 +115,11 @@ def run_migrations(engine) -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name   VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMP",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS cognitive_profile JSONB",
+        # Parche 14 (auditoría): cierre de sesiones y autorización del acudiente
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_valid_after      TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS guardian_name             VARCHAR(150)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS guardian_authorized_at    TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS guardian_authorized_by_id INTEGER",
 
         # Índice único parcial en document_number
         """
@@ -181,8 +186,6 @@ def run_migrations(engine) -> None:
 
         # ── 6. Columnas que pueden faltar en institutions si la tabla fue
         #      creada antes de agregar estos campos ────────────────────────
-        # NOTA: license_type y expiry_date han sido eliminadas del modelo
-        # ya que hemos removido el sistema de licencias completamente.
         "ALTER TABLE institutions ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
 
         # ── 7. Columnas legacy en institutions: hacerlas NULLABLE y quitar
@@ -197,7 +200,8 @@ def run_migrations(engine) -> None:
                 FROM information_schema.columns
                 WHERE table_name = 'institutions'
                   AND table_schema = 'public'
-                  AND column_name NOT IN ('id','name','dane_code','is_active','created_at','created_by')
+                  AND column_name NOT IN ('id','name','dane_code',
+                                          'is_active','created_at','created_by')
                   AND data_type IN ('character varying','text','character','integer',
                                     'bigint','boolean','numeric')
             LOOP
@@ -247,13 +251,13 @@ def run_migrations(engine) -> None:
         END $$
         """,
 
-        # ── 9. Columnas que pueden faltan en classrooms ───────────────────
+        # ── 9. Columnas que pueden faltar en classrooms ───────────────────
         "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS color       VARCHAR(20)  DEFAULT '#0B6E99'",
         "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS invite_code VARCHAR(20)  DEFAULT NULL",
         "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS description TEXT         DEFAULT NULL",
         "ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS max_students INTEGER     DEFAULT 40",
 
-        # ── 10. Columnas que pueden faltan en audit_logs ──────────────────
+        # ── 10. Columnas que pueden faltar en audit_logs ──────────────────
         "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS notes TEXT",
         "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_type  VARCHAR(30)",
         "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)",
@@ -288,15 +292,15 @@ def run_migrations(engine) -> None:
         # db.query(ExpertBot). Por eso una sola columna faltante (por ejemplo
         # language) puede romper cualquier consulta de ExpertBot.
         # ── Sincronización de expert_bots ─────────────────────────────────────
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'es'",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS difficulty_range JSONB DEFAULT '{\"min\":\"beginner\",\"max\":\"expert\"}'::jsonb",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS system_prompt TEXT DEFAULT ''",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS personality JSONB DEFAULT '{\"teaching_style\":\"balanced\",\"verbosity\":\"medium\",\"use_examples\":true,\"use_analogies\":true}'::jsonb",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS knowledge_base JSONB DEFAULT '{\"steps\":[],\"warnings\":[],\"rules\":[],\"tips\":[],\"scenarios\":[],\"faq\":[]}'::jsonb",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS total_users INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS avg_rating DOUBLE PRECISION NOT NULL DEFAULT 0.0",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS total_sessions INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS effectiveness_score DOUBLE PRECISION NOT NULL DEFAULT 0.0",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS language VARCHAR(10) DEFAULT 'es'",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS difficulty_range JSONB DEFAULT '{\"min\":\"beginner\",\"max\":\"expert\"}'::jsonb",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS system_prompt TEXT DEFAULT ''",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS personality JSONB DEFAULT '{\"teaching_style\":\"balanced\",\"verbosity\":\"medium\",\"use_examples\":true,\"use_analogies\":true}'::jsonb",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS knowledge_base JSONB DEFAULT '{\"steps\":[],\"warnings\":[],\"rules\":[],\"tips\":[],\"scenarios\":[],\"faq\":[]}'::jsonb",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS total_users INTEGER NOT NULL DEFAULT 0",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS avg_rating DOUBLE PRECISION NOT NULL DEFAULT 0.0",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS total_sessions INTEGER NOT NULL DEFAULT 0",
+"ALTER TABLE expert_bots ADD COLUMN IF NOT EXISTS effectiveness_score DOUBLE PRECISION NOT NULL DEFAULT 0.0",
         # ── 14. Índices secundarios de rendimiento ──────────────────────────
         # Las consultas agregadas (count/avg/group_by) sobre columnas calientes
         # hacían seq scan sobre tablas completas en PostgreSQL. Estos índices

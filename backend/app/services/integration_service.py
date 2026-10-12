@@ -497,25 +497,40 @@ def run_automation_action(
     return result
 
 
+def _automation_recipients(automation) -> list:
+    """Destinatario de las acciones internas: quien creó la automatización."""
+    return [automation.created_by] if getattr(automation, "created_by", None) else []
+
+
 def _action_crear_alerta(db, automation, user, trigger_data) -> dict:
-    """Crea una alerta interna persistida para el docente."""
-    detail = (
-        f"Alerta creada: {trigger_data.get('alert_title', automation.name)} — "
-        f"{trigger_data.get('alert_message', '')}".strip()
+    """Crea una alerta real (notificación persistente con enlace a NeuroAlertas)
+    para el docente que configuró la automatización."""
+    from app.services import notification_service
+    title = (trigger_data.get("alert_title") or f"Alerta: {automation.name}")[:200]
+    message = trigger_data.get("alert_message") or trigger_data.get("event_desc") or automation.name
+    created = notification_service.notify(
+        db, _automation_recipients(automation), "automatizacion", title, message,
+        link="/teacher?tab=alertas", resource_type="automatizacion", resource_id=automation.id,
     )
-    # La alerta queda registrada como ejecución "ok" (trazabilidad real).
-    # El frontend puede leer estas alertas desde el historial.
-    return {"action": automation.action, "ok": True, "detail": detail}
+    if not created:
+        return {"action": automation.action, "ok": False,
+                "detail": "No se creó la alerta: el destinatario desactivó «Nueva actividad» en su perfil."}
+    return {"action": automation.action, "ok": True, "detail": f"Alerta creada: {title} — {message}"}
 
 
 def _action_enviar_notificacion(db, automation, user, trigger_data) -> dict:
-    """Registra una notificación/aviso para el docente en el historial."""
-    message = trigger_data.get("message", f"Automatización «{automation.name}» ejecutada")
-    return {
-        "action": automation.action,
-        "ok": True,
-        "detail": f"Notificación enviada al docente: {message}",
-    }
+    """Envía una notificación real (campana 🔔) al docente que configuró la
+    automatización, con enlace a Automatizaciones."""
+    from app.services import notification_service
+    message = trigger_data.get("message") or trigger_data.get("event_desc") or f"Automatización «{automation.name}» ejecutada"
+    created = notification_service.notify(
+        db, _automation_recipients(automation), "automatizacion", automation.name[:200], message,
+        link="/teacher?tab=automatizaciones", resource_type="automatizacion", resource_id=automation.id,
+    )
+    if not created:
+        return {"action": automation.action, "ok": False,
+                "detail": "No se envió: el destinatario desactivó «Nueva actividad» en su perfil."}
+    return {"action": automation.action, "ok": True, "detail": f"Notificación enviada: {message}"}
 
 
 def _action_google_calendar(db, automation, user, trigger_data) -> dict:
@@ -614,26 +629,27 @@ def get_connected_calendar_id(db: Session, institution_id: int) -> Optional[str]
     return (integration.config or {}).get("calendar_id")
 
 
-def dispatch_trigger(db: Session, current_user: User, trigger: str, trigger_data: dict) -> list[dict]:
+def dispatch_trigger(db: Session, current_user: User, trigger: str, trigger_data: dict,
+                     owner_id: Optional[int] = None) -> list[dict]:
     """
-    Dispara todas las automatizaciones habilitadas de la institución que
-    coinciden con el `trigger`. Devuelve los resultados de cada ejecución.
-    Devuelve lista vacía si no hay automatizaciones habilitadas.
+    Dispara las automatizaciones habilitadas de la institución que coinciden
+    con el `trigger`. Con `owner_id`, solo las de ese docente (el evento es
+    de su grupo o lo generó él): así un profesor no recibe avisos por la
+    actividad de los grupos de otro. Devuelve los resultados de cada ejecución.
     """
     institution_id = current_user.institution_id
     results: list[dict] = []
     if not institution_id:
         return results
 
-    automations = (
-        db.query(Automation)
-        .filter(
-            Automation.institution_id == institution_id,
-            Automation.trigger == trigger,
-            Automation.enabled == True,  # noqa: E712
-        )
-        .all()
+    q = db.query(Automation).filter(
+        Automation.institution_id == institution_id,
+        Automation.trigger == trigger,
+        Automation.enabled == True,  # noqa: E712
     )
+    if owner_id is not None:
+        q = q.filter(Automation.created_by == owner_id)
+    automations = q.all()
 
     for autom in automations:
         try:

@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
+    # Azure Speech (voz del tutor). La clave vive SOLO en el servidor; el
+    # navegador pide el audio a /api/v1/voice/tts. Se aceptan los nombres
+    # antiguos VITE_* como respaldo para no romper despliegues existentes,
+    # pero conviene renombrarlos (y rotar la clave, que estuvo expuesta).
+    AZURE_SPEECH_KEY: Optional[str] = os.getenv("AZURE_SPEECH_KEY") or os.getenv("VITE_AZURE_SPEECH_KEY")
+    AZURE_SPEECH_REGION: str = (
+        os.getenv("AZURE_SPEECH_REGION") or os.getenv("VITE_AZURE_SPEECH_REGION") or "eastus"
+    )
+
     # Timeout (segundos) de las llamadas HTTP a Groq/Gemini. Debe quedar por
     # debajo del maxDuration de la función de Vercel para no morir en frío.
     AI_HTTP_TIMEOUT: float = float(os.getenv("AI_HTTP_TIMEOUT", "15"))
@@ -95,9 +104,13 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     # URL de callback registrada en Google (apunta al backend).
-    GOOGLE_REDIRECT_URI: str = os.getenv(
-        "GOOGLE_REDIRECT_URI",
-        "http://localhost:8000/api/v1/integrations/google/callback",
+    # Si no se define, en Vercel se usa el dominio de producción del proyecto
+    # (antes quedaba localhost y Google devolvía al usuario a una URL rota).
+    # Debe coincidir EXACTAMENTE con la URI autorizada en Google Cloud.
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI") or (
+        f"https://{os.getenv('VERCEL_PROJECT_PRODUCTION_URL')}/api/v1/integrations/google/callback"
+        if os.getenv("VERCEL_PROJECT_PRODUCTION_URL")
+        else "http://localhost:8000/api/v1/integrations/google/callback"
     )
     # Alcances mínimos para Drive + Calendar.
     GOOGLE_SCOPES: str = os.getenv(
