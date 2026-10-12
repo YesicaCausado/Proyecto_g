@@ -18,8 +18,9 @@ from sqlalchemy.orm import Session
 from app.api.auth import get_client_ip, get_current_user
 from app.db.database import get_db
 from app.models.consent import CONSENT_TYPES
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services import consent_service as svc
+from app.services import notification_service
 
 router = APIRouter(prefix="/consents", tags=["Consentimientos"])
 
@@ -30,6 +31,10 @@ class ConsentAccept(BaseModel):
     consent_type: ConsentType
     version: str
     accepted: bool
+
+
+class ConsentRequest(BaseModel):
+    consent_type: ConsentType
 
 
 def _iso(dt):
@@ -89,6 +94,51 @@ async def accept_consent(
     except svc.GuardianAuthorizationRequired as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     return _state(db, current_user)
+
+
+@router.post("/request-authorization")
+async def request_guardian_authorization(
+    payload: ConsentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Notifica a los Súper Profesores que el estudiante necesita autorización."""
+    guardian = svc.guardian_status(current_user)
+    if current_user.role != UserRole.ESTUDIANTE.value or not (
+        guardian["required"] and not guardian["authorized"]
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Esta cuenta no tiene una autorización institucional pendiente.",
+        )
+    recipients = [
+        row[0]
+        for row in db.query(User.id).filter(
+            User.role == UserRole.SUPER_PROFESOR.value,
+            User.institution_id == current_user.institution_id,
+            User.is_active.is_(True),
+        ).all()
+    ]
+    if not recipients:
+        raise HTTPException(
+            status_code=409,
+            detail="No hay un coordinador o Súper Profesor activo en tu institución.",
+        )
+    label = "cámara" if payload.consent_type == "camara_facial" else "micrófono"
+    notification_service.notify(
+        db,
+        recipients,
+        "solicitud_consentimiento",
+        "Solicitud de autorización de acudiente",
+        f"{current_user.full_name or current_user.username} solicita registrar la autorización "
+        f"de acudiente para activar el {label}.",
+        link="/super?tab=estudiantes",
+        resource_type="usuario",
+        resource_id=current_user.id,
+        dedupe_key=f"consent-request:{current_user.id}:{payload.consent_type}",
+    )
+    db.commit()
+    return {"requested": True, "message": "Solicitud enviada a tu institución."}
 
 
 @router.delete("/{consent_type}")

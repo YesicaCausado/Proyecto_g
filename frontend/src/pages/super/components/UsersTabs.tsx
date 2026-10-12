@@ -342,6 +342,8 @@ export function TeachersTab() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedTeacherId(teacher.id);
+      setError('');
+      setMessage(`Credenciales de ${teacher.full_name || teacher.username} copiadas correctamente.`);
       setTimeout(() => setCopiedTeacherId(null), 1200);
     } catch {
       setError('No se pudo copiar la credencial. Inténtalo de nuevo.');
@@ -846,7 +848,7 @@ export function TeachersTab() {
                       </td>
                       <td className="px-6 py-3 text-right">
                         <div className="flex justify-end items-center gap-2">
-                          <button onClick={() => copyTeacherCredentials(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Copiar credencial">
+                          <button onClick={() => copyTeacherCredentials(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title={copiedTeacherId === t.id ? "Credenciales copiadas" : "Copiar credencial"} aria-label={copiedTeacherId === t.id ? "Credenciales copiadas" : "Copiar credencial"}>
                             {copiedTeacherId === t.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
                           </button>
                           <button onClick={() => setEditingTeacher(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Editar profesor">
@@ -1014,6 +1016,8 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedStudentId(student.id);
+      setError('');
+      setMessage(`Credenciales de ${student.full_name || student.username} copiadas correctamente.`);
       setTimeout(() => setCopiedStudentId(null), 1200);
     } catch {
       setError('No se pudo copiar la credencial. Inténtalo de nuevo.');
@@ -1544,7 +1548,7 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
                       </td>
                       <td className="px-6 py-3 text-right">
                         <div className="flex justify-end items-center gap-2">
-                          <button onClick={() => copyStudentCredentials(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Copiar credencial">
+                          <button onClick={() => copyStudentCredentials(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title={copiedStudentId === s.id ? "Credenciales copiadas" : "Copiar credencial"} aria-label={copiedStudentId === s.id ? "Credenciales copiadas" : "Copiar credencial"}>
                             {copiedStudentId === s.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
                           </button>
                           <button onClick={() => setEditingStudent(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Editar estudiante">

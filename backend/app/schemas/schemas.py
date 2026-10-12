@@ -19,6 +19,18 @@ class UserCreate(BaseModel):
     )
 
 
+class UserUpdate(BaseModel):
+    """Campos editables por el panel de administración."""
+
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = Field(
+        default=None,
+        pattern="^(estudiante|profesor|super_profesor|admin)$",
+    )
+    is_active: Optional[bool] = None
+
+
 class UserLogin(BaseModel):
     username: str
     password: str

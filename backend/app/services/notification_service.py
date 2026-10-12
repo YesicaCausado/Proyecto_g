@@ -39,6 +39,7 @@ NOTIFICATION_TYPES: Dict[str, tuple] = {
     "mensaje_directo":         ("mensaje_directo", "message"),
     "material_compartido":     ("nueva_actividad", "clipboard"),
     "automatizacion":          ("nueva_actividad", "alert"),
+    "solicitud_consentimiento": ("nueva_actividad", "shield"),
 }
 PREFERENCE_FIELDS = ("nueva_actividad", "mensaje_directo")
 

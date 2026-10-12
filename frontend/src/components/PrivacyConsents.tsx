@@ -29,6 +29,9 @@ export default function PrivacyConsents() {
     setActionError('');
     try {
       await revoke(type);
+      window.dispatchEvent(new CustomEvent<ConsentType>('neurolearn:consent-revoked', {
+        detail: type,
+      }));
     } catch (err) {
       setActionError(errorText(err, 'No se pudo retirar el consentimiento.'));
     } finally {

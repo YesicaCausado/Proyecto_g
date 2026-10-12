@@ -361,14 +361,14 @@ export default function ChatPage() {
   const [consentPrompt, setConsentPrompt] = useState<ConsentType | null>(null);
   const [consentNotice, setConsentNotice] = useState("");
 
-  const activateDevice = (type: ConsentType) => {
+  const activateDevice = async (type: ConsentType) => {
     setConsentNotice("");
-    if (type === "camara_facial") facial.startCamera();
-    else voice.startMic();
+    if (type === "camara_facial") await facial.startCamera();
+    else await voice.startMic();
   };
 
   const requestDevice = (type: ConsentType) => {
-    if (consents.granted(type)) activateDevice(type);
+    if (consents.granted(type)) void activateDevice(type);
     else setConsentPrompt(type);
   };
 
@@ -377,7 +377,12 @@ export default function ChatPage() {
     const type = consentPrompt;
     await consents.accept(type, version);
     setConsentPrompt(null);
-    activateDevice(type);
+    await activateDevice(type);
+  };
+
+  const requestGuardianAuthorization = async () => {
+    if (!consentPrompt) return;
+    await consents.requestAuthorization(consentPrompt);
   };
 
   const declineConsent = () => {
@@ -388,6 +393,19 @@ export default function ChatPage() {
     }
     setConsentPrompt(null);
   };
+
+  // Privacidad puede revocar el consentimiento mientras el chat sigue montado.
+  // En ese caso hay que apagar también el stream local, no solo invalidar el
+  // permiso lógico en el backend.
+  useEffect(() => {
+    const handleConsentRevoked = (event: Event) => {
+      const type = (event as CustomEvent<ConsentType>).detail;
+      if (type === "camara_facial") facial.stopCamera();
+      if (type === "microfono_voz") voice.stopMic();
+    };
+    window.addEventListener("neurolearn:consent-revoked", handleConsentRevoked);
+    return () => window.removeEventListener("neurolearn:consent-revoked", handleConsentRevoked);
+  }, [facial.stopCamera, voice.stopMic]);
 
   // Tutor de Voz — STT escucha al usuario, TTS responde en voz alta
   const voiceTutor = useVoiceTutor(async (transcript) => {
@@ -751,6 +769,8 @@ export default function ChatPage() {
     setMessages([]);
     setLastResponse(null);
     setSelectedSkill("");
+    facial.stopCamera();
+    voice.stopMic();
     // Importante: si se termina la sesión mientras un mensaje está en vuelo,
     // hay que liberar `sending`; de lo contrario la pantalla inicial queda
     // con las preguntas sugeridas y el input deshabilitados para siempre.
@@ -1071,6 +1091,7 @@ export default function ChatPage() {
           loadError={consents.error}
           blockedMessage={consents.guardian?.blocked ? (consents.guardian.message ?? '') : ''}
           onAccept={acceptConsent}
+          onRequestAuthorization={requestGuardianAuthorization}
           onDecline={declineConsent}
           onRetry={consents.load}
         />

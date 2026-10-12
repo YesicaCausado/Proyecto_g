@@ -169,8 +169,11 @@ def blocked_by_guardian(user) -> bool:
 
 
 GUARDIAN_MESSAGE = (
-    "Para activar la cámara o el micrófono, tu institución debe registrar la "
-    "autorización de tu madre, padre o acudiente. Pídesela a tu coordinador."
+    "Tu cuenta todavía no tiene registrada la autorización del acudiente. "
+    "Debes entregar la autorización a tu institución; un Súper Profesor o "
+    "coordinador debe abrir Panel institucional → Estudiantes → Editar, "
+    "escribir el nombre del acudiente y marcar «Sí, la institución la recibió». "
+    "Después vuelve al chat, cierra este aviso y pulsa de nuevo el botón de la función."
 )
 
 

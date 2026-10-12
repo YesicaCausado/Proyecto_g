@@ -8,19 +8,22 @@ import type { ConsentState, ConsentType } from '../hooks/useConsents';
  * (casilla + botón). No toca la cámara ni el micrófono: eso lo hace quien lo
  * abre, y solo después de que el backend registró la aceptación.
  */
-export default function ConsentModal({ type, state, loadError, blockedMessage = '', onAccept, onDecline, onRetry }: {
+export default function ConsentModal({ type, state, loadError, blockedMessage = '', onAccept, onRequestAuthorization, onDecline, onRetry }: {
   type: ConsentType;
   state: ConsentState | null;
   loadError: string;
   /** Falta la autorización del acudiente: no se puede aceptar todavía. */
   blockedMessage?: string;
   onAccept: (version: string) => Promise<void>;
+  onRequestAuthorization?: () => Promise<void>;
   onDecline: () => void;
   onRetry: () => void;
 }) {
   const [checked, setChecked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [requesting, setRequesting] = useState(false);
+  const [requested, setRequested] = useState(false);
   const Icon = type === 'camara_facial' ? Camera : Mic;
   const doc = state?.document;
 
@@ -34,6 +37,21 @@ export default function ConsentModal({ type, state, loadError, blockedMessage = 
       const detail = err?.response?.data?.detail;
       setError(typeof detail === 'string' ? detail : 'No se pudo registrar tu aceptación. Inténtalo de nuevo.');
       setSaving(false);
+    }
+  };
+
+  const requestAuthorization = async () => {
+    if (!onRequestAuthorization || requesting || requested) return;
+    setRequesting(true);
+    setError('');
+    try {
+      await onRequestAuthorization();
+      setRequested(true);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'No se pudo enviar la solicitud.');
+    } finally {
+      setRequesting(false);
     }
   };
 
@@ -85,9 +103,27 @@ export default function ConsentModal({ type, state, loadError, blockedMessage = 
                 <p>{doc.minors}</p>
               </div>
               {blockedMessage && (
-                <p className="p-3 rounded-lg bg-[#FCF6E5] text-xs text-[#9A6700] flex gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" /> <span>{blockedMessage}</span>
-                </p>
+                <div className="p-3 rounded-lg bg-[#FCF6E5] text-xs text-[#9A6700] space-y-2">
+                  <p className="flex gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                    <span>{blockedMessage}</span>
+                  </p>
+                  <p className="pl-5">
+                    El estudiante no puede registrar esta autorización por su cuenta.
+                    Cuando la institución la registre, vuelve a pulsar el botón de
+                    cámara o micrófono y completa este consentimiento.
+                  </p>
+                  {onRequestAuthorization && (
+                    <button
+                      type="button"
+                      onClick={requestAuthorization}
+                      disabled={requesting || requested}
+                      className="ml-5 px-3 py-1.5 rounded-md bg-[#9A6700] text-white text-xs font-medium hover:bg-[#7D5300] disabled:opacity-60"
+                    >
+                      {requesting ? 'Enviando solicitud...' : requested ? 'Solicitud enviada' : 'Solicitar autorización'}
+                    </button>
+                  )}
+                </div>
               )}
               <label className="flex items-start gap-2 cursor-pointer">
                 <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} className="mt-0.5 w-4 h-4" />

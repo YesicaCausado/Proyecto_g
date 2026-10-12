@@ -83,7 +83,12 @@ export function useConsents() {
     setConsents(res.data.consents);
   }, []);
 
+  const requestAuthorization = useCallback(async (type: ConsentType) => {
+    const res = await api.post('/consents/request-authorization', { consent_type: type });
+    return res.data as { requested: boolean; message: string };
+  }, []);
+
   const granted = useCallback((type: ConsentType) => !!consents?.[type]?.granted, [consents]);
 
-  return { consents, guardian, loading, error, load, accept, revoke, granted, errorText };
+  return { consents, guardian, loading, error, load, accept, revoke, requestAuthorization, granted, errorText };
 }
