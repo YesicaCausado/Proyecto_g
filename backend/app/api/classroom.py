@@ -15,7 +15,7 @@ from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, ClassroomUser
 from app.models.institution import Institution
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
+
 
 router = APIRouter(prefix="/classrooms", tags=["Aulas y Grupos"])
 
@@ -233,7 +233,3 @@ async def create_classroom(
 
 # Los demás endpoints (get, put, delete, etc.) seguirían un patrón similar...
 
-# Mantener funciones de compatibilidad pero simplificadas
-def _require_classroom_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    _require_classroom_access(user)

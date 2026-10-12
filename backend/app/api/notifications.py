@@ -12,7 +12,7 @@ from datetime import datetime
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
+
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/notifications", tags=["Notificaciones"])
@@ -148,7 +148,3 @@ def _get_system_notifications(current_user: User, db: Session) -> List[dict]:
     return notifs
 
 
-# Mantener funciones de compatibilidad pero simplificadas
-def _require_notifications_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    return True

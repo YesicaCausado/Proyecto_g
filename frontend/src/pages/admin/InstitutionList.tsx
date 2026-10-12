@@ -14,7 +14,6 @@ interface InstitutionItem {
   id: number;
   name: string;
   dane_code: string;
-  license_type: 'basica' | 'premium' | 'pro';
   is_active: boolean;
   created_at: string;
   teacher_count: number;
@@ -30,12 +29,6 @@ interface InstitutionListEnvelope {
     students_count: number;
   }>;
 }
-
-const LICENSE_BADGE: Record<string, string> = {
-  basica:  'bg-[#F7F6F3] text-[#787774] border-[#E9E9E7]',
-  premium: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',
-  pro:     'bg-[#F7F3FB] text-[#6940A5] border-[#D9CCE9]',
-};
 
 export default function InstitutionList() {
   const [institutions, setInstitutions] = useState<InstitutionItem[]>([]);
@@ -55,7 +48,6 @@ export default function InstitutionList() {
         id: i.id,
         name: i.name,
         dane_code: i.dane_code,
-        license_type: i.license_type,
         is_active: i.is_active,
         created_at: i.created_at ?? new Date().toISOString(),
         teacher_count: i.teachers_count ?? 0,
@@ -178,9 +170,6 @@ export default function InstitutionList() {
                   Código DANE
                 </th>
                 <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
-                  Licencia
-                </th>
-                <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
                   Usuarios
                 </th>
                 <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">
@@ -214,13 +203,6 @@ export default function InstitutionList() {
                   <td className="px-5 py-4">
                     <span className="text-sm font-mono text-[#787774]">
                       {inst.dane_code}
-                    </span>
-                  </td>
-
-                  {/* Licencia */}
-                  <td className="px-5 py-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold border rounded-full capitalize ${LICENSE_BADGE[inst.license_type] ?? LICENSE_BADGE.basica}`}>
-                      {inst.license_type}
                     </span>
                   </td>
 

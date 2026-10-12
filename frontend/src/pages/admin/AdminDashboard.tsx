@@ -13,7 +13,6 @@ import {
   ChevronRight,
   Menu,
   X,
-  Shield,
   ClipboardList,
 } from 'lucide-react';
 import AdminHome from './AdminHome';
@@ -21,7 +20,6 @@ import CreateInstitution from './CreateInstitution';
 import InstitutionList from './InstitutionList';
 import UserManagement from './UserManagement';
 import AuditLogs from './AuditLogs';
-import LicenseManagement from './LicenseManagement';
 import SystemConfig from './SystemConfig';
 import BotManagement from './BotManagement';
 
@@ -40,13 +38,6 @@ const NAV_ITEMS = [
     icon: School,
     label: 'Instituciones',
     description: 'Colegios y super profesores',
-  },
-  {
-    to: '/admin/licencias',
-    end: false,
-    icon: Shield,
-    label: 'Licencias',
-    description: 'Tipo, vencimiento y cupos',
   },
   {
     to: '/admin/usuarios',
@@ -224,7 +215,6 @@ export default function AdminDashboard() {
             <Route path="instituciones"        element={<InstitutionList />} />
             <Route path="instituciones/nueva"  element={<CreateInstitution />} />
             <Route path="usuarios"             element={<UserManagement />} />
-            <Route path="licencias"            element={<LicenseManagement />} />
             <Route path="auditoria"            element={<AuditLogs />} />
             <Route path="bots"                element={<BotManagement />} />
             <Route path="configuracion"        element={<SystemConfig />} />

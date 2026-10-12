@@ -20,10 +20,7 @@ from app.models.classroom import Classroom, Enrollment
 from app.models.expert_bot import ExpertBot
 from app.models.learning import QuizHistory
 from app.models.events import CalendarEvent
-from app.services.license_service import (
-    require_active_license,
-    LicenseInfo,
-)
+
 
 
 router = APIRouter(
@@ -99,7 +96,6 @@ def _enrolled_student_ids(
 @router.get("/stats")
 def get_teacher_stats(
     current_user: User = Depends(get_current_user),
-    active_license: LicenseInfo = Depends(require_active_license),
     db: Session = Depends(get_db),
 ):
     """

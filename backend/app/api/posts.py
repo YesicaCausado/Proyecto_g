@@ -14,7 +14,7 @@ from app.api.auth import get_current_user, require_role
 from app.models.user import User, UserRole
 from app.models.posts import Post, PostType
 from app.models.classroom import Classroom
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
+
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/posts", tags=["Publicaciones"])
@@ -185,8 +185,3 @@ async def get_post(
 
 # Los demás endpoints (put, delete, etc.) seguirían un patrón similar...
 
-# Mantener funciones de compatibilidad pero simplificadas
-def _require_posts_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    # Verificar que el usuario sea profesor o super profesor
-    return user.role in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value)

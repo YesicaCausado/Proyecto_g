@@ -14,7 +14,7 @@ from app.db.database import get_db
 from app.api.auth import get_current_user, require_role
 from app.models.user import User, UserRole
 from app.models.expert_bot import ExpertBot
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
+
 
 router = APIRouter(prefix="/expert-bots", tags=["ExpertBots"])
 
@@ -88,8 +88,6 @@ async def create_expert_bot(
     # Verificar que el usuario tenga permisos para crear ExpertBots
     # Según la matriz de características, tutor_ia (para estudiantes) y teacher_ai (para profesores)
     # están disponibles según el rol
-    from app.services.license_service import get_license_for_user
-    license_info = get_license_for_user(current_user, db)
     
     # Estudiantes necesitan tutor_ia, profesores necesitan teacher_ai
     if current_user.role == UserRole.ESTUDIANTE.value:
@@ -193,8 +191,7 @@ async def update_expert_bot(
         )
     
     # Verificar que el usuario tenga permisos para actualizar ExpertBots
-    from app.services.license_service import get_license_for_user
-    license_info = get_license_for_user(current_user, db)
+
     
     if current_user.role == UserRole.ESTUDIANTE.value:
         required_feature = "tutor_ia"
@@ -262,14 +259,3 @@ async def delete_expert_bot(
 
 
 # Mantener funciones de compatibilidad pero simplificadas
-def _require_expert_bot_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    from app.services.license_service import get_license_for_user
-    license_info = get_license_for_user(user, None)  # db será None en compatibilidad
-    if current_user.role == UserRole.ESTUDIANTE.value:
-        required_feature = "tutor_ia"
-    elif current_user.role in {UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value, UserRole.ADMIN.value}:
-        required_feature = "teacher_ai"
-    else:
-        return False
-    return license_info.has_feature(required_feature)

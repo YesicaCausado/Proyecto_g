@@ -52,6 +52,7 @@ from app.repositories.password_reset_repository import (
     SqlAlchemyPasswordResetTokenRepository,
     SqlAlchemyUserRepository,
 )
+from app.services.permission_service import features_for_user
 from app.services.email_service import frontend_url
 from app.services.mail.factory import get_email_sender
 from app.services.password_reset_service import (
@@ -1177,3 +1178,31 @@ def require_role(*allowed_roles: UserRole):
             )
         return current_user
     return role_checker
+
+
+def require_chat_access(current_user: User = Depends(get_current_user)):
+    """Dependency to check if the user has access to the chat feature.
+    Access is granted based on role and the associated feature:
+    - Administradores: acceso total
+    - Estudiantes: requieren la característica 'tutor_ia'
+    - Profesores y Super Profesores: requieren la característica 'teacher_ai'
+    """
+    from app.models.user import UserRole  # Import here to avoid circular import issues
+    user_role = current_user.role
+    features = features_for_user(user_role)
+    
+    if user_role == UserRole.ADMIN.value:
+        return current_user
+    
+    if user_role == UserRole.ESTUDIANTE.value:
+        if "tutor_ia" in features:
+            return current_user
+    
+    if user_role in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
+        if "teacher_ai" in features:
+            return current_user
+    
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access to chat is not allowed for your role.",
+    )

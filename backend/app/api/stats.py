@@ -15,7 +15,7 @@ from app.api.auth import get_current_user, require_role
 from app.models.user import User, UserRole
 from app.models.learning import QuizHistory
 from app.models.classroom import Classroom, ClassroomUser
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
+
 
 router = APIRouter(prefix="/stats", tags=["Estadísticas"])
 
@@ -228,8 +228,3 @@ async def get_student_stats(
 
 # Los demás endpoints (como /curso/{course_id}, etc.) seguirían un patrón similar...
 
-# Mantener funciones de compatibilidad pero simplificadas
-def _require_stats_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    # Todos los roles tienen acceso a estadísticas básicas según nuestros permisos
-    return True

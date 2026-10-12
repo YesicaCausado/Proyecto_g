@@ -50,7 +50,7 @@ class Message(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    conversation = relationship("Conversation", back_populates="messages")
+    conversation = relationship("Conversation", back_populates="messages", foreign_keys=[conversation_id])
     sender = relationship("User", foreign_keys=[sender_id])
 
 
@@ -66,4 +66,4 @@ class Conversation(Base):
     last_message = relationship("Message", foreign_keys=[last_message_id])
 
     # Relationship to messages
-    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", foreign_keys=[Message.conversation_id])

@@ -15,7 +15,7 @@ from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.learning import LearningSession, QuizHistory
-from app.services.license_service import require_feature, require_active_license, LicenseInfo
+
 
 router = APIRouter(prefix="/teacher", tags=["Teacher - Reports"])
 
@@ -50,10 +50,7 @@ async def export_reports(
     format: str = Query("csv", description="Formato: csv o pdf"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(
-        require_feature("reportes_avanzados") if format == "pdf" else require_feature("reportes")
-    ),
-    active_license: LicenseInfo = Depends(require_active_license),
+
 ):
     """
     Exporta reportes académicos.

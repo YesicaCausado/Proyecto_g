@@ -16,7 +16,7 @@ from app.models.events import CalendarEvent
 from app.models.institution import Institution
 from app.models.classroom import Classroom
 from app.models.classroom import ClassroomUser
-from app.services.license_service import require_active_license  # Mantener por compatibilidad pero ya no verifica licencia real
+
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/events", tags=["Calendario - Eventos"])
@@ -271,7 +271,3 @@ async def create_event(
 # Por brevidad, solo muestro los primeros endpoints, pero el patrón es similar
 # para todos los endpoints que anteriormente usaban license_info
 
-# Mantener la función de compatibilidad pero simplificada
-def _require_calendar_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    _require_calendar_access(user)

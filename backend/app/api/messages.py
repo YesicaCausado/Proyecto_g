@@ -12,7 +12,7 @@ from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.messages import Message, Conversation
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
+
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -182,7 +182,3 @@ async def send_message(
 
 # Los demás endpoints seguirían un patrón similar...
 
-# Mantener funciones de compatibilidad pero simplificadas
-def _require_messaging_module(user: User, license_info):  # pragma: no cover
-    """Función de compatibilidad - ya no hace nada real."""
-    _require_messaging_access(user)

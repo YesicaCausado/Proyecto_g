@@ -10,7 +10,7 @@ from datetime import datetime
 from app.db.database import Base, get_db
 from app.api.auth import get_current_user
 from app.models.user import User
-from app.services.license_service import require_active_license, require_teacher_module, LicenseInfo
+
 
 router = APIRouter(prefix="/teacher", tags=["Teacher Evaluations"])
 
@@ -56,7 +56,6 @@ def _eval_out(ev: TeacherEvaluation) -> dict:
 async def list_evaluations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("evaluaciones")),
 ):
     """Lista todas las evaluaciones del profesor."""
     evals = (
@@ -73,8 +72,6 @@ async def create_evaluation(
     data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("evaluaciones")),
-    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Crea una nueva evaluación con sus preguntas."""
     title = (data.get("title") or "").strip()
@@ -107,8 +104,6 @@ async def toggle_evaluation(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("evaluaciones")),
-    active_license: LicenseInfo = Depends(require_active_license),
 ):
     """Activa o desactiva una evaluación."""
     ev = db.query(TeacherEvaluation).filter(
@@ -128,8 +123,7 @@ async def delete_evaluation(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    license_info: LicenseInfo = Depends(require_teacher_module("evaluaciones")),
-    active_license: LicenseInfo = Depends(require_active_license),
+):
 ):
     """Elimina una evaluación."""
     ev = db.query(TeacherEvaluation).filter(

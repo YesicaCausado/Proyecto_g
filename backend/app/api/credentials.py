@@ -15,7 +15,7 @@ from app.db.database import get_db
 from app.api.auth import get_current_user, require_role
 from app.models.user import User, UserRole
 from app.models.institution import Institution
-from app.services.license_service import require_active_license  # Mantener por compatibilidad
+
 
 router = APIRouter(prefix="/credentials", tags=["Credenciales"])
 
@@ -66,7 +66,11 @@ async def create_institution(
     Crear una nueva institución.
     Solo administradores pueden crear instituciones.
     """
-    _require_role(current_user, UserRole.ADMIN.value)
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo administradores pueden crear instituciones"
+        )
     
     check_origin(request)
     check_rate_limit(request)
@@ -121,7 +125,11 @@ async def get_institution(
     """
     Obtener información de una institución por su ID.
     """
-    _require_role(current_user, UserRole.ADMIN.value)
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo administradores pueden obtener información de instituciones"
+        )
     
     check_origin(request)
     check_rate_limit(request)
