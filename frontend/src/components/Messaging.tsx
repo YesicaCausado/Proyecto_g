@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Search, Loader2, MessageSquare, PenSquare, X, CheckCheck, Paperclip, Download } from 'lucide-react';
+import { Send, Search, Loader2, MessageSquare, PenSquare, X, CheckCheck, Paperclip, Download, ArrowLeft } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -117,6 +117,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [mobileListOpen, setMobileListOpen] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -139,6 +140,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   }, [active?.messages.length]);
 
   const openConversation = useCallback(async (conv: Conversation, list?: Conversation[]) => {
+    setMobileListOpen(false);
     const src = list ?? convs;
     setConvs(src.map(c => c.otherId === conv.otherId ? { ...c, unread: 0 } : c));
     if (!conv.loaded) {
@@ -301,7 +303,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
       )}
 
       {/* ── Lista de conversaciones ──────────────────────────── */}
-      <div className="w-72 flex-shrink-0 border-r border-[#E9E9E7] flex flex-col">
+      <div className={`${active && !mobileListOpen ? 'hidden md:flex' : 'flex'} w-full md:w-72 flex-shrink-0 border-r border-[#E9E9E7] flex-col`}>
         <div className="px-4 py-3 border-b border-[#E9E9E7]">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-[#191919] text-sm">Mensajes</h3>
@@ -364,7 +366,14 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-3 px-5 py-3 border-b border-[#E9E9E7] bg-[#F7F6F3]/50 flex-shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 border-b border-[#E9E9E7] bg-[#F7F6F3]/50 flex-shrink-0">
+              <button
+                onClick={() => setMobileListOpen(true)}
+                className="md:hidden p-1.5 rounded-lg text-[#787774] hover:bg-white"
+                aria-label="Volver a conversaciones"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
               <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${badgeFor(active.role.toLowerCase()).bg}`}>
                 {active.initials}
               </div>
@@ -374,7 +383,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-4 space-y-3 overscroll-contain">
               {active.messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-32 text-[#AEADAB]">
                   <MessageSquare className="w-8 h-8 mb-2 text-[#E9E9E7]" />

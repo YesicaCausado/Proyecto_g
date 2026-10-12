@@ -3,7 +3,7 @@ import { useSearchParams, useParams } from "react-router-dom";
 import api from "../../services/api";
 import { COMPETENCIES, findCompetency } from "../../data/competencies";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
-import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions, Plus, MessageSquare, Trash2, History, RefreshCw } from "lucide-react";
+import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions, Plus, MessageSquare, Trash2, History, RefreshCw, Search, Sparkles } from "lucide-react";
 import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
@@ -130,7 +130,7 @@ function ChatHistorySidebar({
 
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center w-14 flex-shrink-0 border-r border-[#E9E9E7] bg-[#FBFBFA] py-3 gap-2">
+      <div className="hidden md:flex flex-col items-center w-14 flex-shrink-0 border-r border-[#E9E9E7] bg-[#FBFBFA] py-3 gap-2">
         <button
           onClick={onToggleCollapse}
           title="Mostrar historial"
@@ -150,14 +150,17 @@ function ChatHistorySidebar({
   }
 
   return (
-    <div className="w-64 md:w-72 flex-shrink-0 border-r border-[#E9E9E7] bg-white flex flex-col">
+    <aside className="fixed md:static left-0 top-12 bottom-16 md:top-auto md:bottom-auto z-50 w-[min(20rem,calc(100vw-1rem))] md:w-72 flex-shrink-0 border-r border-[#E9E9E7] bg-white flex flex-col shadow-[8px_0_24px_rgba(55,53,47,0.08)] md:shadow-none">
       {/* Encabezado */}
-      <div className="px-3 pt-3 pb-2 border-b border-[#E9E9E7]">
+      <div className="px-3.5 pt-4 pb-3 border-b border-[#E9E9E7] bg-[#FBFBFA]">
         <div className="flex items-center justify-between mb-2.5">
-          <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-1.5">
-            <History className="w-4 h-4 text-[#0B6E99]" />
-            Historial de chats
-          </h3>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9B9A97]">Tu espacio</p>
+            <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-1.5 mt-0.5">
+              <History className="w-4 h-4 text-[#0B6E99]" />
+              Historial de chats
+            </h3>
+          </div>
           <div className="flex items-center gap-1">
             <button
               onClick={onRefresh}
@@ -179,27 +182,27 @@ function ChatHistorySidebar({
         {/* Botón nueva conversación — prominente */}
         <button
           onClick={onNew}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[#0B6E99]/30 bg-[#E5F3FF] text-[#0B6E99] text-sm font-semibold hover:bg-[#D4EAF8] transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[#0B6E99]/30 bg-[#E5F3FF] text-[#0B6E99] text-sm font-semibold shadow-sm hover:bg-[#D4EAF8] hover:border-[#0B6E99]/50 transition-colors"
         >
           <Plus className="w-4 h-4" />
           Nueva conversación
         </button>
 
         {/* Búsqueda */}
-        <div className="relative mt-2">
+        <div className="relative mt-2.5">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar conversaciones..."
-            className="w-full pl-8 pr-3 py-1.5 border border-[#E9E9E7] rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#0B6E99] focus:border-[#0B6E99] bg-[#FBFBFA]"
+            className="w-full pl-8 pr-3 py-2 border border-[#E9E9E7] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99] bg-white transition-shadow"
           />
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#AEADAB] text-sm">🔍</span>
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#AEADAB]" />
         </div>
       </div>
 
       {/* Lista */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 min-h-0 overflow-y-auto py-2.5 overscroll-contain">
         {loading && conversations.length === 0 ? (
           <div className="flex items-center justify-center py-10 text-xs text-[#9B9A97]">
             <Loader2 className="w-4 h-4 animate-spin mr-2" /> Cargando...
@@ -223,13 +226,13 @@ function ChatHistorySidebar({
           filtered.map((c: any) => {
             const isActive = c.id === activeId;
             return (
-              <div
+              <button
                 key={c.id}
                 onClick={() => onSelect(c.id)}
-                className={`group mx-1.5 mb-1 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
+                className={`group w-[calc(100%-0.75rem)] text-left mx-1.5 mb-1 px-2.5 py-2.5 rounded-lg cursor-pointer transition-all ${
                   isActive
-                    ? "bg-[#E5F3FF] border border-[#BFDFF0]"
-                    : "border border-transparent hover:bg-[#F7F6F3]"
+                    ? "bg-[#E5F3FF] border border-[#BFDFF0] shadow-sm"
+                    : "border border-transparent hover:bg-[#F7F6F3] hover:border-[#E9E9E7]"
                 }`}
               >
                 <div className="flex items-start gap-2.5">
@@ -249,20 +252,22 @@ function ChatHistorySidebar({
                       {c.subject || c.skill || c.topic || "Neuro-Chat"}
                     </p>
                   </div>
-                  <button
+                  <span
                     onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}
                     title="Eliminar conversación"
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-[#9B9A97] hover:text-[#E03E3E] hover:bg-[#FDEEEE] transition-all flex-shrink-0"
+                    role="button"
+                    tabIndex={0}
+                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-[#9B9A97] hover:text-[#E03E3E] hover:bg-[#FDEEEE] transition-all flex-shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  </span>
                 </div>
-              </div>
+              </button>
             );
           })
         )}
       </div>
-    </div>
+      </aside>
   );
 }
 
@@ -336,7 +341,9 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<any[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
-  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [historyCollapsed, setHistoryCollapsed] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false
+  );
   const [sessionActive, setSessionActive] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<string>(skillParam || routeCompetency?.key || "");
   const [showNewChatPicker, setShowNewChatPicker] = useState(false);
@@ -953,7 +960,7 @@ export default function ChatPage() {
     };
 
     return (
-      <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
+      <div className="relative flex w-full max-w-full h-[calc(100dvh-48px-64px)] md:h-[calc(100dvh-64px)] min-h-0 overflow-hidden bg-[#F7F6F3]">
         {newChatPicker}
         {/* Sidebar historial de chats */}
         <ChatHistorySidebar
@@ -1082,7 +1089,7 @@ export default function ChatPage() {
 
   // ===== CHAT VIEW =====
   return (
-    <div className="flex h-[calc(100vh-48px-64px)] md:h-[calc(100vh-64px)] bg-[#F7F6F3]">
+    <div className="flex h-[calc(100dvh-48px-64px)] md:h-[calc(100dvh-64px)] min-h-0 bg-[#F7F6F3]">
       {newChatPicker}
       {consentPrompt && (
         <ConsentModal
@@ -1103,6 +1110,13 @@ export default function ChatPage() {
         </div>
       )}
       {/* Sidebar historial de chats (estilo ChatGPT) */}
+      {!historyCollapsed && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/20"
+          onClick={() => setHistoryCollapsed(true)}
+          aria-hidden="true"
+        />
+      )}
       <ChatHistorySidebar
         conversations={conversations}
         activeId={conversationId}
@@ -1115,22 +1129,29 @@ export default function ChatPage() {
         onToggleCollapse={() => setHistoryCollapsed(!historyCollapsed)}
       />
       {/* Chat Panel */}
-      <div className="flex flex-col flex-1 min-w-0 relative">
+      <div className="flex flex-col flex-1 min-w-0 min-h-0 relative">
         {/* Header */}
-        <div className="bg-white border-b border-[#E9E9E7] px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <NeuronAvatar size={36} online variant="dark" />
-            <div>
-              <h2 className="font-semibold text-[#191919] text-sm">
+        <div className="bg-white border-b border-[#E9E9E7] px-3 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-2 flex-shrink-0 shadow-[0_1px_8px_rgba(55,53,47,0.03)]">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="relative flex-shrink-0">
+              <NeuronAvatar size={36} online variant="dark" />
+              <span className="absolute -right-0.5 -bottom-0.5 w-2.5 h-2.5 rounded-full bg-[#0F7B6C] border-2 border-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-semibold text-[#191919] text-sm truncate max-w-[42vw] sm:max-w-none">
                 Neuro-Chat
                 {SKILLS.find((s) => s.key === selectedSkill)?.name && (
                   <span className="text-[#0B6E99] font-bold"> · {SKILLS.find((s) => s.key === selectedSkill)?.name}</span>
                 )}
               </h2>
-              <p className="text-xs text-[#787774]">
+              <p className="text-xs text-[#787774] truncate max-w-[42vw] sm:max-w-none">
                 {SKILLS.find((s) => s.key === selectedSkill)?.topic || "Selecciona una competencia para empezar"}
               </p>
             </div>
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-[#EEF7F4] px-2 py-1 text-[10px] font-semibold text-[#0F7B6C]">
+              <Sparkles className="w-3 h-3" />
+              Tutor activo
+            </span>
             {/* Badge Modo Tutor Voz */}
             {voiceTutor.isVoiceMode && (
               <span className="flex items-center gap-1 text-xs bg-[#F4EFFB] text-[#6940A5] px-2 py-0.5 rounded-full font-medium animate-pulse">
@@ -1138,7 +1159,7 @@ export default function ChatPage() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 sm:gap-2 flex-wrap justify-end max-w-[48%] sm:max-w-none">
             {stateKey && (
               <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${stateInfo.color}`}>
                 {stateInfo.label}
@@ -1309,10 +1330,10 @@ export default function ChatPage() {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-5 space-y-5 overscroll-contain scroll-smooth">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex animate-fadeIn ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={msg.role === "user" ? "max-w-[80%] md:max-w-[65%]" : "w-full"}>
+              <div className={msg.role === "user" ? "max-w-[92%] sm:max-w-[80%] md:max-w-[65%] min-w-0" : "w-full min-w-0"}>
                 {msg.role === "bot"
                   ? <BotMessageWithActions 
                       content={msg.content}
@@ -1322,7 +1343,7 @@ export default function ChatPage() {
                       onReport={(id) => console.log(`Reporte de mensaje: ${id}`)}
                     />
                   : <div className="bg-[#37352F] text-white rounded-md rounded-tr-sm px-4 py-3">
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
                     </div>
                 }
                 {msg.suggestions && msg.suggestions.length > 0 && (
@@ -1379,7 +1400,7 @@ export default function ChatPage() {
         )}
 
         {/* Input */}
-        <div className="bg-white border-t border-[#E9E9E7] px-4 py-3 flex-shrink-0">
+        <div className="bg-white border-t border-[#E9E9E7] px-3 sm:px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex-shrink-0">
           {/* Indicador STT: transcript en vivo mientras el usuario habla */}
           {voiceTutor.isListening && voiceTutor.liveTranscript && (
             <div className="px-4 pb-1 max-w-4xl mx-auto w-full animate-fadeIn">
@@ -1426,7 +1447,7 @@ export default function ChatPage() {
             </div>
           </div>
         )}
-        <div className="flex items-center gap-2 max-w-4xl mx-auto">
+        <div className="flex items-center gap-2 max-w-4xl mx-auto min-w-0">
             <input
               ref={inputRef}
               type="text"
@@ -1435,7 +1456,7 @@ export default function ChatPage() {
               onKeyDown={handleSendKeyDown}
               placeholder="Escribe tu respuesta..."
               disabled={sending}
-              className="flex-1 px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-[#F7F6F3]"
+              className="min-w-0 flex-1 px-3 sm:px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-[#F7F6F3]"
             />
             <button
               onClick={sendMessage}

@@ -487,7 +487,7 @@ export default function EvaluacionesTab() {
                     <input value={form.title} onChange={e=>setForm(p=>({...p,title:e.target.value}))} placeholder="ej. Parcial 1 — Álgebra"
                       maxLength={200} className={inputCls} />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className={labelCls}>Grupo *</label>
                       <select value={form.classroom_id} onChange={e=>setForm(p=>({...p,classroom_id:Number(e.target.value)}))} className={`${inputCls} bg-white`}>
@@ -528,7 +528,7 @@ export default function EvaluacionesTab() {
                   {/* Generación con IA */}
                   <div className="border border-[#6940A5]/30 bg-purple-50/40 rounded-lg p-4 space-y-3">
                     <p className="text-xs font-semibold text-[#6940A5] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Generar preguntas con IA (tipo Saber 11)</p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="col-span-2">
                         <label className={labelCls}>Tema *</label>
                         <input value={aiForm.topic} onChange={e=>setAiForm(p=>({...p,topic:e.target.value}))} maxLength={200}

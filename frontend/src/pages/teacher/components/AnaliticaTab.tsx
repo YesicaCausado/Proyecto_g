@@ -166,7 +166,7 @@ function TopicsChart({ data }: { data: TopicPerf[] }) {
 // ── Mapa de calor de la semana (actividad real) ───────────────────────────────
 function HeatCells({ data }: { data: WeeklyActivity[] }) {
   return (
-    <div className="grid grid-cols-6 gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
       {data.map((d, i) => {
         const hot = d.pct >= 70;
         const mid = d.pct >= 40 && d.pct < 70;
@@ -448,7 +448,7 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
           {risk.bajo + risk.medio + risk.alto === 0 && (
             <p className="text-[11px] text-[#AEADAB] text-center mt-1">Tus estudiantes aún no tienen quizzes registrados.</p>
           )}
-          <div className="w-full grid grid-cols-4 gap-2 mt-4">
+          <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
             {[
               { label: 'Bajo', v: risk.bajo, c: ACCENTS.mint },
               { label: 'Medio', v: risk.medio, c: ACCENTS.amber },

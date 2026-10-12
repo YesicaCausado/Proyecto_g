@@ -7,7 +7,7 @@ export default function MessagesPage() {
         <h1 className="text-2xl font-bold text-[#37352F]">Mensajes</h1>
         <p className="text-[#787774] text-sm mt-1">Conversaciones con tus profesores</p>
       </div>
-      <Messaging accent="#0066FF" height="h-[calc(100vh-200px)] min-h-[480px]" emptyHint="Habla con tus profesores de clase" />
+      <Messaging accent="#0066FF" height="h-[calc(100dvh-200px)] min-h-[480px]" emptyHint="Habla con tus profesores de clase" />
     </div>
   );
 }

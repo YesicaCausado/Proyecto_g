@@ -182,7 +182,7 @@ export default function SuperDashboard() {
   );
 
   return (
-    <div className="flex h-screen bg-[#F7F6F3] overflow-hidden">
+    <div className="flex h-[100dvh] min-h-0 bg-[#F7F6F3] overflow-hidden">
 
       {/* ══ SIDEBAR DESKTOP ══ */}
       <aside className="hidden lg:flex lg:flex-col w-60 border-r border-[#E9E9E7] flex-shrink-0" style={{ background: THEME.background }}>
@@ -221,7 +221,7 @@ export default function SuperDashboard() {
       )}
 
       {/* ══ MAIN CONTENT ══ */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-white">
 
         {/* Top header — desktop only */}
         <header className="hidden lg:block flex-shrink-0 px-6 xl:px-8 py-4 xl:py-5 border-b border-[#E9E9E7] bg-white">
@@ -239,7 +239,7 @@ export default function SuperDashboard() {
         </header>
 
         {/* Scrollable content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
           <div className="pt-12 lg:pt-0 p-4 sm:p-6 xl:p-8 max-w-7xl mx-auto">
 
             {activeTab === 'dashboard'    && <DashboardGeneral onNavigate={setActiveTab} />}

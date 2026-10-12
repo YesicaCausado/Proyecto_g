@@ -190,7 +190,7 @@ function TabDesempeno({ subjects, history }: { subjects: Subject[]; history: His
                   </button>
                   {isOpen && (
                     <div className="mx-2 mb-2 p-3 bg-[#F7F6F3] rounded-md border border-[#E9E9E7] animate-fadeIn">
-                      <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                         <div>
                           <p className="text-[11px] font-semibold text-[#9B9A97] uppercase mb-1.5">✅ Fortalezas</p>
                           {(s.strengths.length ? s.strengths : ['Sin datos aún']).map(t => (

@@ -395,7 +395,7 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
                 className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB]" />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Evento</label>
                 <select value={form.trigger} onChange={e => setForm(p => ({ ...p, trigger: e.target.value }))}

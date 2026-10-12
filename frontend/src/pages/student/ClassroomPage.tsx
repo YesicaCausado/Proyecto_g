@@ -153,7 +153,7 @@ export default function ClassroomPage() {
             ) : (
               <p className="text-xs text-[#9B9A97]">El profesor aún no ha añadido una descripción.</p>
             )}
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="p-3 bg-[#F7F6F3] rounded-md">
                 <p className="text-[11px] text-[#787774] uppercase tracking-wide">Materia</p>
                 <p className="text-sm font-medium text-[#37352F] mt-0.5">{classroom.subject}</p>

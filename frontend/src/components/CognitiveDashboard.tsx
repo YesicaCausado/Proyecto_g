@@ -189,7 +189,7 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
   const isVoiceLive  = !!(voiceActive && voiceSnapshot?.is_active);
 
   return (
-    <div className="bg-white border-l border-[#E9E9E7] w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4">
+    <aside className="fixed md:static right-0 top-12 bottom-16 md:top-auto md:bottom-auto z-40 bg-white border-l border-[#E9E9E7] w-[min(20rem,calc(100vw-1rem))] md:w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4 shadow-[-8px_0_24px_rgba(55,53,47,0.08)] md:shadow-none">
       {/* Estado Cognitivo */}
       <div>
         <div className="flex items-center gap-2 mb-3">
@@ -392,6 +392,6 @@ export default function CognitiveDashboard({ response, isVisible, facialSnapshot
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

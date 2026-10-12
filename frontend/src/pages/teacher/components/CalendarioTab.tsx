@@ -233,7 +233,7 @@ export default function CalendarioTab() {
                 placeholder="ej. Examen parcial — Física"
                 className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB]" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Tipo</label>
                 <select value={form.type} onChange={e => setForm(p=>({...p,type:e.target.value as EventType}))}

@@ -420,7 +420,7 @@ export default function MisGruposTab() {
                   placeholder="ej. Matemáticas 9A"
                   className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2E6FDB]/30 focus:border-[#2E6FDB]" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#787774] mb-1.5 uppercase tracking-wide">Materia *</label>
                   <input value={form.subject} onChange={e => setForm(p => ({...p, subject: e.target.value}))}

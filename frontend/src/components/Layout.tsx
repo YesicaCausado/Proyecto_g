@@ -352,7 +352,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="flex h-screen bg-white text-[#37352F]"
+      className="flex h-[100dvh] min-h-0 bg-white text-[#37352F]"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
       {/* ── Sidebar Desktop ── */}
@@ -406,7 +406,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* ── Main content ── */}
-      <main className="flex-1 overflow-y-auto flex flex-col">
+      <main className="flex-1 min-w-0 min-h-0 overflow-y-auto flex flex-col">
         <div className="pt-12 md:pt-0 pb-16 md:pb-0 min-h-full flex-1">
           {children}
         </div>

@@ -135,7 +135,7 @@ export default function ExportReportModal({ onClose }: { onClose: () => void }) 
             </select>
             {groupsError && <p className="mt-1 text-[11px] text-[#D9730D]">{groupsError}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Desde</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />

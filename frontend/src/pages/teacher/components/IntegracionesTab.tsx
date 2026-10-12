@@ -456,7 +456,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
                 )}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Fecha *</label>
                 <input type="date" value={calForm.event_date} onChange={e => setCalForm(p => ({ ...p, event_date: e.target.value }))}

@@ -242,7 +242,7 @@ export default function CalendarioTab() {
                   placeholder="Ej: Examen de Matemáticas" autoFocus
                   className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm outline-none focus:ring-1 focus:ring-[#6940A5]" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#787774] mb-1 uppercase tracking-wide">Tipo</label>
                   <select value={form.type} onChange={e => setForm({...form, type: e.target.value as EventType})}

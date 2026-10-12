@@ -845,7 +845,8 @@ export default function TeacherPanel() {
     <div
       className="
         flex
-        h-screen
+        h-[100dvh]
+        min-h-0
         bg-[#F7F6F3]
         overflow-hidden
       "
@@ -1029,6 +1030,8 @@ export default function TeacherPanel() {
       <div
         className="
           flex-1
+          min-w-0
+          min-h-0
           flex
           flex-col
           overflow-hidden
