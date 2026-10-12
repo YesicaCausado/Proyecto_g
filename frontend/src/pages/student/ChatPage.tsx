@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { lazy, Suspense, useState, useRef, useEffect } from "react";
 import { useSearchParams, useParams } from "react-router-dom";
 import api from "../../services/api";
 import { COMPETENCIES, findCompetency } from "../../data/competencies";
@@ -11,7 +11,7 @@ import { useVoiceTutor } from "../../hooks/useVoiceTutor";
 import { useConsents, type ConsentType } from "../../hooks/useConsents";
 import ConsentModal from "../../components/ConsentModal";
 import { ProgressBar, StatusBadge, type NeuroBotProgress } from "../../components/neurobots/progress";
-import CognitiveDashboard from "../../components/CognitiveDashboard";
+const CognitiveDashboard = lazy(() => import("../../components/CognitiveDashboard"));
 import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor";
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
 import BotMessageWithActions from "../../components/BotMessageWithActions";
@@ -358,6 +358,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const vrmRef = useRef<VRMTutorHandle>(null);
+  const pendingConversationRef = useRef<Promise<number | null> | null>(null);
   const [currentQuiz, setCurrentQuiz] = useState<QuizData | null>(null);
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
@@ -482,27 +483,36 @@ export default function ChatPage() {
     const topic = topicForBot ?? skill?.topic;
     if (!topic) return;
     setSending(true);
+    // Mostrar el espacio de chat inmediatamente; la bienvenida de la IA llega
+    // después sin bloquear la navegación ni el input.
+    setSessionActive(true);
 
     let data: ChatMessageResponse;
 
-    // ── Paso 1: crear/reutilizar conversación (memoria de chats) ──
-    // Si aún no hay conversation_id, se crea una para que el historial persista.
+    // La conversación se crea en paralelo con la bienvenida. Antes eran dos
+    // peticiones secuenciales y el estado de carga permanecía visible durante
+    // ambas latencias. El primer mensaje esperará esta promesa si hace falta.
     let convId = conversationId;
-    try {
-      if (!convId) {
-        const skillObj = SKILLS.find((s) => s.key === skillKey);
-        const cv = await api.post<any>("/chat/conversations", {
+    if (!convId) {
+      const skillObj = SKILLS.find((s) => s.key === skillKey);
+      pendingConversationRef.current = api.post<any>("/chat/conversations", {
           subject: skillObj?.name ?? "",
           skill: skillObj?.topic ? skillObj.name : "",
           topic: topic,
           bot_id: botIdParam ? Number(botIdParam) : undefined,
+        }).then(cv => {
+          const id = cv.data?.id ?? null;
+          if (id) {
+            setConversationId(id);
+            // Refresca el drawer cuando la persistencia termina, sin bloquear
+            // la bienvenida ni el primer render.
+            void loadConversations();
+          }
+          return id;
+        }).catch(e => {
+          console.warn("No se pudo crear conversación persistente:", e);
+          return null;
         });
-        convId = cv.data?.id ?? null;
-        setConversationId(convId);
-      }
-    } catch (e) {
-      // Si falla, seguimos sin conversation_id (el chat funciona igual).
-      console.warn("No se pudo crear conversación persistente:", e);
     }
 
     try {
@@ -627,13 +637,17 @@ export default function ChatPage() {
 
     // ── Paso 1: llamada al backend ──
     try {
+      let activeConversationId = conversationId;
+      if (!activeConversationId && pendingConversationRef.current) {
+        activeConversationId = await pendingConversationRef.current;
+      }
       const skill = SKILLS.find((s) => s.key === (skillKeyOverride ?? selectedSkill));
       const res = await api.post<ChatMessageResponse>("/chat/message", {
         message: msgContent,
         topic: botTopic ?? skill?.topic ?? "Tema general",
         // NeuroBot: el backend agrega al contexto los documentos del docente.
         bot_id: botIdParam ? Number(botIdParam) : undefined,
-        conversation_id: conversationId ?? undefined,
+        conversation_id: activeConversationId ?? undefined,
         cognitive_state: lastResponse?.cognitive_state || "normal",
         history: messages.slice(-10).map((m) => ({
           role: m.role === "bot" ? "assistant" : "user",
@@ -893,8 +907,14 @@ export default function ChatPage() {
     } catch (e) { /* ignore */ }
   };
 
-  // Cargar lista de conversaciones al montar
-  useEffect(() => { loadConversations(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // El historial no debe retrasar el primer render del chat.
+  useEffect(() => {
+    const idle = window.setTimeout(() => { void loadConversations(); }, 0);
+    return () => {
+      window.clearTimeout(idle);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const stateKey = lastResponse?.cognitive_state || "";
   const stateInfo = STATE_LABELS[stateKey] || { label: stateKey, color: "bg-[#F7F6F3] text-[#787774]" };
@@ -1548,14 +1568,18 @@ export default function ChatPage() {
       </div>
 
       {/* Panel Neuroconductual */}
-      <CognitiveDashboard
-        response={lastResponse}
-        isVisible={showDashboard}
-        facialSnapshot={facial.snapshot}
-        facialActive={facial.isStreaming}
-        voiceSnapshot={voice.snapshot}
-        voiceActive={voice.isStreaming}
-      />
+      {lastResponse && showDashboard && (
+        <Suspense fallback={null}>
+          <CognitiveDashboard
+            response={lastResponse}
+            isVisible={showDashboard}
+            facialSnapshot={facial.snapshot}
+            facialActive={facial.isStreaming}
+            voiceSnapshot={voice.snapshot}
+            voiceActive={voice.isStreaming}
+          />
+        </Suspense>
+      )}
 
 
     </div>

@@ -94,29 +94,6 @@ export function useFacialDetection(): FacialDetectionControls {
     setErrorMessage(null);
   }, []);
 
-  // Detectar si hay cámara disponible al montar el hook
-  useEffect(() => {
-    if (!navigator.mediaDevices?.enumerateDevices) {
-      setHardwareAvailable(false);
-      return;
-    }
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
-      const hasCamera = devices.some((d) => d.kind === 'videoinput');
-      setHardwareAvailable(hasCamera);
-      if (!hasCamera) setErrorMessage('Este dispositivo no tiene cámara disponible.');
-    }).catch(() => setHardwareAvailable(false));
-  }, []);
-
-  // Crear el elemento video una sola vez
-  if (!videoRef.current) {
-    const v = document.createElement('video');
-    v.setAttribute('playsinline', '');
-    v.muted = true;
-    v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-1px;left:-1px;';
-    document.body.appendChild(v);
-    videoRef.current = v;
-  }
-
   // ── Carga perezosa del modelo MediaPipe (GPU -> CPU por fallback) ──
   const ensureLandmarker = useCallback(async (): Promise<LandmarkerLike> => {
     if (landmarkerRef.current) return landmarkerRef.current;
@@ -263,6 +240,24 @@ export function useFacialDetection(): FacialDetectionControls {
 
   const startCamera = useCallback(async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setHardwareAvailable(false);
+        throw new Error('El navegador no permite acceder a la cámara.');
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasCamera = devices.some((d) => d.kind === 'videoinput');
+      if (!hasCamera) {
+        setHardwareAvailable(false);
+        throw new DOMException('No se encontró ninguna cámara.', 'NotFoundError');
+      }
+      if (!videoRef.current) {
+        const v = document.createElement('video');
+        v.setAttribute('playsinline', '');
+        v.muted = true;
+        v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-1px;left:-1px;';
+        document.body.appendChild(v);
+        videoRef.current = v;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480, facingMode: 'user' },
         audio: false,
@@ -296,6 +291,7 @@ export function useFacialDetection(): FacialDetectionControls {
         setErrorMessage('Permiso de cámara denegado. Haz clic en el candado de la barra de dirección y permite la cámara.');
         console.warn('[FacialDetection] Permiso de camara denegado');
       } else if (e?.name === 'NotFoundError') {
+        setHardwareAvailable(false);
         setErrorMessage('No se encontró ninguna cámara en este dispositivo.');
         console.warn('[FacialDetection] Cámara no encontrada');
       } else if (e?.name === 'NotReadableError') {

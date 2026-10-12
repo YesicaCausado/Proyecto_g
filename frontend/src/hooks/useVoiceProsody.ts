@@ -92,19 +92,6 @@ export function useVoiceProsody(): VoiceProsodyControls {
     setErrorMessage(null);
   }, []);
 
-  // Detectar si hay micrófono disponible al montar el hook
-  useEffect(() => {
-    if (!navigator.mediaDevices?.enumerateDevices) {
-      setHardwareAvailable(false);
-      return;
-    }
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
-      const hasMic = devices.some((d) => d.kind === 'audioinput');
-      setHardwareAvailable(hasMic);
-      if (!hasMic) setErrorMessage('Este dispositivo no tiene micrófono disponible.');
-    }).catch(() => setHardwareAvailable(false));
-  }, []);
-
   const analyzeAudio = useCallback(() => {
     const analyser = analyserRef.current;
     if (!analyser) return;
@@ -223,6 +210,16 @@ export function useVoiceProsody(): VoiceProsodyControls {
 
   const startMic = useCallback(async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setHardwareAvailable(false);
+        throw new Error('El navegador no permite acceder al micrófono.');
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasMic = devices.some((d) => d.kind === 'audioinput');
+      if (!hasMic) {
+        setHardwareAvailable(false);
+        throw new DOMException('No se encontró ningún micrófono.', 'NotFoundError');
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       streamRef.current = stream;
 
@@ -252,6 +249,7 @@ export function useVoiceProsody(): VoiceProsodyControls {
         setPermissionDenied(true);
         setErrorMessage('Permiso de micrófono denegado. Haz clic en el candado de la barra de dirección y permite el micrófono.');
       } else if (error?.name === 'NotFoundError') {
+        setHardwareAvailable(false);
         setErrorMessage('No se encontró ningún micrófono en este dispositivo.');
       } else if (error?.name === 'NotReadableError') {
         setErrorMessage('El micrófono está siendo usado por otra aplicación. Ciérrala e intenta de nuevo.');
