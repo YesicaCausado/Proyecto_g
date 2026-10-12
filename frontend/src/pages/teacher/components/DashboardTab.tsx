@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, Users, TrendingUp, Bot, AlertTriangle,
   ChevronRight, Star, Clock, Calendar, Zap,
@@ -52,12 +52,13 @@ function MiniCalendar({ eventDays }: { eventDays: number[] }) {
         <button onClick={() => { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);}}
           className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#F7F6F3] text-[#787774] text-xs">›</button>
       </div>
+
       <div className="grid grid-cols-7 gap-0.5 mb-1">
         {DAYS.map(d => <div key={d} className="text-center text-[9px] font-semibold text-[#AEADAB] py-0.5">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map((day, i) => (
-          <div key={i} className={`aspect-square flex items-center justify-center rounded text-[11px] relative cursor-pointer transition-colors
+          <div key={i} className={`aspect-square flex items-center justify-center rounded text-[11px] relative transition-colors
             ${day === null ? '' : eventDays.includes(day ?? 0) ? 'font-semibold' : 'hover:bg-[#F7F6F3]'}
             ${isCurrentMonth && day === todayDay ? 'bg-[#2E6FDB] text-white rounded-full' : 'text-[#37352F]'}
           `}>
@@ -77,13 +78,26 @@ export default function DashboardTab({ onNavigate }: Props) {
   const { user } = useAuth();
   const [stats, setStats] = useState<TeacherStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadStats = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     api.get('/teacher/stats')
       .then(r => setStats(r.data))
-      .catch(() => {})
+      .catch(() => {
+        setStats(null);
+        setLoadError('No fue posible cargar las estadísticas reales del grupo.');
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadStats();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadStats]);
 
   const hasData = stats?.has_data ?? false;
 
@@ -140,6 +154,19 @@ export default function DashboardTab({ onNavigate }: Props) {
           <Zap className="w-4 h-4" /> NeuroInsights
         </button>
       </div>
+
+      {loadError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#F2C6C6] bg-[#FDF4F4] px-4 py-3 text-sm text-[#A33A3A]">
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={loadStats}
+            className="rounded-md border border-[#E8AAAA] px-3 py-1.5 text-xs font-semibold hover:bg-white"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       {/* ── KPI Cards ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">

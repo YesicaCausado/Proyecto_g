@@ -17,6 +17,48 @@ import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components
 import BotMessageWithActions from "../../components/BotMessageWithActions";
 import NeuronAvatar from "../../components/NeuronAvatar";
 
+interface ConversationSummary {
+  id: number;
+  title?: string | null;
+  subject?: string | null;
+  topic?: string | null;
+  skill?: string | null;
+  last_interaction?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+}
+
+interface ConversationMessage {
+  id: number;
+  role: string;
+  content: string;
+  timestamp: string;
+}
+
+interface ConversationResponse {
+  conversation?: {
+    skill?: string | null;
+    subject?: string | null;
+    topic?: string | null;
+  };
+  messages?: ConversationMessage[];
+}
+
+interface ApiErrorResponse {
+  detail?: string;
+}
+
+interface ApiError {
+  response?: {
+    status?: number;
+    data?: ApiErrorResponse;
+  };
+}
+
+function getApiError(error: unknown): ApiError {
+  return typeof error === "object" && error !== null ? error as ApiError : {};
+}
+
 function VideoPreview({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | null> }) {
   const previewRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -93,7 +135,7 @@ const SUBJECT_ICONS: Record<string, string> = {
   ciudadanas: "🏛️", social: "🏛️",
 };
 
-function subjectIcon(conv: any): string {
+function subjectIcon(conv: ConversationSummary): string {
   const key = (conv.skill || conv.subject || "").toLowerCase();
   for (const [k, icon] of Object.entries(SUBJECT_ICONS)) {
     if (key.includes(k)) return icon;
@@ -113,7 +155,7 @@ function ChatHistorySidebar({
   collapsed,
   onToggleCollapse,
 }: {
-  conversations: any[];
+  conversations: ConversationSummary[];
   activeId: number | null;
   loading: boolean;
   onSelect: (id: number) => void;
@@ -124,7 +166,7 @@ function ChatHistorySidebar({
   onToggleCollapse: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const filtered = conversations.filter((c: any) =>
+  const filtered = conversations.filter((c) =>
     (c.title || c.subject || c.topic || "").toLowerCase().includes(search.toLowerCase())
   );
 
@@ -223,7 +265,7 @@ function ChatHistorySidebar({
             )}
           </div>
         ) : (
-          filtered.map((c: any) => {
+          filtered.map((c) => {
             const isActive = c.id === activeId;
             return (
               <button
@@ -245,7 +287,7 @@ function ChatHistorySidebar({
                         {c.title || "Conversación"}
                       </p>
                       <span className="text-[10px] text-[#AEADAB] flex-shrink-0">
-                        {fmtRelativeTime(c.last_interaction || c.updated_at)}
+                        {fmtRelativeTime(c.last_interaction || c.updated_at || null)}
                       </span>
                     </div>
                     <p className="text-[11px] text-[#787774] truncate mt-0.5">
@@ -339,7 +381,7 @@ export default function ChatPage() {
   const [prevInput, setPrevInput] = useState("");
   const [sending, setSending] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(() =>
     typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false
@@ -492,10 +534,10 @@ export default function ChatPage() {
     // La conversación se crea en paralelo con la bienvenida. Antes eran dos
     // peticiones secuenciales y el estado de carga permanecía visible durante
     // ambas latencias. El primer mensaje esperará esta promesa si hace falta.
-    let convId = conversationId;
+    const convId = conversationId;
     if (!convId) {
       const skillObj = SKILLS.find((s) => s.key === skillKey);
-      pendingConversationRef.current = api.post<any>("/chat/conversations", {
+      pendingConversationRef.current = api.post<{ id?: number }>("/chat/conversations", {
           subject: skillObj?.name ?? "",
           skill: skillObj?.topic ? skillObj.name : "",
           topic: topic,
@@ -516,15 +558,19 @@ export default function ChatPage() {
     }
 
     try {
-      const payload: any = { topic, difficulty: "medium" };
+      const payload: { topic: string; difficulty: string; bot_id?: number; conversation_id?: number } = {
+        topic,
+        difficulty: "medium",
+      };
       if (botIdParam) payload.bot_id = Number(botIdParam);
       if (convId) payload.conversation_id = convId;
       const res = await api.post<ChatMessageResponse>("/chat/start", payload);
       data = res.data;
       if (convId) loadConversations();
-    } catch (err: any) {
-      if (err?.response && err.response.status < 500) {
-        const detail = err.response.data?.detail || `Error ${err.response.status}`;
+    } catch (err: unknown) {
+      const apiError = getApiError(err);
+      if (apiError.response?.status && apiError.response.status < 500) {
+        const detail = apiError.response.data?.detail || `Error ${apiError.response.status}`;
         console.error("Error starting session (HTTP 4xx):", detail);
         setSessionActive(true);
         setMessages([{
@@ -537,7 +583,7 @@ export default function ChatPage() {
         inputRef.current?.focus();
         return;
       }
-      console.error("Backend/IA no disponible:", err?.response?.status ?? err?.message);
+      console.error("Backend/IA no disponible:", apiError.response?.status);
       setSessionActive(true);
       setMessages([{
         id: Date.now().toString(),
@@ -689,10 +735,11 @@ export default function ChatPage() {
         } : {}),
       });
       data = res.data;
-    } catch (err: any) {
-      if (err?.response && err.response.status < 500) {
+    } catch (err: unknown) {
+      const apiError = getApiError(err);
+      if (apiError.response?.status && apiError.response.status < 500) {
         // Error de cliente (4xx) — sí mostrar al usuario
-        const detail = err.response.data?.detail || `Error ${err.response.status}`;
+        const detail = apiError.response.data?.detail || `Error ${apiError.response.status}`;
         console.error("Error sending message (HTTP 4xx):", detail);
         setMessages((prev) => [
           ...prev,
@@ -708,7 +755,7 @@ export default function ChatPage() {
         return;
       }
       // 5xx o sin respuesta → mostrar error real, no fabricar respuesta demo
-      console.error("Backend/IA no disponible:", err?.response?.status ?? err?.message);
+      console.error("Backend/IA no disponible:", apiError.response?.status);
       setMessages((prev) => [
         ...prev,
         {
@@ -809,8 +856,11 @@ export default function ChatPage() {
       // Cada módulo ve solo su historial: con un NeuroBot, sus conversaciones;
       // en Competencias, solo los chats sin NeuroBot.
       const scope = botIdParam ? { bot_id: Number(botIdParam) } : { scope: "competencias" };
-      const res = await api.get<any>("/chat/conversations", { params: { ...scope, _t: Date.now() } });
-      const list = res.data?.conversations ?? res.data ?? [];
+      const res = await api.get<{ conversations?: ConversationSummary[] } | ConversationSummary[]>(
+        "/chat/conversations",
+        { params: { ...scope, _t: Date.now() } },
+      );
+      const list = Array.isArray(res.data) ? res.data : res.data?.conversations ?? [];
       setConversations(Array.isArray(list) ? list : []);
     } catch (e) {
       console.warn("No se pudo cargar el historial de conversaciones:", e);
@@ -821,9 +871,9 @@ export default function ChatPage() {
 
   const loadConversation = async (id: number) => {
     try {
-      const res = await api.get<any>(`/chat/conversations/${id}`);
+      const res = await api.get<ConversationResponse>(`/chat/conversations/${id}`);
       const conv = res.data?.conversation;
-      const msgs = (res.data?.messages ?? []).map((m: any) => ({
+      const msgs: ChatMessage[] = (res.data?.messages ?? []).map((m) => ({
         id: String(m.id),
         role: m.role === "user" ? "user" : "bot",
         content: m.content,
@@ -843,7 +893,7 @@ export default function ChatPage() {
       }
       metrics.reset();
       if (msgs.length) metrics.onBotMessageReceived();
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   };
 
   // Reinicia el estado del chat sin abrir el selector (tras eliminar, p. ej.).
@@ -904,7 +954,7 @@ export default function ChatPage() {
       await api.delete(`/chat/conversations/${id}`);
       if (conversationId === id) resetChatState();
       loadConversations();
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   };
 
   // El historial no debe retrasar el primer render del chat.
@@ -1191,7 +1241,8 @@ export default function ChatPage() {
                 <button
                   onClick={() => {
                     if (facial.errorMessage) facial.resetError();
-                    facial.isStreaming ? facial.stopCamera() : requestDevice("camara_facial");
+                    if (facial.isStreaming) facial.stopCamera();
+                    else requestDevice("camara_facial");
                   }}
                   title={
                     facial.errorMessage ? facial.errorMessage
@@ -1235,7 +1286,8 @@ export default function ChatPage() {
                 <button
                   onClick={() => {
                     if (voice.errorMessage) voice.resetError();
-                    voice.isStreaming ? voice.stopMic() : requestDevice("microfono_voz");
+                    if (voice.isStreaming) voice.stopMic();
+                    else requestDevice("microfono_voz");
                   }}
                   title={
                     voice.errorMessage ? voice.errorMessage
@@ -1360,7 +1412,6 @@ export default function ChatPage() {
                       messageId={msg.id}
                       onSpeak={(text, onEnd) => voiceTutor.speakText(text, onEnd)}
                       onStopSpeak={() => voiceTutor.stopSpeaking()}
-                      onReport={(id) => console.log(`Reporte de mensaje: ${id}`)}
                     />
                   : <div className="bg-[#37352F] text-white rounded-md rounded-tr-sm px-4 py-3">
                       <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>

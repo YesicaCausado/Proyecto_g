@@ -168,7 +168,6 @@ interface BotMessageWithActionsProps {
   onDislike?: (id: string) => void;
   onSpeak?: (content: string, onStop?: () => void) => void;
   onStopSpeak?: () => void;
-  onReport?: (id: string) => void;
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────────

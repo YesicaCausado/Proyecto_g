@@ -136,4 +136,14 @@ class Settings(BaseSettings):
         case_sensitive = True
         extra = "ignore"
 
+    def model_post_init(self, __context) -> None:
+        # Vercel debe prevalecer sobre un GOOGLE_REDIRECT_URI local heredado
+        # del archivo .env cuando no existe una variable explícita.
+        explicit_uri = os.getenv("GOOGLE_REDIRECT_URI")
+        production_url = os.getenv("VERCEL_PROJECT_PRODUCTION_URL")
+        if not explicit_uri and production_url:
+            self.GOOGLE_REDIRECT_URI = (
+                f"https://{production_url}/api/v1/integrations/google/callback"
+            )
+
 settings = Settings()

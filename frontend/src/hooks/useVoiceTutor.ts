@@ -8,6 +8,15 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import api from '../services/api';
 
+interface SpeechRecognitionConstructor {
+  new (): ISpeechRecognition;
+}
+
+interface BrowserWindow extends Window {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+}
+
 // ── Tipos de Web Speech API ──────────────────────────────────────────────────
 interface ISpeechRecognition extends EventTarget {
   lang: string;
@@ -143,9 +152,10 @@ async function azureSynth(text: string, lang: 'es' | 'en'): Promise<HTMLAudioEle
     audio.addEventListener('ended',  cleanup, { once: true });
     audio.addEventListener('error',  cleanup, { once: true });
     return audio;
-  } catch (err: any) {
-    if (err?.response?.status === 503) azureAvailable = false;
-    console.warn('[Voz] Se usa la voz del navegador:', err?.response?.status ?? err?.message);
+  } catch (err: unknown) {
+    const error = err as { response?: { status?: number }; message?: string };
+    if (error.response?.status === 503) azureAvailable = false;
+    console.warn('[Voz] Se usa la voz del navegador:', error.response?.status ?? error.message);
     return null;
   }
 }
@@ -173,8 +183,9 @@ export function useVoiceTutor(
   const subtitleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef         = useRef<HTMLAudioElement | null>(null); // elemento Audio de Azure
 
+  const browserWindow = window as BrowserWindow;
   const SpeechRecognitionAPI =
-    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
   const supported = !!(SpeechRecognitionAPI && window.speechSynthesis);
 
   // Precargar voces al montar (el navegador las carga de forma asíncrona)
@@ -240,7 +251,7 @@ export function useVoiceTutor(
     };
 
     // 7. Web Speech como respaldo
-    function useWebSpeech() {
+    function speakWithBrowser() {
       if (!window.speechSynthesis) { handleEnd(); return; }
       const utterance  = new SpeechSynthesisUtterance(clean);
       utterance.lang   = isEn ? 'en-US' : 'es-BO';
@@ -259,7 +270,7 @@ export function useVoiceTutor(
     // 8. Azure TTS por el servidor (principal) → Web Speech (fallback)
     if (azureAvailable) {
       azureSynth(clean, detectedLang).then(audio => {
-        if (!audio) { useWebSpeech(); return; }
+        if (!audio) { speakWithBrowser(); return; }
         audioRef.current = audio;
         audio.onended = () => { if (audioRef.current === audio) handleEnd(); };
         audio.onerror = () => { if (audioRef.current === audio) handleEnd(); };
@@ -269,7 +280,7 @@ export function useVoiceTutor(
       });
       return;
     }
-    useWebSpeech();
+    speakWithBrowser();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -342,7 +353,7 @@ export function useVoiceTutor(
 
     recognitionRef.current = recognition;
     try { recognition.start(); } catch { /* ya corriendo */ }
-  }, [onTranscript]);
+  }, [SpeechRecognitionAPI, onTranscript]);
 
   // ── Activar / Desactivar modo voz ────────────────────────────────────────────
   const startVoiceMode = useCallback(() => {
@@ -423,7 +434,7 @@ export function useVoiceTutor(
 
     recognitionRef.current = recognition;
     try { recognition.start(); } catch { /* ya corriendo */ }
-  }, [onTranscript]);
+  }, [SpeechRecognitionAPI, onTranscript]);
 
   const stopPTT = useCallback(() => {
     recognitionRef.current?.stop();

@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 
@@ -659,6 +659,63 @@ async def update_institution_admin(
     )
 
 
+class InstitutionPatchPayload(BaseModel):
+    """Campos que el panel puede actualizar sin recrear la institución."""
+
+    name: Optional[str] = Field(None, min_length=2, max_length=200)
+    dane_code: Optional[str] = Field(None, min_length=3, max_length=20)
+    is_active: Optional[bool] = None
+
+
+@router.patch(
+    "/institutions/{institution_id}",
+)
+async def patch_institution_admin(
+    institution_id: int,
+    payload: InstitutionPatchPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Actualiza parcialmente una institución, incluida su activación."""
+
+    _require_admin(current_user)
+    institution = db.query(Institution).filter(Institution.id == institution_id).first()
+    if not institution:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Institución no encontrada.",
+        )
+
+    changes = payload.model_dump(exclude_unset=True)
+    if "dane_code" in changes:
+        duplicate = (
+            db.query(Institution)
+            .filter(
+                Institution.dane_code == changes["dane_code"],
+                Institution.id != institution_id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El código DANE ya está registrado por otra institución.",
+            )
+
+    for field_name, value in changes.items():
+        setattr(institution, field_name, value)
+    db.commit()
+    db.refresh(institution)
+
+    return {
+        "id": institution.id,
+        "name": institution.name,
+        "dane_code": institution.dane_code,
+        "is_active": institution.is_active,
+        "created_at": institution.created_at,
+    }
+
+
 # ============================================================================
 # CONFIGURACIÓN DEL SISTEMA
 # ============================================================================
@@ -785,73 +842,6 @@ async def admin_get_config(
         "total_users": total_users,
         "active_users": active_users,
         "total_institutions": total_institutions,
-    }
-
-
-# ============================================================================
-# ACTUALIZAR CONFIGURACIÓN
-# ============================================================================
-
-class ConfigUpdatePayload(BaseModel):
-    """
-    Configuración global modificable desde el panel de administración.
-
-    No contiene ningún campo relacionado con licencias.
-    """
-
-    token_expire_minutes: Optional[int] = None
-    debug_mode: Optional[bool] = None
-    email_from: Optional[str] = None
-
-
-@router.patch("/config")
-async def admin_update_config(
-    payload: ConfigUpdatePayload,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Actualiza la configuración global del sistema.
-    """
-
-    _require_admin(current_user)
-
-    # ------------------------------------------------------------------------
-    # Validar y actualizar duración del token
-    # ------------------------------------------------------------------------
-
-    if payload.token_expire_minutes is not None:
-
-        if not 60 <= payload.token_expire_minutes <= 43200:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "token_expire_minutes debe estar entre "
-                    "60 y 43200 minutos."
-                ),
-            )
-
-        settings.ACCESS_TOKEN_EXPIRE_MINUTES = (
-            payload.token_expire_minutes
-        )
-
-    # ------------------------------------------------------------------------
-    # Debug
-    # ------------------------------------------------------------------------
-
-    if payload.debug_mode is not None:
-        settings.DEBUG = payload.debug_mode
-
-    # ------------------------------------------------------------------------
-    # Email
-    # ------------------------------------------------------------------------
-
-    if payload.email_from is not None:
-        settings.EMAIL_FROM = payload.email_from
-
-    return {
-        "status": "ok",
-        "message": "Configuración actualizada correctamente.",
     }
 
 
