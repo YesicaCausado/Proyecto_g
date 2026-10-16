@@ -64,6 +64,8 @@ function CredentialsTable({
   icon: any;
 }) {
   const [selected, setSelected] = useState<Set<number>>(() => new Set(credentials.map((_, i) => i)));
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState(false);
 
   if (credentials.length === 0) return null;
 
@@ -134,13 +136,23 @@ function CredentialsTable({
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-[#787774]">{cred.full_name || '-'}</td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-[#37352F] font-mono tracking-wider font-semibold">{cred.temp_password}</td>
                 <td className="px-4 py-4 whitespace-nowrap text-sm text-right" onClick={e => e.stopPropagation()}>
-                  <button 
-                    onClick={() => navigator.clipboard.writeText(`Usuario: ${cred.username} | Pass: ${cred.temp_password}`)}
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(`Usuario: ${cred.username} | Pass: ${cred.temp_password}`);
+                        setCopiedIndex(idx);
+                        setCopyError(false);
+                        window.setTimeout(() => setCopiedIndex(current => current === idx ? null : current), 1500);
+                      } catch {
+                        setCopiedIndex(null);
+                        setCopyError(true);
+                      }
+                    }}
                     className="text-[#787774] hover:text-[#37352F] transition-colors flex items-center gap-1 justify-end ml-auto"
                     title="Copiar credenciales"
                   >
-                    <Copy className="w-4 h-4" />
-                    <span className="text-xs">Copiar</span>
+                    {copiedIndex === idx ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
+                    <span className="text-xs">{copiedIndex === idx ? 'Copiadas' : 'Copiar'}</span>
                   </button>
                 </td>
               </tr>
@@ -148,6 +160,11 @@ function CredentialsTable({
           </tbody>
         </table>
       </div>
+      {copyError && (
+        <p className="px-6 py-2 text-xs text-[#A33A3A] bg-[#FDF4F4] border-t border-[#F2C6C6]">
+          No se pudieron copiar las credenciales. Revisa los permisos del portapapeles e inténtalo de nuevo.
+        </p>
+      )}
       <div className="bg-[#F7F6F3]/30 px-6 py-3 border-t border-[#E9E9E7] flex justify-between items-center hide-print">
         <p className="text-xs text-[#787774]">
           * Contraseñas temporales. Selecciona las filas que deseas incluir al imprimir.
@@ -319,7 +336,9 @@ export function TeachersTab() {
     try {
       const res = await api.get('/super/teachers');
       setExistingTeachers(res.data || []);
-    } catch { /* silencioso */ }
+    } catch {
+      setError('No se pudieron cargar los profesores. Inténtalo de nuevo.');
+    }
     finally { setLoadingList(false); }
   };
 
@@ -993,7 +1012,9 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
     try {
       const res = await api.get('/super/students');
       setExistingStudents(res.data || []);
-    } catch { /* silencioso */ }
+    } catch {
+      setError('No se pudieron cargar los estudiantes. Inténtalo de nuevo.');
+    }
     finally { setLoadingList(false); }
   };
 

@@ -162,6 +162,15 @@ export default function UserManagement() {
     }
   };
 
+  const copyTemporaryPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(newPwd);
+      notify('ok', 'Contraseña copiada');
+    } catch {
+      notify('err', 'No se pudo copiar la contraseña. Revisa los permisos del portapapeles.');
+    }
+  };
+
   // ─── Eliminar ───────────────────────────────────────────────────────────────
   const doDelete = async () => {
     if (!deleteUser) return;
@@ -416,7 +425,7 @@ export default function UserManagement() {
                     <button onClick={() => setShowPwd(v => !v)} className="text-[#787774] hover:text-[#37352F]">
                       {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
-                    <button onClick={() => { navigator.clipboard.writeText(newPwd); notify('ok', 'Contraseña copiada'); }}
+                    <button onClick={() => void copyTemporaryPassword()}
                       className="text-[#787774] hover:text-[#37352F]" title="Copiar">
                       <Copy className="w-4 h-4" />
                     </button>

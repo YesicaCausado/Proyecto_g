@@ -52,14 +52,13 @@ function MiniCalendar({ eventDays }: { eventDays: number[] }) {
         <button onClick={() => { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);}}
           className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#F7F6F3] text-[#787774] text-xs">›</button>
       </div>
-
       <div className="grid grid-cols-7 gap-0.5 mb-1">
         {DAYS.map(d => <div key={d} className="text-center text-[9px] font-semibold text-[#AEADAB] py-0.5">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map((day, i) => (
-          <div key={i} className={`aspect-square flex items-center justify-center rounded text-[11px] relative transition-colors
-            ${day === null ? '' : eventDays.includes(day ?? 0) ? 'font-semibold' : 'hover:bg-[#F7F6F3]'}
+          <div key={i} className={`aspect-square flex items-center justify-center rounded text-[11px] relative
+            ${day === null ? '' : eventDays.includes(day ?? 0) ? 'font-semibold' : ''}
             ${isCurrentMonth && day === todayDay ? 'bg-[#2E6FDB] text-white rounded-full' : 'text-[#37352F]'}
           `}>
             {day}
@@ -83,7 +82,7 @@ export default function DashboardTab({ onNavigate }: Props) {
   const loadStats = useCallback(() => {
     setLoading(true);
     setLoadError(null);
-    api.get('/teacher/stats')
+    return api.get('/teacher/stats')
       .then(r => setStats(r.data))
       .catch(() => {
         setStats(null);
@@ -93,9 +92,7 @@ export default function DashboardTab({ onNavigate }: Props) {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadStats();
-    }, 0);
+    const timer = window.setTimeout(() => void loadStats(), 0);
     return () => window.clearTimeout(timer);
   }, [loadStats]);
 
@@ -160,7 +157,7 @@ export default function DashboardTab({ onNavigate }: Props) {
           <span>{loadError}</span>
           <button
             type="button"
-            onClick={loadStats}
+            onClick={() => void loadStats()}
             className="rounded-md border border-[#E8AAAA] px-3 py-1.5 text-xs font-semibold hover:bg-white"
           >
             Reintentar
@@ -225,8 +222,8 @@ export default function DashboardTab({ onNavigate }: Props) {
             <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
               <h3 className="font-semibold text-[#191919] text-sm mb-4">Desempeño por grupo</h3>
               <div className="space-y-3">
-                {(stats?.groups_perf ?? []).length > 0 ? (stats?.groups_perf ?? []).map(g => (
-                  <div key={g.name}>
+                {(stats?.groups_perf ?? []).length > 0 ? (stats?.groups_perf ?? []).map((g, i) => (
+                  <div key={`${g.name}-${i}`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-[#37352F] truncate max-w-[70%]">{g.name}</span>
                       <span className="text-xs font-semibold text-[#191919]">{g.count} evaluaciones · {g.avg}</span>
@@ -245,8 +242,8 @@ export default function DashboardTab({ onNavigate }: Props) {
             <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
               <h3 className="font-semibold text-[#191919] text-sm mb-4">Uso de NeuroBots</h3>
               <div className="space-y-3">
-                {(stats?.ai_usage ?? []).length > 0 ? (stats?.ai_usage ?? []).map(a => (
-                  <div key={a.name}>
+                {(stats?.ai_usage ?? []).length > 0 ? (stats?.ai_usage ?? []).map((a, i) => (
+                  <div key={`${a.name}-${i}`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-[#37352F]">{a.name}</span>
                       <span className="text-xs font-semibold text-[#191919]">{a.pct}%</span>
@@ -279,7 +276,7 @@ export default function DashboardTab({ onNavigate }: Props) {
                   ? 'text-[#AEADAB]'
                   : (s.trend.startsWith('-') ? 'text-[#E03E3E]' : 'text-[#0F7B6C]');
                 return (
-                  <div key={s.name} className="flex items-center gap-3 py-2 border-b border-[#F7F6F3] last:border-0">
+                  <div key={`${s.name}-${s.group}-${i}`} className="flex items-center gap-3 py-2 border-b border-[#F7F6F3] last:border-0">
                     <span className="text-xs font-bold text-[#AEADAB] w-4">{i+1}</span>
                     <div className="w-7 h-7 rounded-full bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center text-xs font-bold flex-shrink-0">
                       {s.name.charAt(0)}

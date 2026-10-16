@@ -11,6 +11,8 @@ interface CalEvent {
   type: EventType;
   time?: string;
   description?: string;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 const TYPE_CONFIG: Record<EventType, { label: string; color: string; bg: string; dot: string }> = {
@@ -32,6 +34,8 @@ function mapEvent(raw: any): CalEvent {
     type:        (raw.event_type ?? raw.type) as EventType,
     time:        raw.event_time ?? raw.time,
     description: raw.description,
+    canEdit: raw.can_edit === true,
+    canDelete: raw.can_delete === true,
   };
 }
 
@@ -43,6 +47,7 @@ export default function CalendarioTab() {
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ title: '', type: 'reunion' as EventType, time: '', description: '' });
 
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
@@ -72,25 +77,37 @@ export default function CalendarioTab() {
   const handleAddEvent = async () => {
     if (!form.title.trim() || !selected) return;
     try {
-      const res = await api.post('/events', {
+      const payload = {
         title: form.title,
         event_type: form.type,
         event_date: selected,
         event_time: form.time || null,
         description: form.description || null,
-      });
-      setEvents(prev => [...prev, mapEvent(res.data)]);
+      };
+      const res = editingId
+        ? await api.put(`/events/${editingId}`, payload)
+        : await api.post('/events', payload);
+      const saved = mapEvent(res.data);
+      if (editingId) {
+        setEvents(prev => prev.map(event => event.id === editingId ? saved : event));
+      } else {
+        setEvents(prev => [...prev, saved]);
+      }
     } catch {
-      // optimistic fallback: add with temp id
-      setEvents(prev => [...prev, { id: Date.now(), date: selected, title: form.title, type: form.type, time: form.time || undefined, description: form.description || undefined }]);
+      return;
     }
+    setEditingId(null);
     setForm({ title: '', type: 'reunion', time: '', description: '' });
     setShowForm(false);
   };
 
   const handleDelete = async (id: number) => {
-    setEvents(prev => prev.filter(e => e.id !== id));
-    try { await api.delete(`/events/${id}`); } catch { /* already removed from UI */ }
+    try {
+      await api.delete(`/events/${id}`);
+      setEvents(prev => prev.filter(e => e.id !== id));
+    } catch {
+      return;
+    }
   };
 
   const selectedEvents = selected ? events.filter(e => e.date === selected) : [];
@@ -202,9 +219,20 @@ export default function CalendarioTab() {
                           {TYPE_CONFIG[ev.type].label}
                         </span>
                       </div>
-                      <button onClick={() => handleDelete(ev.id)} className="text-[#787774] hover:text-[#E03E3E] transition-colors ml-2 flex-shrink-0">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                        {ev.canEdit && (
+                          <button onClick={() => {
+                            setEditingId(ev.id);
+                            setForm({ title: ev.title, type: ev.type, time: ev.time ?? '', description: ev.description ?? '' });
+                            setShowForm(true);
+                          }} className="text-xs text-[#6940A5] hover:underline">Editar</button>
+                        )}
+                        {ev.canDelete && (
+                          <button onClick={() => handleDelete(ev.id)} className="text-[#787774] hover:text-[#E03E3E] transition-colors">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -232,7 +260,7 @@ export default function CalendarioTab() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-[#191919]">Nuevo evento — {selected}</h3>
+              <h3 className="font-semibold text-[#191919]">{editingId ? 'Editar evento' : 'Nuevo evento'} — {selected}</h3>
               <button onClick={() => setShowForm(false)} className="text-[#787774] hover:text-[#37352F]"><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-3">

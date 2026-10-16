@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db.database import get_db
 from app.api.auth import get_current_user
@@ -41,7 +41,7 @@ class EventUpdate(BaseModel):
     description: Optional[str] = None
 
 
-def _event_to_dict(ev: ClassroomEvent, db: Session) -> dict:
+def _event_to_dict(ev: ClassroomEvent, db: Session, user: User | None = None) -> dict:
     teacher = db.query(User).filter(User.id == ev.teacher_id).first()
     classroom = db.query(Classroom).filter(Classroom.id == ev.classroom_id).first() if ev.classroom_id else None
     return {
@@ -57,18 +57,35 @@ def _event_to_dict(ev: ClassroomEvent, db: Session) -> dict:
         "event_time": ev.event_time,
         "description": ev.description,
         "created_at": ev.created_at.isoformat(),
+        "is_personal": ev.classroom_id is None and ev.institution_id is None,
+        "can_edit": user is not None and _can_edit_event(user, ev),
+        "can_delete": user is not None and _can_delete_event(user, ev, db),
     }
 
 
-def _can_manage_event(user: User, ev: ClassroomEvent) -> bool:
-    """Quién puede editar/eliminar un evento: su creador, o un super_profesor/admin
-    de la misma institución."""
-    if ev.teacher_id == user.id:
+def _can_edit_event(user: User, ev: ClassroomEvent) -> bool:
+    """Solo el creador puede editar; estudiantes solo eventos personales."""
+    if ev.teacher_id != user.id:
+        return False
+    return user.role in (
+        UserRole.PROFESOR.value,
+        UserRole.SUPER_PROFESOR.value,
+    ) or (user.role == UserRole.ESTUDIANTE.value and ev.classroom_id is None)
+
+
+def _can_delete_event(user: User, ev: ClassroomEvent, db: Session) -> bool:
+    """El creador elimina lo suyo; el super puede eliminar eventos de profesores
+    de su institución, pero no eventos personales de estudiantes."""
+    if _can_edit_event(user, ev):
         return True
-    if user.role in (UserRole.SUPER_PROFESOR.value, "admin"):
-        inst_id = getattr(user, "institution_id", None)
-        return inst_id is not None and ev.institution_id == inst_id
-    return False
+    if user.role != UserRole.SUPER_PROFESOR.value:
+        return False
+    owner = db.query(User).filter(User.id == ev.teacher_id).first()
+    return (
+        owner is not None
+        and owner.role == UserRole.PROFESOR.value
+        and ev.institution_id == getattr(user, "institution_id", None)
+    )
 
 
 def _require_calendar_manager(user: User) -> None:
@@ -123,11 +140,41 @@ async def list_events(
             ClassroomEvent.is_active == True,
             ClassroomEvent.classroom_id == classroom_id,
         )
+        if current_user.role == UserRole.SUPER_PROFESOR.value:
+            q = q.filter(ClassroomEvent.teacher_id.in_(
+                db.query(User.id).filter(
+                    User.institution_id == inst_id,
+                    User.role.in_([
+                        UserRole.SUPER_PROFESOR.value,
+                        UserRole.PROFESOR.value,
+                    ]),
+                )
+            ))
+        elif current_user.role == UserRole.PROFESOR.value:
+            q = q.filter(or_(
+                ClassroomEvent.teacher_id == current_user.id,
+                ClassroomEvent.teacher_id.in_(
+                    db.query(User.id).filter(
+                        User.institution_id == inst_id,
+                        User.role == UserRole.SUPER_PROFESOR.value,
+                    )
+                ),
+            ))
+        elif current_user.role == UserRole.ESTUDIANTE.value:
+            q = q.filter(ClassroomEvent.teacher_id.in_(
+                db.query(User.id).filter(
+                    User.institution_id == inst_id,
+                    User.role.in_([
+                        UserRole.SUPER_PROFESOR.value,
+                        UserRole.PROFESOR.value,
+                    ]),
+                )
+            ))
         if month:
             q = q.filter(ClassroomEvent.event_date.startswith(month))
         events = q.order_by(ClassroomEvent.event_date).all()
         return {
-            "events": [_event_to_dict(e, db) for e in events],
+            "events": [_event_to_dict(e, db, current_user) for e in events],
             "total": len(events),
         }
 
@@ -135,15 +182,17 @@ async def list_events(
     conditions = [ClassroomEvent.is_active == True]
 
     if current_user.role == UserRole.SUPER_PROFESOR.value or current_user.role == "admin":
-        # Super/rector ve TODOS los eventos de su institución.
+        # El súper ve sus eventos y los publicados por profesores de su
+        # institución. Los eventos personales de estudiantes quedan fuera.
         if inst_id is not None:
             conditions.append(or_(
-                ClassroomEvent.institution_id == inst_id,
-                ClassroomEvent.classroom_id.in_(
-                    db.query(Classroom.id).filter(
-                        Classroom.teacher_id.in_(
-                            db.query(User.id).filter(User.institution_id == inst_id)
-                        )
+                ClassroomEvent.teacher_id.in_(
+                    db.query(User.id).filter(
+                        User.institution_id == inst_id,
+                        User.role.in_([
+                            UserRole.SUPER_PROFESOR.value,
+                            UserRole.PROFESOR.value,
+                        ]),
                     )
                 ),
             ))
@@ -160,15 +209,18 @@ async def list_events(
         ).all()
         cids = [c.id for c in my_classrooms]
         cls_cond = ClassroomEvent.classroom_id.in_(cids) if cids else False
-        # Eventos de sus clases + eventos institucionales de su institución.
+        # Solo sus eventos y los eventos institucionales publicados por el
+        # Súper Profesor. Los eventos de otros profesores quedan aislados.
         conditions.append(or_(
-            cls_cond,
             and_(
-                ClassroomEvent.classroom_id == None,
-                or_(
-                    ClassroomEvent.institution_id == inst_id,
-                    ClassroomEvent.institution_id == None,
-                ),
+                ClassroomEvent.teacher_id == current_user.id,
+                ClassroomEvent.institution_id == inst_id,
+            ),
+            ClassroomEvent.teacher_id.in_(
+                db.query(User.id).filter(
+                    User.institution_id == inst_id,
+                    User.role == UserRole.SUPER_PROFESOR.value,
+                )
             ),
         ))
     else:
@@ -179,15 +231,37 @@ async def list_events(
         ).all()
         cids = [e.classroom_id for e in enrollments]
         cls_cond = ClassroomEvent.classroom_id.in_(cids) if cids else False
-        # Eventos de sus clases + eventos institucionales de su institución.
+        # Eventos de clases inscritas publicados por docentes, eventos
+        # institucionales de docentes/súper y su evento personal.
         conditions.append(or_(
-            cls_cond,
             and_(
-                ClassroomEvent.classroom_id == None,
-                or_(
-                    ClassroomEvent.institution_id == inst_id,
-                    ClassroomEvent.institution_id == None,
+                ClassroomEvent.teacher_id.in_(
+                    db.query(User.id).filter(
+                        User.institution_id == inst_id,
+                        User.role.in_([
+                            UserRole.SUPER_PROFESOR.value,
+                            UserRole.PROFESOR.value,
+                        ]),
+                    )
                 ),
+                ClassroomEvent.institution_id == inst_id,
+            ),
+            and_(
+                cls_cond,
+                ClassroomEvent.teacher_id.in_(
+                    db.query(User.id).filter(
+                        User.institution_id == inst_id,
+                        User.role.in_([
+                            UserRole.SUPER_PROFESOR.value,
+                            UserRole.PROFESOR.value,
+                        ]),
+                    )
+                ),
+            ),
+            and_(
+                ClassroomEvent.teacher_id == current_user.id,
+                ClassroomEvent.classroom_id == None,
+                ClassroomEvent.institution_id == None,
             ),
         ))
 
@@ -198,7 +272,7 @@ async def list_events(
 
     events = q.order_by(ClassroomEvent.event_date).all()
     return {
-        "events": [_event_to_dict(e, db) for e in events],
+        "events": [_event_to_dict(e, db, current_user) for e in events],
         "total": len(events),
     }
 
@@ -209,11 +283,15 @@ async def create_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Crear un evento en el calendario (solo profesores)."""
-    if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
-        raise HTTPException(status_code=403, detail="Solo profesores pueden crear eventos")
+    """Crear un evento institucional/de clase o uno personal del estudiante."""
+    if current_user.role == UserRole.ESTUDIANTE.value:
+        if body.classroom_id is not None:
+            raise HTTPException(status_code=403, detail="El calendario personal no puede publicar en clases")
+    elif current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
+        raise HTTPException(status_code=403, detail="Rol sin permiso para crear eventos")
 
-    _require_calendar_manager(current_user)
+    if current_user.role != UserRole.ESTUDIANTE.value:
+        _require_calendar_manager(current_user)
 
     # Verificar que la clase le pertenece (si se especificó).
     if body.classroom_id:
@@ -233,7 +311,11 @@ async def create_event(
     ev = ClassroomEvent(
         classroom_id=body.classroom_id,
         teacher_id=current_user.id,
-        institution_id=getattr(current_user, "institution_id", None),
+        institution_id=(
+            getattr(current_user, "institution_id", None)
+            if current_user.role != UserRole.ESTUDIANTE.value
+            else None
+        ),
         title=body.title,
         event_type=body.event_type,
         event_date=body.event_date,
@@ -243,7 +325,7 @@ async def create_event(
     db.add(ev)
     db.commit()
     db.refresh(ev)
-    return _event_to_dict(ev, db)
+    return _event_to_dict(ev, db, current_user)
 
 
 @router.put("/{event_id}")
@@ -253,28 +335,35 @@ async def update_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Editar un evento (solo el profesor que lo creó o un super de su institución)."""
-    if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
-        raise HTTPException(status_code=403, detail="Solo profesores pueden editar eventos")
+    """Editar solo un evento propio; el estudiante se limita a sus personales."""
+    if current_user.role not in (
+        UserRole.PROFESOR.value,
+        UserRole.SUPER_PROFESOR.value,
+        UserRole.ESTUDIANTE.value,
+    ):
+        raise HTTPException(status_code=403, detail="Rol sin permiso para editar eventos")
 
     ev = db.query(ClassroomEvent).filter(
         ClassroomEvent.id == event_id,
         ClassroomEvent.is_active == True,
     ).first()
-    if not ev or not _can_manage_event(current_user, ev):
-        raise HTTPException(status_code=404, detail="Evento no encontrado o sin permiso")
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    if not _can_edit_event(current_user, ev):
+        raise HTTPException(status_code=403, detail="No puedes editar este evento")
 
-    _require_calendar_manager(current_user)
+    if current_user.role != UserRole.ESTUDIANTE.value:
+        _require_calendar_manager(current_user)
 
     if body.title is not None:       ev.title = body.title
     if body.event_type is not None:  ev.event_type = body.event_type
     if body.event_date is not None:  ev.event_date = body.event_date
     if body.event_time is not None:  ev.event_time = body.event_time
     if body.description is not None: ev.description = body.description
-    ev.updated_at = datetime.utcnow()
+    ev.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(ev)
-    return _event_to_dict(ev, db)
+    return _event_to_dict(ev, db, current_user)
 
 
 @router.delete("/{event_id}")
@@ -283,18 +372,25 @@ async def delete_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Eliminar un evento (solo el profesor que lo creó o un super de su institución)."""
-    if current_user.role not in (UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value):
-        raise HTTPException(status_code=403, detail="Solo profesores pueden eliminar eventos")
+    """Eliminar un evento propio o, para el súper, un evento de un profesor."""
+    if current_user.role not in (
+        UserRole.PROFESOR.value,
+        UserRole.SUPER_PROFESOR.value,
+        UserRole.ESTUDIANTE.value,
+    ):
+        raise HTTPException(status_code=403, detail="Rol sin permiso para eliminar eventos")
 
     ev = db.query(ClassroomEvent).filter(
         ClassroomEvent.id == event_id,
         ClassroomEvent.is_active == True,
     ).first()
-    if not ev or not _can_manage_event(current_user, ev):
-        raise HTTPException(status_code=404, detail="Evento no encontrado o sin permiso")
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evento no encontrado")
+    if not _can_delete_event(current_user, ev, db):
+        raise HTTPException(status_code=403, detail="No puedes eliminar este evento")
 
-    _require_calendar_manager(current_user)
+    if current_user.role != UserRole.ESTUDIANTE.value:
+        _require_calendar_manager(current_user)
 
     ev.is_active = False
     db.commit()

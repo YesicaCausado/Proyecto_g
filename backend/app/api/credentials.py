@@ -17,7 +17,7 @@ import string
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -527,7 +527,6 @@ async def bulk_create_teachers(
 
 @router.post("/super/teachers/preview")
 async def preview_bulk_create_teachers(
-    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -545,7 +544,6 @@ async def preview_bulk_create_teachers(
     la fila exacta del CSV para que la UI pueda mostrarlos antes de confirmar.
     """
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
-    institution = _get_my_institution(db, current_user)
 
     content = await file.read()
     if not content.strip():
@@ -789,7 +787,7 @@ async def update_student(
         if updates["guardian_authorized"]:
             if not student.guardian_name:
                 raise HTTPException(400, "Escribe el nombre del acudiente que firmó la autorización.")
-            student.guardian_authorized_at = datetime.utcnow()
+            student.guardian_authorized_at = datetime.now(timezone.utc).replace(tzinfo=None)
             student.guardian_authorized_by_id = current_user.id
             guardian_note = f" · autorización del acudiente registrada ({student.guardian_name})"
         else:
@@ -824,7 +822,6 @@ async def bulk_create_students(
 ):
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
-
     content = await file.read()
     if not content.strip():
         raise HTTPException(400, "El archivo CSV está vacío")
@@ -907,7 +904,6 @@ async def bulk_create_students(
 
 @router.post("/super/students/preview")
 async def preview_bulk_create_students(
-    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -921,8 +917,6 @@ async def preview_bulk_create_students(
       2) POST /super/students/bulk    → solo si el usuario confirma
     """
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
-    institution = _get_my_institution(db, current_user)
-
     content = await file.read()
     if not content.strip():
         raise HTTPException(400, "El archivo CSV está vacío")

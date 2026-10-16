@@ -9,6 +9,9 @@ interface CalEvent {
   date: string;
   type: EventType;
   group?: string;
+  classroomId?: number | null;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 const EVENT_COLORS: Record<EventType, { bg: string; dot: string; label: string }> = {
@@ -34,6 +37,9 @@ function mapEvent(raw: any): CalEvent {
     date:  raw.event_date ?? raw.date,
     type:  (raw.event_type ?? raw.type ?? 'clase') as EventType,
     group: raw.classroom_name ?? raw.group,
+    classroomId: raw.classroom_id ?? null,
+    canEdit: raw.can_edit === true,
+    canDelete: raw.can_delete === true,
   };
 }
 
@@ -43,6 +49,7 @@ export default function CalendarioTab() {
   const [events,   setEvents]   = useState<CalEvent[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [classrooms, setClassrooms] = useState<{ id: number; name: string }[]>([]);
   const [form, setForm] = useState({ title:'', type:'clase' as EventType, group:'', date:'' });
 
@@ -74,24 +81,36 @@ export default function CalendarioTab() {
   const addEvent = async () => {
     if (!form.title.trim() || !form.date) return;
     try {
-      const res = await api.post('/events', {
+      const payload = {
         title:      form.title.trim(),
         event_type: form.type,
         event_date: form.date,
         classroom_id: form.group ? Number(form.group) : null,
-      });
-      setEvents(prev => [...prev, mapEvent(res.data)]);
+      };
+      const res = editingId
+        ? await api.put(`/events/${editingId}`, payload)
+        : await api.post('/events', payload);
+      const saved = mapEvent(res.data);
+      if (editingId) {
+        setEvents(prev => prev.map(event => event.id === editingId ? saved : event));
+      } else {
+        setEvents(prev => [...prev, saved]);
+      }
     } catch {
-      const ev: CalEvent = { id: Date.now().toString(), title: form.title.trim(), type: form.type, date: form.date, group: form.group ? classrooms.find(c => c.id === Number(form.group))?.name : undefined };
-      setEvents(prev => [...prev, ev]);
+      return;
     }
+    setEditingId(null);
     setForm({ title:'', type:'clase', group:'', date:'' });
     setShowForm(false);
   };
 
   const deleteEvent = async (id: string) => {
-    setEvents(prev => prev.filter(e => e.id !== id));
-    try { await api.delete(`/events/${id}`); } catch { /* already removed */ }
+    try {
+      await api.delete(`/events/${id}`);
+      setEvents(prev => prev.filter(e => e.id !== id));
+    } catch {
+      return;
+    }
   };
 
   const prev = () => { if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); };
@@ -179,7 +198,18 @@ export default function CalendarioTab() {
                     <p className="text-sm font-medium truncate">{ev.title}</p>
                     {ev.group && <p className="text-[11px] opacity-70">{ev.group}</p>}
                   </div>
-                  <button onClick={() => deleteEvent(ev.id)} className="opacity-50 hover:opacity-100 text-xs transition-opacity">×</button>
+                  <div className="flex items-center gap-2">
+                    {ev.canEdit && (
+                      <button onClick={() => {
+                        setEditingId(ev.id);
+                        setForm({ title: ev.title, type: ev.type, group: ev.classroomId ? String(ev.classroomId) : '', date: ev.date });
+                        setShowForm(true);
+                      }} className="text-xs text-[#2E6FDB] hover:underline">Editar</button>
+                    )}
+                    {ev.canDelete && (
+                      <button onClick={() => deleteEvent(ev.id)} className="opacity-50 hover:opacity-100 text-xs transition-opacity">×</button>
+                    )}
+                  </div>
                 </div>
               ))
             )}
@@ -226,7 +256,7 @@ export default function CalendarioTab() {
       {showForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-semibold text-[#191919]">Agregar evento</h3>
+            <h3 className="font-semibold text-[#191919]">{editingId ? 'Editar evento' : 'Agregar evento'}</h3>
             <div>
               <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Título *</label>
               <input value={form.title} onChange={e => setForm(p=>({...p,title:e.target.value}))}

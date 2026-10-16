@@ -31,6 +31,12 @@ CAMBIOS EN ESTA VERSIÓN (correcciones)
    instrucción de no incluir quizzes automáticos, se registra un warning
    (antes la función estaba definida pero nunca invocada).
 
+CORRECCIONES APLICADAS (v2):
+A. Import de LearningSession agregado en generate_cognitive_quiz (evita NameError).
+B. `nonlocal db` eliminado de _save_session_stats (era innecesario y confuso).
+C. _load_neural_state_cache definido ANTES de _get_user_engine (orden correcto).
+D. QuizHistory.completed_at == None → .is_(None) en submit_quiz_answers (idiomático).
+
 REQUIERE (agregar en app/models/learning.py) -- ver bloque comentado al
 final de este archivo con el modelo `CognitiveSessionState` sugerido y
 la migración correspondiente.
@@ -261,6 +267,15 @@ ai_manager = AIManager(
     gemini_model=settings.GEMINI_MODEL,
 )
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CORRECCIÓN C: _load_neural_state_cache definido ANTES de _get_user_engine
+# para evitar que la referencia al dict falle si se reordena el archivo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Caché en memoria de proceso del neural_state ya leído de la BD, para no
+# re-consultarlo en cada reconstruction. Se refresca en cada guardado.
+_load_neural_state_cache: Dict[int, dict] = {}
+
 # Caché de motor neuroconductual EN MEMORIA (por proceso).
 # ⚠️ En Vercel esto es solo una optimización de latencia dentro de la misma
 # instancia "caliente"; NO es la fuente de verdad. La fuente de verdad de
@@ -294,11 +309,6 @@ def _get_user_engine(user_id: int) -> MultimodalCognitiveEngine:
         except Exception as exc:
             logger.debug("No se pudo restaurar neural_state para user %s: %s", user_id, exc)
     return _user_engines[key]
-
-
-# Caché en memoria de proceso del neural_state ya leído de la BD, para no
-# re-consultarlo en cada reconstruction. Se refresca en cada guardado.
-_load_neural_state_cache: Dict[int, dict] = {}
 
 
 def _load_neural_state(db: Session, user_id: int, topic: str) -> Optional[dict]:
@@ -567,8 +577,12 @@ def _load_session_stats(db: Session, user_id: int, topic: str) -> dict:
 
 def _save_session_stats(db: Session, user_id: int, topic: str, stats: dict) -> None:
     """Persiste el estado de sesión actualizado en la base de datos."""
+    # ─────────────────────────────────────────────────────────────────────
+    # CORRECCIÓN B: eliminado `nonlocal db`. `db` es parámetro de la función
+    # exterior y es accesible directamente por cierre (closure); declararlo
+    # `nonlocal` era incorrecto y podría generar confusión al refactorizar.
+    # ─────────────────────────────────────────────────────────────────────
     def _try_commit(include_chat_answers: bool) -> bool:
-        nonlocal db
         try:
             from app.models.learning import CognitiveSessionState
 
@@ -1051,9 +1065,6 @@ async def start_session(
     )
 
     if not result["response"]:
-        # Defensa en profundidad: generate() ya retorna un template local,
-        # pero no rompemos el arranque del chat con un 503 (que es engañoso,
-        # porque la clave sí está configurada). Devolvemos una bienvenida útil.
         logger.warning("⚠️ start_session: respuesta vacía, usando bienvenida local.")
         result["response"] = (
             f"¡Hola! 👋 Soy tu tutor de {request.topic or 'este tema'}.\n\n"
@@ -1152,8 +1163,6 @@ async def send_message(
         session_stats = _load_session_stats(db, current_user.id, topic)
 
         # ═══ Restaurar calibración del motor neuroconductual (cold start) ═══
-        # Lee el estado compacto persistido y lo deja listo para que
-        # _get_user_engine() lo aplique al construir el motor en este proceso.
         if current_user.id not in _load_neural_state_cache:
             try:
                 stored = _load_neural_state(db, current_user.id, topic)
@@ -1164,10 +1173,6 @@ async def send_message(
 
         # ═══ ANÁLISIS NEUROCONDUCTUAL — 5 PATRONES ═══
         analysis = None
-        # Inicializados FUERA del try para que, si el bloque de análisis
-        # neuroconductual falla antes de asignarlos (o no llega a ejecutarse),
-        # permanezcan definidos y no se dispare UnboundLocalError al leerse
-        # más abajo (p.ej. `corrected = bool(verdict == "correct")`).
         verdict = None          # "correct" | "incorrect" | None
         grade_conf = 0.0
         try:
@@ -1200,8 +1205,6 @@ async def send_message(
             ):
                 from app.ai.cognitive.neuroconductual_engine import EmotionEnum
                 raw_emotion = request.facial_data.get("emotion", "neutral")
-                # Aliases del frontend → valores válidos del enum (evita que la
-                # emoción se pierda y caiga siempre en NEUTRAL).
                 _EMOTION_ALIASES = {
                     "worried": "fearful",
                     "stress": "fearful",
@@ -1248,14 +1251,10 @@ async def send_message(
                 db, current_user.id, topic, chat_bot.id if chat_bot is not None else None)
 
             user_engine = _get_user_engine(current_user.id)
-            # Re-siembra la predicción de error con lo respondido en el chat
-            # (solo la primera vez que el motor se construye en este proceso;
-            # evita perder la ventana real en cold starts de Vercel).
             _seed_engine_from_answers(user_engine, session_stats)
 
-            # ── Patrón 5 EN TIEMPO REAL: detectar la última pregunta del tutor
-            # y calificar la respuesta actual del estudiante con IA.
-            verdict = None          # "correct" | "incorrect" | None
+            # ── Patrón 5 EN TIEMPO REAL: calificar respuesta actual del estudiante
+            verdict = None
             grade_conf = 0.0
             last_assistant = _get_last_assistant_message(db, request, session)
             try:
@@ -1356,8 +1355,6 @@ async def send_message(
             if quiz_error_rate > 0.4:
                 error_risk = max(error_risk, quiz_error_rate * 0.8)
 
-            # Actualizar estadísticas de sesión (en memoria de request) y
-            # persistirlas en DB de inmediato.
             correct_flag = None if verdict is None else (verdict == "correct")
             session_stats = _update_session_stats(
                 session_stats,
@@ -1371,7 +1368,6 @@ async def send_message(
             _save_session_stats(db, current_user.id, topic, session_stats)
 
             # ── Persistir el estado compacto del motor (baselines + prior) ──
-            # para que la personalización sobreviva a cold starts serverless.
             try:
                 state = user_engine.serialize_state()
                 _save_neural_state(db, current_user.id, topic, state)
@@ -1393,8 +1389,6 @@ async def send_message(
 
         except Exception as e:
             logger.warning(f"⚠️ Análisis neuroconductual falló: {e}")
-            # session_stats ya viene cargado de DB arriba; lo dejamos tal cual
-            # en vez de perder el contexto real del usuario.
 
         system_prompt = _build_system_prompt(
             topic,
@@ -1409,15 +1403,12 @@ async def send_message(
         # ═══════════════════════════════════════════════════════════════
         strategy_meta = {}
         try:
-            # skill ≈ topic normalizado (clave de mastery). subject se infiere
-            # desde el prefijo de la materia que llega en request.topic.
             skill_key = topic.strip()[:120] or "general"
             subject_key = _infer_subject(request.topic)
 
             student_model: StudentModel = _student_model_service.load_model(
                 db, current_user.id, skill=skill_key)
 
-            # Señales neuro disponibles sólamente las que llegan reales.
             neuro_digest = _available_signals(request)
 
             strategy = _adaptation_engine.decide(student_model, neuro_digest)
@@ -1426,7 +1417,6 @@ async def send_message(
                 system_prompt += build_adaptation_context(
                     student_model, strategy, neuro_digest)
 
-            # Persistir episodio relevante según el veredicto REAL del chat.
             _persist_adaptive_state(
                 db, current_user.id, subject_key, skill_key,
                 request.topic, verdict, strategy, request.message,
@@ -1447,7 +1437,6 @@ async def send_message(
                 "student_model_used": student_model.has_evidence(),
             }
         except Exception as adapt_err:
-            # Nunca debe romper el chat; degradar con tronco sin inventar datos.
             logger.warning("⚠️ Motor de adaptación pedagógica falló: %s", adapt_err)
 
         # ═══ Base de conocimiento del NeuroBot (documentos del docente) ═══
@@ -1481,8 +1470,6 @@ async def send_message(
         )
 
         if not result["response"]:
-            # Defensa en profundidad: generate() ya retorna un template local,
-            # pero si algo salió mal no rompemos el chat con un 503.
             logger.error("⚠️ AIManager devolvió respuesta vacía tras el fallback local.")
             result["response"] = (
                 "🤖 En este momento no puedo procesar tu mensaje. "
@@ -1492,11 +1479,8 @@ async def send_message(
 
         logger.info(f"✅ Respuesta IA de: {result['provider']}")
 
-        # Detectar si la IA sugirió hacer un quiz (análisis neuroconductual)
         quiz_suggested = _quiz_suggested(result["response"])
 
-        # Detectar si, a pesar de la instrucción, la IA incluyó un quiz
-        # automático embebido en el texto -- esto no debería pasar.
         if _has_automatic_quiz(result["response"]):
             logger.warning(
                 "⚠️ La IA incluyó un quiz automático embebido en la respuesta "
@@ -1504,23 +1488,17 @@ async def send_message(
                 topic, current_user.id,
             )
 
-        # Limpiar el marcador QUIZ_SUGERIDO del mensaje
         clean_message = result["response"].replace("QUIZ_SUGERIDO", "").strip()
 
-        # Guardar la respuesta del tutor en la conversación (memoria de chats)
         _save_conversation_message(
             db, request.conversation_id, current_user.id, "assistant",
             clean_message, {"topic": topic, "provider": result["provider"]},
         )
 
-        # Progreso del NeuroBot asignado: solo cuenta si respondió la IA real
-        # (no el mensaje local de «no puedo procesar tu mensaje»).
         neurobot_progress = None
         if chat_bot is not None and result.get("provider") != "local":
             neurobot_progress = _track_neurobot(db, current_user, chat_bot, interaction=True)
 
-        # Conectar la recomendación del motor neuroconductual a la dificultad
-        # (antes quedaba fija en "medium" aunque el motor calculara should_adapt).
         response_difficulty = "medium"
         suggested_difficulty = None
         if analysis and analysis.should_adapt and analysis.suggested_difficulty:
@@ -1530,9 +1508,6 @@ async def send_message(
         chat_error_rate = session_stats.get("chat_error_rate", 0.0)
         chat_eval_count = session_stats.get("chat_eval_count", 0)
 
-        # Confianza REAL: del motor neuroconductual si hubo análisis válido;
-        # si no, de la estrategia pedagógica (que solo tiene confianza cuando
-        # hay evidencia). Nunca se inventa 0.8 fijo.
         response_confidence = 0.0
         if analysis is not None and analysis.probability:
             response_confidence = round(float(analysis.probability), 3)
@@ -1564,7 +1539,6 @@ async def send_message(
                         "response_time_ms": request.response_time_ms,
                         "typing_speed_cpm": request.typing_speed_cpm,
                         "pause_before_ms": request.pause_before_ms,
-                        # Activo SOLO si llegó al menos una señal real de ritmo.
                         "active": (request.response_time_ms is not None and request.response_time_ms > 0)
                                   or (request.typing_speed_cpm is not None and request.typing_speed_cpm > 0)
                                   or (request.pause_before_ms is not None and request.pause_before_ms > 0),
@@ -1573,7 +1547,6 @@ async def send_message(
                         "corrections": request.corrections,
                         "typing_bursts": request.typing_bursts,
                         "is_question": request.is_question,
-                        # Activo SOLO si llegó al menos una señal real de decisión.
                         "active": (request.corrections is not None and request.corrections > 0)
                                   or (request.typing_bursts is not None and request.typing_bursts > 0)
                                   or bool(request.is_question),
@@ -1589,14 +1562,11 @@ async def send_message(
                     "P5_error_prediction": {
                         "quiz_error_rate": round(quiz_error_rate, 3),
                         "weak_concepts": weak_concepts,
-                        # Activo SOLO si hay un predictor con historial real (>=3
-                        # interacciones) o veredicto de chat/quiz real disponible.
                         "active": (
                             verdict is not None
                             or quiz_error_rate > 0
                             or (session_stats.get("chat_eval_count", 0) or 0) >= 3
                         ),
-                        # ═══ P5 EN TIEMPO REAL desde el chat ═══
                         "real_time": verdict is not None,
                         "last_answer_grade": verdict,
                         "last_answer_correct": corrected if verdict is not None else None,
@@ -1638,8 +1608,6 @@ async def get_session_stats(
     - average_response_time: promedio ponderado real de tiempos de respuesta
     - topics_covered: temas distintos con actividad registrada
     - session_duration: tiempo total invertido en quizzes completados (segundos)
-
-    (Antes este endpoint devolvía ceros hardcodeados sin consultar nada.)
     """
     from app.models.learning import QuizHistory
 
@@ -1707,11 +1675,14 @@ async def generate_cognitive_quiz(
     3. Ajusta la dificultad según el desempeño histórico
     4. Genera preguntas de refuerzo si hubo errores previos
     """
-    from app.models.learning import QuizHistory
+    # ─────────────────────────────────────────────────────────────────────
+    # CORRECCIÓN A: LearningSession agregado al import para evitar NameError
+    # cuando se entra en la rama de "primer quiz en el tema".
+    # ─────────────────────────────────────────────────────────────────────
+    from app.models.learning import QuizHistory, LearningSession
     from datetime import datetime
 
     # 1. ANÁLISIS DEL HISTORIAL - Buscar quizzes previos del mismo tema
-    #    (mismo criterio de match que /message, ver _topic_match_filter)
     previous_quizzes = db.query(QuizHistory).filter(
         QuizHistory.user_id == current_user.id,
         _topic_match_filter(QuizHistory, request.topic),
@@ -1847,8 +1818,6 @@ async def generate_cognitive_quiz(
             detail="El servicio de IA no respondió. Intenta de nuevo en unos minutos."
         )
 
-    # Sin proveedor externo la respuesta local no es un quiz real: se informa
-    # en vez de mostrar preguntas inventadas.
     if result.get("provider") == "local":
         raise HTTPException(
             status_code=503,
@@ -1896,10 +1865,6 @@ async def generate_cognitive_quiz(
         if not quiz_data["questions"] or len(quiz_data["questions"]) == 0:
             raise ValueError("No se generaron preguntas")
 
-        # Solo se aceptan preguntas cuya respuesta correcta sea una de sus
-        # opciones. Antes, si la IA no la daba (o no coincidía), se marcaba
-        # como correcta la primera opción: el estudiante podía recibir una
-        # calificación basada en una respuesta inventada.
         valid_questions = []
         for question in quiz_data["questions"]:
             options = question.get("options")
@@ -1974,11 +1939,6 @@ def _is_quiz_answer_correct(user_answer, correct_answer, options=None):
     """Determina si la respuesta del usuario a una pregunta de quiz es correcta
     de forma tolerante. Acepta la LETRA ('A','B','C','D') o el TEXTO completo,
     comparando sin distinguir mayúsculas, acentos ni espacios extra.
-
-    El cliente de frontend suele enviar la letra de la opción seleccionada,
-    mientras que el backend guarda 'answer' como texto completo. Esta función
-    concilia ambos formatos para que la nota sea REAL y coincida con la que ve
-    el estudiante.
     """
     if user_answer is None or correct_answer is None:
         return False
@@ -1987,20 +1947,17 @@ def _is_quiz_answer_correct(user_answer, correct_answer, options=None):
     correct_norm = _normalize_text(correct_answer)
     options = list(options or [])
 
-    # Índice de la opción correcta dentro de 'options'
     correct_index = -1
     for idx, opt in enumerate(options):
         if isinstance(opt, str) and _normalize_text(opt) == correct_norm:
             correct_index = idx
             break
 
-    # Respuesta como LETRA (A/B/C/D) → debe coincidir con la letra de la opción correcta
     if correct_index != -1:
         correct_letter = chr(65 + correct_index)
         if ua.upper() == correct_letter.upper():
             return True
 
-    # Respuesta como TEXTO → comparación normalizada
     return _normalize_text(ua) == correct_norm
 
 
@@ -2021,10 +1978,13 @@ async def submit_quiz_answers(
     from app.models.learning import QuizHistory
     from datetime import datetime
 
+    # ─────────────────────────────────────────────────────────────────────
+    # CORRECCIÓN D: completed_at == None → .is_(None) (idiomático en SQLAlchemy)
+    # ─────────────────────────────────────────────────────────────────────
     quiz_entry = db.query(QuizHistory).filter(
         QuizHistory.user_id == current_user.id,
         QuizHistory.quiz_title == submission.quiz_title,
-        QuizHistory.completed_at == None
+        QuizHistory.completed_at.is_(None)
     ).order_by(QuizHistory.created_at.desc()).first()
 
     if not quiz_entry:
@@ -2042,14 +2002,11 @@ async def submit_quiz_answers(
 
         # user_answers puede llegar con claves int o string dependiendo de
         # cómo lo serializó el cliente (JSON siempre usa strings como
-        # claves de objeto). Probamos ambas formas para no perder
-        # respuestas válidas.
+        # claves de objeto). Probamos ambas formas para no perder respuestas.
         user_answer = submission.user_answers.get(question_id)
         if user_answer is None:
             user_answer = submission.user_answers.get(str(question_id))
 
-        # Valida de forma robusta (letra o texto, case/acentos/espacios) para
-        # que la nota sea REAL y coincida con la que ve el estudiante.
         if _is_quiz_answer_correct(user_answer, correct_answer, question.get("options")):
             correct += 1
         else:
@@ -2119,8 +2076,6 @@ async def submit_quiz_answers(
     quiz_entry.adaptation_applied = adaptation_message
 
     if quiz_entry.created_at:
-        # Usa el tiempo real que el frontend midió con su cronómetro (duration).
-        # Solo si no viene, se estima con la diferencia entre creación y envío.
         if submission.duration is not None:
             quiz_entry.time_spent_seconds = int(submission.duration)
         else:
@@ -2227,9 +2182,6 @@ async def get_quiz_history(
                 "explanation": question.get("explanation", ""),
             })
 
-        # La fecha real de finalización (completed_at) es la que importa para
-        # el historial y el dashboard. created_at es solo el momento en que se
-        # generó el quiz (puede diferir del momento en que se respondió).
         completed = entry.completed_at or entry.created_at
         history_list.append(QuizHistoryEntry(
             id=entry.id,
@@ -2254,8 +2206,9 @@ async def get_quiz_history(
 # ═══════════════════════════════════════════════════════════════════════════
 # MODELO NUEVO REQUERIDO -- agregar en app/models/learning.py
 # ═══════════════════════════════════════════════════════════════════════════
-# from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, ForeignKey
+# from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, ForeignKey, UniqueConstraint
 # from app.db.database import Base
+# from datetime import datetime
 #
 # class CognitiveSessionState(Base):
 #     __tablename__ = "cognitive_session_state"
@@ -2271,12 +2224,13 @@ async def get_quiz_history(
 #     total_rt_ms = Column(Float, default=0.0)
 #     quiz_error_rate = Column(Float, default=0.0)
 #     weak_concepts = Column(JSON, default=list)
+#     chat_answers = Column(JSON, default=list)   # ventana móvil de 30 respuestas
+#     neural_state = Column(JSON, default=dict)   # calibración del motor neuroconductual
 #
 #     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 #
 #     __table_args__ = (
-#         # un registro por usuario+tema
-#         # UniqueConstraint("user_id", "topic", name="uq_user_topic_state"),
+#         UniqueConstraint("user_id", "topic", name="uq_user_topic_state"),
 #     )
 #
 # Migración (ejemplo con Alembic):

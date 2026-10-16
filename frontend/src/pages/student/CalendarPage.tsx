@@ -13,6 +13,9 @@ interface CalEvent {
   teacherName?: string;
   description?: string;
   time?: string;
+  isPersonal?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 const EVENT_COLORS: Record<EventType, { bg: string; dot: string; textBg: string; label: string; icon: any }> = {
@@ -39,6 +42,9 @@ function mapEvent(raw: any): CalEvent {
     teacherName: raw.teacher_name ?? undefined,
     description: raw.description ?? undefined,
     time:        raw.event_time ?? undefined,
+    isPersonal:  raw.is_personal === true,
+    canEdit:     raw.can_edit === true,
+    canDelete:   raw.can_delete === true,
   };
 }
 
@@ -52,6 +58,9 @@ export default function CalendarPage() {
   const [detailEv, setDetailEv] = useState<CalEvent | null>(null);
   const [events,   setEvents]   = useState<CalEvent[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ title: '', date: todayStr, time: '', description: '' });
 
   // Cargar eventos al montar y al cambiar de mes
   useEffect(() => {
@@ -80,6 +89,43 @@ export default function CalendarPage() {
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
 
+  const savePersonalEvent = async () => {
+    if (!form.title.trim() || !form.date) return;
+    const payload = {
+      title: form.title.trim(),
+      event_type: 'evento',
+      event_date: form.date,
+      event_time: form.time || null,
+      description: form.description.trim(),
+      classroom_id: null,
+    };
+    try {
+      const response = editingId
+        ? await api.put(`/events/${editingId}`, payload)
+        : await api.post('/events', payload);
+      const saved = mapEvent(response.data);
+      setEvents(prev => editingId
+        ? prev.map(event => event.id === editingId ? saved : event)
+        : [...prev, saved]);
+      setEditingId(null);
+      setShowForm(false);
+      setDetailEv(null);
+      setForm({ title: '', date: todayStr, time: '', description: '' });
+    } catch {
+      // Keep the form open so the user can see and retry the failed operation.
+    }
+  };
+
+  const deletePersonalEvent = async (id: string) => {
+    try {
+      await api.delete(`/events/${id}`);
+      setEvents(prev => prev.filter(event => event.id !== id));
+      setDetailEv(null);
+    } catch {
+      // The event remains visible because the server did not confirm deletion.
+    }
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <Loader2 className="w-6 h-6 text-[#787774] animate-spin" />
@@ -93,7 +139,7 @@ export default function CalendarPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[#37352F]">Calendario Escolar</h1>
-          <p className="text-[#787774] text-sm mt-1">Exámenes, tareas y eventos de tus clases — solo lectura</p>
+          <p className="text-[#787774] text-sm mt-1">Eventos de tus clases y tu calendario personal</p>
         </div>
         <div className="hidden sm:flex items-center gap-2 bg-[#F7F6F3] border border-[#E9E9E7] px-3 py-1.5 rounded-lg text-xs text-[#787774]">
           <Info className="w-3.5 h-3.5" />
@@ -214,6 +260,12 @@ export default function CalendarPage() {
 
         {/* ── Panel derecho: próximos ───────────────────────── */}
         <div className="space-y-4">
+          <button
+            onClick={() => { setEditingId(null); setForm({ title: '', date: todayStr, time: '', description: '' }); setShowForm(true); }}
+            className="w-full px-4 py-2.5 rounded-lg bg-[#2E6FDB] text-white text-sm font-medium hover:bg-[#255DC0]"
+          >
+            + Nuevo evento personal
+          </button>
           <div className="bg-white border border-[#E9E9E7] rounded-xl p-5">
             <h3 className="font-semibold text-[#191919] text-sm mb-4 flex items-center gap-2">
               <Clock className="w-4 h-4 text-[#787774]" /> Próximos eventos
@@ -326,6 +378,38 @@ export default function CalendarPage() {
                   {detailEv.description}
                 </p>
               )}
+              {detailEv.isPersonal && (
+                <div className="flex justify-end gap-2 pt-3">
+                  {detailEv.canEdit && (
+                    <button onClick={() => {
+                      setEditingId(detailEv.id);
+                      setForm({ title: detailEv.title, date: detailEv.date, time: detailEv.time ?? '', description: detailEv.description ?? '' });
+                      setDetailEv(null);
+                      setShowForm(true);
+                    }} className="px-3 py-1.5 text-xs text-[#2E6FDB] border border-[#C5D9F7] rounded-lg">Editar</button>
+                  )}
+                  {detailEv.canDelete && (
+                    <button onClick={() => deletePersonalEvent(detailEv.id)} className="px-3 py-1.5 text-xs text-[#E03E3E] border border-red-200 rounded-lg">Eliminar</button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-[#191919]">{editingId ? 'Editar evento personal' : 'Nuevo evento personal'}</h3>
+            <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Título" className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm" />
+            <div className="grid grid-cols-2 gap-3">
+              <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm" />
+              <input type="time" value={form.time} onChange={e => setForm(p => ({ ...p, time: e.target.value }))} className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm" />
+            </div>
+            <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Descripción (opcional)" rows={3} className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm resize-none" />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowForm(false)} className="px-3 py-2 text-sm text-[#787774]">Cancelar</button>
+              <button onClick={savePersonalEvent} disabled={!form.title.trim() || !form.date} className="px-4 py-2 bg-[#2E6FDB] text-white rounded-lg text-sm disabled:opacity-50">Guardar</button>
             </div>
           </div>
         </div>
