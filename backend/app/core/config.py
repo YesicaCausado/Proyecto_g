@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     # Timeout (segundos) de las llamadas HTTP a Groq/Gemini. Debe quedar por
     # debajo del maxDuration de la función de Vercel para no morir en frío.
     AI_HTTP_TIMEOUT: float = float(os.getenv("AI_HTTP_TIMEOUT", "15"))
+    # Presupuesto total de una solicitud de IA, incluyendo el fallback. Debe
+    # dejar margen para serialización y respuesta de Vercel.
+    AI_TOTAL_TIMEOUT: float = float(os.getenv("AI_TOTAL_TIMEOUT", "24"))
 
     COGNITIVE_ANALYSIS_WINDOW: int = 30
     FATIGUE_THRESHOLD: float = 0.7

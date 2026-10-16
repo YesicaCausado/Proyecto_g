@@ -297,6 +297,7 @@ const VRMTutor = forwardRef<VRMTutorHandle, Props>(
           ref={canvasRef}
           className="w-full h-full"
           style={{ display: loadState === "loaded" ? "block" : "none" }}
+           aria-label="Avatar del tutor NeuroLearn"
         />
 
         {/* Cargando */}

@@ -116,6 +116,7 @@ function NeuInput({ id, label, type = 'text', placeholder, value, onChange, onFo
         />
         {isPass && (
           <button type="button" tabIndex={-1} onClick={() => setShow(v => !v)}
+             aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             style={{
               position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
               background: 'none', border: 'none', cursor: 'pointer',

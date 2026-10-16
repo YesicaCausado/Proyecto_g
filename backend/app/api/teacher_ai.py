@@ -37,6 +37,7 @@ ai_manager = AIManager(
     groq_model=settings.GROQ_MODEL,
     gemini_api_key=settings.GEMINI_API_KEY,
     gemini_model=settings.GEMINI_MODEL,
+    total_timeout=settings.AI_TOTAL_TIMEOUT,
 )
 
 

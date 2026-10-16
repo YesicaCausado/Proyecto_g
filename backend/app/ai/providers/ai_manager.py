@@ -14,6 +14,7 @@ import asyncio
 import inspect
 import json
 import logging
+import time
 from typing import Dict, List, Optional
 
 from app.ai.providers.groq_provider import GroqProvider
@@ -34,11 +35,15 @@ class AIManager:
         groq_model: str = "openai/gpt-oss-120b",
         gemini_api_key: Optional[str] = None,
         gemini_model: str = "gemini-3.6-flash",
-        request_timeout: float = 20.0,
+        # Dos intentos de 12 s caben en el presupuesto global de 24 s y dejan
+        # margen para ejecutar el fallback local antes del límite de Vercel.
+        request_timeout: float = 12.0,
+        total_timeout: float = 24.0,
     ):
         self.providers: List[Dict] = []
         self.active_provider: Optional[str] = None
         self.request_timeout = request_timeout
+        self.total_timeout = total_timeout
 
         # Proveedor 1: Groq
         if groq_api_key:
@@ -62,7 +67,7 @@ class AIManager:
     # ------------------------------------------------------------------
     # Generación con fallback
     # ------------------------------------------------------------------
-    async def _call_provider(self, provider, **kwargs) -> str:
+    async def _call_provider(self, provider, timeout: float, **kwargs) -> str:
         """
         Llama al proveedor con timeout. Si su método generate es síncrono,
         lo ejecuta en un hilo para no bloquear el event loop.
@@ -71,7 +76,7 @@ class AIManager:
             coro = provider.generate(**kwargs)
         else:
             coro = asyncio.to_thread(provider.generate, **kwargs)
-        return await asyncio.wait_for(coro, timeout=self.request_timeout)
+        return await asyncio.wait_for(coro, timeout=timeout)
 
     async def generate(
         self,
@@ -100,7 +105,14 @@ class AIManager:
                                         # proveedor configurado
             }
         """
+        deadline = time.monotonic() + self.total_timeout
+
         for i, entry in enumerate(self.providers):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.warning("Se agoto el presupuesto total de IA antes del proveedor %s.", entry["name"])
+                break
+
             name = entry["name"]
             provider = entry["provider"]
 
@@ -117,8 +129,10 @@ class AIManager:
 
             # 2. Generación
             try:
+                provider_timeout = min(self.request_timeout, remaining)
                 response = await self._call_provider(
                     provider,
+                    timeout=provider_timeout,
                     prompt=prompt,
                     system_prompt=system_prompt,
                     temperature=temperature,
@@ -139,8 +153,8 @@ class AIManager:
 
             except asyncio.TimeoutError:
                 logger.warning(
-                    "Proveedor %s excedio el timeout de %ss.",
-                    name, self.request_timeout,
+                    "Proveedor %s excedio el timeout de %.1fs.",
+                    name, provider_timeout,
                 )
             except Exception:
                 # No relanzamos: continuamos con el siguiente proveedor.
