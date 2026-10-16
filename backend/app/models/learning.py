@@ -1,46 +1,54 @@
 """
 NeuroLearn AI - Modelos de Sesión de Aprendizaje y Eventos Cognitivos
 """
-from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey, Text, Enum
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Float,
+    JSON,
+    ForeignKey,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
 
 from app.db.database import Base
-from app.models.user import User
-from app.models.expert_bot import ExpertBot
+
+
+def utcnow() -> datetime:
+    """Return a naive UTC datetime for the existing DateTime columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 class CognitiveSessionState(Base):
-        __tablename__ = "cognitive_session_state"
+    __tablename__ = "cognitive_session_state"
 
-        id = Column(Integer, primary_key=True, index=True)
-        user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-        topic = Column(String, nullable=False, index=True)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    topic = Column(String, nullable=False, index=True)
 
-        msg_count = Column(Integer, default=0)
-        error_streak = Column(Integer, default=0)
-        fast_replies = Column(Integer, default=0)
-        slow_replies = Column(Integer, default=0)
-        total_rt_ms = Column(Float, default=0.0)
-        quiz_error_rate = Column(Float, default=0.0)
-        weak_concepts = Column(JSON, default=list)
+    msg_count = Column(Integer, default=0)
+    error_streak = Column(Integer, default=0)
+    fast_replies = Column(Integer, default=0)
+    slow_replies = Column(Integer, default=0)
+    total_rt_ms = Column(Float, default=0.0)
+    quiz_error_rate = Column(Float, default=0.0)
+    weak_concepts = Column(JSON, default=list)
 
-        # Patrón 5 — veredictos de respuestas del chat en tiempo real.
-        # Ventana móvil de las últimas ~30 respuestas: [{c: 1|0|None, ts, len}]
-        chat_answers = Column(JSON, default=list)
+    # Ventana móvil de veredictos de respuestas del chat.
+    chat_answers = Column(JSON, default=list)
 
-        # Estado compacto del motor neuroconductual (baselines calibrados +
-        # prior del predictor de error + EMA). Permite reconstruir la
-        # personalización del motor entre cold starts serverless (Vercel),
-        # donde el estado en memoria de proceso se pierde en cada invocación.
-        neural_state = Column(JSON, default={})
+    # Estado compacto para reconstruir la calibración entre cold starts.
+    neural_state = Column(JSON, default=dict)
 
-        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
-        __table_args__ = (
-            # un registro por usuario+tema
-            # UniqueConstraint("user_id", "topic", name="uq_user_topic_state"),
-        )
+    __table_args__ = (
+        UniqueConstraint("user_id", "topic", name="uq_user_topic_state"),
+    )
 
 class CognitiveState(str, enum.Enum):
     NORMAL = "normal"
@@ -66,7 +74,7 @@ class LearningSession(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     bot_id = Column(Integer, ForeignKey("expert_bots.id"), nullable=True)
     topic = Column(String(200))
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=utcnow)
     ended_at = Column(DateTime, nullable=True)
     current_difficulty = Column(String(20), default=DifficultyLevel.MEDIUM.value)
     
@@ -97,7 +105,7 @@ class CognitiveEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     session_id = Column(Integer, ForeignKey("learning_sessions.id"), nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=utcnow)
     
     # Datos del evento
     event_type = Column(String(50))  # keystroke, click, response, correction, pause
@@ -127,7 +135,7 @@ class ChatMessage(Base):
     session_id = Column(Integer, ForeignKey("learning_sessions.id"), nullable=False)
     role = Column(String(20))  # user, assistant, system
     content = Column(Text, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=utcnow)
     
     # Metadata del mensaje
     response_time_ms = Column(Float, nullable=True)
@@ -171,7 +179,7 @@ class QuizHistory(Base):
     recommended_difficulty = Column(String(20), nullable=True)  # Dificultad sugerida para próximo quiz
     
     # Metadatos
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     completed_at = Column(DateTime, nullable=True)
     time_spent_seconds = Column(Integer, nullable=True)
     

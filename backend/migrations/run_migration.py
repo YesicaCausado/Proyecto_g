@@ -19,6 +19,7 @@ def run_migration():
         Path(__file__).parent / "applied" / "002_add_adaptive_quiz_columns.sql",
         Path(__file__).parent / "applied" / "003_add_chat_patterns_tables.sql",
         Path(__file__).parent / "applied" / "004_add_chat_answers.sql",
+        Path(__file__).parent / "applied" / "013_cognitive_session_state_unique.sql",
     ]
 
     for migration_file in migration_files:
@@ -34,8 +35,14 @@ def run_migration():
         try:
             with engine.connect() as conn:
                 for statement in sql_content.split(';'):
-                    statement = statement.strip()
-                    if statement and not statement.startswith('--'):
+                    # Los comentarios SQL pueden preceder a una sentencia;
+                    # eliminarlos por línea evita descartar accidentalmente
+                    # el primer CREATE/ALTER de una migración.
+                    statement = "\n".join(
+                        line for line in statement.splitlines()
+                        if not line.strip().startswith('--')
+                    ).strip()
+                    if statement:
                         print(f"   Ejecutando: {statement[:60]}...")
                         conn.execute(text(statement))
                 conn.commit()
