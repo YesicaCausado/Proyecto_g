@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Search, Loader2, MessageSquare, PenSquare, X, CheckCheck, Paperclip, Download, ArrowLeft, Trash2 } from 'lucide-react';
+import { Send, Search, Loader2, MessageSquare, PenSquare, X, CheckCheck, ArrowLeft, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +21,6 @@ interface Message {
   text: string;
   time: string;
   read: boolean;
-  attachment?: { name: string; mime: string; size: number; url: string } | null;
 }
 
 interface Conversation {
@@ -90,7 +89,6 @@ function mapMessage(raw: any): Message {
       ? new Date(raw.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
       : (raw.time ?? ''),
     read: raw.is_read ?? false,
-    attachment: raw.attachment ?? null,
   };
 }
 
@@ -116,11 +114,9 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   const [showNew, setShowNew] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
-  const [attachment, setAttachment] = useState<File | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [messageError, setMessageError] = useState('');
   const [mobileListOpen, setMobileListOpen] = useState(true);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -175,12 +171,9 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   };
 
   const sendMessage = async () => {
-    if ((!text.trim() && !attachment) || !active || sending) return;
+    if (!text.trim() || !active || sending) return;
     const content = text.trim();
-    const file = attachment;
     setText('');
-    setAttachment(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
     setSending(true);
     const tempMsg: Message = {
       id: `tmp-${Date.now()}`,
@@ -188,21 +181,14 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
       text: content,
       time: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
       read: false,
-      attachment: file ? { name: file.name, mime: file.type, size: file.size, url: '' } : null,
     };
-    const updatedActive = { ...active, messages: [...active.messages, tempMsg], lastMsg: content || `📎 ${file?.name}`, lastTime: 'Ahora', unread: 0 };
+    const updatedActive = { ...active, messages: [...active.messages, tempMsg], lastMsg: content, lastTime: 'Ahora', unread: 0 };
     setActive(updatedActive);
     setConvs(prev => prev.map(c => c.otherId === active.otherId ? updatedActive : c));
     try {
-      const form = new FormData();
-      form.append('content', content);
-      if (file) form.append('file', file);
-      await api.post(`/messages/conversations/${active.otherId}`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await api.post(`/messages/conversations/${active.otherId}`, new URLSearchParams({ content }));
     } catch {
       setText(content);
-      setAttachment(file);
       setActive(prev => prev ? { ...prev, messages: prev.messages.filter(m => m.id !== tempMsg.id) } : prev);
     } finally {
       setSending(false);
@@ -236,25 +222,6 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
     setShowNew(false);
   };
 
-  const downloadAttachment = async (msg: Message) => {
-    if (!msg.attachment?.url) return;
-    try {
-      // attachment.url ya incluye el prefijo /api/v1 (viene del backend).
-      // Usamos fetch nativo para evitar que axios duplique el baseURL.
-      const res = await fetch(msg.attachment.url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = msg.attachment.name || 'archivo';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch { /* noop */ }
-  };
-
   const deleteMessage = async (msg: Message) => {
     if (msg.senderId !== myId || deletingId) return;
     setMessageError('');
@@ -266,14 +233,14 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
       setActive(prev => prev ? {
         ...prev,
         messages: remaining,
-        lastMsg: last ? (last.text || (last.attachment ? `📎 ${last.attachment.name}` : '')) : '',
+        lastMsg: last?.text ?? '',
         lastTime: last?.time ?? '',
       } : prev);
       setConvs(prev => prev.map(conv => conv.otherId === active?.otherId
         ? {
             ...conv,
             messages: conv.messages.filter(item => item.id !== msg.id),
-            lastMsg: last ? (last.text || (last.attachment ? `📎 ${last.attachment.name}` : '')) : '',
+            lastMsg: last?.text ?? '',
             lastTime: last?.time ?? '',
           }
         : conv));
@@ -430,20 +397,6 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                   <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[70%] px-3.5 py-2 rounded-2xl ${isMe ? 'text-white rounded-br-sm' : 'bg-[#F7F6F3] text-[#191919] rounded-bl-sm'}`} style={isMe ? { background: accent } : undefined}>
                       {msg.text && <p className="text-sm leading-relaxed whitespace-pre-line">{msg.text}</p>}
-                      {msg.attachment?.name && (
-                        <button
-                          onClick={() => downloadAttachment(msg)}
-                          disabled={!msg.attachment.url}
-                          className={`mt-1.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            isMe ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-white border border-[#E9E9E7] text-[#37352F] hover:bg-[#EBEBEA]'
-                          }`}
-                          title="Descargar archivo"
-                        >
-                          <Paperclip className="w-3.5 h-3.5 flex-shrink-0" />
-                          <span className="truncate max-w-[160px]">{msg.attachment.name}</span>
-                          {msg.attachment.url && <Download className="w-3.5 h-3.5 flex-shrink-0" />}
-                        </button>
-                      )}
                       <div className={`flex items-center justify-end gap-1 mt-1 ${isMe ? 'text-white/70' : 'text-[#AEADAB]'}`}>
                         <span className="text-[10px]">{msg.time}</span>
                         {isMe && <CheckCheck className={`w-3 h-3 ${msg.read ? 'text-white' : 'text-white/50'}`} />}
@@ -470,29 +423,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
             </div>
 
             <div className="px-5 pt-3 border-t border-[#E9E9E7] flex-shrink-0">
-              {attachment && (
-                <div className="mb-2 flex items-center gap-2 px-3 py-1.5 bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg text-xs text-[#37352F]">
-                  <Paperclip className="w-3.5 h-3.5 text-[#787774]" />
-                  <span className="truncate flex-1">{attachment.name}</span>
-                  <span className="text-[#AEADAB]">{Math.round(attachment.size / 1024)} KB</span>
-                  <button onClick={() => { setAttachment(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="text-[#787774] hover:text-[#E03E3E]"><X className="w-3.5 h-3.5" /></button>
-                </div>
-              )}
               <div className="flex items-center gap-3 pb-3">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={e => setAttachment(e.target.files?.[0] ?? null)}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Adjuntar archivo"
-                  className="w-9 h-9 flex items-center justify-center rounded-full text-[#787774] hover:bg-[#F7F6F3] hover:text-[#37352F] transition-colors"
-                  style={attachment ? { color: accent } : undefined}
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
                 <input
                   value={text}
                   onChange={e => setText(e.target.value)}
@@ -500,7 +431,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                   placeholder={`Escribe a ${active.name}...`}
                   className="flex-1 px-4 py-2 border border-[#E9E9E7] rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 focus:border-[#0066FF]"
                 />
-                <button onClick={sendMessage} disabled={(!text.trim() && !attachment) || sending}
+                <button onClick={sendMessage} disabled={!text.trim() || sending}
                   className="w-9 h-9 flex items-center justify-center text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:opacity-90"
                   style={{ background: accent }}>
                   {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

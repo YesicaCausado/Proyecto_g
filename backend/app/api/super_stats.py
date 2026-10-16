@@ -15,7 +15,7 @@ Endpoints:
   GET  /super/institution      - Datos de la institución (nombre, DANE, contacto)
   PATCH /super/institution     - Actualizar nombre de la institución
 """
-from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, Query, HTTPException, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from datetime import datetime, timedelta
@@ -822,23 +822,6 @@ class BroadcastSend(BaseModel):
     group_id: Optional[int] = None
 
 
-def _guess_mime(filename: str) -> str:
-    import os
-    ext = os.path.splitext(filename or "")[1].lower()
-    return {
-        ".pdf": "application/pdf", ".doc": "application/msword",
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".ppt": "application/vnd.ms-powerpoint",
-        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        ".xls": "application/vnd.ms-excel",
-        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".txt": "text/plain", ".csv": "text/csv", ".png": "image/png",
-        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
-        ".webp": "image/webp", ".svg": "image/svg+xml", ".zip": "application/zip",
-        ".mp4": "video/mp4", ".mp3": "audio/mpeg",
-    }.get(ext, "application/octet-stream")
-
-
 def _broadcast_recipients(body: "BroadcastSend", sender: "User", db: Session):
     """Devuelve los usuarios a los que va dirigido el broadcast (excluyendo al propio rector)."""
     inst_id = sender.institution_id
@@ -904,7 +887,6 @@ async def list_broadcasts(
             "reads":    int(reads),
             "total":    total,
             "sender":   (db.query(User).filter(User.id == lg.performed_by_id).first() or current_user).full_name or "Rector",
-            "attachment": notes.get("attachment") or None,
         })
 
     return {"broadcasts": result, "total": len(result)}
@@ -916,7 +898,6 @@ async def send_broadcast(
     body: str = Form(...),
     recipient_type: str = Form("institucional"),
     grade: Optional[str] = Form(None),
-    file: Optional[UploadFile] = File(None),
     scheduled_at: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -946,20 +927,6 @@ async def send_broadcast(
     total = len(recipients)
     recipient_ids = [u.id for u in recipients]
 
-    # Adjunto opcional (se entrega el mismo binario a cada destinatario)
-    attach_name = attach_mime = None
-    attach_size = None
-    attach_data = None
-    if file is not None:
-        raw = await file.read()
-        if len(raw) > 25 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="El archivo supera el límite de 25 MB.")
-        if raw:
-            attach_name = file.filename or "archivo"
-            attach_mime = file.content_type or _guess_mime(attach_name)
-            attach_size = len(raw)
-            attach_data = raw
-
     # ── Entregar un mensaje real en el buzón de cada destinatario ─────────────
     if recipients:
         db.add_all([
@@ -967,10 +934,6 @@ async def send_broadcast(
                 sender_id=current_user.id,
                 receiver_id=uid,
                 content=f"📢 {data.subject}\n\n{data.body}",
-                attachment_name=attach_name,
-                attachment_mime=attach_mime,
-                attachment_size=attach_size,
-                attachment_data=attach_data,
             )
             for uid in recipient_ids
         ])
@@ -983,11 +946,6 @@ async def send_broadcast(
         "to":            to_label,
         "total":         total,
         "recipient_ids": recipient_ids,
-        "attachment":    {
-            "name": attach_name,
-            "mime": attach_mime,
-            "size": attach_size,
-        } if attach_name else None,
     })
 
     log = AuditLog(
@@ -1008,5 +966,4 @@ async def send_broadcast(
         "reads":   0,
         "total":   total,
         "sender":  current_user.full_name or current_user.username,
-        "attachment": attach_name,
     }
