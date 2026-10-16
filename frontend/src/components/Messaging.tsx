@@ -277,11 +277,11 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
       const form = new FormData();
       form.append('content', content);
       if (file) form.append('file', file);
-      const res = await api.post(`/messages/conversations/${active.otherId}`, form, {
+      const { data } = await api.post(`/messages/conversations/${active.otherId}`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       // Reemplazar el mensaje temporal con el real (incluye created_at real)
-      const realMsg = mapMessage(res.data);
+      const realMsg = mapMessage(data);
       setActive(prev => prev
         ? { ...prev, messages: prev.messages.map(m => m.id === tempMsg.id ? realMsg : m) }
         : prev,
