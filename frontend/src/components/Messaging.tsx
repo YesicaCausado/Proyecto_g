@@ -318,8 +318,9 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
     setDeleteConfirm(null);
     setDeletingId(msg.id);
 
+    // ✅ LO QUE DEBE QUEDAR:
     try {
-      const res = await api.delete(`/messages/${msg.id}`, { params: { scope } });
+      await api.delete(`/messages/${msg.id}`, { params: { scope } });
 
       if (scope === 'for_all') {
         // Mostrar marcador en lugar de ocultar
