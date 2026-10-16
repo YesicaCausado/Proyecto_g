@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Search, Loader2, MessageSquare, PenSquare, X, CheckCheck, Paperclip, Download, ArrowLeft } from 'lucide-react';
+import { Send, Search, Loader2, MessageSquare, PenSquare, X, CheckCheck, Paperclip, Download, ArrowLeft, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -117,6 +117,8 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [messageError, setMessageError] = useState('');
   const [mobileListOpen, setMobileListOpen] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -253,6 +255,35 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
     } catch { /* noop */ }
   };
 
+  const deleteMessage = async (msg: Message) => {
+    if (msg.senderId !== myId || deletingId) return;
+    setMessageError('');
+    setDeletingId(msg.id);
+    try {
+      await api.delete(`/messages/${msg.id}`);
+      const remaining = active?.messages.filter(item => item.id !== msg.id) ?? [];
+      const last = remaining[remaining.length - 1];
+      setActive(prev => prev ? {
+        ...prev,
+        messages: remaining,
+        lastMsg: last ? (last.text || (last.attachment ? `📎 ${last.attachment.name}` : '')) : '',
+        lastTime: last?.time ?? '',
+      } : prev);
+      setConvs(prev => prev.map(conv => conv.otherId === active?.otherId
+        ? {
+            ...conv,
+            messages: conv.messages.filter(item => item.id !== msg.id),
+            lastMsg: last ? (last.text || (last.attachment ? `📎 ${last.attachment.name}` : '')) : '',
+            lastTime: last?.time ?? '',
+          }
+        : conv));
+    } catch {
+      setMessageError('No se pudo eliminar el mensaje. Inténtalo de nuevo.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const filtered = convs.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.subtitle.toLowerCase().includes(search.toLowerCase())
@@ -384,6 +415,9 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-4 space-y-3 overscroll-contain">
+              {messageError && (
+                <p className="text-center text-xs text-[#E03E3E]" role="alert">{messageError}</p>
+              )}
               {active.messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-32 text-[#AEADAB]">
                   <MessageSquare className="w-8 h-8 mb-2 text-[#E9E9E7]" />
@@ -413,6 +447,20 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                       <div className={`flex items-center justify-end gap-1 mt-1 ${isMe ? 'text-white/70' : 'text-[#AEADAB]'}`}>
                         <span className="text-[10px]">{msg.time}</span>
                         {isMe && <CheckCheck className={`w-3 h-3 ${msg.read ? 'text-white' : 'text-white/50'}`} />}
+                        {isMe && (
+                          <button
+                            type="button"
+                            onClick={() => deleteMessage(msg)}
+                            disabled={deletingId === msg.id}
+                            aria-label="Eliminar mensaje"
+                            title="Eliminar mensaje"
+                            className="ml-1 p-0.5 rounded text-white/70 hover:text-white disabled:opacity-50"
+                          >
+                            {deletingId === msg.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <Trash2 className="w-3 h-3" />}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -395,6 +395,29 @@ async def get_messages(
     }
 
 
+@router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_message(
+    message_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Elimina un mensaje enviado por el usuario autenticado."""
+    message = db.query(DirectMessage).filter(
+        DirectMessage.id == message_id,
+    ).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Mensaje no encontrado")
+    if message.sender_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo puedes eliminar tus propios mensajes",
+        )
+
+    db.delete(message)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/{message_id}/attachment")
 async def download_attachment(
     message_id: int,
