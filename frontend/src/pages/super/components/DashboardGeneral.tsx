@@ -1,6 +1,6 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Users, GraduationCap, BookOpen, Bot, TrendingUp, TrendingDown,
+  Users, GraduationCap, BookOpen, Bot, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2, LineChart,
   PieChart, Trophy
 } from 'lucide-react';
