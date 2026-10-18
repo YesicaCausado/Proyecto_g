@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   Users, GraduationCap, BookOpen, Bot, TrendingUp, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2, LineChart,
@@ -56,7 +56,7 @@ export default function DashboardGeneral({
     { label: 'Estudiantes', value: stats?.total_students != null ? String(stats.total_students) : '—', status: 'good', icon: GraduationCap, tab: 'estudiantes' },
     { label: 'Grupos', value: stats?.total_groups != null ? String(stats.total_groups) : '—', status: 'neutral', icon: BookOpen, tab: 'grupos' },
     { label: 'NeuroBots', value: '—', status: 'neutral', icon: Bot, tab: 'neurobots' },
-    { label: 'Promedio general', value: stats?.avg_score != null ? `${stats.avg_score}/10` : '—', status: stats && stats.avg_score >= 7 ? 'good' : 'neutral', icon: TrendingUp, tab: null },
+
     { label: 'En riesgo', value: stats?.at_risk_count != null ? String(stats.at_risk_count) : '—', status: 'danger', icon: AlertTriangle, tab: 'alertas' },
   ];
 
@@ -65,11 +65,11 @@ export default function DashboardGeneral({
 
       {!stats && (
         <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md px-4 py-2.5 text-xs text-[#787774] font-medium">
-          Cargando datos reales de la institución…
+          Cargando datos reales de la instituciónâ€¦
         </div>
       )}
 
-      {/* ── Institución ── */}
+      {/* â”€â”€ Institución â”€â”€ */}
       <div className="bg-white border border-[#E9E9E7] rounded-lg px-5 py-4 flex items-center gap-3">
         <ShieldCheck className="w-6 h-6 text-[#6940A5] flex-shrink-0" />
         <div className="min-w-0">
@@ -81,7 +81,7 @@ export default function DashboardGeneral({
         )}
       </div>
 
-      {/* ── KPIs ── */}
+      {/* â”€â”€ KPIs â”€â”€ */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {metrics.map((m, i) => {
           const Icon = m.icon;
@@ -101,7 +101,7 @@ export default function DashboardGeneral({
         })}
       </div>
 
-      {/* ── Gráficas + Ranking ── */}
+      {/* â”€â”€ GrÃ¡ficas + Ranking â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
           <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2 mb-4">
@@ -132,7 +132,7 @@ export default function DashboardGeneral({
           </h3>
           {stats ? (
             <div className="space-y-3">
-              <p className="text-sm text-[#37352F] font-medium">Promedio general: {stats.avg_score}/10</p>
+
               <p className="text-xs text-[#787774]">La tendencia se calcula con los registros reales de la institución disponibles en el backend.</p>
             </div>
           ) : (
@@ -141,7 +141,7 @@ export default function DashboardGeneral({
         </div>
       </div>
 
-      {/* ── Ranking profesores + Distribución áreas ── */}
+      {/* â”€â”€ Ranking profesores + Distribución Ã¡reas â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Ranking profesores */}
@@ -162,7 +162,7 @@ export default function DashboardGeneral({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#191919] truncate">{t.name}</p>
-                  <p className="text-xs text-[#787774]">{t.subject} · {t.students} estudiantes</p>
+                  <p className="text-xs text-[#787774]">{t.subject} Â· {t.students} estudiantes</p>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className={`text-sm font-bold ${t.avg >= 8 ? 'text-[#0F7B6C]' : t.avg >= 7 ? 'text-[#D9730D]' : 'text-[#E03E3E]'}`}>{t.avg}</p>
@@ -170,14 +170,14 @@ export default function DashboardGeneral({
                 </div>
               </div>
             ))}
-            {!stats && <p className="text-xs text-[#AEADAB] text-center py-4">Cargando datos reales…</p>}
+            {!stats && <p className="text-xs text-[#AEADAB] text-center py-4">Cargando datos realesâ€¦</p>}
           </div>
         </div>
 
-        {/* Distribución por áreas */}
+        {/* Distribución por Ã¡reas */}
         <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
           <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2 mb-4">
-            <PieChart className="w-4 h-4 text-[#787774]" /> Distribución por Áreas
+            <PieChart className="w-4 h-4 text-[#787774]" /> Distribución por Ãreas
           </h3>
           <div className="space-y-2.5">
             {(stats?.areas_data ?? []).map((area, i) => (
@@ -191,12 +191,12 @@ export default function DashboardGeneral({
                 </div>
               </div>
             ))}
-            {!stats && <p className="text-xs text-[#AEADAB] text-center py-4">Cargando…</p>}
+            {!stats && <p className="text-xs text-[#AEADAB] text-center py-4">Cargandoâ€¦</p>}
           </div>
         </div>
       </div>
 
-      {/* ── Estudiantes en Riesgo ── */}
+      {/* â”€â”€ Estudiantes en Riesgo â”€â”€ */}
       <div className="bg-white border border-[#E9E9E7] rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-[#191919] text-sm flex items-center gap-2">
@@ -216,7 +216,7 @@ export default function DashboardGeneral({
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-[#37352F] truncate">{s.name}</p>
-                  <p className="text-[10px] text-[#787774]">{s.grade} · {s.subject}</p>
+                  <p className="text-[10px] text-[#787774]">{s.grade} Â· {s.subject}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between">
@@ -227,7 +227,7 @@ export default function DashboardGeneral({
               </div>
             </div>
           ))}
-          {!stats && <p className="text-xs text-[#AEADAB] col-span-4 text-center py-4">Cargando datos reales…</p>}
+          {!stats && <p className="text-xs text-[#AEADAB] col-span-4 text-center py-4">Cargando datos realesâ€¦</p>}
         </div>
       </div>
 
@@ -239,9 +239,9 @@ export default function DashboardGeneral({
         <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full opacity-30 pointer-events-none"
           style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
         <div className="relative z-10 flex flex-col justify-center h-full pl-6 pr-32">
-          <p className="text-[14px] font-bold text-[#2e1065] leading-tight mb-1">¡Neuron está listo!</p>
+          <p className="text-[14px] font-bold text-[#2e1065] leading-tight mb-1">Â¡Neuron estÃ¡ listo!</p>
           <p className="text-[11px] text-[#6d28d9] leading-snug opacity-85">
-            Tu institución avanza. Monitorea, decide, transforma 🚀
+            Tu institución avanza. Monitorea, decide, transforma ðŸš€
           </p>
         </div>
         <div className="absolute right-6 top-0 bottom-0 flex items-center justify-center pointer-events-none">
@@ -252,4 +252,6 @@ export default function DashboardGeneral({
     </div>
   );
 }
+
+
 
