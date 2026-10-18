@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Users, GraduationCap, BookOpen, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2,
-  PieChart, Trophy, Activity, RefreshCw
+  PieChart, Trophy, Activity, RefreshCw, type LucideIcon
 } from 'lucide-react';
 import api from '../../../services/api';
 import NeuronAvatar from '../../../components/NeuronAvatar';
@@ -22,7 +22,7 @@ const AREA_COLORS = ['#0B6E99','#0F7B6C','#6940A5','#D9730D','#E03E3E','#2E6FDB'
 function StatCard({
   label, value, icon: Icon, status, onClick,
 }: {
-  label: string; value: string; icon: React.ElementType;
+  label: string; value: string; icon: LucideIcon;
   status: 'good' | 'neutral' | 'danger'; onClick?: () => void;
 }) {
   const accent =
