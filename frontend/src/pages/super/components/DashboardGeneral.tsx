@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Users, GraduationCap, BookOpen, Bot, TrendingDown,
+  Users, GraduationCap, BookOpen, TrendingDown,
   ShieldCheck, ExternalLink, AlertTriangle, BarChart2, LineChart,
   PieChart, Trophy
 } from 'lucide-react';
@@ -11,7 +11,6 @@ interface DashStats {
   total_teachers: number;
   total_students: number;
   total_groups: number;
-  avg_score: number;
   at_risk_count: number;
   teacher_ranking: { name: string; subject: string; avg: number; participation: number; students: number }[];
   at_risk_detail: { name: string; grade: string; avg: number; subject: string; risk: string }[];
@@ -55,8 +54,6 @@ export default function DashboardGeneral({
     { label: 'Profesores activos', value: stats?.total_teachers != null ? String(stats.total_teachers) : '—', status: 'good', icon: Users, tab: 'profesores' },
     { label: 'Estudiantes', value: stats?.total_students != null ? String(stats.total_students) : '—', status: 'good', icon: GraduationCap, tab: 'estudiantes' },
     { label: 'Grupos', value: stats?.total_groups != null ? String(stats.total_groups) : '—', status: 'neutral', icon: BookOpen, tab: 'grupos' },
-    { label: 'NeuroBots', value: '—', status: 'neutral', icon: Bot, tab: 'neurobots' },
-
     { label: 'En riesgo', value: stats?.at_risk_count != null ? String(stats.at_risk_count) : '—', status: 'danger', icon: AlertTriangle, tab: 'alertas' },
   ];
 
@@ -252,6 +249,3 @@ export default function DashboardGeneral({
     </div>
   );
 }
-
-
-
