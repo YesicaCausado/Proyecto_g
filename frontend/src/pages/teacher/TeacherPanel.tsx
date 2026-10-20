@@ -429,10 +429,10 @@ export default function TeacherPanel() {
   // CALLBACK DE INTEGRACIONES
   // ----------------------------------------------------------
 
-  // Regreso de Google OAuth (?tab=integraciones&integration_ok=1 o
-  // &integration_error=…): se abre Integraciones, que muestra el resultado.
+  // Regreso de Google OAuth (?tab=integraciones&google_code=… o
+  // &integration_error=…): se abre Integraciones, que completa la conexión.
   useEffect(() => {
-    if (searchParams.get('integration_ok') || searchParams.get('integration_error')) {
+    if (searchParams.get('google_code') || searchParams.get('integration_error')) {
       setActiveTab('integraciones');
     }
   }, [searchParams]);

@@ -143,6 +143,7 @@ paso:
 | `test_institucion_usuario.py` | 2 | Nombre real de la institución en login y `/auth/me` |
 | `test_adaptive_system.py` | 12 | Modelo del estudiante y motor de adaptación pedagógica |
 | `test_patterns.py` | 14 | Patrones neuroconductuales |
+| `test_patrones_neurodigitales.py` | 18 | Cinco patrones de extremo a extremo (casos A–J de `docs/AUDITORIA_PATRONES_NEURODIGITALES.md`): estados `available`/`unavailable`/`not_applicable`/`error`, sin valores inventados, duplicados, entradas inválidas, calificación correcta, aislamiento y reproducibilidad del motor. No sustituye la prueba manual con cámara y micrófono reales |
 | `test_integration_service.py` | 4 | Cifrado de tokens, webhooks reales a un servidor local, automatizaciones |
 | `test_crear_admin.py` | 5 | Alta del Administrador global con `scripts/crear_admin.py`: inicia sesión y crea instituciones, política de contraseñas, no pisa cuentas ni cambia roles, nunca imprime la contraseña |
 | `test_neurobots_notificaciones.py` | 13 | Parche 11B: flujo completo profesor asigna NeuroBot → notificación → Mis NeuroBots → chat → progreso → completado → resultado al profesor; el respaldo local no cuenta como interacción; meta y desasignación; roles y aislamiento por institución; asignación + notificación atómicas; estado leído y contador persistidos; mensajes directos agrupados y preferencias; evaluación publicada; alerta de riesgo alto; grupo nuevo y estudiante que se une; racha persistida una vez; moderación del Súper Profesor |

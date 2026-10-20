@@ -184,8 +184,19 @@ class IntegracionesProfesorTests(unittest.TestCase):
 
     # ── Drive y OAuth ──────────────────────────────────────────────────────
     def test_importar_de_drive_guarda_enlace(self):
-        r = self.client.post(f"{API}/integrations/google/drive/import", headers=self.h("profe"),
-                             json={"files": [{"id": "1AbCdEfGhIjKlMnOp", "name": "Guía.pdf", "type": "pdf"}]})
+        from unittest import mock
+        from app.models.integration import Integration
+        from app.services import integration_service as isvc
+        db = self.Session()
+        db.add(Integration(institution_id=1, user_id=self.ids["profe"], provider="google_drive",
+                           status="connected", access_token=isvc.encrypt_token("t"), config={}))
+        db.commit()
+        db.close()
+        meta = {"id": "1AbCdEfGhIjKlMnOp", "name": "Guía.pdf", "mime_type": "application/pdf", "type": "pdf",
+                "url": "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view", "link_access": "anyone"}
+        with mock.patch.object(isvc, "get_drive_file", return_value=meta):
+            r = self.client.post(f"{API}/integrations/google/drive/import", headers=self.h("profe"),
+                                 json={"files": [{"id": "1AbCdEfGhIjKlMnOp", "name": "Guía.pdf", "type": "pdf"}]})
         self.assertEqual(r.status_code, 200, r.text)
         folders = self.client.get(f"{API}/teacher/materials", headers=self.h("profe")).json()
         files = [f for folder in (folders.get("folders") if isinstance(folders, dict) else folders) for f in folder["files"]]

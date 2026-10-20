@@ -148,6 +148,16 @@ Tu proyecto tiene **12 variables de entorno principales** distribuidas en el bac
 - Dirección pública de la app (sin `/` final). Tras autorizar, el backend envía
   al profesor a `FRONTEND_URL/#/teacher?tab=integraciones`.
 
+### `GOOGLE_DRIVE_SCOPES` y `GOOGLE_CALENDAR_SCOPES` (opcionales)
+- Permisos que se piden al conectar cada servicio. Por defecto:
+  Drive → `openid email …/auth/drive.readonly`;
+  Calendar → `openid email …/auth/calendar.readonly …/auth/calendar.events`.
+- Deben estar declarados en Google Cloud → Pantalla de consentimiento de OAuth.
+- `GOOGLE_SCOPES` (una sola lista para ambos) ya no se usa: si existe en Vercel
+  puede borrarse.
+- Cada conexión de Google pertenece al usuario que la hizo; no se comparte con
+  los demás profesores de la institución.
+
 ---
 
 ## **5. VARIABLES DE UMBRALES COGNITIVOS**

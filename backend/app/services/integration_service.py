@@ -18,6 +18,7 @@ import base64
 import hmac
 import hashlib
 import json
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -79,11 +80,15 @@ def decrypt_token(ciphertext: Optional[str]) -> Optional[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _sign_state(data: dict, ttl_seconds: int = 900) -> str:
-    """Firma un estado OAuth (fecha de expiración + token de sesión) con HMAC."""
+    """Firma un estado OAuth (usuario, proveedor, caducidad) con HMAC.
+
+    El state viaja por la URL de Google: NUNCA lleva el JWT de la sesión
+    (antes se incluía y quedaba en el historial y en los registros de Google).
+    """
     payload = {
         "sub": data.get("sub"),
-        "token": data.get("token"),
         "provider": data.get("provider"),
+        "nonce": secrets.token_urlsafe(12),
         "exp": int((datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).timestamp()),
     }
     body = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
@@ -121,13 +126,49 @@ def _unsign_state(state: str) -> Optional[dict]:
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
-DRIVE_ROOT_URL = "https://www.googleapis.com/drive/v3/files"
 CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
 CALENDAR_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars"
+
+# Permisos que cada operación necesita de verdad. Si el usuario los desmarca
+# en la pantalla de consentimiento de Google, la conexión no se guarda.
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
+CALENDAR_SCOPES_REQUIRED = (
+    "https://www.googleapis.com/auth/calendar.readonly",   # calendarList.list
+    "https://www.googleapis.com/auth/calendar.events",     # events.insert
+)
+
+_DRIVE_ID_RE = re.compile(r"[A-Za-z0-9_-]{10,200}")
+
+
+class GoogleAPIError(RuntimeError):
+    """Error de Google con un mensaje apto para mostrar al usuario."""
+
+    def __init__(self, message: str, status_code: int = 502):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def google_configured() -> bool:
     return bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
+
+
+def scopes_for(provider: str) -> str:
+    """Alcances que se piden para cada proveedor (antes se pedían Drive y
+    Calendar juntos al conectar cualquiera de los dos)."""
+    if provider == IntegrationProvider.GOOGLE_CALENDAR:
+        return settings.GOOGLE_CALENDAR_SCOPES
+    return settings.GOOGLE_DRIVE_SCOPES
+
+
+def missing_scopes(provider: str, granted: str) -> list[str]:
+    """Permisos imprescindibles que el usuario NO concedió."""
+    got = set((granted or "").split())
+    needed = (DRIVE_SCOPE,) if provider == IntegrationProvider.GOOGLE_DRIVE else CALENDAR_SCOPES_REQUIRED
+    return [s for s in needed if s not in got]
+
+
+def is_drive_id(value: str) -> bool:
+    return bool(_DRIVE_ID_RE.fullmatch(value or ""))
 
 
 def _google_headers(access_token: str) -> dict:
@@ -141,7 +182,7 @@ def build_authorization_url(provider: str, state_token: str, redirect_uri: str |
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": redirect_uri or settings.GOOGLE_REDIRECT_URI,
         "response_type": "code",
-        "scope": settings.GOOGLE_SCOPES,
+        "scope": scopes_for(provider),
         "access_type": "offline",
         "prompt": "consent",
         "state": state_token,
@@ -164,129 +205,184 @@ def exchange_code_for_tokens(code: str, redirect_uri: str | None = None) -> dict
     return resp.json()
 
 
-def refresh_access_token(refresh_token: str) -> str:
-    """Refresca el access token usando el refresh token. Devuelve el nuevo access token."""
+def refresh_access_token(refresh_token: str) -> dict:
+    """Refresca el access token. Devuelve {access_token, expires_in}.
+
+    Lanza GoogleAPIError(401) si Google rechaza el refresh token (revocado o
+    caducado) y GoogleAPIError(503) si es un fallo pasajero de red/servidor.
+    """
     import httpx
-    resp = httpx.post(TOKEN_URL, data={
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "client_secret": settings.GOOGLE_CLIENT_SECRET,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token",
-    }, timeout=30)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Error refrescando token: {resp.status_code} {resp.text[:300]}")
-    return resp.json().get("access_token")
+    try:
+        resp = httpx.post(TOKEN_URL, data={
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }, timeout=30)
+    except Exception as e:  # noqa: BLE001
+        raise GoogleAPIError("No pudimos comunicarnos con Google. Intenta de nuevo.", 503) from e
+    if resp.status_code in (400, 401):
+        raise GoogleAPIError("Google rechazó la conexión (se revocó o caducó). Vuelve a conectar la cuenta.", 401)
+    if resp.status_code != 200 or not resp.json().get("access_token"):
+        raise GoogleAPIError("Google no respondió correctamente. Intenta de nuevo.", 503)
+    data = resp.json()
+    return {"access_token": data["access_token"], "expires_in": int(data.get("expires_in") or 3600)}
 
 
 def get_user_email(access_token: str) -> str:
-    """Obtiene el correo de la cuenta Google autenticada."""
+    """Obtiene el correo de la cuenta Google autenticada (alcance «email»)."""
     import httpx
     resp = httpx.get(USERINFO_URL, headers=_google_headers(access_token), timeout=30)
     if resp.status_code != 200:
-        raise RuntimeError(f"Error obteniendo perfil de Google: {resp.status_code} {resp.text[:300]}")
+        raise RuntimeError(f"Error obteniendo perfil de Google: {resp.status_code}")
     return resp.json().get("email", "")
+
+
+def _mark(db: Session, integration: Integration, status: str) -> None:
+    integration.status = status
+    try:
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
 
 
 def _get_valid_access_token(db: Session, integration: Integration) -> tuple[str, bool]:
     """
-    Devuelve un access token válido descifrado y si requiere refresh.
-    Si el token expiró, intenta refrescarlo con el refresh token y lo
-    persiste cifrado de vuelta.
+    Devuelve un access token válido descifrado. Si expiró, lo refresca con el
+    refresh token y lo persiste cifrado. Si Google rechaza el refresh token,
+    la integración pasa a «token_expired» (la UI deja de mostrarla conectada).
     """
     access = decrypt_token(integration.access_token)
     refresh = decrypt_token(integration.refresh_token)
-    requires_refresh = False
 
     expires = integration.token_expires_at
     now = datetime.now(timezone.utc)
+    expired = False
     if expires is not None:
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=timezone.utc)
         # Margen de seguridad de 60 s antes de considerar expirado.
-        if now >= expires - timedelta(seconds=60):
-            requires_refresh = True
+        expired = now >= expires - timedelta(seconds=60)
 
-    if requires_refresh and refresh:
+    if (expired or not access) and refresh:
         try:
-            new_access = refresh_access_token(refresh)
-            access = new_access
-            integration.access_token = encrypt_token(new_access)
-            integration.token_expires_at = now + timedelta(hours=1)
-            db.commit()
-            requires_refresh = False
-        except Exception:  # noqa: BLE001
-            # No se pudo refrescar → token caducado/en revocado.
-            integration.status = "token_expired"
-            db.commit()
-            raise RuntimeError("El token de Google ha caducado. Vuelve a conectar la integración.")
+            fresh = refresh_access_token(refresh)
+        except GoogleAPIError as e:
+            if e.status_code == 401:
+                _mark(db, integration, "token_expired")
+            raise
+        access = fresh["access_token"]
+        integration.access_token = encrypt_token(access)
+        integration.token_expires_at = (now + timedelta(seconds=fresh["expires_in"])).replace(tzinfo=None)
+        db.commit()
+    elif expired or not access:
+        _mark(db, integration, "token_expired")
+        raise GoogleAPIError("La conexión con Google caducó. Vuelve a conectar la cuenta.", 401)
+    return access, False
 
-    if not access:
-        raise RuntimeError("No hay token de acceso válido para esta integración.")
-    return access, requires_refresh
+
+def _google_request(db: Session, integration: Integration, method: str, url: str, **kwargs):
+    """Llamada real a una API de Google con traducción de errores.
+
+    401 → la integración queda «token_expired»; 403 → permisos insuficientes,
+    API deshabilitada o cuota; 404 → recurso inexistente o sin acceso.
+    """
+    import httpx
+    token, _ = _get_valid_access_token(db, integration)
+    try:
+        resp = httpx.request(method, url, headers=_google_headers(token), timeout=60, **kwargs)
+    except Exception as e:  # noqa: BLE001
+        raise GoogleAPIError("No pudimos comunicarnos con Google. Intenta de nuevo.", 503) from e
+    if resp.status_code in (200, 201, 204):
+        return resp
+    reason = ""
+    try:
+        err = resp.json().get("error") or {}
+        if isinstance(err, dict):
+            reason = ((err.get("errors") or [{}])[0].get("reason") or err.get("status") or "")
+    except Exception:  # noqa: BLE001
+        pass
+    if resp.status_code == 401:
+        _mark(db, integration, "token_expired")
+        raise GoogleAPIError("La conexión con Google caducó o se revocó. Vuelve a conectar la cuenta.", 401)
+    if resp.status_code == 429 or reason in ("rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"):
+        raise GoogleAPIError("Google limitó temporalmente las solicitudes. Intenta en unos minutos.", 429)
+    if resp.status_code == 403:
+        if reason in ("accessNotConfigured", "SERVICE_DISABLED"):
+            raise GoogleAPIError("La API de Google no está habilitada en el proyecto de Google Cloud.", 503)
+        raise GoogleAPIError("La cuenta de Google conectada no tiene permiso para esta operación.", 403)
+    if resp.status_code == 404:
+        raise GoogleAPIError("El recurso no existe en Google o la cuenta conectada no tiene acceso.", 404)
+    if resp.status_code == 400:
+        raise GoogleAPIError("Google rechazó los datos enviados.", 400)
+    raise GoogleAPIError("Google no respondió correctamente. Intenta de nuevo.", 502)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Google Drive
 # ─────────────────────────────────────────────────────────────────────────────
 
+_MAX_PAGES = 10   # 10 × 100 = hasta 1 000 elementos por listado
+
+
+def _list_drive(db: Session, integration: Integration, params: dict) -> list[dict]:
+    """files.list con paginación real (antes solo llegaban los 100 primeros)."""
+    out: list[dict] = []
+    page_token = None
+    for _ in range(_MAX_PAGES):
+        p = dict(params)
+        if page_token:
+            p["pageToken"] = page_token
+        data = _google_request(db, integration, "GET", DRIVE_FILES_URL, params=p).json()
+        out.extend(data.get("files", []))
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+    return out
+
+
 def list_drive_folders(db: Session, integration: Integration) -> list[dict]:
     """Lista las carpetas de Google Drive visibles para la cuenta conectada."""
-    token, _ = _get_valid_access_token(db, integration)
-    import httpx
-    params = {
+    files = _list_drive(db, integration, {
         "q": "mimeType='application/vnd.google-apps.folder' and trashed=false",
-        "fields": "files(id,name,mimeType),nextPageToken",
+        "fields": "files(id,name),nextPageToken",
         "pageSize": 100,
         "orderBy": "name",
         "spaces": "drive",
-    }
-    resp = httpx.get(DRIVE_FILES_URL, params=params, headers=_google_headers(token), timeout=60)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Error listando carpetas de Drive: {resp.status_code} {resp.text[:300]}")
-    files = resp.json().get("files", [])
+    })
     return [{"id": f["id"], "name": f.get("name", "Sin nombre")} for f in files]
 
 
+def _friendly_type(mime: str) -> str:
+    if mime in ("application/vnd.google-apps.document", "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"):
+        return "doc"
+    if mime == "application/vnd.google-apps.spreadsheet":
+        return "sheet"
+    if mime == "application/pdf":
+        return "pdf"
+    if mime == "text/plain":
+        return "txt"
+    if mime in ("application/vnd.ms-powerpoint", "application/vnd.google-apps.presentation",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation"):
+        return "ppt"
+    if mime.startswith("image/"):
+        return "img"
+    return "file"
+
+
 def list_drive_folder_files(db: Session, integration: Integration, folder_id: str) -> list[dict]:
-    """Lista los archivos dentro de una carpeta de Google Drive."""
-    token, _ = _get_valid_access_token(db, integration)
-    import urllib.parse
-    import httpx
-    q = f"'{folder_id}' in parents and trashed=false"
-    params = {
-        "q": q,
+    """Lista los archivos (no subcarpetas) dentro de una carpeta de Google Drive."""
+    if not is_drive_id(folder_id):
+        raise GoogleAPIError("Carpeta de Drive no válida.", 400)
+    files = _list_drive(db, integration, {
+        # folder_id validado: no puede romper la consulta con comillas.
+        "q": (f"'{folder_id}' in parents and trashed=false "
+              "and mimeType != 'application/vnd.google-apps.folder'"),
         "fields": "files(id,name,mimeType,size,modifiedTime),nextPageToken",
         "pageSize": 100,
         "orderBy": "name",
-    }
-    resp = httpx.get(DRIVE_FILES_URL, params=params, headers=_google_headers(token), timeout=60)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Error listando archivos de Drive: {resp.status_code} {resp.text[:300]}")
-    files = resp.json().get("files", [])
-
-    # Descargar el nombre web si es un Google Doc/Sheet (hace falta el alias).
-    # Por simplicidad: devolver id, nombre, mime y tamaño si existe.
-    def _friendly_type(mime: str) -> str:
-        if mime == "application/vnd.google-apps.document":
-            return "doc"
-        if mime == "application/vnd.google-apps.spreadsheet":
-            return "sheet"
-        if mime == "application/pdf":
-            return "pdf"
-        if mime == "text/plain":
-            return "txt"
-        if mime == "application/vnd.ms-powerpoint":
-            return "ppt"
-        if mime == "application/msword":
-            return "doc"
-        if mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            return "doc"
-        if mime == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-            return "ppt"
-        if mime.startswith("image/"):
-            return "img"
-        return "file"
-
+    })
     return [
         {
             "id": f["id"],
@@ -300,26 +396,105 @@ def list_drive_folder_files(db: Session, integration: Integration, folder_id: st
     ]
 
 
+def get_drive_file(db: Session, integration: Integration, file_id: str) -> dict:
+    """Metadatos reales de un archivo (files.get). Comprueba que exista, que la
+    cuenta conectada lo vea y si está compartido para que otros lo abran."""
+    if not is_drive_id(file_id):
+        raise GoogleAPIError("Archivo de Drive no válido.", 400)
+    f = _google_request(db, integration, "GET", f"{DRIVE_FILES_URL}/{file_id}", params={
+        "fields": "id,name,mimeType,trashed,webViewLink,permissions(type,role,domain)",
+        "supportsAllDrives": "true",
+    }).json()
+    if f.get("trashed"):
+        raise GoogleAPIError(f"«{f.get('name', file_id)}» está en la papelera de Drive.", 404)
+    if f.get("mimeType") == "application/vnd.google-apps.folder":
+        raise GoogleAPIError("Solo se pueden importar archivos, no carpetas.", 400)
+    perms = f.get("permissions")
+    if perms is None:
+        access = "unknown"        # la cuenta no puede ver los permisos (no es propietaria)
+    elif any(p.get("type") == "anyone" for p in perms):
+        access = "anyone"
+    elif any(p.get("type") == "domain" for p in perms):
+        access = "domain"
+    else:
+        access = "restricted"
+    return {
+        "id": f["id"],
+        "name": f.get("name") or "Archivo de Drive",
+        "mime_type": f.get("mimeType", ""),
+        "type": _friendly_type(f.get("mimeType", "")),
+        "url": f.get("webViewLink") or f"https://drive.google.com/file/d/{f['id']}/view",
+        "link_access": access,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Google Calendar
 # ─────────────────────────────────────────────────────────────────────────────
 
 def list_google_calendars(db: Session, integration: Integration) -> list[dict]:
-    """Lista los calendarios de la cuenta conectada."""
-    token, _ = _get_valid_access_token(db, integration)
-    import httpx
-    resp = httpx.get(CALENDAR_LIST_URL, headers=_google_headers(token), timeout=60)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Error listando calendarios: {resp.status_code} {resp.text[:300]}")
-    items = resp.json().get("items", [])
+    """Lista los calendarios de la cuenta conectada (con su zona horaria y si
+    la cuenta puede crear eventos en ellos)."""
+    data = _google_request(db, integration, "GET", CALENDAR_LIST_URL,
+                           params={"maxResults": 250}).json()
     return [
         {
             "id": c.get("id"),
-            "name": c.get("summary", "Calendario"),
+            "name": c.get("summaryOverride") or c.get("summary", "Calendario"),
             "primary": bool(c.get("primary")),
+            "time_zone": c.get("timeZone"),
+            "writable": c.get("accessRole") in ("owner", "writer"),
         }
-        for c in items
+        for c in data.get("items", [])
     ]
+
+
+def _calendar_time_zone(db: Session, integration: Integration, calendar_id: str) -> Optional[str]:
+    try:
+        url = f"{CALENDAR_LIST_URL}/{_quote(calendar_id)}"
+        return _google_request(db, integration, "GET", url).json().get("timeZone")
+    except GoogleAPIError as e:
+        if e.status_code == 401:
+            raise
+        return None
+
+
+def _parse_time(t: str) -> Optional[str]:
+    """Normaliza 'HH:MM AM/PM' o 'HH:MM' → 'HH:MM' (24 h). None si no es una hora."""
+    t = (t or "").strip()
+    for fmt in ("%I:%M %p", "%H:%M"):
+        try:
+            return datetime.strptime(t, fmt).strftime("%H:%M")
+        except ValueError:
+            pass
+    return None
+
+
+def build_event_body(title: str, description: str, date: str, time: Optional[str],
+                     time_zone: str, duration_minutes: int = 60) -> dict:
+    """Cuerpo de events.insert. Valida la fecha y la hora en vez de inventar
+    una («09:00») cuando llegan mal."""
+    title = (title or "").strip()
+    if not title:
+        raise GoogleAPIError("El título del evento es obligatorio.", 400)
+    try:
+        day = datetime.strptime((date or "").strip(), "%Y-%m-%d")
+    except ValueError:
+        raise GoogleAPIError("La fecha debe tener el formato AAAA-MM-DD.", 400)
+    if time:
+        hhmm = _parse_time(time)
+        if hhmm is None:
+            raise GoogleAPIError("La hora no es válida (usa HH:MM).", 400)
+        start_dt = datetime.strptime(f"{date} {hhmm}", "%Y-%m-%d %H:%M")
+        end_dt = start_dt + timedelta(minutes=duration_minutes)   # puede pasar al día siguiente
+        start = {"dateTime": start_dt.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": time_zone}
+        end = {"dateTime": end_dt.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": time_zone}
+    else:
+        # Día completo: Google exige que el fin sea el día SIGUIENTE (exclusivo).
+        # Con fin = inicio respondía 400 «The specified time range is empty».
+        start = {"date": day.strftime("%Y-%m-%d")}
+        end = {"date": (day + timedelta(days=1)).strftime("%Y-%m-%d")}
+    return {"summary": title[:250], "description": description or "", "start": start, "end": end}
 
 
 def create_google_calendar_event(
@@ -333,39 +508,22 @@ def create_google_calendar_event(
     time: Optional[str] = None,
     event_type: str = "clase",
 ) -> dict:
-    """Crea un evento en el calendario de Google conectado."""
-    token, _ = _get_valid_access_token(db, integration)
-    import httpx
-
-    # Construir fecha: con hora (all-day si no se especifica).
-    start = {"date": date}
+    """Crea un evento en el calendario de Google conectado (no se guarda en el
+    calendario interno de NeuroLearn: son independientes)."""
+    calendar_id = (calendar_id or "").strip()
+    if not calendar_id:
+        raise GoogleAPIError("Selecciona un calendario.", 400)
+    tz = None
     if time:
-        # "HH:MM AM/PM" o "HH:MM"
-        t = _parse_time(time)
-        end = (datetime.strptime(date + " " + t, "%Y-%m-%d %H:%M") + timedelta(hours=1))
-        start = {
-            "dateTime": f"{date}T{t}:00",
-            "timeZone": "America/Bogota",
-        }
-        end_dt = {"dateTime": f"{date}T{end.strftime('%H:%M')}:00", "timeZone": "America/Bogota"}
-    else:
-        end_dt = None
-
-    body: dict[str, Any] = {
-        "summary": title,
-        "description": description,
-        "start": start,
-        "end": end_dt or {"date": date},
-        "eventType": "default",
-    }
+        tz = _calendar_time_zone(db, integration, calendar_id)
+        if not tz:
+            inst = db.query(Institution).filter(Institution.id == integration.institution_id).first()
+            tz = getattr(inst, "timezone", None) or "America/Bogota"
+    body = build_event_body(title, description, date, time, tz or "UTC")
     url = f"{CALENDAR_EVENTS_URL}/{_quote(calendar_id)}/events"
-    resp = httpx.post(url, json=body, headers={
-        **_google_headers(token),
-        "Content-Type": "application/json",
-    }, timeout=60)
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(f"Error creando evento en Google Calendar: {resp.status_code} {resp.text[:400]}")
-    data = resp.json()
+    data = _google_request(db, integration, "POST", url, json=body).json()
+    if not data.get("id"):
+        raise GoogleAPIError("Google no confirmó la creación del evento.", 502)
     return {
         "id": data.get("id"),
         "title": data.get("summary"),
@@ -373,22 +531,45 @@ def create_google_calendar_event(
     }
 
 
-def _parse_time(t: str) -> str:
-    """Normaliza 'HH:MM AM/PM' → 'HH:MM' (24h)."""
-    t = t.strip()
+def _try_revoke_token(token: Optional[str]) -> Optional[bool]:
+    """Revoca un token en Google. True: revocado; False: Google no lo
+    confirmó; None: no había token. Nunca lanza (desconectar no debe fallar)."""
+    if not token:
+        return None
+    import httpx
     try:
-        return datetime.strptime(t, "%I:%M %p").strftime("%H:%M")
+        resp = httpx.post(
+            "https://oauth2.googleapis.com/revoke",
+            data={"token": token},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10,
+        )
+        # 400 invalid_token: ya estaba revocado/caducado → el acceso ya no existe.
+        return resp.status_code in (200, 400)
     except Exception:  # noqa: BLE001
-        pass
-    try:
-        return datetime.strptime(t, "%H:%M").strftime("%H:%M")
-    except Exception:  # noqa: BLE001
-        return "09:00"
+        return False
 
 
 def _quote(value: str) -> str:
     import urllib.parse
     return urllib.parse.quote(value, safe="")
+
+
+def user_google_integration(db: Session, institution_id: int, user_id: int,
+                            provider: str) -> Optional[Integration]:
+    """La conexión de Google es de cada usuario (RF-32: «sus cuentas»). Antes
+    era una por institución y cualquier profesor usaba el Drive del último
+    que se había conectado."""
+    return (
+        db.query(Integration)
+        .filter(
+            Integration.institution_id == institution_id,
+            Integration.user_id == user_id,
+            Integration.provider == provider,
+        )
+        .order_by(Integration.id.desc())
+        .first()
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -534,22 +715,15 @@ def _action_enviar_notificacion(db, automation, user, trigger_data) -> dict:
 
 
 def _action_google_calendar(db, automation, user, trigger_data) -> dict:
-    """Crea un evento en el Google Calendar conectado."""
-    integration = (
-        db.query(Integration)
-        .filter(
-            Integration.institution_id == automation.institution_id,
-            Integration.provider == IntegrationProvider.GOOGLE_CALENDAR,
-            Integration.status == "connected",
-        )
-        .first()
-    )
-    if not integration:
+    """Crea un evento en el Google Calendar de quien creó la automatización."""
+    integration = user_google_integration(db, automation.institution_id, automation.created_by,
+                                          IntegrationProvider.GOOGLE_CALENDAR)
+    if not integration or integration.status != "connected":
         return {"action": automation.action, "ok": False,
-                "detail": "No hay Google Calendar conectado para esta institución."}
+                "detail": "Quien creó la automatización no tiene Google Calendar conectado."}
 
     cfg = automation.configuration or {}
-    calendar_id = cfg.get("calendar_id")
+    calendar_id = cfg.get("calendar_id") or (integration.config or {}).get("calendar_id")
     if not calendar_id or calendar_id == "__primary__":
         # Si no definió uno, listar y usar el principal.
         try:
@@ -558,7 +732,7 @@ def _action_google_calendar(db, automation, user, trigger_data) -> dict:
             if not primary:
                 return {"action": automation.action, "ok": False, "detail": "No hay calendarios disponibles."}
             calendar_id = primary["id"]
-        except Exception as e:  # noqa: BLE001
+        except GoogleAPIError as e:
             return {"action": automation.action, "ok": False, "detail": str(e)}
 
     title = trigger_data.get("title", "Actividad de NeuroLearn")
@@ -613,18 +787,11 @@ def _action_webhook(db, automation, user, trigger_data) -> dict:
 # 8. Motores de disparo
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_connected_calendar_id(db: Session, institution_id: int) -> Optional[str]:
-    """Devuelve el calendar_id guardado para la institución si está conectado."""
-    integration = (
-        db.query(Integration)
-        .filter(
-            Integration.institution_id == institution_id,
-            Integration.provider == IntegrationProvider.GOOGLE_CALENDAR,
-            Integration.status == "connected",
-        )
-        .first()
-    )
-    if not integration:
+def get_connected_calendar_id(db: Session, institution_id: int, user_id: int) -> Optional[str]:
+    """Devuelve el calendar_id elegido por el usuario si tiene Calendar conectado."""
+    integration = user_google_integration(db, institution_id, user_id,
+                                          IntegrationProvider.GOOGLE_CALENDAR)
+    if not integration or integration.status != "connected":
         return None
     return (integration.config or {}).get("calendar_id")
 
@@ -672,13 +839,9 @@ def _action_available(db: Session, autom: Automation) -> bool:
     """Valida que la integración requerida por la acción existe (anti-fallos silenciosos)."""
     institution_id = autom.institution_id
     if autom.action == AutomationAction.GOOGLE_CALENDAR:
-        return bool(
-            db.query(Integration).filter(
-                Integration.institution_id == institution_id,
-                Integration.provider == IntegrationProvider.GOOGLE_CALENDAR,
-                Integration.status == "connected",
-            ).first()
-        )
+        integ = user_google_integration(db, institution_id, autom.created_by,
+                                        IntegrationProvider.GOOGLE_CALENDAR)
+        return bool(integ and integ.status == "connected")
     if autom.action == AutomationAction.WEBHOOK:
         integ = db.query(Integration).filter(
             Integration.institution_id == institution_id,

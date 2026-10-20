@@ -4,6 +4,8 @@ NeuroLearn AI — API de Integraciones y Automatizaciones
 Endpoints del módulo de Integraciones (Administrador, Súper Profesor y Profesor):
   - Google Drive  (OAuth 2.0 real: conectar, listar carpetas, archivos, importar)
   - Google Calendar (OAuth: conectar, listar calendarios, crear eventos)
+  Las conexiones de Google son de cada usuario (no de la institución);
+  el webhook sí es institucional.
   - Webhooks          (configurar, probar, activar/desactivar, ejecución real)
   - Automatizaciones  (CRUD, toggle, ejecución manual, historial)
 
@@ -21,7 +23,7 @@ from typing import Optional
 
 import logging
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -147,19 +149,24 @@ def _serialize_automation(a: Automation, user: Optional[User] = None) -> dict:
 # Estado global de integraciones
 # ─────────────────────────────────────────────────────────────────────────────
 
+_GOOGLE = (IntegrationProvider.GOOGLE_DRIVE, IntegrationProvider.GOOGLE_CALENDAR)
+
+
 @router.get("/integrations")
 async def list_integrations(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
-    """Lista las integraciones de la institución del usuario (sin tokens)."""
+    """Integraciones visibles para el usuario (sin tokens): sus propias
+    conexiones de Google y, solo para el Súper Profesor / Administrador, el
+    webhook institucional."""
     inst_id = _require_institution(current_user)
     try:
         rows = (
             db.query(Integration)
             .filter(Integration.institution_id == inst_id)
-            .order_by(Integration.provider)
+            .order_by(Integration.provider, Integration.id.desc())
             .all()
         )
     except Exception as e:  # noqa: BLE001
@@ -167,11 +174,17 @@ async def list_integrations(
             status_code=503,
             detail="No se pudieron cargar las integraciones en este momento. Intenta de nuevo.",
         ) from e
-    if not _is_manager(current_user):
-        rows = [r for r in rows if r.provider != IntegrationProvider.WEBHOOK]
+    visible = []
+    for r in rows:
+        if r.provider in _GOOGLE:
+            # Antes se devolvía la cuenta de Google de OTRO docente de la institución.
+            if r.user_id == current_user.id and all(v.provider != r.provider for v in visible):
+                visible.append(r)
+        elif r.provider == IntegrationProvider.WEBHOOK and _is_manager(current_user):
+            visible.append(r)
     from app.core.config import settings as _settings
     return {
-        "integrations": [_serialize_integration(r) for r in rows],
+        "integrations": [_serialize_integration(r) for r in visible],
         "google_configured": bool(getattr(_settings, "GOOGLE_CLIENT_ID", "") and
                                   getattr(_settings, "GOOGLE_CLIENT_SECRET", "")),
     }
@@ -186,11 +199,8 @@ async def automation_options(
     """Devuelve qué acciones están disponibles según integraciones conectadas."""
     inst_id = _require_institution(current_user)
 
-    calendar = db.query(Integration).filter(
-        Integration.institution_id == inst_id,
-        Integration.provider == IntegrationProvider.GOOGLE_CALENDAR,
-        Integration.status == "connected",
-    ).first()
+    cal = isvc.user_google_integration(db, inst_id, current_user.id, IntegrationProvider.GOOGLE_CALENDAR)
+    calendar_ok = bool(cal and cal.status == "connected")
     webhook = db.query(Integration).filter(
         Integration.institution_id == inst_id,
         Integration.provider == IntegrationProvider.WEBHOOK,
@@ -206,11 +216,11 @@ async def automation_options(
         "actions": [
             {"value": AutomationAction.CREAR_ALERTA, "label": "Crear alerta", "available": True},
             {"value": AutomationAction.ENVIAR_NOTIFICACION, "label": "Enviar notificación", "available": True},
-            {"value": AutomationAction.GOOGLE_CALENDAR, "label": "Google Calendar", "available": calendar is not None},
+            {"value": AutomationAction.GOOGLE_CALENDAR, "label": "Google Calendar", "available": calendar_ok},
         ] + ([
             {"value": AutomationAction.WEBHOOK, "label": "Webhook", "available": webhook is not None and bool((webhook.config or {}).get("url"))},
         ] if _is_manager(current_user) else []),
-        "calendar_connected": calendar is not None,
+        "calendar_connected": calendar_ok,
         "webhook_configured": webhook is not None and bool((webhook.config or {}).get("url")),
     }
 
@@ -218,39 +228,46 @@ async def automation_options(
 # ─────────────────────────────────────────────────────────────────────────────
 # Google OAuth: conectar
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Flujo (OAuth 2.0 «authorization code»):
+#   1. POST /integrations/google/{drive|calendar}/connect  (con JWT)
+#        → URL de Google con un `state` firmado (usuario, proveedor, 15 min).
+#   2. Google → GET /integrations/google/callback?code&state  (sin JWT)
+#        Solo valida el state y reenvía code+state al frontend (#/…).
+#   3. El frontend, con la sesión del usuario, llama a
+#      POST /integrations/google/complete {code, state}: aquí se comprueba que
+#      quien termina es quien empezó, se canjea el código y se guardan los
+#      tokens cifrados.
+# El paso 3 impide que alguien envíe a otra persona su propio enlace de
+# autorización y se quede con el Drive/Calendar de la víctima (CSRF de
+# OAuth): antes el callback guardaba los tokens a nombre de quien figuraba
+# en el state, sin importar quién hubiera autorizado.
+
+def _google_provider(provider: str) -> str:
+    if provider == "drive":
+        return IntegrationProvider.GOOGLE_DRIVE
+    if provider == "calendar":
+        return IntegrationProvider.GOOGLE_CALENDAR
+    raise HTTPException(status_code=400, detail="Proveedor Google no válido.")
+
 
 @router.post("/integrations/google/{provider}/connect")
 async def connect_google(
     provider: str,
-    request: "Request",
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
     """Inicia el flujo OAuth de Google devolviendo la URL de autorización."""
-    inst_id = _require_institution(current_user)
-    if provider not in ("drive", "calendar"):
-        raise HTTPException(status_code=400, detail="Proveedor Google no válido.")
+    _require_institution(current_user)
+    provider_id = _google_provider(provider)
     if not isvc.google_configured():
         raise HTTPException(
             status_code=503,
             detail="La integración de Google no está configurada en el servidor. Configura GOOGLE_CLIENT_ID en el backend.",
         )
-    provider_id = (IntegrationProvider.GOOGLE_CALENDAR if provider == "calendar"
-                   else IntegrationProvider.GOOGLE_DRIVE)
-
-    # Extraer el JWT del header para firmar el estado OAuth (el callback de
-    # Google no reenvía headers, así que el token viaja firmado en `state`).
-    auth = request.headers.get("Authorization", "")
-    jwt_token = auth[7:] if auth.lower().startswith("bearer ") else ""
-
-    state_token = isvc._sign_state({
-        "sub": str(current_user.id),
-        "token": jwt_token,
-        "provider": provider_id,
-    })
-    url = isvc.build_authorization_url(provider_id, state_token)
-    return {"url": url}
+    state_token = isvc._sign_state({"sub": str(current_user.id), "provider": provider_id})
+    return {"url": isvc.build_authorization_url(provider_id, state_token)}
 
 
 @router.get("/integrations/google/callback")
@@ -260,82 +277,89 @@ async def google_callback(
     error: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """
-    Callback de Google OAuth. Intercambia el code, guarda los tokens cifrados
-    y redirige al frontend.
-    """
-    from fastapi.responses import RedirectResponse
-    # Con «#» (HashRouter): sin él, el regreso de Google abría la landing.
+    """Regreso de Google. No guarda nada: reenvía el código al frontend para
+    que el usuario autenticado complete la conexión (ver arriba)."""
     from app.services.email_service import frontend_url
-    fallback = frontend_url("/teacher")
+    payload = isvc._unsign_state(state) if state else None
+    # Con «#» (HashRouter): sin él, el regreso de Google abría la landing.
+    # La pantalla de Integraciones solo existe en el panel del profesor.
+    target = frontend_url("/teacher")
 
     if error:
-        return _redirect_with_params(fallback, {"integration_error": "El usuario canceló la autorización o hubo un error."})
-
+        msg = ("Cancelaste la autorización en Google." if error == "access_denied"
+               else "Google devolvió un error durante la autorización.")
+        return _redirect_with_params(target, {"integration_error": msg})
     if not code or not state:
-        return _redirect_with_params(fallback, {"integration_error": "Faltan parámetros en la respuesta de Google."})
-
-    payload = isvc._unsign_state(state)
+        return _redirect_with_params(target, {"integration_error": "Faltan parámetros en la respuesta de Google."})
     if not payload:
-        return _redirect_with_params(fallback, {"integration_error": "El estado OAuth es inválido o ha expirado. Intenta de nuevo."})
+        return _redirect_with_params(target, {"integration_error": "El estado OAuth es inválido o ha expirado. Intenta de nuevo."})
+    return _redirect_with_params(target, {"google_code": code, "google_state": state})
 
-    provider = payload.get("provider")
-    user_id = int(payload.get("sub", 0))
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.institution_id:
-        return _redirect_with_params(fallback, {"integration_error": "Usuario no encontrado."})
+class GoogleComplete(BaseModel):
+    code: str
+    state: str
+
+
+@router.post("/integrations/google/complete")
+async def complete_google(
+    body: GoogleComplete,
+    current_user: User = Depends(get_current_user),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
+    db: Session = Depends(get_db),
+):
+    """Canjea el código de Google y guarda la conexión del usuario autenticado."""
+    inst_id = _require_institution(current_user)
+    payload = isvc._unsign_state(body.state)
+    if not payload or payload.get("provider") not in _GOOGLE:
+        raise HTTPException(status_code=400, detail="El estado OAuth es inválido o ha expirado. Intenta de nuevo.")
+    if str(payload.get("sub")) != str(current_user.id):
+        raise HTTPException(status_code=403,
+                            detail="Esta autorización de Google se inició con otra cuenta de NeuroLearn.")
+    provider = payload["provider"]
 
     try:
-        tokens = isvc.exchange_code_for_tokens(code)
-    except Exception as e:  # noqa: BLE001
-        logger.exception("Error al completar la conexión con Google")
-        return _redirect_with_params(fallback, {"integration_error": "No pudimos conectar Google. Inténtalo de nuevo."})
+        tokens = isvc.exchange_code_for_tokens(body.code)
+    except Exception:  # noqa: BLE001
+        logger.exception("Error al canjear el código de Google")
+        raise HTTPException(status_code=502,
+                            detail="No pudimos conectar Google (el código caducó o ya se usó). Inténtalo de nuevo.")
 
     access = tokens.get("access_token")
     refresh = tokens.get("refresh_token")
+    if not access:
+        raise HTTPException(status_code=502, detail="Google no entregó credenciales. Inténtalo de nuevo.")
+    missing = isvc.missing_scopes(provider, tokens.get("scope", ""))
+    if missing:
+        # La pantalla de Google permite desmarcar permisos: sin ellos la
+        # integración aparecería «conectada» pero todas las operaciones fallarían.
+        isvc._try_revoke_token(refresh or access)
+        raise HTTPException(status_code=400,
+                            detail="No concediste todos los permisos necesarios en Google. Vuelve a conectar y marca todas las casillas.")
+
     email = ""
     try:
-        if access:
-            email = isvc.get_user_email(access)
+        email = isvc.get_user_email(access)
     except Exception:  # noqa: BLE001
-        pass
+        logger.warning("No se pudo leer el correo de la cuenta de Google conectada")
 
-    expires_in = tokens.get("expires_in", 3600)
-    # Buscar/actualizar la integración existente.
-    integ = db.query(Integration).filter(
-        Integration.institution_id == user.institution_id,
-        Integration.provider == provider,
-    ).first()
-
+    integ = isvc.user_google_integration(db, inst_id, current_user.id, provider)
     now = datetime.now(timezone.utc)
-    config_kwargs = {}
+    expires_at = (now + timedelta(seconds=int(tokens.get("expires_in") or 3600))).replace(tzinfo=None)
     if not integ:
-        integ = Integration(
-            institution_id=user.institution_id,
-            user_id=user.id,
-            provider=provider,
-            status="connected",
-            account_email=email or None,
-            access_token=isvc.encrypt_token(access),
-            refresh_token=isvc.encrypt_token(refresh),
-            token_expires_at=now + timedelta(seconds=expires_in),
-            config=config_kwargs,
-        )
+        integ = Integration(institution_id=inst_id, user_id=current_user.id, provider=provider, config={})
         db.add(integ)
-    else:
-        integ.user_id = user.id
-        integ.status = "connected"
-        integ.account_email = email or None
-        if access:
-            integ.access_token = isvc.encrypt_token(access)
-        if refresh:
-            integ.refresh_token = isvc.encrypt_token(refresh)
-        integ.token_expires_at = now + timedelta(seconds=expires_in)
-        integ.config = config_kwargs or (integ.config or {})
+    elif integ.account_email and email and integ.account_email != email:
+        integ.config = {}   # otra cuenta de Google: la carpeta/calendario elegidos ya no aplican
+    integ.status = "connected"
+    integ.account_email = email or None
+    integ.access_token = isvc.encrypt_token(access)
+    if refresh:
+        integ.refresh_token = isvc.encrypt_token(refresh)
+    integ.token_expires_at = expires_at
     db.commit()
-
-    return _redirect_with_params(fallback, {"integration": provider, "integration_ok": "1"})
+    db.refresh(integ)
+    return {"ok": True, "integration": _serialize_integration(integ)}
 
 
 @router.delete("/integrations/{provider}")
@@ -345,56 +369,49 @@ async def disconnect_integration(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
-    """Desconecta una integración (elimina credenciales almacenadas)."""
+    """Desconecta una integración propia (revoca y elimina credenciales)."""
     inst_id = _require_institution(current_user)
-    integ = db.query(Integration).filter(
-        Integration.institution_id == inst_id,
-        Integration.provider == provider,
-    ).first()
+    if provider in _GOOGLE:
+        integ = isvc.user_google_integration(db, inst_id, current_user.id, provider)
+    elif provider == IntegrationProvider.WEBHOOK:
+        _require_webhook_manager(current_user)
+        integ = db.query(Integration).filter(
+            Integration.institution_id == inst_id,
+            Integration.provider == provider,
+        ).first()
+    else:
+        integ = None
     if not integ:
         raise HTTPException(status_code=404, detail="Integración no encontrada.")
 
-    if provider in (IntegrationProvider.GOOGLE_DRIVE, IntegrationProvider.GOOGLE_CALENDAR):
-        # Remover las credenciales. (Opcional: revocar token de Google.)
-        _try_revoke(integ)
+    revoked = None
+    if provider in _GOOGLE:
+        revoked = isvc._try_revoke_token(isvc.decrypt_token(integ.refresh_token)
+                                         or isvc.decrypt_token(integ.access_token))
     integ.access_token = None
     integ.refresh_token = None
     integ.status = "disconnected"
     integ.account_email = None
     integ.token_expires_at = None
     db.commit()
-    return {"message": "Integración desconectada."}
-
-
-def _try_revoke(integ: Integration) -> None:
-    """Intenta revocar el token de Google (best-effort, sin romper el flujo)."""
-    refresh = isvc.decrypt_token(integ.refresh_token)
-    access = isvc.decrypt_token(integ.access_token)
-    token = refresh or access
-    if not token:
-        return
-    import httpx
-    try:
-        httpx.post(
-            "https://oauth2.googleapis.com/revoke",
-            data={"token": token},
-            params={"token": token},
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=10,
-        )
-    except Exception:  # noqa: BLE001
-        pass
+    if revoked is False:
+        return {"message": "Integración desconectada en NeuroLearn. Google no confirmó la revocación: "
+                           "puedes quitar el acceso en myaccount.google.com/permissions.",
+                "revoked": False}
+    return {"message": "Integración desconectada.", "revoked": revoked}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Google Drive
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _get_connected(db: Session, inst_id: int, provider: str) -> Integration:
-    integ = db.query(Integration).filter(
-        Integration.institution_id == inst_id,
-        Integration.provider == provider,
-    ).first()
+def _get_connected(db: Session, user: User, provider: str) -> Integration:
+    """Conexión de Google DEL USUARIO autenticado (nunca la de otro docente)."""
+    inst_id = _require_institution(user)
+    integ = isvc.user_google_integration(db, inst_id, user.id, provider)
+    if integ and integ.status == "token_expired":
+        raise HTTPException(status_code=409,
+                            detail="La conexión con Google caducó o se revocó. Vuelve a conectar la cuenta.")
     if not integ or integ.status != "connected":
         raise HTTPException(
             status_code=400,
@@ -403,20 +420,28 @@ def _get_connected(db: Session, inst_id: int, provider: str) -> Integration:
     return integ
 
 
+def _google_http_error(e: Exception, default: str) -> HTTPException:
+    """Traduce un fallo de Google a una respuesta clara (sin volcar la
+    respuesta cruda del proveedor). 401 de Google → 409 aquí: un 401 haría que
+    el frontend cerrara la sesión de NeuroLearn."""
+    if isinstance(e, isvc.GoogleAPIError):
+        code = 409 if e.status_code == 401 else e.status_code
+        return HTTPException(status_code=code, detail=str(e))
+    logger.exception(default)
+    return HTTPException(status_code=502, detail=default)
+
+
 @router.get("/integrations/google/drive/folders")
 async def drive_folders(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
-    inst_id = _require_institution(current_user)
-    integ = _get_connected(db, inst_id, IntegrationProvider.GOOGLE_DRIVE)
+    integ = _get_connected(db, current_user, IntegrationProvider.GOOGLE_DRIVE)
     try:
         return {"folders": isvc.list_drive_folders(db, integ)}
-    except isvc.RuntimeError:
-        raise
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"No pudimos conectar Google Drive: {str(e)}")
+        raise _google_http_error(e, "No pudimos consultar Google Drive.")
 
 
 @router.get("/integrations/google/drive/folders/{folder_id}/files")
@@ -426,12 +451,11 @@ async def drive_files(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
-    inst_id = _require_institution(current_user)
-    integ = _get_connected(db, inst_id, IntegrationProvider.GOOGLE_DRIVE)
+    integ = _get_connected(db, current_user, IntegrationProvider.GOOGLE_DRIVE)
     try:
         return {"files": isvc.list_drive_folder_files(db, integ, folder_id)}
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"No pudimos listar los archivos: {str(e)}")
+        raise _google_http_error(e, "No pudimos listar los archivos.")
 
 
 @router.post("/integrations/google/drive/folder")
@@ -442,12 +466,11 @@ async def drive_select_folder(
     db: Session = Depends(get_db),
 ):
     """Guarda la carpeta de Drive seleccionada en la configuración de la integración."""
-    inst_id = _require_institution(current_user)
     folder_id = (body.get("folder_id") or "").strip()
-    folder_name = (body.get("folder_name") or "").strip()
-    if not folder_id:
+    folder_name = (body.get("folder_name") or "").strip()[:200]
+    if not isvc.is_drive_id(folder_id):
         raise HTTPException(status_code=400, detail="folder_id es obligatorio.")
-    integ = _get_connected(db, inst_id, IntegrationProvider.GOOGLE_DRIVE)
+    integ = _get_connected(db, current_user, IntegrationProvider.GOOGLE_DRIVE)
     cfg = dict(integ.config or {})
     cfg["folder_id"] = folder_id
     cfg["folder_name"] = folder_name
@@ -464,17 +487,34 @@ async def drive_import_files(
     db: Session = Depends(get_db),
 ):
     """
-    Importa archivos seleccionados de Google Drive a los Materiales del docente.
-    Registra cada archivo en teacher_materials (carpeta "Desde Drive" por defecto).
+    Importa archivos de Google Drive a los Materiales del docente como ENLACE
+    (el binario no se copia a NeuroLearn; «Abrir en Drive» desde Materiales).
+    Cada archivo se consulta en Drive con la cuenta del propio docente: el
+    nombre y el enlace son los reales y no se aceptan identificadores que la
+    cuenta no puede ver. No cambia los permisos del archivo en Drive.
     """
-    inst_id = _require_institution(current_user)
-    files = body.get("files") or []  # [{id, name, type}]
-    folder_id = (body.get("folder_id") or "").strip()
+    from app.api.teacher_materials import TeacherFolder, TeacherMaterial, DRIVE_MIME
 
-    from app.api.teacher_materials import TeacherFolder, TeacherMaterial
-
-    if not files:
+    files = body.get("files") or []  # [{id}] (el nombre se toma de Drive)
+    if not isinstance(files, list) or not files:
         raise HTTPException(status_code=400, detail="No se seleccionaron archivos.")
+    if len(files) > 50:
+        raise HTTPException(status_code=400, detail="Importa como máximo 50 archivos a la vez.")
+    ids = []
+    for f in files:
+        file_id = str((f.get("id") if isinstance(f, dict) else f) or "").strip()
+        if not isvc.is_drive_id(file_id):
+            raise HTTPException(status_code=400, detail="Archivo de Drive no válido.")
+        if file_id not in ids:
+            ids.append(file_id)
+
+    integ = _get_connected(db, current_user, IntegrationProvider.GOOGLE_DRIVE)
+    metas = []
+    try:
+        for file_id in ids:
+            metas.append(isvc.get_drive_file(db, integ, file_id))
+    except Exception as e:  # noqa: BLE001
+        raise _google_http_error(e, "No pudimos consultar el archivo en Google Drive.")
 
     # Carpeta destino: "Desde Google Drive".
     target = db.query(TeacherFolder).filter(
@@ -486,29 +526,33 @@ async def drive_import_files(
         db.add(target)
         db.flush()
 
-    imported = []
-    for f in files:
-        file_id = str(f.get("id") or "").strip()
-        if not re.fullmatch(r"[A-Za-z0-9_-]{10,200}", file_id):
-            raise HTTPException(status_code=400, detail="Archivo de Drive no válido.")
-        # Se guarda como ENLACE al archivo en Drive (el binario no se copia):
-        # «Abrir en Drive» desde Materiales. Antes se mezclaban metadatos con
-        # shared_with («[object Object]») y el archivo no se podía abrir.
+    existing = {m.original_name for m in db.query(TeacherMaterial).filter(
+        TeacherMaterial.teacher_id == current_user.id, TeacherMaterial.mime_type == DRIVE_MIME).all()}
+    imported, skipped, restricted = [], [], []
+    for meta in metas:
+        url = meta["url"][:255]
+        if url in existing:
+            skipped.append(meta["name"])          # ya estaba importado: no se duplica
+            continue
         mat = TeacherMaterial(
             folder_id=target.id,
             teacher_id=current_user.id,
-            name=(f.get("name") or "Archivo de Drive")[:200],
+            name=meta["name"][:200],
             file_type="link",
             size="—",
             shared_with=[],
-            original_name=f"https://drive.google.com/file/d/{file_id}/view",
-            mime_type="drive-link",
+            original_name=url,
+            mime_type=DRIVE_MIME,
             has_file=False,
         )
         db.add(mat)
-        imported.append({"name": mat.name, "type": mat.file_type})
+        existing.add(url)
+        imported.append({"name": mat.name, "type": meta["type"], "link_access": meta["link_access"]})
+        if meta["link_access"] in ("restricted", "unknown"):
+            restricted.append(meta["name"])
     db.commit()
-    return {"ok": True, "imported": imported, "count": len(imported)}
+    return {"ok": True, "imported": imported, "count": len(imported),
+            "skipped": skipped, "restricted": restricted}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -521,12 +565,11 @@ async def calendar_calendars(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
-    inst_id = _require_institution(current_user)
-    integ = _get_connected(db, inst_id, IntegrationProvider.GOOGLE_CALENDAR)
+    integ = _get_connected(db, current_user, IntegrationProvider.GOOGLE_CALENDAR)
     try:
         return {"calendars": isvc.list_google_calendars(db, integ)}
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"No pudimos consultar Google Calendar: {str(e)}")
+        raise _google_http_error(e, "No pudimos consultar Google Calendar.")
 
 
 @router.post("/integrations/google/calendar/select")
@@ -537,12 +580,11 @@ async def calendar_select(
     db: Session = Depends(get_db),
 ):
     """Guarda el calendario de Google seleccionado."""
-    inst_id = _require_institution(current_user)
     calendar_id = (body.get("calendar_id") or "").strip()
-    calendar_name = (body.get("calendar_name") or "").strip()
-    if not calendar_id:
+    calendar_name = (body.get("calendar_name") or "").strip()[:200]
+    if not calendar_id or len(calendar_id) > 300:
         raise HTTPException(status_code=400, detail="calendar_id es obligatorio.")
-    integ = _get_connected(db, inst_id, IntegrationProvider.GOOGLE_CALENDAR)
+    integ = _get_connected(db, current_user, IntegrationProvider.GOOGLE_CALENDAR)
     cfg = dict(integ.config or {})
     cfg["calendar_id"] = calendar_id
     cfg["calendar_name"] = calendar_name
@@ -558,9 +600,9 @@ async def calendar_create_event(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
 ):
-    """Crea un evento real en el calendario de Google seleccionado."""
-    inst_id = _require_institution(current_user)
-    integ = _get_connected(db, inst_id, IntegrationProvider.GOOGLE_CALENDAR)
+    """Crea un evento real en un calendario de Google del usuario. No se
+    copia al calendario interno de NeuroLearn (no hay sincronización)."""
+    integ = _get_connected(db, current_user, IntegrationProvider.GOOGLE_CALENDAR)
     try:
         created = isvc.create_google_calendar_event(
             db, integ,
@@ -573,7 +615,7 @@ async def calendar_create_event(
         )
         return {"ok": True, **created}
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"No pudimos crear el evento en Google: {str(e)}")
+        raise _google_http_error(e, "No pudimos crear el evento en Google Calendar.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

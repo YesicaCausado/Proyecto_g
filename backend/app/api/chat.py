@@ -2282,11 +2282,16 @@ async def submit_quiz_answers(
     quiz_entry.adaptation_applied = adaptation_message
 
     if quiz_entry.created_at:
-        if submission.duration is not None:
+        # El tiempo del cliente no puede superar el transcurrido en el servidor
+        # desde que se generó el quiz (+60 s de margen por relojes/latencia).
+        elapsed = int((datetime.utcnow() - quiz_entry.created_at).total_seconds())
+        if submission.duration is not None and submission.duration <= elapsed + 60:
             quiz_entry.time_spent_seconds = int(submission.duration)
         else:
-            time_diff = datetime.utcnow() - quiz_entry.created_at
-            quiz_entry.time_spent_seconds = int(time_diff.total_seconds())
+            if submission.duration is not None:
+                logger.warning("Duración de quiz %ss descartada (transcurrido real %ss)",
+                               submission.duration, elapsed)
+            quiz_entry.time_spent_seconds = elapsed
 
     db.commit()
     logger.info(f"Quiz analizado: {percentage}% - Conceptos débiles: {weak_concepts}")

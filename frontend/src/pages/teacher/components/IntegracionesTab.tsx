@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Loader2, Calendar as CalendarIcon, AlertTriangle, Check,
   Link2, Folder, Upload, Plus, ChevronRight, X, Zap,
@@ -20,7 +20,7 @@ interface Integration {
 
 interface DriveFolder { id: string; name: string; }
 interface DriveFile { id: string; name: string; mime_type?: string; type?: string; size?: string | null; modified?: string | null; }
-interface Cal { id: string; name: string; primary?: boolean; }
+interface Cal { id: string; name: string; primary?: boolean; time_zone?: string | null; writable?: boolean; }
 
 interface IntegrationState {
   googleDrive?: Integration;
@@ -66,18 +66,36 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Resultado del regreso de Google OAuth (antes un error se perdía en silencio).
+  // Regreso de Google OAuth. El backend no guarda nada en el callback: aquí,
+  // con la sesión del usuario, se completa la conexión (así nadie puede
+  // quedarse con la cuenta de Google de otra persona enviándole su enlace).
   const [searchParams, setSearchParams] = useSearchParams();
+  const handledCode = useRef<string | null>(null);
   useEffect(() => {
     const oauthError = searchParams.get('integration_error');
-    const oauthOk = searchParams.get('integration_ok');
-    if (!oauthError && !oauthOk) return;
-    if (oauthError) { setError(oauthError); setSuccess(null); }
-    else { setSuccess('Cuenta de Google conectada correctamente.'); setError(null); }
+    const code = searchParams.get('google_code');
+    const oauthState = searchParams.get('google_state');
+    if (!oauthError && !code) return;
     const next = new URLSearchParams(searchParams);
-    ['integration_error', 'integration_ok', 'integration'].forEach(k => next.delete(k));
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
+    ['integration_error', 'integration_ok', 'integration', 'google_code', 'google_state'].forEach(k => next.delete(k));
+    setSearchParams(next, { replace: true });   // el código no queda en la barra de direcciones
+    if (oauthError) { setError(oauthError); setSuccess(null); return; }
+    if (!code || !oauthState || handledCode.current === code) return;
+    handledCode.current = code;
+    setBusyKey('complete');
+    api.post('/integrations/google/complete', { code, state: oauthState })
+      .then(async () => {
+        await loadAll();
+        setSuccess('Cuenta de Google conectada correctamente.');
+        setError(null);
+      })
+      .catch((e: { response?: { data?: { detail?: unknown } } }) => {
+        const detail = e?.response?.data?.detail;
+        setError(typeof detail === 'string' && detail ? detail : 'No pudimos completar la conexión con Google.');
+        setSuccess(null);
+      })
+      .finally(() => setBusyKey(null));
+  }, [searchParams, setSearchParams, loadAll]);
 
   const flash = (kind: 'error' | 'success', msg: string) => {
     if (kind === 'error') { setError(msg); setSuccess(null); }
@@ -114,11 +132,11 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
   };
 
   const disconnect = async (provider: 'google_drive' | 'google_calendar') => {
-    if (!window.confirm('¿Desconectar esta integración? Se revocarán las credenciales de Google.')) return;
+    if (!window.confirm('¿Desconectar esta integración? Se revocará el acceso de NeuroLearn a tu cuenta de Google. Los materiales ya importados se conservan.')) return;
     await wrap(`disconnect-${provider}`, async () => {
-      await api.delete(`/integrations/${provider}`);
+      const res = await api.delete(`/integrations/${provider}`);
       await loadAll();
-      flash('success', 'Integración desconectada y credenciales revocadas.');
+      flash('success', res.data?.message || 'Integración desconectada.');
     });
   };
 
@@ -160,10 +178,16 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
     if (files.length === 0) return;
     await wrap('import', async () => {
       const res = await api.post('/integrations/google/drive/import', {
-        files,
+        files: files.map(f => ({ id: f.id })),
         folder_id: folderId || undefined,
       });
-      flash('success', `${res.data?.count ?? files.length} archivo(s) agregado(s) a Materiales › «Desde Google Drive» como enlace (se abren en Drive).`);
+      const count = res.data?.count ?? 0;
+      const skipped: string[] = res.data?.skipped ?? [];
+      const restricted: string[] = res.data?.restricted ?? [];
+      let msg = `${count} archivo(s) agregado(s) a Materiales › «Desde Google Drive» como enlace (se abren en Drive; no se copian).`;
+      if (skipped.length) msg += ` Ya estaban importados: ${skipped.join(', ')}.`;
+      if (restricted.length) msg += ` Atención: ${restricted.join(', ')} no está compartido en Drive; los estudiantes no podrán abrirlo hasta que lo compartas desde Google Drive.`;
+      flash('success', msg);
     });
   };
 
@@ -207,7 +231,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
       });
       setShowCalForm(false);
       setCalForm({ title: '', calendar_id: '', event_date: '', event_time: '', description: '' });
-      flash('success', 'Evento creado en Google Calendar.');
+      flash('success', 'Evento creado en Google Calendar (no se agrega al calendario de NeuroLearn).');
     });
   };
 
@@ -263,7 +287,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
                   <h3 className="font-bold text-[#191919]">Google Drive</h3>
                   {drive && badge('google_drive', drive.status)}
                 </div>
-                <p className="text-xs text-[#787774] mt-0.5">Importa archivos desde tu Google Drive a los Materiales de NeuroLearn.</p>
+                <p className="text-xs text-[#787774] mt-0.5">Agrega enlaces a archivos de tu Google Drive en tus Materiales. Solo lectura: NeuroLearn no copia ni modifica tus archivos ni sus permisos.</p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
                 {driveConnected ? (
@@ -279,6 +303,10 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
 
             {!googleReady && (
               <div className="px-5 py-4 text-sm text-[#D9730D]">Google no está configurado en el servidor. El administrador debe setear GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET.</div>
+            )}
+
+            {drive?.status === 'token_expired' && (
+              <div className="px-5 py-4 text-sm text-[#D9730D]">La conexión con Google caducó o se revocó. Vuelve a conectar Drive.</div>
             )}
 
             {driveConnected && (
@@ -343,7 +371,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
                   <h3 className="font-bold text-[#191919]">Google Calendar</h3>
                   {calendar && badge('google_calendar', calendar.status)}
                 </div>
-                <p className="text-xs text-[#787774] mt-0.5">Crea eventos y sincroniza tus actividades académicas.</p>
+                <p className="text-xs text-[#787774] mt-0.5">Crea eventos en tu Google Calendar. No se sincroniza con el calendario de NeuroLearn.</p>
               </div>
               <div className="flex gap-2 flex-shrink-0">
                 {calendarConnected ? (
@@ -358,6 +386,10 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
             </div>
 
             {!googleReady && <div className="px-5 py-4 text-sm text-[#D9730D]">Google no está configurado en el servidor.</div>}
+
+            {calendar?.status === 'token_expired' && (
+              <div className="px-5 py-4 text-sm text-[#D9730D]">La conexión con Google caducó o se revocó. Vuelve a conectar Calendar.</div>
+            )}
 
             {calendarConnected && (
               <div className="p-5 space-y-4">
@@ -392,8 +424,12 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
                           <CalendarIcon className="w-4 h-4 text-[#2E6FDB] flex-shrink-0" />
                           <span className="text-sm text-[#37352F] truncate">{c.name} {c.primary ? '(principal)' : ''}</span>
                         </div>
-                        <button onClick={() => selectCalendar(c)}
-                          className="text-xs text-[#2E6FDB] hover:underline font-medium flex-shrink-0">Usar</button>
+                        {c.writable === false ? (
+                          <span className="text-[11px] text-[#AEADAB] flex-shrink-0">Solo lectura</span>
+                        ) : (
+                          <button onClick={() => selectCalendar(c)}
+                            className="text-xs text-[#2E6FDB] hover:underline font-medium flex-shrink-0">Usar</button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -449,8 +485,8 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
               <select value={calForm.calendar_id} onChange={e => setCalForm(p => ({ ...p, calendar_id: e.target.value }))}
                 className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm bg-white">
                 <option value="">Seleccionar calendario…</option>
-                {cals.length === 0 && <option value={calendar?.config?.calendar_id}>{calendar?.config?.calendar_name || 'Calendario principal'}</option>}
-                {cals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {cals.length === 0 && !calendar?.config?.calendar_id && <option value="primary">Calendario principal</option>}
+                {cals.filter(c => c.writable !== false).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 {calendar?.config?.calendar_id && !cals.some(c => c.id === calendar.config.calendar_id) && (
                   <option value={calendar.config.calendar_id}>{calendar.config.calendar_name || 'Calendario configurado'}</option>
                 )}

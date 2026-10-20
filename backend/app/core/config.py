@@ -115,13 +115,18 @@ class Settings(BaseSettings):
         if os.getenv("VERCEL_PROJECT_PRODUCTION_URL")
         else "http://localhost:8000/api/v1/integrations/google/callback"
     )
-    # Alcances mínimos para Drive + Calendar.
-    GOOGLE_SCOPES: str = os.getenv(
-        "GOOGLE_SCOPES",
-        "https://www.googleapis.com/auth/drive.readonly "
-        "https://www.googleapis.com/auth/calendar.events "
+    # Alcances mínimos POR PROVEEDOR (antes conectar Drive pedía también
+    # Calendar y viceversa). «email» es necesario para mostrar la cuenta
+    # conectada: con solo «openid» el perfil no trae el correo.
+    GOOGLE_DRIVE_SCOPES: str = os.getenv(
+        "GOOGLE_DRIVE_SCOPES",
+        "openid email https://www.googleapis.com/auth/drive.readonly",
+    )
+    GOOGLE_CALENDAR_SCOPES: str = os.getenv(
+        "GOOGLE_CALENDAR_SCOPES",
+        "openid email "
         "https://www.googleapis.com/auth/calendar.readonly "
-        "openid",
+        "https://www.googleapis.com/auth/calendar.events",
     )
     # URL pública del frontend. Se usa para redirigir tras el flujo OAuth y
     # para construir los enlaces de los correos (p. ej. /reset-password).

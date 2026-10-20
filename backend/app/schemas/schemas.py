@@ -113,15 +113,15 @@ class ChatMessageRequest(BaseModel):
     # Patrones facial y de voz: agregados del turno. Se validan en el chat con
     # app/schemas/neuro_signals.py; una señal inválida se descarta completa y
     # se informa como error del patrón (no bloquea el mensaje).
-    facial_data: Optional[Dict[str, Any]] = None
-    voice_data: Optional[Dict[str, Any]] = None
+    facial_data: Optional[Any] = None
+    voice_data: Optional[Any] = None
     # Estado del sensor en el turno (explica por qué no hay datos)
     facial_status: Optional[Literal["active", "off", "denied", "unavailable",
                                     "no_face", "insufficient", "error"]] = None
     voice_status: Optional[Literal["active", "off", "denied", "unavailable",
                                    "no_face", "insufficient", "error"]] = None
     # Patrón de interacción: eventos de la interfaz del turno
-    interaction_data: Optional[Dict[str, Any]] = None
+    interaction_data: Optional[Any] = None
 
 
 class BotDocumentResponse(BaseModel):
@@ -273,7 +273,9 @@ class QuizSubmission(BaseModel):
     quiz_title: str
     user_answers: Dict[int, str]  # {question_id: selected_answer}
     classroom_id: Optional[int] = None 
-    duration: Optional[int] = None  # segundos que tardó el usuario en responder 
+    # Segundos que tardó el estudiante (medido en el cliente). El servidor lo
+    # acota al tiempo real transcurrido desde que se generó el quiz.
+    duration: Optional[int] = Field(default=None, ge=0, le=86_400)
 
 class QuizAnalysisResponse(BaseModel):
     """Respuesta del análisis de quiz con recomendaciones adaptativas"""

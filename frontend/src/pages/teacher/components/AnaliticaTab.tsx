@@ -378,12 +378,19 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
               Índice de Salud Académica
             </span>
           </div>
-          <HealthGauge score={score ?? 0} />
-          <div className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-[#191919]">
-            {avg >= 7 ? <ArrowUpRight className="w-4 h-4 text-[#0F7B6C]" /> : <ArrowDownRight className="w-4 h-4 text-[#E03E3E]" />}
-            Promedio global <span className="text-[#0F7B6C]">{avg}/10</span>
-          </div>
-          <p className="text-[11px] text-[#787774] mt-1 text-center">promedio real del historial de quizzes de tus estudiantes</p>
+          {score == null ? (
+            // Sin quizzes calificados no hay índice: antes se mostraba 0 y «0/10».
+            emptyState(loading ? 'Cargando…' : 'Aún no hay quizzes calificados de tus estudiantes para calcular el índice.')
+          ) : (
+            <>
+              <HealthGauge score={score} />
+              <div className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-[#191919]">
+                {avg >= 7 ? <ArrowUpRight className="w-4 h-4 text-[#0F7B6C]" /> : <ArrowDownRight className="w-4 h-4 text-[#E03E3E]" />}
+                Promedio global <span className="text-[#0F7B6C]">{avg}/10</span>
+              </div>
+              <p className="text-[11px] text-[#787774] mt-1 text-center">promedio real del historial de quizzes de tus estudiantes</p>
+            </>
+          )}
         </motion.div>
 
         {/* Modelos */}
