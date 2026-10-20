@@ -378,7 +378,6 @@ export default function ChatPage() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [prevInput, setPrevInput] = useState("");
   const [sending, setSending] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -645,9 +644,7 @@ export default function ChatPage() {
   };
 
   const handleInputChange = (val: string) => {
-    metrics.onUserStartedTyping();
-    metrics.onInputChange(val, prevInput);
-    setPrevInput(input);
+    metrics.onInputChange(val, input);
     setInput(val);
   };
 
@@ -676,7 +673,6 @@ export default function ChatPage() {
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setPrevInput("");
     setSending(true);
 
     let data: ChatMessageResponse;
