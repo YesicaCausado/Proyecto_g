@@ -13,6 +13,16 @@
  *  - Palabras de relleno → heurístico sin STT: cuenta short low-pitch utterances
  *    (filled pauses tipo "eh"/"um") rodeadas de silencio. Es una ESTIMACIÓN,
  *    no un conteo literal de palabras.
+ *
+ * Unidades reales: volume_db en dBFS (−60..0); pitch_mean_hz es el centroide
+ * espectral (proxy de tono, NO frecuencia fundamental).
+ *
+ * Agregado por turno (auditoría): `beginTurn()` al llegar la respuesta del
+ * tutor y `getTurnSummary()` al enviar. El resumen promedia SOLO los frames con
+ * voz y solo es válido con ≥ MIN_VOICED_MS de voz; si no, el estado es
+ * 'insufficient' y no se envían valores (antes se enviaba el valor instantáneo
+ * del momento del envío aunque el estudiante no hubiera hablado).
+ * El audio nunca sale del navegador: solo se envían estos números.
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
@@ -27,8 +37,31 @@ export interface VoiceSnapshot {
   is_active: boolean;          // hay voz en este momento
 }
 
+export interface VoiceTurnData {
+  voiced_ms: number;
+  window_ms: number;
+  pitch_mean_hz: number | null;
+  volume_db: number | null;
+  speech_rate_wpm: number | null;
+  voice_tremor: number | null;
+  energy_level: number | null;
+  filler_words_count: number;
+  silence_duration_ms: number;
+  pause_ratio: number;
+  pause_count: number;
+}
+
+export type VoiceSensorState = 'active' | 'off' | 'denied' | 'unavailable' | 'insufficient' | 'error';
+
+export interface VoiceTurnSummary {
+  status: VoiceSensorState;
+  data: VoiceTurnData | null;
+}
+
 export interface VoiceProsodyControls {
   snapshot: VoiceSnapshot;
+  beginTurn: () => void;
+  getTurnSummary: () => VoiceTurnSummary;
   isStreaming: boolean;
   permissionDenied: boolean;
   errorMessage: string | null;
@@ -60,6 +93,20 @@ const UTT_MAX_MS = 450;     // una palabra con contenido suele superar esto
 const FILLER_PITCH_HZ = 220; // energía espectral baja → sonido vocálico sostenido
 const FILLER_WINDOW_MS = 15000; // ventana acumulada (reinicio al arrancar)
 const MAX_CONSEC_FILLERS = 8;    // techo para no inflar el conteo por ruido
+/** Voz mínima en el turno para una muestra válida (igual que el backend) */
+export const MIN_VOICED_MS = 1000;
+/** Silencio mínimo entre emisiones para contarlo como pausa */
+const PAUSE_MIN_MS = 250;
+
+interface TurnAcc {
+  start: number; voicedMs: number; frames: number; voicedFrames: number;
+  dbSum: number; centroidSum: number; energySum: number; tremorSum: number;
+  onsets: number; fillers: number; pauses: number; silenceRun: number;
+}
+const newTurn = (): TurnAcc => ({
+  start: Date.now(), voicedMs: 0, frames: 0, voicedFrames: 0, dbSum: 0,
+  centroidSum: 0, energySum: 0, tremorSum: 0, onsets: 0, fillers: 0, pauses: 0, silenceRun: 0,
+});
 
 export function useVoiceProsody(): VoiceProsodyControls {
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -80,6 +127,8 @@ export function useVoiceProsody(): VoiceProsodyControls {
   const lastUtterPitchRef = useRef<number>(0);       // pitch de la última emisión
   const fillerLogRef = useRef<number[]>([]);         // timestamps de muletillas detectadas
   const consecFillerRef = useRef<number>(0);         // racha de muletillas (anti-ruido)
+
+  const turnRef = useRef<TurnAcc>(newTurn());
 
   const [snapshot, setSnapshot] = useState<VoiceSnapshot>(DEFAULT_SNAPSHOT);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -165,6 +214,7 @@ export function useVoiceProsody(): VoiceProsodyControls {
         if (isFillerPitch && consecFillerRef.current < MAX_CONSEC_FILLERS) {
           fillerLogRef.current.push(now);
           consecFillerRef.current += 1;
+          turnRef.current.fillers += 1;
         }
       } else if (dur > UTT_MAX_MS) {
         // Emisión larga → palabra con contenido, reinicia la racha anti-ruido.
@@ -196,6 +246,23 @@ export function useVoiceProsody(): VoiceProsodyControls {
     const variance = rmsHistory.current.reduce((s, v) => s + (v - mean) ** 2, 0) / rmsHistory.current.length;
     const voice_tremor = Math.min(Math.sqrt(variance) * 20, 1);
 
+    // --- Agregado del turno (solo frames con voz) ---
+    const t = turnRef.current;
+    t.frames += 1;
+    if (isVoiceActive) {
+      if (t.silenceRun >= PAUSE_MIN_MS && t.voicedFrames > 0) t.pauses += 1;
+      if (t.silenceRun > 0 || t.voicedFrames === 0) t.onsets += 1;
+      t.silenceRun = 0;
+      t.voicedMs += dt;
+      t.voicedFrames += 1;
+      t.dbSum += volume_db;
+      t.centroidSum += pitch_mean_hz;
+      t.energySum += energy_level;
+      t.tremorSum += voice_tremor;
+    } else {
+      t.silenceRun += dt;
+    }
+
     setSnapshot({
       pitch_mean_hz: parseFloat(pitch_mean_hz.toFixed(1)),
       volume_db: parseFloat(volume_db.toFixed(1)),
@@ -208,7 +275,43 @@ export function useVoiceProsody(): VoiceProsodyControls {
     });
   }, []);
 
+  const beginTurn = useCallback(() => {
+    turnRef.current = newTurn();
+  }, []);
+
+  const getTurnSummary = useCallback((): VoiceTurnSummary => {
+    if (!isStreaming || !analyserRef.current) {
+      const status: VoiceSensorState = permissionDenied ? 'denied'
+        : !hardwareAvailable ? 'unavailable'
+        : errorMessage ? 'error' : 'off';
+      return { status, data: null };
+    }
+    const t = turnRef.current;
+    if (t.voicedMs < MIN_VOICED_MS || t.voicedFrames === 0) return { status: 'insufficient', data: null };
+    const windowMs = Math.max(Date.now() - t.start, t.voicedMs);
+    const n = t.voicedFrames;
+    const round = (v: number, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
+    return {
+      status: 'active',
+      data: {
+        voiced_ms: Math.round(t.voicedMs),
+        window_ms: Math.round(windowMs),
+        pitch_mean_hz: round(t.centroidSum / n),
+        volume_db: round(Math.max(-100, Math.min(0, t.dbSum / n))),
+        // ~1,5 sílabas (inicios de voz) por palabra, sobre el tiempo con voz
+        speech_rate_wpm: round(Math.min((t.onsets / 1.5) / (t.voicedMs / 60000), 400)),
+        voice_tremor: round(t.tremorSum / n, 3),
+        energy_level: round(t.energySum / n, 3),
+        filler_words_count: t.fillers,
+        silence_duration_ms: Math.round(windowMs - t.voicedMs),
+        pause_ratio: round(1 - t.voicedMs / windowMs, 3),
+        pause_count: t.pauses,
+      },
+    };
+  }, [isStreaming, permissionDenied, hardwareAvailable, errorMessage]);
+
   const startMic = useCallback(async () => {
+    if (streamRef.current) return; // evita capturas duplicadas
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         setHardwareAvailable(false);
@@ -240,10 +343,18 @@ export function useVoiceProsody(): VoiceProsodyControls {
       activityLog.current = [];
       rmsHistory.current = [];
 
+      turnRef.current = newTurn();
       intervalRef.current = setInterval(analyzeAudio, ANALYSIS_INTERVAL_MS);
       setIsStreaming(true);
       setPermissionDenied(false);
+      setErrorMessage(null);
     } catch (err: unknown) {
+      // Liberar lo que se haya alcanzado a abrir: no dejar el micrófono activo.
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      audioCtxRef.current?.close().catch(() => { /* noop */ });
+      audioCtxRef.current = null;
+      analyserRef.current = null;
       const error = err as { name?: string; message?: string };
       if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
         setPermissionDenied(true);
@@ -263,7 +374,7 @@ export function useVoiceProsody(): VoiceProsodyControls {
   const stopMic = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     sourceRef.current?.disconnect();
-    audioCtxRef.current?.close();
+    audioCtxRef.current?.close().catch(() => { /* ya cerrado */ });
     streamRef.current?.getTracks().forEach((t) => t.stop());
 
     sourceRef.current = null;
@@ -277,6 +388,7 @@ export function useVoiceProsody(): VoiceProsodyControls {
     utteranceStartRef.current = 0;
     lastUtterPitchRef.current = 0;
     consecFillerRef.current = 0;
+    turnRef.current = newTurn();
 
     setIsStreaming(false);
     setSnapshot(DEFAULT_SNAPSHOT);
@@ -291,5 +403,5 @@ export function useVoiceProsody(): VoiceProsodyControls {
     };
   }, []);
 
-  return { snapshot, isStreaming, permissionDenied, errorMessage, hardwareAvailable, startMic, stopMic, resetError };
+  return { snapshot, beginTurn, getTurnSummary, isStreaming, permissionDenied, errorMessage, hardwareAvailable, startMic, stopMic, resetError };
 }

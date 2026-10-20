@@ -2,7 +2,7 @@
 NeuroLearn AI - Schemas Pydantic
 """
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Literal
 from datetime import datetime
 
 
@@ -94,18 +94,34 @@ class ChatMessageRequest(BaseModel):
     conversation_id: Optional[int] = None
     # NeuroBot con el que se conversa: su base de conocimiento se usa como contexto.
     bot_id: Optional[int] = None
-    # Patrón 1 — Ritmo de Interacción
-    response_time_ms: Optional[float] = Field(default=None, ge=0)
-    typing_speed_cpm: Optional[float] = Field(default=None, ge=0)
-    pause_before_ms: Optional[float] = Field(default=None, ge=0)
-    # Patrón 2 — Secuencia de Decisión
-    corrections: Optional[int] = Field(default=None, ge=0)       # backspaces reales
-    typing_bursts: Optional[int] = Field(default=None, ge=0)     # ráfagas separadas por pausas
+    # Identificador idempotente generado por el cliente: un reenvío del mismo
+    # mensaje no vuelve a registrar mediciones ni a contar intentos.
+    client_message_id: Optional[str] = Field(default=None, max_length=64,
+                                             pattern=r"^[A-Za-z0-9_\-]+$")
+    # Cómo se produjo el texto: escrito, dictado por voz o pegado.
+    input_mode: Optional[Literal["typed", "voice", "pasted"]] = None
+    # Patrón de teclado — ritmo de interacción (límites: valores humanos posibles)
+    response_time_ms: Optional[float] = Field(default=None, ge=0, le=86_400_000)
+    typing_speed_cpm: Optional[float] = Field(default=None, ge=0, le=5000)
+    pause_before_ms: Optional[float] = Field(default=None, ge=0, le=86_400_000)
+    keystrokes: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    # Patrón de teclado — secuencia de decisión
+    corrections: Optional[int] = Field(default=None, ge=0, le=1_000_000)  # caracteres borrados
+    typing_bursts: Optional[int] = Field(default=None, ge=0, le=100_000)  # ráfagas separadas por pausas
     is_question: Optional[bool] = None        # mensaje termina en '?'
     message_length: Optional[int] = Field(default=None, ge=0)    # longitud del mensaje
-    # Patrones 3 y 4 — datos multimodales opcionales
+    # Patrones facial y de voz: agregados del turno. Se validan en el chat con
+    # app/schemas/neuro_signals.py; una señal inválida se descarta completa y
+    # se informa como error del patrón (no bloquea el mensaje).
     facial_data: Optional[Dict[str, Any]] = None
     voice_data: Optional[Dict[str, Any]] = None
+    # Estado del sensor en el turno (explica por qué no hay datos)
+    facial_status: Optional[Literal["active", "off", "denied", "unavailable",
+                                    "no_face", "insufficient", "error"]] = None
+    voice_status: Optional[Literal["active", "off", "denied", "unavailable",
+                                   "no_face", "insufficient", "error"]] = None
+    # Patrón de interacción: eventos de la interfaz del turno
+    interaction_data: Optional[Dict[str, Any]] = None
 
 
 class BotDocumentResponse(BaseModel):
@@ -230,6 +246,8 @@ class QuizRequest(BaseModel):
     topic: str
     num_questions: Optional[int] = 5
     difficulty: Optional[str] = None  # Opcional: Fácil/Medio/Difícil
+    # Clave de la competencia Saber 11 (frontend/src/data/competencies.ts).
+    competency: Optional[str] = None
 
 class QuizHistoryEntry(BaseModel):
     """Entrada individual del historial de quizzes con adaptación"""
@@ -385,6 +403,8 @@ class ClassroomCreate(BaseModel):
     grade: str = Field(default="", max_length=20)
     max_students: int = Field(default=40, ge=1, le=100)
     color: str = Field(default="#2E6FDB", max_length=20)
+    # Competencia Saber 11 del aula; vacía = la que corresponde a la materia.
+    competency: Optional[str] = Field(default=None, max_length=30)
 
 
 class ClassroomResponse(BaseModel):
@@ -393,6 +413,7 @@ class ClassroomResponse(BaseModel):
     name: str
     description: str = ""
     subject: str
+    competency: Optional[str] = None
     grade: str
     invite_code: str
     is_active: bool

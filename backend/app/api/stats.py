@@ -41,13 +41,13 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
         LearningSession.user_id == user_id
     ).count()
 
-    # 4. Total Study Time (hours)
-    # Estimate based on learning sessions 
-    # (Here we sum session time if added later, but for now we fallback to standard 1 hour per session approximation or use Quiz time spent if we had it populated always)
-    total_study_hours = (total_study_time_seconds / 3600) + (total_classes * 0.5)
-    
+    # 4. Tiempo de estudio: SOLO el tiempo medido de los quizzes completados.
+    # Antes se sumaban 0,5 h ficticias por cada sesión de chat.
+    total_study_hours = total_study_time_seconds / 3600
+
     return {
-        "progress_percentage": int(avg_performance),
+        # None = aún no hay quizzes completados (no es un 0 % de progreso)
+        "progress_percentage": int(round(avg_performance)) if agg[1] is not None else None,
         "total_exercises": int(total_exercises),
         "total_classes": total_classes,
         "active_skills": active_skills_count,
@@ -103,9 +103,18 @@ def _avg(entries, field="performance_score"):
 
 
 def _build_cognitive_summary_from_events(events) -> dict:
-    """Deriva indicadores cognitivos reales desde los eventos neuroconductuales guardados."""
+    """Deriva indicadores cognitivos desde los eventos neuroconductuales guardados.
+
+    Solo cuentan los eventos cuyo estado se infirió con evidencia suficiente
+    (≥ 2 fuentes válidas, `event_data.sufficient_evidence`). Los eventos
+    anteriores a la auditoría no llevan esa marca: se calcularon con valores
+    sustituidos por defaults y no se usan. Sin eventos válidos los indicadores
+    son None (no 0 %).
+    """
+    empty = {"fatigue": None, "overload": None, "doubt": None, "mastery": None}
+    events = [e for e in (events or []) if (e.event_data or {}).get("sufficient_evidence") is True]
     if not events:
-        return {"fatigue": 0, "overload": 0, "doubt": 0, "mastery": 0}
+        return empty
 
     state_counts = {"fatigue": 0, "overload": 0, "doubt": 0, "mastery": 0, "flow": 0, "normal": 0}
     for event in events:
@@ -129,7 +138,7 @@ def _build_cognitive_summary_from_events(events) -> dict:
 
     total = sum(state_counts.values())
     if total == 0:
-        return {"fatigue": 0, "overload": 0, "doubt": 0, "mastery": 0}
+        return empty
 
     fatigue = int((state_counts["fatigue"] / total) * 100)
     overload = int((state_counts["overload"] / total) * 100)
@@ -189,8 +198,11 @@ def get_performance_stats(
         prev_ = subject_prev.get(subj, [])
         all_  = subject_all.get(subj, [])
 
-        score      = _avg(cur_) or _avg(all_[:5]) or 0
-        prev_score = _avg(prev_) or 0
+        # Sin quizzes en la materia: score None (no 0 %). La tendencia solo se
+        # calcula si hay un período anterior comparable (antes prev=0 hacía
+        # que cualquier nota apareciera como una mejora de +nota puntos).
+        score      = (_avg(cur_) if cur_ else _avg(all_[:5])) if all_ else None
+        prev_score = _avg(prev_) if prev_ else None
 
         time_entries = [e for e in all_ if e.time_spent_seconds]
         avg_time = round(
@@ -208,7 +220,8 @@ def get_performance_stats(
         subjects_out[subj] = {
             "score":        score,
             "prev_score":   prev_score,
-            "trend":        round(score - prev_score, 1),
+            "trend":        round(score - prev_score, 1)
+                            if score is not None and prev_score is not None else None,
             "quizzes":      len(all_),
             "avg_time_min": avg_time,
             "topics":       list({e.topic for e in all_})[:3],
@@ -308,34 +321,24 @@ def get_performance_stats(
     )
     event_cognitive = _build_cognitive_summary_from_events(recent_events)
 
-    if recent_events:
-        fatigue = event_cognitive["fatigue"]
-        overload = event_cognitive["overload"]
-        doubt = event_cognitive["doubt"]
-        mastery = event_cognitive["mastery"]
-    else:
-        recent5 = all_history[:5]
-        if len(recent5) >= 3:
-            diff_fatigue = _avg(recent5[:2]) - _avg(recent5[2:])
-            fatigue = min(90, max(10, int((diff_fatigue + 30) * 1.5)))
-        else:
-            fatigue = 25
-
-        avg_t_per_q = (
-            sum((e.time_spent_seconds or 0) / max(e.questions_count, 1) for e in recent5) / len(recent5)
-            if recent5 else 60
-        )
-        overload = min(90, max(10, int(avg_t_per_q * 1.2)))
-
-        last3 = all_history[:3]
-        if last3:
-            tot3   = sum(e.questions_count for e in last3)
-            wrong3 = sum(e.wrong_answers or 0 for e in last3)
-            doubt  = min(90, max(10, int(wrong3 / max(tot3, 1) * 100 * 0.8)))
-        else:
-            doubt = 25
-
-        mastery = min(95, max(5, int(avg_sc)))
+    # Sin eventos con evidencia suficiente los indicadores quedan en None.
+    # Antes se inventaban (fatiga=25, duda=25, sobrecarga = segundos por
+    # pregunta × 1,2, dominio = nota media) y se mostraban como mediciones.
+    fatigue  = event_cognitive["fatigue"]
+    overload = event_cognitive["overload"]
+    doubt    = event_cognitive["doubt"]
+    mastery  = event_cognitive["mastery"]
+    valid_events = [e for e in recent_events
+                    if (e.event_data or {}).get("sufficient_evidence") is True]
+    cognitive_meta = {
+        "status": "available" if valid_events else "unavailable",
+        "reason": None if valid_events else
+        "No hay análisis neuroconductuales con evidencia suficiente.",
+        "events_used": len(valid_events),
+        "last_measured_at": (valid_events[0].timestamp.isoformat() + "Z")
+        if valid_events and valid_events[0].timestamp else None,
+        "label": "Estimación experimental del sistema; no es un diagnóstico.",
+    }
 
     # ── 10. Logros ────────────────────────────────────────────────────────────
     math_80       = len([e for e in subject_all.get("matematicas", []) if (e.performance_score or 0) >= 80])
@@ -402,15 +405,17 @@ def get_performance_stats(
     # ── 11. Distribución horaria (24 h, normalizada 0–60) ─────────────────────
     hourly_raw = [0] * 24
     for e in all_history:
-        hourly_raw[e.completed_at.hour] += (e.time_spent_seconds or 60) // 60
+        if e.time_spent_seconds:   # sin tiempo medido no se suma (antes 60 s)
+            hourly_raw[e.completed_at.hour] += e.time_spent_seconds // 60
     max_h = max(hourly_raw) if any(hourly_raw) else 1
     hourly = [min(60, int(v / max_h * 60)) for v in hourly_raw]
 
     # ── 12. Mejor día / mejor hora ────────────────────────────────────────────
-    best_day_obj = max(weekly, key=lambda x: x["score"], default={"day": "—"})
-    best_day     = best_day_obj["day"]
-    peak_h       = hourly.index(max(hourly)) if any(hourly) else 15
-    best_time    = f"{peak_h}:00 – {(peak_h + 4) % 24}:00"
+    scored_days  = [w for w in weekly if w["score"]]
+    best_day     = max(scored_days, key=lambda x: x["score"])["day"] if scored_days else None
+    # Sin datos horarios no hay "mejor hora" (antes 15:00 por defecto).
+    peak_h       = hourly.index(max(hourly)) if any(hourly) else None
+    best_time    = f"{peak_h}:00 – {(peak_h + 4) % 24}:00" if peak_h is not None else None
     days_active  = sum(1 for v in calendar if v > 0)
     consistency  = round(days_active / 28 * 100)
     avg_session  = round(
@@ -444,6 +449,7 @@ def get_performance_stats(
             "doubt":    doubt,
             "mastery":  mastery,
         },
+        "cognitive_meta": cognitive_meta,
         "achievements":        achievements,
         "hourly_distribution": hourly,
     }

@@ -72,6 +72,10 @@ class _Page:
     def rect(self, x: float, y: float, w: float, h: float, gray: float) -> None:
         self.ops.append(b"%.2f g %.2f %.2f %.2f %.2f re f" % (gray, x, y, w, h))
 
+    def rect_rgb(self, x: float, y: float, w: float, h: float, rgb: Sequence[float]) -> None:
+        r, g, b = rgb
+        self.ops.append(b"%.3f %.3f %.3f rg %.2f %.2f %.2f %.2f re f" % (r, g, b, x, y, w, h))
+
     def line(self, x1: float, y1: float, x2: float, y2: float, gray: float = 0.8) -> None:
         self.ops.append(b"%.2f G 0.5 w %.2f %.2f m %.2f %.2f l S" % (gray, x1, y1, x2, y2))
 
@@ -130,6 +134,11 @@ def build_table_pdf(
         page.line(MARGIN, y - ROW_H + 4, MARGIN + usable_w, y - ROW_H + 4)
         y -= ROW_H
 
+    return _assemble(pages, footer, generated_at)
+
+
+def _assemble(pages: List[_Page], footer: str, generated_at: str) -> bytes:
+    """Pie de página numerado y ensamblado del archivo PDF."""
     generated = generated_at or datetime.now().strftime("%Y-%m-%d %H:%M")
     for i, pg in enumerate(pages, start=1):
         pg.text(MARGIN, MARGIN - 14, f"{footer} · generado {generated}", size=7, gray=0.45)
@@ -170,3 +179,133 @@ def build_table_pdf(
         f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
     )
     return out.getvalue()
+
+
+BRAND_RGB = (0.043, 0.431, 0.6)       # #0B6E99, azul de NeuroLearn
+LIGHT_RGB = (0.906, 0.945, 0.984)     # #E7F1FB
+
+
+def _wrap(text: str, width: float, size: float) -> List[str]:
+    lines, current = [], ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        if text_width(candidate, size) <= width or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def build_report_pdf(
+    title: str,
+    meta_lines: Sequence[str],
+    blocks: Sequence[dict],
+    footer: str = "NeuroLearn IA",
+    generated_at: str = "",
+) -> bytes:
+    """
+    PDF de varias secciones. Bloques admitidos:
+        {"type": "heading", "text"}
+        {"type": "paragraph", "text", "gray"?}
+        {"type": "bars", "rows": [(etiqueta, valor 0-100 | None, nota)], "unit"?}
+        {"type": "table", "headers", "rows", "weights"}
+    """
+    usable_w = PAGE_W - 2 * MARGIN
+    pages: List[_Page] = []
+    state = {"y": 0.0}
+
+    def new_page() -> _Page:
+        pg = _Page()
+        pages.append(pg)
+        state["y"] = PAGE_H - MARGIN
+        if len(pages) == 1:
+            pg.rect_rgb(0, PAGE_H - 6, PAGE_W, 6, BRAND_RGB)
+            pg.text(MARGIN, state["y"] - 14, title, size=15, bold=True)
+            state["y"] -= 32
+            for line in meta_lines:
+                pg.text(MARGIN, state["y"], fit(line, usable_w, 9), size=9, gray=0.25)
+                state["y"] -= 13
+            state["y"] -= 6
+        else:
+            pg.text(MARGIN, state["y"] - 10, fit(title, usable_w, 10), size=10, bold=True, gray=0.3)
+            state["y"] -= 26
+        return pg
+
+    page = new_page()
+
+    def ensure(height: float) -> None:
+        nonlocal page
+        if state["y"] - height < MARGIN + 18:
+            page = new_page()
+
+    for block in blocks:
+        kind = block.get("type")
+        if kind == "heading":
+            ensure(40)
+            state["y"] -= 8
+            page.text(MARGIN, state["y"] - 10, fit(block["text"], usable_w, 11.5), size=11.5, bold=True)
+            state["y"] -= 14
+            page.line(MARGIN, state["y"] - 2, MARGIN + usable_w, state["y"] - 2, gray=0.75)
+            state["y"] -= 10
+        elif kind == "paragraph":
+            size = block.get("size", 8.5)
+            for line in _wrap(str(block["text"]), usable_w, size):
+                ensure(12)
+                page.text(MARGIN, state["y"] - 8, line, size=size, gray=block.get("gray", 0.15))
+                state["y"] -= 12
+            state["y"] -= 2
+        elif kind == "bars":
+            label_w, value_w = 210.0, 60.0
+            bar_w = usable_w - label_w - value_w - 160
+            unit = block.get("unit", " %")
+            for label, value, note in block["rows"]:
+                ensure(18)
+                y = state["y"]
+                page.text(MARGIN, y - 10, fit(str(label), label_w - 8, 8.5), size=8.5)
+                page.rect_rgb(MARGIN + label_w, y - 13, bar_w, 10, LIGHT_RGB)
+                if value is not None:
+                    w = max(0.0, min(float(value), 100.0)) / 100.0 * bar_w
+                    page.rect_rgb(MARGIN + label_w, y - 13, w, 10, BRAND_RGB)
+                    page.text(MARGIN + label_w + bar_w + 6, y - 10, f"{value:.1f}{unit}", size=8.5, bold=True)
+                else:
+                    page.text(MARGIN + label_w + bar_w + 6, y - 10, "Sin datos", size=8.5, gray=0.5)
+                if note:
+                    page.text(MARGIN + label_w + bar_w + value_w, y - 10, fit(str(note), 160, 7.5), size=7.5, gray=0.4)
+                state["y"] -= 17
+            state["y"] -= 4
+        elif kind == "table":
+            headers = block["headers"]
+            weights = block.get("weights") or [1.0] * len(headers)
+            total = float(sum(weights)) or 1.0
+            widths = [usable_w * w / total for w in weights]
+            xs = [MARGIN]
+            for w in widths[:-1]:
+                xs.append(xs[-1] + w)
+
+            def header() -> None:
+                page.rect(MARGIN, state["y"] - ROW_H + 4, usable_w, ROW_H, 0.92)
+                for x, w, h in zip(xs, widths, headers):
+                    page.text(x + 3, state["y"] - 7, fit(str(h), w - 6, HEADER_FONT_SIZE),
+                              size=HEADER_FONT_SIZE, bold=True)
+                state["y"] -= ROW_H
+
+            ensure(ROW_H * 3)
+            header()
+            rows = block["rows"]
+            if not rows:
+                page.text(MARGIN + 3, state["y"] - 7, "Sin datos para los filtros seleccionados.", size=8, gray=0.45)
+                state["y"] -= ROW_H
+            for row in rows:
+                if state["y"] - ROW_H < MARGIN + 18:
+                    page = new_page()
+                    header()
+                for x, w, value in zip(xs, widths, row):
+                    page.text(x + 3, state["y"] - 7, fit("" if value is None else str(value), w - 6, FONT_SIZE))
+                page.line(MARGIN, state["y"] - ROW_H + 4, MARGIN + usable_w, state["y"] - ROW_H + 4)
+                state["y"] -= ROW_H
+            state["y"] -= 8
+
+    return _assemble(pages, footer, generated_at)

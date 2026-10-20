@@ -53,6 +53,8 @@ def tutor_is_asking(last_assistant_text: str) -> bool:
 
 _VERDICT_CORRECT = ("CORRECTO", "correct")
 _VERDICT_INCORRECT = ("INCORRECTO", "incorrect")
+# El calificador no pudo producir un veredicto (fallo de IA o salida inválida).
+GRADING_ERROR = "error"
 
 
 async def grade_user_answer(ai_manager, user_message: str,
@@ -62,8 +64,10 @@ async def grade_user_answer(ai_manager, user_message: str,
 
     Returns:
         (verdict, confidence) donde verdict ∈ {"correct", "incorrect", None} y
-        confidence ∈ [0,1]. verdict es None cuando no se puede evaluar (el
-        tutor no preguntó, la respuesta no es evaluable, o el modelo falló).
+        confidence ∈ [0,1]. verdict es None cuando la respuesta no es evaluable
+        (el tutor no preguntó, o el modelo la juzgó NEUTRO) y GRADING_ERROR
+        ("error") cuando el calificador falló: un fallo técnico no se confunde
+        con una respuesta neutra.
     """
     if not tutor_is_asking(last_assistant_message):
         return None, 0.0
@@ -97,12 +101,27 @@ async def grade_user_answer(ai_manager, user_message: str,
             max_tokens=8,
             context_messages=None,
         )
-        raw = (result.get("response") or "").strip().upper()
-        if _VERDICT_CORRECT[0] in raw:
-            return _VERDICT_CORRECT[1], 0.9
-        if _VERDICT_INCORRECT[0] in raw:
-            return _VERDICT_INCORRECT[1], 0.9
-    except Exception as exc:  # pragma: no cover - degradación segura
+    except Exception as exc:
         logger.warning("⚠️ Calificador de chat falló: %s", exc)
+        return GRADING_ERROR, 0.0
+    return parse_verdict(result.get("response") or "")
 
-    return None, 0.0
+
+def parse_verdict(raw_text: str):
+    """Interpreta la salida del calificador.
+
+    "INCORRECTO" contiene la subcadena "CORRECTO": antes se comprobaba primero
+    `"CORRECTO" in raw` y TODA respuesta incorrecta se registraba como
+    correcta. Ahora se compara la primera palabra exacta.
+    """
+    words = re.findall(r"[A-ZÁÉÍÓÚÑ]+", (raw_text or "").strip().upper())
+    first = words[0] if words else ""
+    if first == _VERDICT_INCORRECT[0]:
+        return _VERDICT_INCORRECT[1], 0.9
+    if first == _VERDICT_CORRECT[0]:
+        return _VERDICT_CORRECT[1], 0.9
+    if first == "NEUTRO":
+        return None, 0.0
+    # Salida no interpretable: es un fallo técnico, no una respuesta neutra.
+    logger.warning("⚠️ Veredicto no interpretable del calificador: %r", raw_text[:40])
+    return GRADING_ERROR, 0.0

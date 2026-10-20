@@ -19,6 +19,7 @@ from app.api.auth import get_current_user, require_permission
 from app.core.permissions import Permission
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment, ClassroomBot
+from app.services.competencies import classroom_competency, from_subject, valid_key
 from app.models.expert_bot import ExpertBot
 
 
@@ -124,6 +125,7 @@ def classroom_response(
         name=classroom.name,
         description=classroom.description or "",
         subject=classroom.subject,
+        competency=classroom_competency(classroom),
         grade=classroom.grade,
         invite_code=classroom.invite_code,
         is_active=classroom.is_active,
@@ -166,6 +168,7 @@ async def create_classroom(
         name=request.name,
         description=request.description,
         subject=request.subject,
+        competency=valid_key(request.competency) or from_subject(request.subject),
         grade=request.grade,
         max_students=request.max_students,
         color=getattr(

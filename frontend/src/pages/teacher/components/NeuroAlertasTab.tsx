@@ -22,7 +22,7 @@ interface Student {
   id: string;
   name: string;
   group: string;
-  avg: number;
+  avg: number | null;   // null = sin promedio reportado (no 0)
   risk: 'high' | 'medium' | 'low';
   strengths: string[];
   weaknesses: string[];
@@ -65,7 +65,7 @@ function StudentProfile({ student, onBack }: { student: Student; onBack: () => v
           <p className="text-sm text-[#787774]">Grupo {student.group}</p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <span className="text-2xl font-bold text-[#191919]">{student.avg}<span className="text-sm font-normal text-[#787774]">/10</span></span>
+          <span className="text-2xl font-bold text-[#191919]">{student.avg ?? '—'}<span className="text-sm font-normal text-[#787774]">/10</span></span>
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${risk.bg} ${risk.color}`}>{risk.label}</span>
         </div>
       </div>
@@ -184,6 +184,9 @@ export default function NeuroAlertasTab() {
   const [selected,    setSelected]    = useState<Student | null>(null);
   const [filterPrio,  setFilterPrio]  = useState<Priority | 'todas'>('todas');
   const [loading,     setLoading]     = useState(true);
+  // Clases cuyas alertas no se pudieron cargar (no se muestran como "sin alertas")
+  const [failedClasses, setFailedClasses] = useState<string[]>([]);
+  const [loadError,   setLoadError]   = useState(false);
 
   useEffect(() => {
     // Load alerts + derive at-risk students list from classroom alerts
@@ -192,9 +195,13 @@ export default function NeuroAlertasTab() {
         const classrooms: any[] = r.data.classrooms ?? [];
         const alertsList: Alert[] = [];
         const studentsMap = new Map<string, Student>();
+        const failed: string[] = [];
 
         for (const c of classrooms) {
-          const res = await api.get(`/classrooms/${c.id}/alerts`).catch(() => ({ data: { alerts: [] } }));
+          const res = await api.get(`/classrooms/${c.id}/alerts`).catch(() => {
+            failed.push(c.name ?? `Clase ${c.id}`);
+            return { data: { alerts: [] } };
+          });
           for (const a of (res.data.alerts ?? [])) {
             alertsList.push({
               id:       String(a.id ?? `${c.id}-${a.student_id}`),
@@ -203,7 +210,8 @@ export default function NeuroAlertasTab() {
               title:    a.title ?? a.message ?? 'Alerta académica',
               detail:   a.detail ?? a.description ?? '',
               affected: a.student ?? a.student_name ?? 'Estudiante',
-              date:     (a.created_at ?? '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+              // Sin fecha del backend no se inventa la de hoy.
+              date:     (a.created_at ?? '').slice(0, 10) || '—',
               resolved: a.resolved ?? false,
             });
             const key = String(a.student_id);
@@ -212,7 +220,7 @@ export default function NeuroAlertasTab() {
                 id:           key,
                 name:         a.student ?? a.student_name ?? `Estudiante ${key}`,
                 group:        c.grade ?? c.name ?? '',
-                avg:          a.average_score != null ? Math.round(a.average_score * 10) / 10 : 0,
+                avg:          a.average_score != null ? Math.round(a.average_score * 10) / 10 : null,
                 risk:         a.severity === 'high' ? 'high' : a.severity === 'medium' ? 'medium' : 'low',
                 strengths:    [],
                 weaknesses:   [a.message ?? 'Bajo rendimiento'],
@@ -228,8 +236,10 @@ export default function NeuroAlertasTab() {
 
         setAlerts(alertsList);
         setStudents(Array.from(studentsMap.values()));
+        setFailedClasses(failed);
+        setLoadError(false);
       })
-      .catch(() => { setAlerts([]); setStudents([]); })
+      .catch(() => { setAlerts([]); setStudents([]); setLoadError(true); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -238,16 +248,18 @@ export default function NeuroAlertasTab() {
   const filtered = alerts.filter(a => filterPrio === 'todas' || a.priority === filterPrio);
   const unresolved = alerts.filter(a => !a.resolved).length;
   const studentsAtRisk = students.filter(s => s.risk !== 'low').length;
-  const avgScore = students.length
-    ? (students.reduce((sum, s) => sum + s.avg, 0) / students.length).toFixed(1)
-    : '0.0';
-  const avgStudy = students.length
-    ? (() => {
-        const minutes = students
-          .map((s) => Number.parseFloat((s.study_time ?? '0').replace(/[^\d.]/g, '')) || 0)
-          .reduce((sum, value) => sum + value, 0);
-        return `${Math.round(minutes / students.length)} min`;
-      })()
+  // Promedio solo sobre estudiantes con promedio reportado.
+  const withAvg = students.filter((s): s is Student & { avg: number } => s.avg != null);
+  const avgScore = withAvg.length
+    ? (withAvg.reduce((sum, s) => sum + s.avg, 0) / withAvg.length).toFixed(1)
+    : '—';
+  // Las alertas no incluyen tiempo de estudio: no se calcula un promedio
+  // ficticio a partir de valores ausentes.
+  const studyMinutes = students
+    .map((s) => Number.parseFloat((s.study_time ?? '').replace(/[^\d.]/g, '')))
+    .filter((v) => Number.isFinite(v));
+  const avgStudy = studyMinutes.length
+    ? `${Math.round(studyMinutes.reduce((a, b) => a + b, 0) / studyMinutes.length)} min`
     : '—';
 
   if (selected) return <StudentProfile student={selected} onBack={() => setSelected(null)} />;
@@ -257,6 +269,17 @@ export default function NeuroAlertasTab() {
       {loading && (
         <div className="flex items-center justify-center py-4 gap-2 text-sm text-[#787774]">
           <Loader2 className="w-4 h-4 animate-spin" /> Cargando alertas…
+        </div>
+      )}
+
+      {loadError && (
+        <div className="rounded-md border border-[#F4BDBD] bg-[#FDEEEE] px-4 py-3 text-sm text-[#E03E3E]">
+          No fue posible obtener las alertas. Puedes intentarlo nuevamente.
+        </div>
+      )}
+      {!loadError && failedClasses.length > 0 && (
+        <div className="rounded-md border border-[#EDD88A] bg-[#FCF6E5] px-4 py-3 text-sm text-[#9F6B00]">
+          No se pudieron cargar las alertas de: {failedClasses.join(', ')}. Los indicadores no incluyen esas clases.
         </div>
       )}
 
@@ -335,7 +358,7 @@ export default function NeuroAlertasTab() {
                   <p className="text-sm font-medium text-[#191919] truncate">{student.name}</p>
                   <p className="text-xs text-[#AEADAB]">Grupo {student.group} · {student.study_time}</p>
                 </div>
-                <span className={`text-lg font-bold ${student.avg < 6 ? 'text-[#E03E3E]' : student.avg < 7.5 ? 'text-[#D9730D]' : 'text-[#0F7B6C]'}`}>{student.avg}</span>
+                <span className={`text-lg font-bold ${student.avg == null ? 'text-[#9B9A97]' : student.avg < 6 ? 'text-[#E03E3E]' : student.avg < 7.5 ? 'text-[#D9730D]' : 'text-[#0F7B6C]'}`}>{student.avg ?? '—'}</span>
                 <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${risk.bg} ${risk.color} flex-shrink-0`}>{risk.label}</span>
                 <ChevronRight className="w-4 h-4 text-[#AEADAB] flex-shrink-0" />
               </button>

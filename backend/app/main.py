@@ -29,6 +29,7 @@ from app.api import posts
 from app.api import events
 from app.api import messages
 from app.api import super_stats
+from app.api import super_reports
 from app.api import teacher_stats
 from app.api import teacher_materials
 from app.api import student_materials
@@ -120,6 +121,10 @@ def _apply_schema_and_migrations():
         if engine.dialect.name == "sqlite":
             from app.db.migrate import _add_missing_sqlite_columns
             _add_missing_sqlite_columns(engine)
+        else:
+            # Columnas e índices de la migración 014 (reportes institucionales).
+            from app.db.migrate import ensure_reporting_schema
+            ensure_reporting_schema(engine)
 
         print("[DB] Schema inicializado correctamente.")
 
@@ -324,6 +329,11 @@ app.include_router(
 
 app.include_router(
     super_stats.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    super_reports.router,
     prefix="/api/v1",
 )
 

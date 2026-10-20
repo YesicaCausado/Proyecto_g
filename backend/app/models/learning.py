@@ -155,6 +155,9 @@ class QuizHistory(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     session_id = Column(Integer, ForeignKey("learning_sessions.id"), nullable=True)
     classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)  # ← NUEVO
+    # Competencia Saber 11 elegida por el estudiante al generar el quiz
+    # (app/services/competencies.py). NULL en quizzes anteriores.
+    competency = Column(String(30), nullable=True)
     quiz_title = Column(String(200), nullable=False)
 
     # Información del quiz

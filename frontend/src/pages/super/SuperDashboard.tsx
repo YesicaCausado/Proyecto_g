@@ -69,7 +69,7 @@ const TAB_TITLES: Record<string, { title: string; subtitle: string }> = {
   grupos:        { title: 'Grupos & Aulas',        subtitle: 'Visualiza todos los grupos activos' },
   neurobots:     { title: 'NeuroBots',             subtitle: 'Bots de aprendizaje creados en la institución' },
   alertas:       { title: 'NeuroAlertas IA',       subtitle: 'Alertas inteligentes generadas por el sistema' },
-  reportes:      { title: 'Reportes',              subtitle: 'Genera reportes institucionales en PDF' },
+  reportes:      { title: 'Reportes institucionales', subtitle: 'Analiza el rendimiento académico, el progreso y las necesidades de aprendizaje de tu institución' },
   mensajeria:    { title: 'Mensajería',            subtitle: 'Comunicación con profesores y estudiantes' },
   calendario:    { title: 'Calendario Institucional', subtitle: 'Eventos, exámenes y fechas importantes' },
   auditoria:     { title: 'Auditoría',             subtitle: 'Registro de todas las acciones del sistema' },

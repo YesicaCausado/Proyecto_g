@@ -49,6 +49,9 @@ class TeacherEvaluation(Base):
     classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True, index=True)
     title       = Column(String(200), nullable=False)
     group_name  = Column(String(120), default="")      # nombre del aula (copia para mostrar)
+    # Competencia Saber 11 evaluada (app/services/competencies.py). NULL en
+    # evaluaciones anteriores: se deduce del aula.
+    competency  = Column(String(30), nullable=True)
     eval_type   = Column(String(30), default="cuestionario")   # cuestionario | examen
     date        = Column(String(20), default="")       # fecha límite AAAA-MM-DD ("" = sin límite)
     duration    = Column(Integer, default=30)          # minutos por intento

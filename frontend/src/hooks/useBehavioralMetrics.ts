@@ -1,32 +1,51 @@
 /**
- * Hook: useBehavioralMetrics
- * Captura métricas conductuales en tiempo real para los 5 patrones neuroconductuales:
- *   Patrón 1 - Ritmo de Interacción: response_time_ms, pause_before_ms, typing_speed_cpm
- *   Patrón 2 - Secuencia de Decisión: corrections (backspace count real), hesitations
- *   Patrones 3-4 - Facial/Voz: datos desde cámara/micrófono (hooks separados)
- *   Patrón 5 - Predicción de Error: calculado en backend con historial de quizzes real
+ * Hook: useBehavioralMetrics — Patrón de teclado
  *
- * v3.0: Métricas enriquecidas — hesitaciones, burst typing, contenido del mensaje
+ * Mide, para cada turno del chat (desde la respuesta del tutor hasta el envío):
+ *   - response_time_ms: tiempo hasta el envío
+ *   - pause_before_ms:  tiempo hasta la primera pulsación
+ *   - typing_speed_cpm: caracteres escritos / minuto entre la primera
+ *                        pulsación y el envío
+ *   - corrections:      caracteres borrados (no son errores ortográficos)
+ *   - typing_bursts:    ráfagas separadas por pausas > 800 ms
+ *   - keystrokes:       cambios de texto producidos al escribir
+ *
+ * Privacidad: solo se guardan tiempos y conteos, nunca el texto tecleado.
+ *
+ * Reglas de medición (auditoría): si el texto se dictó por voz o se pegó, no
+ * hay ritmo de escritura: las métricas de teclado son null (no 0). Antes se
+ * asumía 1 s de escritura y un dictado de 50 caracteres aparecía como
+ * 1000 cpm. Tampoco se devuelve un tiempo de respuesta sin una respuesta del
+ * tutor que marque el inicio del turno.
  */
 import { useRef, useCallback, useState, useEffect } from 'react';
 
 /** Umbral para considerar que el estudiante está bloqueado (3 segundos) */
 const LONG_PAUSE_MS = 3000;
+const BURST_GAP_MS = 800;
+/** Escritura mínima para calcular una velocidad fiable */
+const MIN_TYPING_MS = 300;
+
+export type InputMode = 'typed' | 'voice' | 'pasted';
 
 export interface BehavioralMetrics {
-  response_time_ms: number;   // Tiempo desde respuesta del bot hasta envío del usuario
-  typing_speed_cpm: number;   // Caracteres por minuto (velocidad real de escritura)
-  corrections: number;        // Backspaces/correcciones — señal de indecisión (Patrón 2)
-  pause_before_ms: number;    // Pausa antes de empezar a escribir (Patrón 1)
-  typing_bursts: number;      // Número de ráfagas de escritura separadas por pausas (Patrón 2)
-  is_question: boolean;       // El mensaje termina en '?' — señal de duda
-  message_length: number;     // Longitud del mensaje enviado
+  input_mode: InputMode;
+  response_time_ms: number | null;
+  typing_speed_cpm: number | null;
+  corrections: number | null;
+  pause_before_ms: number | null;
+  typing_bursts: number | null;
+  keystrokes: number;
+  is_question: boolean;
+  message_length: number;
 }
 
 export interface MetricsTracker {
   onBotMessageReceived: () => void;
-  onUserStartedTyping: () => void;
+  /** Llamar en cada cambio del campo con el valor nuevo y el ANTERIOR real */
   onInputChange: (val: string, prev: string) => void;
+  onPaste: (pastedLength: number) => void;
+  markVoiceInput: () => void;
   getMetrics: (finalMessage: string) => BehavioralMetrics;
   reset: () => void;
   isLongPause: boolean;
@@ -36,131 +55,134 @@ export interface MetricsTracker {
 export function useBehavioralMetrics(): MetricsTracker {
   const botResponseTime = useRef<number>(0);
   const typingStartTime = useRef<number>(0);
-  const sendTime = useRef<number>(0);
-  const corrections = useRef<number>(0);
-  const hasStartedTyping = useRef<boolean>(false);
-  const lastLength = useRef<number>(0);
-  // Patrón 2 — burst typing: cuenta ráfagas separadas por pausas > 800ms
-  const burstCount = useRef<number>(0);
   const lastKeystrokeTime = useRef<number>(0);
-  const BURST_GAP_MS = 800;
+  const corrections = useRef<number>(0);
+  const typedChars = useRef<number>(0);
+  const keystrokes = useRef<number>(0);
+  const burstCount = useRef<number>(0);
+  const pastedChars = useRef<number>(0);
+  const voiceInput = useRef<boolean>(false);
 
   const [isLongPause, setIsLongPause] = useState(false);
   const [realTimePauseMs, setRealTimePauseMs] = useState(0);
   const pauseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (pauseIntervalRef.current) clearInterval(pauseIntervalRef.current);
-    };
+  const stopTicker = useCallback(() => {
+    if (pauseIntervalRef.current) clearInterval(pauseIntervalRef.current);
+    pauseIntervalRef.current = null;
+  }, []);
+
+  useEffect(() => stopTicker, [stopTicker]);
+
+  const resetTurn = useCallback(() => {
+    typingStartTime.current = 0;
+    lastKeystrokeTime.current = 0;
+    corrections.current = 0;
+    typedChars.current = 0;
+    keystrokes.current = 0;
+    burstCount.current = 0;
+    pastedChars.current = 0;
+    voiceInput.current = false;
+    setIsLongPause(false);
+    setRealTimePauseMs(0);
   }, []);
 
   const startPauseTicker = useCallback(() => {
-    if (pauseIntervalRef.current) clearInterval(pauseIntervalRef.current);
+    stopTicker();
     pauseIntervalRef.current = setInterval(() => {
-      if (botResponseTime.current === 0 || hasStartedTyping.current) {
+      if (botResponseTime.current === 0 || typingStartTime.current > 0) {
         setIsLongPause(false);
         setRealTimePauseMs(0);
-        clearInterval(pauseIntervalRef.current!);
-        pauseIntervalRef.current = null;
+        stopTicker();
         return;
       }
       const elapsed = Date.now() - botResponseTime.current;
       setRealTimePauseMs(elapsed);
       setIsLongPause(elapsed >= LONG_PAUSE_MS);
     }, 500);
-  }, []);
+  }, [stopTicker]);
 
   const onBotMessageReceived = useCallback(() => {
     botResponseTime.current = Date.now();
-    hasStartedTyping.current = false;
-    typingStartTime.current = 0;
-    corrections.current = 0;
-    lastLength.current = 0;
-    burstCount.current = 0;
-    lastKeystrokeTime.current = 0;
-    setIsLongPause(false);
-    setRealTimePauseMs(0);
+    resetTurn();
     startPauseTicker();
-  }, [startPauseTicker]);
+  }, [resetTurn, startPauseTicker]);
 
-  const onUserStartedTyping = useCallback(() => {
+  const onInputChange = useCallback((val: string, prev: string) => {
     const now = Date.now();
-    if (!hasStartedTyping.current) {
+    const delta = val.length - prev.length;
+    if (delta < 0) {
+      corrections.current += -delta;
+    } else if (delta > 0 && delta <= 2) {
+      // 1–2 caracteres por evento = escritura (más es pegado o autocompletado)
+      typedChars.current += delta;
+    } else if (delta === 0) {
+      return;
+    }
+    keystrokes.current += 1;
+    if (typingStartTime.current === 0) {
       typingStartTime.current = now;
-      hasStartedTyping.current = true;
       burstCount.current = 1;
       setIsLongPause(false);
-      if (pauseIntervalRef.current) {
-        clearInterval(pauseIntervalRef.current);
-        pauseIntervalRef.current = null;
-      }
-    }
-    // Detectar nueva ráfaga si hubo pausa larga entre keystrokes
-    if (lastKeystrokeTime.current > 0 && now - lastKeystrokeTime.current > BURST_GAP_MS) {
+      stopTicker();
+    } else if (now - lastKeystrokeTime.current > BURST_GAP_MS) {
       burstCount.current += 1;
     }
     lastKeystrokeTime.current = now;
+  }, [stopTicker]);
+
+  const onPaste = useCallback((pastedLength: number) => {
+    pastedChars.current += Math.max(0, pastedLength);
   }, []);
 
-  const onInputChange = useCallback((val: string, prev: string) => {
-    if (val.length < prev.length) {
-      corrections.current += prev.length - val.length;
-    }
-    lastLength.current = val.length;
+  const markVoiceInput = useCallback(() => {
+    voiceInput.current = true;
   }, []);
 
   const getMetrics = useCallback((finalMessage: string): BehavioralMetrics => {
-    sendTime.current = Date.now();
+    const sendTime = Date.now();
+    const len = finalMessage.length;
+    const turnStarted = botResponseTime.current > 0;
 
-    const response_time_ms = botResponseTime.current > 0
-      ? sendTime.current - botResponseTime.current
-      : 0;
+    let input_mode: InputMode = 'typed';
+    if (voiceInput.current && typedChars.current === 0) input_mode = 'voice';
+    else if (pastedChars.current > 0 && pastedChars.current >= typedChars.current) input_mode = 'pasted';
 
-    const pause_before_ms = botResponseTime.current > 0 && typingStartTime.current > 0
-      ? typingStartTime.current - botResponseTime.current
-      : 0;
+    const response_time_ms = turnStarted ? Math.max(0, sendTime - botResponseTime.current) : null;
 
-    const typing_duration_ms = typingStartTime.current > 0
-      ? sendTime.current - typingStartTime.current
-      : 1000;
-
-    const typing_speed_cpm = finalMessage.length > 0
-      ? (finalMessage.length / typing_duration_ms) * 60000
-      : 0;
+    const typed = input_mode === 'typed' && keystrokes.current > 0 && typingStartTime.current > 0;
+    const typingDuration = typed ? sendTime - typingStartTime.current : 0;
+    const typing_speed_cpm = typed && typingDuration >= MIN_TYPING_MS && typedChars.current > 0
+      ? Math.round((typedChars.current / typingDuration) * 60000 * 10) / 10
+      : null;
+    const pause_before_ms = typed && turnStarted
+      ? Math.max(0, typingStartTime.current - botResponseTime.current)
+      : null;
 
     return {
-      response_time_ms: Math.max(0, response_time_ms),
-      typing_speed_cpm: Math.min(Math.max(0, typing_speed_cpm), 1000),
-      corrections: corrections.current,
-      pause_before_ms: Math.max(0, pause_before_ms),
-      typing_bursts: burstCount.current,
+      input_mode,
+      response_time_ms,
+      typing_speed_cpm,
+      corrections: typed ? corrections.current : null,
+      pause_before_ms,
+      typing_bursts: typed ? burstCount.current : null,
+      keystrokes: keystrokes.current,
       is_question: finalMessage.trim().endsWith('?'),
-      message_length: finalMessage.length,
+      message_length: len,
     };
   }, []);
 
   const reset = useCallback(() => {
     botResponseTime.current = 0;
-    typingStartTime.current = 0;
-    sendTime.current = 0;
-    corrections.current = 0;
-    hasStartedTyping.current = false;
-    lastLength.current = 0;
-    burstCount.current = 0;
-    lastKeystrokeTime.current = 0;
-    setIsLongPause(false);
-    setRealTimePauseMs(0);
-    if (pauseIntervalRef.current) {
-      clearInterval(pauseIntervalRef.current);
-      pauseIntervalRef.current = null;
-    }
-  }, []);
+    resetTurn();
+    stopTicker();
+  }, [resetTurn, stopTicker]);
 
   return {
     onBotMessageReceived,
-    onUserStartedTyping,
     onInputChange,
+    onPaste,
+    markVoiceInput,
     getMetrics,
     reset,
     isLongPause,

@@ -110,6 +110,7 @@ Matriz de permisos probada (✔ = 200, el resto 403):
 | `GET /teacher/stats` | ✔ | ✔ | ✔ | |
 | `GET /teacher/evaluations`, `/classrooms/my-classes` | | | ✔ | |
 | `GET /teacher/reports/export` | | ✔ | ✔ | |
+| `GET /super/reports/*` (`tests/test_super_reports.py`) | | ✔ | | |
 | `GET /classrooms/my-enrolled`, `/student/evaluations` | | | | ✔ |
 | `GET /auth/me`, `/consents/me` | ✔ | ✔ | ✔ | ✔ |
 

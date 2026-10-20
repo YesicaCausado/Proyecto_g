@@ -25,6 +25,9 @@ class Classroom(Base):
     name = Column(String(150), nullable=False)
     description = Column(Text, default="")
     subject = Column(String(100), nullable=False)  # Habilidad transversal
+    # Competencia Saber 11 del aula (app/services/competencies.py). NULL = aula
+    # general o anterior a la columna (se deduce de la materia).
+    competency = Column(String(30), nullable=True)
     grade = Column(String(20), default="")  # Grado: 6to, 7mo, etc.
     invite_code = Column(String(8), unique=True, index=True, nullable=False)
     color = Column(String(20), default="#2E6FDB")

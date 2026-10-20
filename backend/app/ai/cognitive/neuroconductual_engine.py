@@ -131,54 +131,82 @@ class ModalityType(str, Enum):
 class InputValidator:
     """
     Valida que los valores de entrada sean fisiológicamente/conductualmente
-    plausibles. Valores fuera de rango se reemplazan por el valor por defecto
-    (nunca se lanza excepción para no bloquear el pipeline).
+    plausibles. Nunca lanza excepción para no bloquear el pipeline, pero
+    tampoco INVENTA mediciones: un valor fuera de rango se marca como "no
+    medido" (0 / None según la convención de cada analizador, que ya ignora
+    esos valores al calcular), en lugar de sustituirse por un promedio
+    poblacional que después se interpretaría como dato real del estudiante.
     """
 
     @staticmethod
-    def clamp(value: float, lo: float, hi: float, default: float) -> float:
-        if not math.isfinite(value):
-            return default
-        if value < lo or value > hi:
-            log.debug("Valor %.2f fuera de rango [%.1f, %.1f] → usando %.2f", value, lo, hi, default)
-            return default
+    def valid(value: Optional[float], lo: float, hi: float) -> Optional[float]:
+        """Devuelve el valor si es finito y está en [lo, hi]; si no, None."""
+        if value is None:
+            return None
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(value) or value < lo or value > hi:
+            log.debug("Valor %s fuera de rango [%.1f, %.1f] → descartado", value, lo, hi)
+            return None
         return value
 
     @staticmethod
+    def clamp(value: float, lo: float, hi: float, default: float) -> float:
+        """Retrocompatible: valor válido o `default` (usar solo para valores
+        que NO representan mediciones, p. ej. parámetros de configuración)."""
+        v = InputValidator.valid(value, lo, hi)
+        return default if v is None else v
+
+    @staticmethod
     def validate_behavioral(e: "BehavioralEvent") -> "BehavioralEvent":
+        # 0 = "no medido": los analizadores solo usan RT > 50, CPM > 10, pausa > 0.
         # RT: 50 ms (límite inferior humano) – 120 000 ms (2 min, pausa larga)
-        e.response_time_ms   = InputValidator.clamp(e.response_time_ms,   50, 120_000, 3200)
+        e.response_time_ms   = InputValidator.valid(e.response_time_ms,  50, 120_000) or 0.0
         # Velocidad escritura: 10–600 CPM (rango humano real)
-        e.typing_speed_cpm   = InputValidator.clamp(e.typing_speed_cpm,   10, 600, 140)
+        e.typing_speed_cpm   = InputValidator.valid(e.typing_speed_cpm,  10, 600) or 0.0
         # Pausa: 0–60 000 ms
-        e.pause_duration_ms  = InputValidator.clamp(e.pause_duration_ms,   0, 60_000, 0)
+        e.pause_duration_ms  = InputValidator.valid(e.pause_duration_ms,  0, 60_000) or 0.0
         e.content_length     = max(0, int(e.content_length))
         return e
 
     @staticmethod
-    def validate_facial(f: "FacialData") -> "FacialData":
-        f.emotion_confidence = InputValidator.clamp(f.emotion_confidence, 0, 1, 0.5)
-        f.valence            = InputValidator.clamp(f.valence,           -1, 1, 0.0)
-        f.arousal            = InputValidator.clamp(f.arousal,            0, 1, 0.5)
-        f.attention_score    = InputValidator.clamp(f.attention_score,    0, 1, 0.5)
-        # Parpadeo: 2–40 /min (rango clínico real; pantalla reduce a 3–8)
-        f.blink_rate         = InputValidator.clamp(f.blink_rate,         2, 40, 17)
-        f.brow_furrow        = InputValidator.clamp(f.brow_furrow,        0, 1, 0)
-        f.smile_intensity    = InputValidator.clamp(f.smile_intensity,    0, 1, 0)
-        f.jaw_drop           = InputValidator.clamp(f.jaw_drop,           0, 1, 0)
+    def validate_facial(f: "FacialData") -> Optional["FacialData"]:
+        """Devuelve la muestra validada o None si no es utilizable (sin
+        atención/valencia válidas no hay observación facial que analizar)."""
+        attention = InputValidator.valid(f.attention_score, 0, 1)
+        valence = InputValidator.valid(f.valence, -1, 1)
+        if attention is None or valence is None:
+            return None
+        f.attention_score    = attention
+        f.valence            = valence
+        f.arousal            = InputValidator.valid(f.arousal, 0, 1) or 0.0
+        f.emotion_confidence = InputValidator.valid(f.emotion_confidence, 0, 1) or 0.0
+        f.valid_frame_ratio  = InputValidator.valid(f.valid_frame_ratio, 0, 1) or 0.0
+        # Parpadeo: 0 = no medido (ventana demasiado corta); 2–40 /min válido.
+        f.blink_rate         = InputValidator.valid(f.blink_rate, 2, 40) or 0.0
+        f.brow_furrow        = InputValidator.valid(f.brow_furrow, 0, 1) or 0.0
+        f.smile_intensity    = InputValidator.valid(f.smile_intensity, 0, 1) or 0.0
+        f.jaw_drop           = InputValidator.valid(f.jaw_drop, 0, 1) or 0.0
         return f
 
     @staticmethod
     def validate_voice(v: "VoiceProsodyData") -> "VoiceProsodyData":
-        # F0: 80–400 Hz cubre hombre, mujer, voz de cabeza
-        v.pitch_mean_hz      = InputValidator.clamp(v.pitch_mean_hz,   80, 400, 150)
-        # Volumen típico de micrófono de portátil: 40–85 dB SPL
-        v.volume_db          = InputValidator.clamp(v.volume_db,       30, 100,  60)
-        # WPM: 60–300 (habla inteligible)
-        v.speech_rate_wpm    = InputValidator.clamp(v.speech_rate_wpm, 60, 300, 150)
-        v.voice_tremor       = InputValidator.clamp(v.voice_tremor,     0,   1, 0)
-        v.energy_level       = InputValidator.clamp(v.energy_level,     0,   1, 0.5)
-        v.pause_ratio        = InputValidator.clamp(v.pause_ratio,      0,   1, 0)
+        # Unidades REALES del frontend (useVoiceProsody, Web Audio API):
+        #  - pitch_mean_hz: centroide espectral (proxy de tono, NO F0) 50–8000 Hz
+        #  - volume_db: dBFS (relativo a escala completa) −100–0; None = no medido
+        #  - speech_rate_wpm: estimación por inicios de voz 1–400
+        # Antes se validaba contra F0 80–400 Hz y dB SPL 30–100: TODOS los
+        # valores reales caían fuera de rango y se sustituían por 150 Hz / 60 dB,
+        # es decir, el patrón de voz analizaba constantes inventadas.
+        v.pitch_mean_hz      = InputValidator.valid(v.pitch_mean_hz,   50, 8000) or 0.0
+        v.volume_db          = InputValidator.valid(v.volume_db,     -100, 0)
+        v.speech_rate_wpm    = InputValidator.valid(v.speech_rate_wpm,  1, 400) or 0.0
+        v.voice_tremor       = InputValidator.valid(v.voice_tremor,     0, 1) or 0.0
+        v.energy_level       = InputValidator.valid(v.energy_level,     0, 1) or 0.0
+        v.pause_ratio        = InputValidator.valid(v.pause_ratio,      0, 1) or 0.0
+        v.voiced_ms          = InputValidator.valid(v.voiced_ms,        0, 3_600_000) or 0.0
         v.filler_words_count = max(0, int(v.filler_words_count))
         return v
 
@@ -199,6 +227,10 @@ class BehavioralEvent:
     pause_duration_ms: float = 0.0
     content_length: int      = 0
     metadata: dict           = field(default_factory=dict)
+    # True si `error_occurred` es un resultado académico real (respuesta
+    # calificada). Un mensaje de chat sin calificar NO es evidencia de acierto
+    # ni de error y no debe alimentar el predictor de errores (Patrón 5).
+    outcome_known: bool      = True
 
 
 @dataclass
@@ -233,15 +265,17 @@ class FacialData:
     gaze_direction: str               = "screen"
     head_tilt: float                  = 0.0
     micro_expression_duration_ms: float = 0.0
+    # Fracción de fotogramas del turno con rostro detectado (calidad de muestra)
+    valid_frame_ratio: float          = 0.0
 
 
 @dataclass
 class VoiceProsodyData:
     """Patrón 4 — Prosodia de Voz (Web Audio API)"""
     timestamp: datetime
-    pitch_mean_hz: float       = 0.0
+    pitch_mean_hz: float       = 0.0     # centroide espectral (proxy), no F0
     pitch_variance: float      = 0.0
-    volume_db: float           = 0.0
+    volume_db: Optional[float] = None    # dBFS; None = no medido
     volume_variance: float     = 0.0
     speech_rate_wpm: float     = 0.0
     pause_ratio: float         = 0.0
@@ -251,6 +285,7 @@ class VoiceProsodyData:
     emotion_confidence: float  = 0.0
     silence_duration_ms: float = 0.0
     filler_words_count: int    = 0
+    voiced_ms: float           = 0.0     # ms con voz en el turno (suficiencia)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -287,12 +322,23 @@ class CognitiveStateResult:
     active_modalities: List[str]                    = field(default_factory=list)
     modality_probs: Dict[str, Dict[str, float]]     = field(default_factory=dict)
     emotional_state: Optional[str]                  = None
-    attention_level: float                          = 1.0
+    # None = sin observación facial válida (no se asume atención plena)
+    attention_level: Optional[float]                = None
     error_risk: float                               = 0.0
     engagement_score: float                         = 0.5
     predicted_next_error: Optional[str]             = None
     insights: List[str]                             = field(default_factory=list)
     confidence: float                               = 0.0
+    # ── Trazabilidad de la fusión ──
+    # False = el predictor aún no tiene ≥3 respuestas calificadas: error_risk
+    # es solo el prior y NO debe presentarse como predicción.
+    error_risk_available: bool                      = False
+    # Peso normalizado con el que cada modalidad contribuyó (suma 1 o vacío)
+    modality_weights: Dict[str, float]              = field(default_factory=dict)
+    # Modalidades excluidas de la fusión y motivo
+    excluded_modalities: Dict[str, str]             = field(default_factory=dict)
+    # True si al menos 2 modalidades con confianza > 0 sostienen el resultado
+    sufficient_evidence: bool                       = False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -883,11 +929,16 @@ class FacialMicroexpressionAnalyzer:
         self.baseline_attn    = 0.75   # atención media en tarea activa
         self._calibrated      = False
 
-    def add_data(self, data: FacialData):
+    def add_data(self, data: FacialData) -> bool:
+        """Añade una muestra válida. Devuelve False si se descartó."""
         data = InputValidator.validate_facial(data)
+        if data is None:
+            log.info("Muestra facial descartada: atención/valencia fuera de rango")
+            return False
         self.facial_data.append(data)
         if not self._calibrated and len(self.facial_data) >= 20:
             self._calibrate()
+        return True
 
     def _calibrate(self):
         d = list(self.facial_data)[:20]
@@ -927,7 +978,11 @@ class FacialMicroexpressionAnalyzer:
         score.state_scores_raw = raw
         score.state_probs      = softmax(raw, temperature=0.8)
 
-        confs = [d.emotion_confidence for d in recent if d.emotion_confidence > 0]
+        # Confianza = calidad real de la muestra (fracción de fotogramas con
+        # rostro detectado). Antes se usaba emotion_confidence, que el frontend
+        # no envía y el backend rellenaba con 0.5 fijo.
+        quality = [d.valid_frame_ratio for d in recent if d.valid_frame_ratio > 0]
+        confs = quality or [d.emotion_confidence for d in recent if d.emotion_confidence > 0]
         score.confidence = float(statistics.mean(confs)) * 0.90 if confs else 0.0
 
         # Usar baseline de tarea (no reposo) para detectar caída real de atención
@@ -1098,16 +1153,25 @@ class VoiceProsodyAnalyzer:
         self.baseline_rate   = 150.0   # WPM
         self._calibrated     = False
 
-    def add_data(self, data: VoiceProsodyData):
+    # Voz mínima (ms) en un turno para considerar la muestra suficiente
+    MIN_VOICED_MS = 1000
+
+    def add_data(self, data: VoiceProsodyData) -> bool:
+        """Añade una muestra suficiente. Devuelve False si se descartó."""
         data = InputValidator.validate_voice(data)
+        if data.voiced_ms < self.MIN_VOICED_MS:
+            log.info("Muestra de voz descartada: %.0f ms de voz (< %d ms)",
+                     data.voiced_ms, self.MIN_VOICED_MS)
+            return False
         self.voice_data.append(data)
         if not self._calibrated and len(self.voice_data) >= 10:
             self._calibrate()
+        return True
 
     def _calibrate(self):
         d = list(self.voice_data)[:10]
         pitches = [v.pitch_mean_hz   for v in d if v.pitch_mean_hz   > 0]
-        volumes = [v.volume_db       for v in d if v.volume_db       > 0]
+        volumes = [v.volume_db       for v in d if v.volume_db is not None]
         rates   = [v.speech_rate_wpm for v in d if v.speech_rate_wpm > 0]
         if pitches: self.baseline_pitch  = float(statistics.mean(pitches))
         if volumes: self.baseline_volume = float(statistics.mean(volumes))
@@ -1143,8 +1207,15 @@ class VoiceProsodyAnalyzer:
         score.state_scores_raw = raw
         score.state_probs      = softmax(raw, temperature=0.8)
 
-        confs = [v.emotion_confidence for v in recent if v.emotion_confidence > 0]
-        score.confidence = float(statistics.mean(confs)) * 0.85 if confs else 0.25
+        # Confianza según la cantidad real de voz analizada (5 s → máximo).
+        # Las métricas son proxies acústicos sin reconocimiento de voz, por eso
+        # el techo es 0.6. Antes se asignaba 0.25 fijo aunque no hubiera voz.
+        voiced = [v.voiced_ms for v in recent if v.voiced_ms > 0]
+        score.confidence = (min(statistics.mean(voiced) / 5000, 1.0) * 0.6) if voiced else 0.0
+        if not self._calibrated:
+            score.insights.append(
+                "Voz sin línea base personal (se necesitan 10 turnos con voz): "
+                "no se comparan tono, volumen ni ritmo")
 
         if m.get("tremor", 0) > 0.25:
             score.insights.append("Temblor vocal detectado (jitter elevado — ansiedad/fatiga, Goberman 2002)")
@@ -1161,28 +1232,43 @@ class VoiceProsodyAnalyzer:
         if n == 0:
             return {}
         pitches = [d.pitch_mean_hz   for d in data if d.pitch_mean_hz   > 0]
-        volumes = [d.volume_db       for d in data if d.volume_db       > 0]
+        volumes = [d.volume_db       for d in data if d.volume_db is not None]
         rates   = [d.speech_rate_wpm for d in data if d.speech_rate_wpm > 0]
 
-        avg_p = float(statistics.mean(pitches)) if pitches else self.baseline_pitch
-        avg_v = float(statistics.mean(volumes)) if volumes else self.baseline_volume
-        avg_r = float(statistics.mean(rates))   if rates   else self.baseline_rate
+        avg_p = float(statistics.mean(pitches)) if pitches else None
+        avg_v = float(statistics.mean(volumes)) if volumes else None
+        avg_r = float(statistics.mean(rates))   if rates   else None
 
-        # Fillers por minuto (más interpretable que por segmento)
+        # Fillers por minuto con la duración REAL de voz analizada
+        # (antes se asumían 2 s por segmento).
         total_fillers = sum(d.filler_words_count for d in data)
-        # Estimamos duración: n segmentos × duración media de segmento (asumimos 2 s)
-        duration_min  = n * 2 / 60
-        filler_pm     = total_fillers / max(duration_min, 0.1)
+        voiced_min    = sum(d.voiced_ms for d in data) / 60000
+        filler_pm     = total_fillers / voiced_min if voiced_min > 0 else 0.0
+
+        # Las comparaciones (elevación de tono, cambio de volumen/ritmo) solo
+        # tienen sentido contra la línea base PERSONAL: el centroide espectral
+        # y los dBFS dependen del micrófono, no son comparables con normas
+        # poblacionales de F0 o dB SPL. Sin calibración valen 0 (sin evidencia).
+        cal = self._calibrated
+        pitch_elev  = ((avg_p - self.baseline_pitch) / max(self.baseline_pitch, 1)
+                       if cal and avg_p is not None else 0.0)
+        # dBFS: diferencia en dB escalada (+3.6 dB ≈ +0.18)
+        vol_change  = ((avg_v - self.baseline_volume) / 20
+                       if cal and avg_v is not None else 0.0)
+        rate_change = ((avg_r - self.baseline_rate) / max(self.baseline_rate, 1)
+                       if cal and avg_r is not None else 0.0)
 
         return {
             "avg_pitch":   avg_p,
             "pitch_var":   float(statistics.pstdev(pitches)) if len(pitches) > 1 else 0,
-            "pitch_elev":  (avg_p - self.baseline_pitch)  / max(self.baseline_pitch,  1),
+            "pitch_elev":  pitch_elev,
             "avg_volume":  avg_v,
             "vol_var":     float(statistics.pstdev(volumes)) if len(volumes) > 1 else 0,
-            "vol_change":  (avg_v - self.baseline_volume) / max(self.baseline_volume, 1),
+            "vol_change":  vol_change,
             "avg_rate":    avg_r,
-            "rate_change": (avg_r - self.baseline_rate)   / max(self.baseline_rate,   1),
+            "rate_change": rate_change,
+            "voiced_ms":   float(sum(d.voiced_ms for d in data)),
+            "calibrated":  cal,
             "tremor":      float(statistics.mean([d.voice_tremor for d in data])),
             "energy":      float(statistics.mean([d.energy_level for d in data])),
             "filler_pm":   filler_pm,
@@ -1534,8 +1620,9 @@ class MultimodalCognitiveEngine:
                               user_message: str = "") -> CognitiveStateResult:
         self.rhythm_analyzer.add_event(event)
         self.decision_analyzer.add_from_behavioral(event, user_message)
-        rm = self._get_rhythm_metrics()
-        self.error_predictor.record_interaction(rm, event.error_occurred, event.event_type)
+        if event.outcome_known:
+            rm = self._get_rhythm_metrics()
+            self.error_predictor.record_interaction(rm, event.error_occurred, event.event_type)
         return self._run_inference()
 
     def add_decision_event(self, decision: DecisionEvent):
@@ -1564,11 +1651,13 @@ class MultimodalCognitiveEngine:
         )
         return self._run_inference()
 
-    def add_facial_data(self, facial: FacialData):
-        self.facial_analyzer.add_data(facial)
+    def add_facial_data(self, facial: FacialData) -> bool:
+        """True si la muestra se aceptó; False si se descartó por inválida."""
+        return self.facial_analyzer.add_data(facial)
 
-    def add_voice_data(self, voice: VoiceProsodyData):
-        self.voice_analyzer.add_data(voice)
+    def add_voice_data(self, voice: VoiceProsodyData) -> bool:
+        """True si la muestra se aceptó; False si la voz fue insuficiente."""
+        return self.voice_analyzer.add_data(voice)
 
     def add_multimodal_event(self,
                               behavioral: Optional[BehavioralEvent] = None,
@@ -1579,8 +1668,11 @@ class MultimodalCognitiveEngine:
         if behavioral:
             self.rhythm_analyzer.add_event(behavioral)
             self.decision_analyzer.add_from_behavioral(behavioral, user_message)
-            rm = self._get_rhythm_metrics()
-            self.error_predictor.record_interaction(rm, behavioral.error_occurred, behavioral.event_type)
+            # Solo un resultado académico real alimenta el predictor de errores;
+            # un mensaje sin calificar no es acierto ni error.
+            if behavioral.outcome_known:
+                rm = self._get_rhythm_metrics()
+                self.error_predictor.record_interaction(rm, behavioral.error_occurred, behavioral.event_type)
         if decision:
             self.decision_analyzer.add_decision(decision)
         if facial:
@@ -1640,10 +1732,10 @@ class MultimodalCognitiveEngine:
 
         total = sum(active_weights.values())
         if total < 1e-12:
-            # Sin datos suficientes: distribución uniforme sobre activos
-            n_active = sum(1 for ms in scores.values() if ms.is_active)
-            n_active = max(n_active, 1)
-            return {n: (1.0 / n_active if scores[n].is_active else 0.0) for n in scores}
+            # Sin modalidades con confianza > 0 ninguna contribuye. Antes se
+            # repartía peso uniforme entre modalidades activas con confianza
+            # nula, lo que convertía datos sin respaldo en evidencia.
+            return {n: 0.0 for n in scores}
 
         return {n: (w / total) for n, w in active_weights.items()} | \
                {n: 0.0 for n in scores if n not in active_weights}
@@ -1688,6 +1780,11 @@ class MultimodalCognitiveEngine:
 
     def _select_map_state(self, distribution: Dict[str, float]) -> Tuple[CognitiveStateEnum, float]:
         """Paso 5: estado MAP (máxima probabilidad a posteriori)"""
+        vals = list(distribution.values())
+        if vals and max(vals) - min(vals) < 1e-9:
+            # Distribución uniforme = sin evidencia: no se elige arbitrariamente
+            # el primer estado del diccionario (antes salía "fatigue").
+            return CognitiveStateEnum.NORMAL, distribution.get(CognitiveStateEnum.NORMAL.value, vals[0])
         best = max(distribution, key=distribution.get)
         return CognitiveStateEnum(best), distribution[best]
 
@@ -1708,10 +1805,28 @@ class MultimodalCognitiveEngine:
 
         # Atención y riesgo de error
         facial_ms = scores.get(ModalityType.FACIAL_MICROEXPRESSION.value)
-        attention = facial_ms.raw_metrics.get("avg_attn", 1.0) if (facial_ms and facial_ms.is_active) else 1.0
-        err_risk  = scores.get(ModalityType.ERROR_PREDICTION.value,
-                                ModalityScore(modality=ModalityType.ERROR_PREDICTION)
-                               ).raw_metrics.get("error_probability", self.error_predictor.prior)
+        # Sin observación facial válida la atención NO se asume plena (antes 1.0)
+        attention: Optional[float] = None
+        if facial_ms and facial_ms.is_active and facial_ms.confidence > 0:
+            attention = facial_ms.raw_metrics.get("avg_attn")
+        err_ms    = scores.get(ModalityType.ERROR_PREDICTION.value,
+                               ModalityScore(modality=ModalityType.ERROR_PREDICTION))
+        err_risk  = err_ms.raw_metrics.get("error_probability", self.error_predictor.prior)
+        err_available = bool(err_ms.is_active)
+
+        # Trazabilidad: qué contribuyó y qué quedó fuera (y por qué)
+        modality_weights = {n: round(w, 4) for n, w in weights.items() if w > 0}
+        excluded: Dict[str, str] = {}
+        for n, ms in scores.items():
+            if n in modality_weights:
+                continue
+            if not ms.is_active:
+                excluded[n] = "sin_datos"
+            elif ms.confidence <= 0:
+                excluded[n] = "confianza_nula"
+            else:
+                excluded[n] = "peso_nulo"
+        sufficient = len(modality_weights) >= 2
 
         # Emoción dominante: SOLO se reporta si hay un analizador facial con un
         # estado real detectado. No se inventan etiquetas "inferidas por voz":
@@ -1721,17 +1836,26 @@ class MultimodalCognitiveEngine:
             emotional_state = facial_ms.raw_metrics.get("dominant_emotion")
         # (voice por sí sola NO produce una etiqueta emocional honesta)
 
-        engagement = self._compute_engagement(smoothed, attention, err_risk)
+        # Sin atención medida, el factor de atención es neutro (1.0) para el
+        # cálculo interno, pero `attention_level` se reporta como None.
+        engagement = self._compute_engagement(
+            smoothed, attention if attention is not None else 1.0,
+            err_risk if err_available else 0.0)
         recs       = self._build_recommendations(state, smoothed, insights)
 
         # Confianza global = promedio de la confianza de las modalidades activas.
+        # Sin modalidades con confianza la confianza es 0 (antes se devolvía
+        # la probabilidad MAP, que no es una confianza).
         active_conf = [ms.confidence for ms in scores.values() if ms.is_active and ms.confidence > 0]
-        conf_value  = round(sum(active_conf) / len(active_conf), 3) if active_conf else round(prob, 3)
+        conf_value  = round(sum(active_conf) / len(active_conf), 3) if active_conf else 0.0
 
         # La decisión de adaptar dificultad se basa en la confianza global de
         # inferencia (convergencia entre canales), NO en la prob. MAP, que se
-        # diluye entre los 8 estados y rara vez supera 0.38.
+        # diluye entre los 8 estados y rara vez supera 0.38. Una sola fuente
+        # no basta para adaptar (evita conclusiones de una única señal).
         should_adapt, suggested = self._suggest_adaptation(state, conf_value)
+        if not sufficient:
+            should_adapt, suggested = False, None
 
         result = CognitiveStateResult(
             state              = state,
@@ -1743,12 +1867,16 @@ class MultimodalCognitiveEngine:
             active_modalities  = active,
             modality_probs     = {n: ms.state_probs for n, ms in scores.items() if ms.is_active},
             emotional_state    = emotional_state,
-            attention_level    = round(float(attention), 3),
+            attention_level    = round(float(attention), 3) if attention is not None else None,
             error_risk         = round(float(err_risk),  3),
             engagement_score   = round(engagement,       3),
             predicted_next_error = self.error_predictor.get_predicted_error_type(),
             insights           = insights[:6],   # top 6 insights
             confidence         = conf_value,
+            error_risk_available = err_available,
+            modality_weights   = modality_weights,
+            excluded_modalities = excluded,
+            sufficient_evidence = sufficient,
         )
         self.state_history.append(result)
         log.info("Estado inferido: %-12s P=%.2f  error_risk=%.0f%%  engagement=%.2f  [%s]",
@@ -1920,7 +2048,11 @@ class MultimodalCognitiveEngine:
         pred = self.error_predictor
 
         return {
-            "version": 1,
+            # v2: unidades reales de voz (dBFS / centroide espectral) y
+            # confianza facial por calidad de muestra. Las calibraciones de
+            # facial/voz de la v1 se calcularon con valores sustituidos por
+            # defaults y no se restauran (ver restore_state).
+            "version": 2,
             "rhythm": {
                 "baseline": dict(rhythm.baseline),
                 "baseline_from_data": rhythm._baseline_from_data,
@@ -1967,14 +2099,15 @@ class MultimodalCognitiveEngine:
             self.decision_analyzer.total_correct = int(decision.get("total_correct", 0))
             self.decision_analyzer.total_attempts = int(decision.get("total_attempts", 0))
 
-            facial = state.get("facial") or {}
+            legacy = int(state.get("version") or 1) < 2
+            facial = {} if legacy else (state.get("facial") or {})
             if facial.get("baseline_blink"):
                 self.facial_analyzer.baseline_blink = float(facial["baseline_blink"])
             if facial.get("baseline_attn"):
                 self.facial_analyzer.baseline_attn = float(facial["baseline_attn"])
             self.facial_analyzer._calibrated = bool(facial.get("calibrated", False))
 
-            voice = state.get("voice") or {}
+            voice = {} if legacy else (state.get("voice") or {})
             if voice.get("baseline_pitch"):
                 self.voice_analyzer.baseline_pitch = float(voice["baseline_pitch"])
             if voice.get("baseline_volume"):
@@ -1983,7 +2116,11 @@ class MultimodalCognitiveEngine:
                 self.voice_analyzer.baseline_rate = float(voice["baseline_rate"])
             self.voice_analyzer._calibrated = bool(voice.get("calibrated", False))
 
-            pred = state.get("error_prediction") or {}
+            # v1 registraba cada mensaje (calificado o no) como acierto/error
+            # (error = ≥5 correcciones): ese historial no es evidencia académica.
+            # Se descarta y el predictor se re-siembra con los veredictos reales
+            # persistidos (chat_answers, ver chat._seed_engine_from_answers).
+            pred = {} if legacy else (state.get("error_prediction") or {})
             if pred.get("prior") is not None:
                 self.error_predictor.prior = float(pred["prior"])
             # Reinyectar la ventana del historial del predictor (solo si está

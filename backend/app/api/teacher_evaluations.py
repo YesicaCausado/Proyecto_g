@@ -33,6 +33,7 @@ from app.models.classroom import Classroom, Enrollment
 from app.models.evaluation import EvaluationSubmission, TeacherEvaluation  # noqa: F401 (re-export)
 from app.models.user import User
 from app.services import evaluation_service as svc
+from app.services.competencies import classroom_competency
 
 router = APIRouter(prefix="/teacher", tags=["Teacher Evaluations"])
 
@@ -87,6 +88,8 @@ class EvaluationCreate(BaseModel):
     duration: int = Field(30, ge=5, le=180)   # minutos por intento
     attempts: int = Field(1, ge=1, le=5)
     questions: List[EvaluationQuestionIn] = Field(..., max_length=100)
+    # Competencia Saber 11 evaluada; vacía = la del grupo.
+    competency: Optional[Literal["matematicas", "lectora", "ingles", "ciudadanas", "cientifico"]] = None
 
     @field_validator("title")
     @classmethod
@@ -160,6 +163,7 @@ def _eval_out(ev: TeacherEvaluation, db: Optional[Session] = None) -> dict:
         "title":        ev.title,
         "classroom_id": ev.classroom_id,
         "group":        ev.group_name,
+        "competency":   ev.competency,
         "type":         ev.eval_type,
         "date":         ev.date,
         "deadline":     svc.iso(svc.deadline_utc(ev)),
@@ -197,6 +201,7 @@ def _apply_payload(ev: TeacherEvaluation, data: EvaluationCreate, classroom: Cla
     ev.duration = data.duration
     ev.attempts = data.attempts
     ev.questions = svc.ensure_question_ids(questions)
+    ev.competency = data.competency or classroom_competency(classroom)
 
 
 # ─── CRUD ────────────────────────────────────────────────────────────────────

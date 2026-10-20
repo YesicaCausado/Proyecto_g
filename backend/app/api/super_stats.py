@@ -31,6 +31,7 @@ from app.models.institution import AuditLog, Institution
 from app.models.learning import ChatMessage, LearningSession, QuizHistory
 from app.models.expert_bot import ExpertBot
 from app.models.messages import DirectMessage
+from app.services.competencies import COMP_NAMES, classroom_competency, valid_key
 
 router = APIRouter(prefix="/super", tags=["Super Profesor - Stats"])
 
@@ -380,6 +381,7 @@ async def get_super_alerts(
                 "classroom":   c.name,
                 "grade":       st.grade if st else None,
                 "subject":     c.subject,
+                "competency":  classroom_competency(c),
                 "averageScore": round(float(e.average_score or 0), 1),
                 "totalSessions": int(e.total_sessions or 0),
                 "totalTimeMinutes": int(e.total_time_minutes or 0),
@@ -640,6 +642,7 @@ async def get_super_classrooms(
             "teacher":     teacher.full_name or teacher.username if teacher else "?",
             "teacherId":   c.teacher_id,
             "subject":     c.subject,
+            "competency":  classroom_competency(c),
             "grade":       c.grade or "—",
             "students":    student_count,
             "code":        c.invite_code,
@@ -687,6 +690,7 @@ async def get_super_classroom_detail(
         "id":          c.id,
         "name":        c.name,
         "subject":     c.subject,
+        "competency":  classroom_competency(c),
         "grade":       c.grade or "—",
         "description": c.description or "",
         "code":        c.invite_code,
@@ -700,6 +704,8 @@ async def get_super_classroom_detail(
 class SuperClassroomUpdate(BaseModel):
     is_active: Optional[bool] = None
     teacher_id: Optional[int] = None
+    # Competencia Saber 11 del grupo; "general" = aula sin competencia única.
+    competency: Optional[str] = None
 
 
 @router.patch("/classrooms/{classroom_id}")
@@ -727,6 +733,13 @@ async def update_super_classroom(
     if data.is_active is not None and data.is_active != c.is_active:
         c.is_active = data.is_active
         notes.append("activado" if data.is_active else "desactivado")
+    if data.competency is not None:
+        new_comp = None if data.competency == "general" else valid_key(data.competency)
+        if data.competency != "general" and new_comp is None:
+            raise HTTPException(400, "Competencia inválida.")
+        if new_comp != c.competency:
+            c.competency = new_comp
+            notes.append(f"competencia: {COMP_NAMES.get(new_comp, 'general')}")
     if not notes:
         raise HTTPException(400, "No hay cambios para guardar.")
     db.add(AuditLog(
@@ -742,6 +755,7 @@ async def update_super_classroom(
         "status":    "activo" if c.is_active else "inactivo",
         "teacherId": c.teacher_id,
         "teacher":   (teacher.full_name or teacher.username) if teacher else "?",
+        "competency": classroom_competency(c),
     }
 
 

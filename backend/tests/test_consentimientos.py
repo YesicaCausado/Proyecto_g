@@ -40,7 +40,8 @@ from app.services import consent_service  # noqa: E402
 FACIAL = {"emotion": "focused", "valence": 0.3, "arousal": 0.5, "attention_score": 0.8,
           "blink_rate": 15, "brow_furrow": 0.1, "smile_intensity": 0.2, "gaze_direction": "center"}
 VOICE = {"pitch_mean_hz": 180, "volume_db": -20, "speech_rate_wpm": 130, "voice_tremor": 0.1,
-         "energy_level": 0.6, "filler_words_count": 1, "silence_duration_ms": 300}
+         "energy_level": 0.6, "filler_words_count": 1, "silence_duration_ms": 300,
+         "voiced_ms": 2500, "window_ms": 4000}
 
 
 class ConsentTests(unittest.TestCase):

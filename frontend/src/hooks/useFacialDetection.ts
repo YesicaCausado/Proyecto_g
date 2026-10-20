@@ -13,6 +13,15 @@
  *  - Atencion visual (rostro presente + mirada a pantalla + estabilidad)
  *
  * Assets servidos localmente en /mediapipe (wasm + modelo face_landmarker.task).
+ *
+ * Los valores son indicadores faciales OBSERVABLES (blendshapes, mirada,
+ * parpadeo); no son emociones diagnosticadas.
+ *
+ * Agregado por turno (auditoría): `beginTurn()` al llegar la respuesta del
+ * tutor y `getTurnSummary()` al enviar. Solo se promedian los fotogramas CON
+ * rostro; si no hubo rostro el estado es 'no_face' (la ausencia de rostro no
+ * se convierte en una expresión ni en atención baja). Los fotogramas nunca
+ * salen del navegador: solo se envían estos números.
  */
 import { useRef, useState, useCallback, useEffect } from 'react';
 
@@ -28,8 +37,30 @@ export interface FacialSnapshot {
   is_active: boolean;
 }
 
+export type FacialSensorState = 'active' | 'off' | 'denied' | 'unavailable' | 'no_face' | 'insufficient' | 'error';
+
+export interface FacialTurnData {
+  attention_score: number;
+  valence: number;
+  arousal: number;
+  blink_rate: number | null;
+  brow_furrow: number;
+  smile_intensity: number;
+  gaze_direction: string;
+  valid_frames: number;
+  total_frames: number;
+  window_ms: number;
+}
+
+export interface FacialTurnSummary {
+  status: FacialSensorState;
+  data: FacialTurnData | null;
+}
+
 export interface FacialDetectionControls {
   snapshot: FacialSnapshot;
+  beginTurn: () => void;
+  getTurnSummary: () => FacialTurnSummary;
   isStreaming: boolean;
   permissionDenied: boolean;
   errorMessage: string | null;
@@ -67,6 +98,21 @@ const IDX = {
 } as const;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** Fotogramas con rostro necesarios para un resumen válido del turno */
+export const MIN_VALID_FRAMES = 5;
+/** Fallos consecutivos del modelo antes de declarar error */
+const MAX_CONSECUTIVE_MODEL_ERRORS = 30;
+
+interface TurnAcc {
+  start: number; total: number; valid: number;
+  attn: number; valence: number; arousal: number; brow: number; smile: number;
+  blink: number; blinkN: number; gaze: Record<string, number>;
+}
+const newTurn = (): TurnAcc => ({
+  start: Date.now(), total: 0, valid: 0, attn: 0, valence: 0, arousal: 0,
+  brow: 0, smile: 0, blink: 0, blinkN: 0, gaze: {},
+});
 const dist = (a: Landmark, b: Landmark) => Math.hypot(a.x - b.x, a.y - b.y);
 
 export function useFacialDetection(): FacialDetectionControls {
@@ -82,6 +128,8 @@ export function useFacialDetection(): FacialDetectionControls {
   // estado para parpadeos (deteccion de transicion cerrado->abierto)
   const blinkLogRef = useRef<number[]>([]);
   const wasClosedRef = useRef<boolean | null>(null);
+  const turnRef = useRef<TurnAcc>(newTurn());
+  const modelErrorsRef = useRef(0);
 
   const [snapshot, setSnapshot] = useState<FacialSnapshot>(DEFAULT_SNAPSHOT);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -134,8 +182,21 @@ export function useFacialDetection(): FacialDetectionControls {
     let result: { faceLandmarks?: Landmark[][]; faceBlendshapes?: { categories: { categoryName: string; score: number }[] }[] };
     try {
       result = landmarker.detectForVideo(video, performance.now()) as never;
+      modelErrorsRef.current = 0;
     } catch (e) {
       console.warn('[FacialDetection] detectForVideo:', e);
+      modelErrorsRef.current += 1;
+      if (modelErrorsRef.current >= MAX_CONSECUTIVE_MODEL_ERRORS) {
+        // Fallo persistente del modelo: se detiene y se informa (no se
+        // siguen enviando datos como si hubiera medición).
+        runningRef.current = false;
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        setIsStreaming(false);
+        setSnapshot(DEFAULT_SNAPSHOT);
+        setErrorMessage('El modelo de detección facial dejó de responder. Activa la cámara de nuevo.');
+        return;
+      }
       animRef.current = requestAnimationFrame(analyzeFrame);
       return;
     }
@@ -219,6 +280,21 @@ export function useFacialDetection(): FacialDetectionControls {
       wasClosedRef.current = null;
     }
 
+    // Agregado del turno: solo los fotogramas con rostro aportan valores.
+    const t = turnRef.current;
+    t.total += 1;
+    if (face) {
+      t.valid += 1;
+      t.attn += attention_score;
+      t.valence += valence;
+      t.arousal += arousal;
+      t.brow += brow_furrow;
+      t.smile += smile_intensity;
+      // El parpadeo necesita >= 20 s de observación para una tasa por minuto
+      if (now - startTimeRef.current >= 20000) { t.blink += blink_rate; t.blinkN += 1; }
+      t.gaze[gaze_direction] = (t.gaze[gaze_direction] ?? 0) + 1;
+    }
+
     setSnapshot({
       attention_score,
       valence,
@@ -238,7 +314,44 @@ export function useFacialDetection(): FacialDetectionControls {
     }, 66);
   }, []);
 
+  const beginTurn = useCallback(() => {
+    turnRef.current = newTurn();
+  }, []);
+
+  const getTurnSummary = useCallback((): FacialTurnSummary => {
+    if (!isStreaming) {
+      const status: FacialSensorState = permissionDenied ? 'denied'
+        : !hardwareAvailable ? 'unavailable'
+        : errorMessage ? 'error' : 'off';
+      return { status, data: null };
+    }
+    const t = turnRef.current;
+    if (t.total === 0) return { status: 'insufficient', data: null };
+    if (t.valid === 0) return { status: 'no_face', data: null };
+    if (t.valid < MIN_VALID_FRAMES) return { status: 'insufficient', data: null };
+    const n = t.valid;
+    const r3 = (v: number) => Math.round(v * 1000) / 1000;
+    const gaze = Object.entries(t.gaze).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'screen';
+    return {
+      status: 'active',
+      data: {
+        attention_score: r3(t.attn / n),
+        valence: r3(t.valence / n),
+        arousal: r3(t.arousal / n),
+        blink_rate: t.blinkN > 0 ? Math.round((t.blink / t.blinkN) * 10) / 10 : null,
+        brow_furrow: r3(t.brow / n),
+        smile_intensity: r3(t.smile / n),
+        gaze_direction: gaze,
+        valid_frames: t.valid,
+        total_frames: t.total,
+        window_ms: Date.now() - t.start,
+      },
+    };
+  }, [isStreaming, permissionDenied, hardwareAvailable, errorMessage]);
+
   const startCamera = useCallback(async () => {
+    // Evita abrir una segunda captura o un segundo bucle de detección.
+    if (runningRef.current || streamRef.current) return;
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         setHardwareAvailable(false);
@@ -268,7 +381,10 @@ export function useFacialDetection(): FacialDetectionControls {
       wasClosedRef.current = null;
       prevLmRef.current = null;
       startTimeRef.current = Date.now();
+      turnRef.current = newTurn();
+      modelErrorsRef.current = 0;
       setPermissionDenied(false);
+      setErrorMessage(null);
 
       const video = videoRef.current!;
       video.srcObject = stream;
@@ -285,6 +401,12 @@ export function useFacialDetection(): FacialDetectionControls {
       animRef.current = requestAnimationFrame(analyzeFrame);
     } catch (err: unknown) {
       runningRef.current = false;
+      // Si el stream ya se abrió y falló después (p. ej. el modelo no cargó),
+      // la cámara se apaga: no queda capturando sin análisis.
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setIsStreaming(false);
       const e = err as { name?: string; message?: string };
       if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
         setPermissionDenied(true);
@@ -312,6 +434,7 @@ export function useFacialDetection(): FacialDetectionControls {
     prevLmRef.current = null;
     blinkLogRef.current = [];
     wasClosedRef.current = null;
+    turnRef.current = newTurn();
     if (videoRef.current) {
       videoRef.current.srcObject = null;
       videoRef.current.oncanplay = null;
@@ -335,5 +458,5 @@ export function useFacialDetection(): FacialDetectionControls {
     };
   }, []);
 
-  return { snapshot, isStreaming, permissionDenied, errorMessage, hardwareAvailable, videoRef, startCamera, stopCamera, resetError };
+  return { snapshot, beginTurn, getTurnSummary, isStreaming, permissionDenied, errorMessage, hardwareAvailable, videoRef, startCamera, stopCamera, resetError };
 }

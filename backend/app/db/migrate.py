@@ -64,6 +64,41 @@ def _add_missing_sqlite_columns(engine) -> None:
         logger.info(f"SQLite schema drift: {added} columnas añadidas, {errors} errores.")
 
 
+def ensure_reporting_schema(engine) -> None:
+    """
+    Migración 014 (reportes institucionales) aplicada al arrancar en PostgreSQL.
+
+    Las tablas nuevas (academic_periods, followup_cases, followup_notes) las
+    crea Base.metadata.create_all; aquí se agregan las columnas nuevas de
+    tablas existentes y los índices. Sin esto, cualquier consulta a aulas,
+    evaluaciones o quizzes fallaría con «column does not exist» si el
+    despliegue llega antes de ejecutar el SQL en Supabase. Idempotente.
+    """
+    if engine is None or engine.dialect.name != "postgresql":
+        return
+    from pathlib import Path
+    sql_file = Path(__file__).resolve().parents[2] / "migrations" / "014_reportes_institucionales.sql"
+    statements = [
+        "ALTER TABLE classrooms          ADD COLUMN IF NOT EXISTS competency VARCHAR(30)",
+        "ALTER TABLE teacher_evaluations ADD COLUMN IF NOT EXISTS competency VARCHAR(30)",
+        "ALTER TABLE quiz_history        ADD COLUMN IF NOT EXISTS competency VARCHAR(30)",
+        "CREATE INDEX IF NOT EXISTS idx_eval_submissions_eval_student ON evaluation_submissions (evaluation_id, student_id)",
+        "CREATE INDEX IF NOT EXISTS idx_eval_submissions_submitted    ON evaluation_submissions (submitted_at)",
+        "CREATE INDEX IF NOT EXISTS idx_teacher_evaluations_classroom ON teacher_evaluations (classroom_id)",
+    ]
+    if sql_file.exists():
+        # El backfill de competencias de las aulas vive en el archivo SQL.
+        backfill = sql_file.read_text(encoding="utf-8").split("-- Backfill", 1)
+        if len(backfill) == 2:
+            statements.append(backfill[1].split("\n", 2)[-1].strip().rstrip(";"))
+    for sql in statements:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(sql))
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Migración 014: {str(e)[:200]}")
+
+
 def run_migrations(engine) -> None:
     """
     Aplica todas las migraciones B2B pendientes.

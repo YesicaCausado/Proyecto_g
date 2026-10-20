@@ -78,7 +78,16 @@ from app.ai.cognitive.neuroconductual_engine import (
     FacialData,
     VoiceProsodyData,
 )
-from app.ai.cognitive.chat_grader import grade_user_answer, tutor_is_asking
+from app.ai.cognitive.chat_grader import GRADING_ERROR, grade_user_answer, tutor_is_asking
+from app.ai.cognitive import pattern_status as ps
+from app.ai.cognitive.pattern_status import engine_summary
+from app.schemas.neuro_signals import (
+    FacialSignal,
+    InteractionSignal,
+    VoiceSignal,
+    parse_signal,
+    signal_to_storage,
+)
 from app.ai.adaptive.adaptation_engine import PedagogicalAdaptationEngine
 from app.ai.adaptive.student_model import StudentModel
 from app.services.student_model_service import StudentModelService
@@ -94,18 +103,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["Chat Adaptativo"])
 
 
-def _enforce_media_consent(db: Session, user: User, payload) -> None:
+def _enforce_media_consent(db: Session, user: User, payload) -> Dict[str, bool]:
     """
     Descarta los indicadores de cámara/micrófono si el usuario no tiene el
     consentimiento vigente (la interfaz ya no activa los dispositivos sin él;
-    esto lo garantiza también en el servidor).
+    esto lo garantiza también en el servidor). Devuelve qué se descartó para
+    informar el estado del patrón.
     """
+    blocked = {"facial": False, "voice": False}
     if getattr(payload, "facial_data", None) and not has_consent(db, user.id, "camara_facial"):
         logger.info("facial_data ignorado: usuario %s sin consentimiento de cámara", user.id)
         payload.facial_data = None
+        blocked["facial"] = True
     if getattr(payload, "voice_data", None) and not has_consent(db, user.id, "microfono_voz"):
         logger.info("voice_data ignorado: usuario %s sin consentimiento de micrófono", user.id)
         payload.voice_data = None
+        blocked["voice"] = True
+    return blocked
 
 
 def _resolve_chat_bot(db: Session, user: User, bot_id: Optional[int],
@@ -159,6 +173,32 @@ _adaptation_engine = PedagogicalAdaptationEngine()
 _student_model_service = StudentModelService()
 
 
+def _quiz_scope(db: Session, user: User, request) -> tuple:
+    """
+    Competencia y aula de un quiz adaptativo al guardarlo.
+
+    La competencia es la que eligió el estudiante (o la deducida del tema). El
+    aula se asigna solo si el estudiante está inscrito en exactamente un grupo
+    activo de esa competencia; si hay varios o ninguno queda NULL y el reporte
+    lo asocia a los grupos de esa competencia (ver super_report_service).
+    """
+    from app.models.classroom import Classroom, Enrollment
+    from app.services.competencies import classify_competency, classroom_competency, valid_key
+
+    competency = valid_key(getattr(request, "competency", None)) or classify_competency(request.topic)
+    if competency is None:
+        return None, None
+    classrooms = (
+        db.query(Classroom)
+        .join(Enrollment, Enrollment.classroom_id == Classroom.id)
+        .filter(Enrollment.student_id == user.id, Enrollment.is_active == True,  # noqa: E712
+                Classroom.is_active == True)  # noqa: E712
+        .all()
+    )
+    matching = [c.id for c in classrooms if classroom_competency(c) == competency]
+    return competency, (matching[0] if len(matching) == 1 else None)
+
+
 def _infer_subject(topic: Optional[str]) -> str:
     """Infers the subject (Materia) from the topic string (frontend topics)."""
     if not topic:
@@ -177,36 +217,124 @@ def _infer_subject(topic: Optional[str]) -> str:
     return "General"
 
 
-def _available_signals(request) -> dict:
-    """Devuelve SOLO las señales neuro que llegan con valor real (no inventa)."""
+def _available_signals(pattern_status: dict) -> dict:
+    """Resumen para el prompt de SOLO los patrones con medición válida.
+
+    Se construye desde `pattern_status` (la misma fuente que ve la interfaz),
+    de modo que el LLM nunca recibe valores no medidos.
+    """
     out = {}
-
-    rt = request.response_time_ms
-    spd = request.typing_speed_cpm
-    if rt and rt > 0:
-        out["ritmo_interaccion"] = f"tiempo respuesta {rt}ms"
-    if spd and spd > 0:
-        out["ritmo_interaccion"] = (out.get("ritmo_interaccion") or "") + \
-            f", velocidad {spd} cpm"
-
-    if request.corrections and request.corrections > 0:
-        out["secuencia_decision"] = f"{request.corrections} correcciones"
-    if request.typing_bursts and request.typing_bursts >= 1:
-        out["secuencia_decision"] = (out.get("secuencia_decision") or "") + \
-            f", {request.typing_bursts} ráfagas"
-
-    facial = request.facial_data
-    if facial and any(v not in (None, 0, "") for v in facial.values()):
-        attn = facial.get("attention_score")
-        if attn:
-            out["facial"] = f"atención {attn}"
-    voice = request.voice_data
-    if voice and any(v not in (None, 0, "") for v in voice.values()):
-        if voice.get("speech_rate_wpm"):
-            out["voz"] = f"ritmo de habla {voice['speech_rate_wpm']} ppm"
-        elif voice.get("volume_db"):
-            out["voz"] = f"volumen {voice['volume_db']}dB"
+    kb = pattern_status.get("keyboard") or {}
+    if kb.get("status") == ps.AVAILABLE:
+        v = kb["values"]
+        parts = []
+        if v.get("response_time_ms"):
+            parts.append(f"tiempo respuesta {round(v['response_time_ms'])}ms")
+        if v.get("typing_speed_cpm"):
+            parts.append(f"velocidad {v['typing_speed_cpm']} cpm")
+        if parts:
+            out["ritmo_interaccion"] = ", ".join(parts)
+        dec = []
+        if v.get("deleted_chars"):
+            dec.append(f"{v['deleted_chars']} caracteres borrados")
+        if v.get("typing_bursts"):
+            dec.append(f"{v['typing_bursts']} ráfagas")
+        if dec:
+            out["secuencia_decision"] = ", ".join(dec)
+    fa = pattern_status.get("facial") or {}
+    if fa.get("status") == ps.AVAILABLE and fa["values"].get("attention_score") is not None:
+        out["facial"] = f"atención visual estimada {fa['values']['attention_score']}"
+    vo = pattern_status.get("voice") or {}
+    if vo.get("status") == ps.AVAILABLE:
+        v = vo["values"]
+        if v.get("speech_rate_wpm"):
+            out["voz"] = f"ritmo de habla estimado {v['speech_rate_wpm']} ppm"
+        elif v.get("pause_ratio") is not None:
+            out["voz"] = f"proporción de pausas {v['pause_ratio']}"
     return out
+
+
+def _is_duplicate_message(db: Session, user_id: int, client_message_id: str) -> bool:
+    """True si este `client_message_id` ya se registró para el usuario."""
+    try:
+        from app.models.learning import CognitiveEvent
+        rows = (
+            db.query(CognitiveEvent.event_data)
+            .filter(CognitiveEvent.user_id == user_id,
+                    CognitiveEvent.event_type == "response")
+            .order_by(CognitiveEvent.id.desc())
+            .limit(200)
+            .all()
+        )
+        return any((r[0] or {}).get("client_message_id") == client_message_id for r in rows)
+    except Exception as exc:
+        logger.warning("No se pudo comprobar duplicados: %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _refresh_eval_stats(stats: dict) -> dict:
+    """Recalcula tasa/conteo de respuestas calificadas sin añadir intentos."""
+    marked = [a["c"] for a in (stats.get("chat_answers") or []) if a.get("c") is not None]
+    n = len(marked)
+    stats["chat_error_rate"] = (sum(1 for c in marked if c == 0) / n) if n else None
+    stats["chat_eval_count"] = n
+    return stats
+
+
+def _build_pattern_status(*, request, analysis, facial_signal, facial_rejected,
+                          voice_signal, voice_rejected, interaction_signal,
+                          interaction_rejected, consent_blocked, facial_accepted,
+                          voice_accepted, verdict, grading_failed, was_question,
+                          session_stats, quiz_count, quiz_error_rate, last_quiz_at,
+                          now, duplicate=False) -> dict:
+    """Estado verificable de los cinco patrones para este turno."""
+    status = {
+        "facial": ps.facial_status(
+            signal=facial_signal, rejected=facial_rejected,
+            sensor_state=request.facial_status, consent_blocked=consent_blocked["facial"],
+            accepted_by_engine=facial_accepted, now=now),
+        "voice": ps.voice_status(
+            signal=voice_signal, rejected=voice_rejected,
+            sensor_state=request.voice_status, consent_blocked=consent_blocked["voice"],
+            accepted_by_engine=voice_accepted, input_mode=request.input_mode, now=now),
+        "keyboard": ps.keyboard_status(request=request, now=now),
+        "interaction": ps.interaction_status(
+            signal=interaction_signal, rejected=interaction_rejected, now=now),
+        "performance": ps.performance_status(
+            verdict=verdict, grading_failed=grading_failed, was_question=was_question,
+            session_stats=session_stats, quiz_count=quiz_count,
+            quiz_error_rate=quiz_error_rate, last_quiz_at=last_quiz_at,
+            analysis=analysis, now=now),
+    }
+    for name, entry in status.items():
+        ps._attach_engine(entry, name, analysis)
+        if duplicate and entry["status"] == ps.AVAILABLE:
+            entry["notes"] = ((entry.get("notes") or "") +
+                              " Mensaje reenviado: esta medición no se registró de nuevo.").strip()
+    return status
+
+
+def _failed_pattern_status() -> dict:
+    reason = "El análisis neuroconductual falló en este turno; no hay medición válida."
+    return {name: ps._entry(ps.ERROR, "Backend", reason)
+            for name in ("facial", "voice", "keyboard", "interaction", "performance")}
+
+
+_EMOTION_ALIASES = {
+    "worried": "fearful",
+    "stress": "fearful",
+    "relajado": "neutral",
+    "concentrado": "focused",
+    "atento": "focused",
+    "contento": "happy",
+    "inquieto": "surprised",
+    "aburrido": "bored",
+    "confundido": "confused",
+}
 
 
 def _persist_adaptive_state(
@@ -274,7 +402,8 @@ ai_manager = AIManager(
 
 # Caché en memoria de proceso del neural_state ya leído de la BD, para no
 # re-consultarlo en cada reconstruction. Se refresca en cada guardado.
-_load_neural_state_cache: Dict[int, dict] = {}
+# Clave (user_id, topic): cada competencia tiene su propia calibración.
+_load_neural_state_cache: Dict[tuple, dict] = {}
 
 # Caché de motor neuroconductual EN MEMORIA (por proceso).
 # ⚠️ En Vercel esto es solo una optimización de latencia dentro de la misma
@@ -284,7 +413,7 @@ _load_neural_state_cache: Dict[int, dict] = {}
 _user_engines: Dict[str, MultimodalCognitiveEngine] = {}
 
 
-def _get_user_engine(user_id: int) -> MultimodalCognitiveEngine:
+def _get_user_engine(user_id: int, topic: str = "") -> MultimodalCognitiveEngine:
     """Devuelve (o crea) el motor neuroconductual en caché de este proceso.
 
     Si el proceso es nuevo (cold start), el motor se crea vacío. Su
@@ -297,13 +426,16 @@ def _get_user_engine(user_id: int) -> MultimodalCognitiveEngine:
     prior del predictor) se restaura desde CognitiveSessionState.neural_state
     cuando se crea el motor por primera vez en un proceso.
     """
-    key = f"u{user_id}"
+    # Un motor por estudiante Y tema: antes era solo por estudiante y al
+    # cambiar de competencia se mezclaban historiales, baselines y prior de
+    # error de actividades distintas.
+    key = f"u{user_id}:{topic}"
     if key not in _user_engines:
         engine = MultimodalCognitiveEngine()
         _user_engines[key] = engine
         # Restaurar calibración persistida (no bloquea si no hay datos).
         try:
-            stored = _load_neural_state_cache.get(user_id)
+            stored = _load_neural_state_cache.get((user_id, topic))
             if stored:
                 engine.restore_state(stored)
         except Exception as exc:
@@ -347,7 +479,7 @@ def _save_neural_state(db: Session, user_id: int, topic: str, state: dict) -> No
         row.neural_state = state
         row.updated_at = datetime.utcnow()
         db.commit()
-        _load_neural_state_cache[user_id] = state
+        _load_neural_state_cache[(user_id, topic)] = state
     except Exception as exc:
         logger.debug("_save_neural_state falló (no bloquea): %s", exc)
         try:
@@ -366,7 +498,7 @@ def _default_stats_row() -> dict:
         "quiz_error_rate": 0.0,
         "weak_concepts": [],
         "chat_answers": [],
-        "chat_error_rate": 0.0,
+        "chat_error_rate": None,
         "chat_eval_count": 0,
     }
 
@@ -663,14 +795,13 @@ def _update_session_stats(stats: dict, response_time_ms: Optional[float], correc
         elif response_time_ms > avg_rt * 1.8:
             stats["slow_replies"] += 1
 
+    # Solo un veredicto real modifica la racha de errores. Borrar caracteres
+    # al escribir NO es un error académico (antes ≥5 correcciones sumaban un
+    # error y un mensaje sin calificar restaba uno).
     if correct is True:
         stats["error_streak"] = max(0, stats["error_streak"] - 1)
     elif correct is False:
         stats["error_streak"] += 1
-    elif corrections >= 5:
-        stats["error_streak"] += 1
-    else:
-        stats["error_streak"] = max(0, stats["error_streak"] - 1)
 
     return stats
 
@@ -685,7 +816,8 @@ def _record_chat_answer(stats: dict, correct: Optional[bool]) -> dict:
     stats["chat_answers"] = answers[-30:]
     marked = [a["c"] for a in stats["chat_answers"] if a.get("c") is not None]
     n = len(marked)
-    stats["chat_error_rate"] = (sum(1 for c in marked if c == 0) / n) if n else 0.0
+    # Sin respuestas calificadas no hay tasa (None), no 0 % de fallos.
+    stats["chat_error_rate"] = (sum(1 for c in marked if c == 0) / n) if n else None
     stats["chat_eval_count"] = n
     return stats
 
@@ -717,7 +849,10 @@ def _get_last_assistant_message(db: Session, request, session) -> str:
     Prioriza el historial que envía el frontend (más barato); si está vacío,
     cae a la base de datos.
     """
-    for msg in (request.history or []):
+    # El historial llega en orden cronológico: se recorre desde el final para
+    # calificar contra la ÚLTIMA pregunta del tutor (antes se tomaba la primera,
+    # normalmente la bienvenida, y la respuesta se evaluaba contra ella).
+    for msg in reversed(request.history or []):
         if msg.get("role") == "assistant" and str(msg.get("content") or "").strip():
             return str(msg.get("content"))
     try:
@@ -799,7 +934,7 @@ def _build_system_prompt(topic: str, cognitive_state: str = "normal",
         elif slow_r >= 2:
             trend_ctx = "📉 TENDENCIA: El estudiante tarda más de lo habitual — posible duda o cansancio acumulado."
         if err_streak >= 2:
-            trend_ctx += " ⚠️ Ha cometido muchas correcciones seguidas — señal de confusión o frustración."
+            trend_ctx += " ⚠️ Ha respondido incorrectamente varias veces seguidas — posible confusión o frustración."
 
     quiz_ctx = ""
     if quiz_err > 0.5:
@@ -954,8 +1089,17 @@ async def save_pattern_data(
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
 ):
-    """Guarda los datos de los 5 patrones por usuario y tema."""
+    """Guarda los datos de los 5 patrones por usuario y tema.
+
+    Las señales facial/voz se validan con los mismos esquemas que el chat; una
+    señal inválida responde 422 (este endpoint solo registra mediciones).
+    """
     _enforce_media_consent(db, current_user, payload)
+    facial, facial_err = parse_signal(FacialSignal, payload.facial_data)
+    voice, voice_err = parse_signal(VoiceSignal, payload.voice_data)
+    if facial_err or voice_err:
+        raise HTTPException(status_code=422,
+                            detail=f"Señal inválida: {facial_err or voice_err}")
     normalized_state = _normalize_cognitive_state(payload.cognitive_state)
     session = _get_or_create_learning_session(db, current_user.id, payload.topic)
     event_data = {
@@ -968,8 +1112,8 @@ async def save_pattern_data(
         "typing_bursts": payload.typing_bursts,
         "is_question": payload.is_question,
         "message_length": payload.message_length,
-        "facial_data": payload.facial_data,
-        "voice_data": payload.voice_data,
+        "facial_data": signal_to_storage(facial),
+        "voice_data": signal_to_storage(voice),
         "confidence": payload.confidence,
         "metadata": payload.metadata,
     }
@@ -981,7 +1125,7 @@ async def save_pattern_data(
         event_data=event_data,
         response_time_ms=payload.response_time_ms,
         typing_speed_cpm=payload.typing_speed_cpm,
-        error_rate=0.0,
+        error_rate=None,   # este endpoint no recibe resultados académicos
         correction_count=payload.corrections or 0,
         pause_duration_ms=payload.pause_before_ms,
         inferred_state=normalized_state,
@@ -1126,15 +1270,38 @@ async def send_message(
         topic = request.topic or "Preparación Saber 11"
         cognitive_state = _normalize_cognitive_state(request.cognitive_state)
         # Cámara/micrófono solo con consentimiento vigente.
-        _enforce_media_consent(db, current_user, request)
+        consent_blocked = _enforce_media_consent(db, current_user, request)
+        # Validación de las señales neurodigitales del turno. Una señal
+        # inválida se DESCARTA completa y su patrón se informa como `error`;
+        # no se corrige ni se completa con valores por defecto, y tampoco
+        # bloquea la tutoría.
+        facial_signal, facial_rejected = parse_signal(FacialSignal, request.facial_data)
+        voice_signal, voice_rejected = parse_signal(VoiceSignal, request.voice_data)
+        interaction_signal, interaction_rejected = parse_signal(
+            InteractionSignal, request.interaction_data)
+        for _name, _why in (("facial", facial_rejected), ("voz", voice_rejected),
+                            ("interacción", interaction_rejected)):
+            if _why:
+                logger.warning("Señal %s rechazada (usuario %s): %s", _name, current_user.id, _why)
         # NeuroBot (opcional): se valida antes de cualquier procesamiento.
         chat_bot = _resolve_chat_bot(db, current_user, request.bot_id, request.conversation_id)
         knowledge_meta = None
         active_modalities: List[str] = []
         error_risk = 0.0
 
-        # ═══ PATRÓN 5: datos reales de quizzes (historial en DB) ═══
-        quiz_error_rate = 0.0
+        # Idempotencia: un reenvío del mismo mensaje (reintento de red) recibe
+        # respuesta, pero no vuelve a registrar mediciones, intentos ni progreso.
+        duplicate = bool(request.client_message_id) and _is_duplicate_message(
+            db, current_user.id, request.client_message_id)
+        if duplicate:
+            logger.info("Mensaje duplicado %s (usuario %s): no se registran mediciones",
+                        request.client_message_id, current_user.id)
+
+        # ═══ RENDIMIENTO: datos reales de quizzes (historial en DB) ═══
+        # quiz_error_rate es None si no hay quizzes válidos (no 0 % de errores).
+        quiz_error_rate: Optional[float] = None
+        quiz_count = 0
+        last_quiz_at: Optional[datetime] = None
         weak_concepts: List[str] = []
         try:
             from app.models.learning import QuizHistory
@@ -1144,16 +1311,21 @@ async def send_message(
                 QuizHistory.completed_at.isnot(None),
             ).order_by(QuizHistory.completed_at.desc()).limit(5).all()
 
-            if prev_quizzes:
-                total_wrong = sum(q.wrong_answers or 0 for q in prev_quizzes)
-                total_q    = sum(q.questions_count or 1 for q in prev_quizzes)
-                quiz_error_rate = total_wrong / total_q if total_q else 0.0
-                for pq in prev_quizzes:
+            # Denominador = preguntas reales; un quiz sin preguntas no cuenta
+            # (antes `questions_count or 1` inventaba una pregunta).
+            valid_quizzes = [q for q in prev_quizzes if (q.questions_count or 0) > 0]
+            if valid_quizzes:
+                total_wrong = sum(q.wrong_answers or 0 for q in valid_quizzes)
+                total_q    = sum(q.questions_count for q in valid_quizzes)
+                quiz_error_rate = total_wrong / total_q
+                quiz_count = len(valid_quizzes)
+                last_quiz_at = valid_quizzes[0].completed_at
+                for pq in valid_quizzes:
                     if pq.weak_concepts:
                         weak_concepts.extend(pq.weak_concepts)
                 weak_concepts = list(set(weak_concepts))[:5]
         except Exception as eq:
-            logger.debug(f"Quiz history fetch failed (non-critical): {eq}")
+            logger.warning("No se pudo leer el historial de quizzes: %s", eq)
             try:
                 db.rollback()
             except Exception:
@@ -1163,11 +1335,11 @@ async def send_message(
         session_stats = _load_session_stats(db, current_user.id, topic)
 
         # ═══ Restaurar calibración del motor neuroconductual (cold start) ═══
-        if current_user.id not in _load_neural_state_cache:
+        if (current_user.id, topic) not in _load_neural_state_cache:
             try:
                 stored = _load_neural_state(db, current_user.id, topic)
                 if stored:
-                    _load_neural_state_cache[current_user.id] = stored
+                    _load_neural_state_cache[(current_user.id, topic)] = stored
             except Exception as exc:
                 logger.debug("No se pudo leer neural_state: %s", exc)
 
@@ -1175,108 +1347,112 @@ async def send_message(
         analysis = None
         verdict = None          # "correct" | "incorrect" | None
         grade_conf = 0.0
+        grading_failed = False
+        was_question = False
+        analysis_failed = False
+        facial_accepted: Optional[bool] = None
+        voice_accepted: Optional[bool] = None
+        now = datetime.utcnow()
         try:
-            now = datetime.now()
-
+            # Teclado: solo hay ritmo de escritura si el texto se escribió.
+            typed = request.input_mode in (None, "typed")
+            keyboard_measured = bool(
+                typed and request.typing_speed_cpm and request.typing_speed_cpm > 0
+                and (request.keystrokes is None or request.keystrokes > 0))
             has_behavioral_signal = (
                 (request.response_time_ms is not None and request.response_time_ms > 0)
-                or (request.typing_speed_cpm is not None and request.typing_speed_cpm > 0)
-                or (request.pause_before_ms is not None and request.pause_before_ms > 0)
-                or (request.corrections is not None and request.corrections > 0)
+                or keyboard_measured
             )
 
             behavioral_event = None
-            if has_behavioral_signal:
+            if has_behavioral_signal and not duplicate:
                 behavioral_event = BehavioralEvent(
                     timestamp=now,
                     event_type="response",
                     response_time_ms=float(request.response_time_ms or 0.0),
-                    typing_speed_cpm=float(request.typing_speed_cpm or 0.0),
-                    correction_made=(request.corrections or 0) > 0,
-                    error_occurred=(request.corrections or 0) >= 5,
-                    pause_duration_ms=float(request.pause_before_ms or 0.0),
+                    typing_speed_cpm=float(request.typing_speed_cpm) if keyboard_measured else 0.0,
+                    correction_made=keyboard_measured and (request.corrections or 0) > 0,
+                    # Un mensaje no es acierto ni error hasta que se califica:
+                    # el veredicto real entra por record_chat_answer.
+                    error_occurred=False,
+                    outcome_known=False,
+                    pause_duration_ms=float(request.pause_before_ms or 0.0) if keyboard_measured else 0.0,
                     content_length=len(request.message),
+                    metadata={"corrections": (request.corrections or 0) if keyboard_measured else 0},
                 )
 
-            # Patrón 3 — Microexpresión Facial
+            # Patrón facial (agregado del turno, solo con rostro detectado)
             facial_event = None
-            if request.facial_data and any(
-                value not in (None, 0, "", "neutral") for value in request.facial_data.values()
-            ):
+            if facial_signal is not None:
                 from app.ai.cognitive.neuroconductual_engine import EmotionEnum
-                raw_emotion = request.facial_data.get("emotion", "neutral")
-                _EMOTION_ALIASES = {
-                    "worried": "fearful",
-                    "stress": "fearful",
-                    "relajado": "neutral",
-                    "concentrado": "focused",
-                    "atento": "focused",
-                    "contento": "happy",
-                    "inquieto": "surprised",
-                    "aburrido": "bored",
-                    "confundido": "confused",
-                }
+                raw_emotion = facial_signal.emotion or "neutral"
                 mapped = _EMOTION_ALIASES.get(raw_emotion, raw_emotion)
                 try:
                     emotion_val = EmotionEnum(mapped)
                 except (ValueError, KeyError):
                     emotion_val = EmotionEnum.NEUTRAL
+                gaze = facial_signal.gaze_direction or "screen"
                 facial_event = FacialData(
                     timestamp=now,
                     emotion=emotion_val,
-                    valence=float(request.facial_data.get("valence", 0.0) or 0.0),
-                    arousal=float(request.facial_data.get("arousal", 0.0) or 0.0),
-                    attention_score=float(request.facial_data.get("attention_score", 0.5) or 0.5),
-                    blink_rate=float(request.facial_data.get("blink_rate", 17.0) or 17.0),
-                    emotion_confidence=float(request.facial_data.get("emotion_confidence", 0.5) or 0.5),
-                    brow_furrow=float(request.facial_data.get("brow_furrow", 0.0) or 0.0),
-                    smile_intensity=float(request.facial_data.get("smile_intensity", 0.0) or 0.0),
+                    valence=facial_signal.valence,
+                    arousal=facial_signal.arousal or 0.0,
+                    attention_score=facial_signal.attention_score,
+                    blink_rate=facial_signal.blink_rate or 0.0,
+                    brow_furrow=facial_signal.brow_furrow or 0.0,
+                    smile_intensity=facial_signal.smile_intensity or 0.0,
+                    gaze_direction="screen" if gaze in ("center", "centro") else gaze,
+                    valid_frame_ratio=facial_signal.valid_frame_ratio or 0.0,
                 )
 
-            # Patrón 4 — Prosodia de Voz
+            # Patrón de voz (agregado del turno con voz suficiente)
             voice_event = None
-            if request.voice_data and any(value not in (None, 0, "") for value in request.voice_data.values()):
+            if voice_signal is not None:
                 voice_event = VoiceProsodyData(
                     timestamp=now,
-                    pitch_mean_hz=float(request.voice_data.get("pitch_mean_hz", 0.0) or 0.0),
-                    volume_db=float(request.voice_data.get("volume_db", 0.0) or 0.0),
-                    speech_rate_wpm=float(request.voice_data.get("speech_rate_wpm", 0.0) or 0.0),
-                    filler_words_count=int(request.voice_data.get("filler_words_count", 0) or 0),
-                    voice_tremor=float(request.voice_data.get("voice_tremor", 0.0) or 0.0),
-                    energy_level=float(request.voice_data.get("energy_level", 0.5) or 0.5),
-                    pause_ratio=float(request.voice_data.get("pause_ratio", 0.0) or 0.0),
+                    pitch_mean_hz=voice_signal.pitch_mean_hz or 0.0,
+                    volume_db=voice_signal.volume_db,
+                    speech_rate_wpm=voice_signal.speech_rate_wpm or 0.0,
+                    filler_words_count=voice_signal.filler_words_count or 0,
+                    voice_tremor=voice_signal.voice_tremor or 0.0,
+                    energy_level=voice_signal.energy_level or 0.0,
+                    pause_ratio=voice_signal.pause_ratio or 0.0,
+                    silence_duration_ms=voice_signal.silence_duration_ms or 0.0,
+                    voiced_ms=voice_signal.voiced_ms,
                 )
 
             session = _get_or_create_learning_session(
                 db, current_user.id, topic, chat_bot.id if chat_bot is not None else None)
 
-            user_engine = _get_user_engine(current_user.id)
+            user_engine = _get_user_engine(current_user.id, topic)
             _seed_engine_from_answers(user_engine, session_stats)
 
-            # ── Patrón 5 EN TIEMPO REAL: calificar respuesta actual del estudiante
-            verdict = None
-            grade_conf = 0.0
+            # ── Rendimiento EN TIEMPO REAL: calificar la respuesta actual
             last_assistant = _get_last_assistant_message(db, request, session)
-            try:
-                if last_assistant and tutor_is_asking(last_assistant):
+            was_question = bool(last_assistant and tutor_is_asking(last_assistant))
+            if was_question and not duplicate:
+                try:
                     verdict, grade_conf = await grade_user_answer(
                         ai_manager, request.message, last_assistant, topic,
                     )
-            except Exception as ec:
-                logger.warning("⚠️ Calificación de respuesta del chat falló: %s", ec)
+                except Exception as ec:
+                    logger.warning("⚠️ Calificación de respuesta del chat falló: %s", ec)
+                    verdict = GRADING_ERROR
+                if verdict == GRADING_ERROR:
+                    grading_failed = True
+                    verdict = None
 
-            analysis = user_engine.add_multimodal_event(
-                behavioral=behavioral_event,
-                facial=facial_event,
-                voice=voice_event,
-                user_message=request.message,
-            )
-            if analysis:
-                cognitive_state = analysis.state.value
-                active_modalities = analysis.active_modalities
-                error_risk = analysis.error_risk
+            if not duplicate:
+                if facial_event is not None:
+                    facial_accepted = user_engine.add_facial_data(facial_event)
+                if voice_event is not None:
+                    voice_accepted = user_engine.add_voice_data(voice_event)
+                analysis = user_engine.add_multimodal_event(
+                    behavioral=behavioral_event,
+                    user_message=request.message,
+                )
 
-            # Reconstruir el prior de error con el veredicto REAL del chat.
+            # El veredicto REAL es la única evidencia de acierto/error.
             had_error_chat = (verdict == "incorrect")
             if verdict is not None:
                 try:
@@ -1285,116 +1461,136 @@ async def send_message(
                         request.message, had_error_chat, rm_metrics or None,
                         context="respuesta_chat",
                     )
-                    if analysis:
-                        cognitive_state = analysis.state.value
-                        active_modalities = analysis.active_modalities
-                        error_risk = analysis.error_risk
                 except Exception as er:
                     logger.warning("⚠️ No se pudo registrar veredicto del chat: %s", er)
 
-            grade_event = {
-                "chat_grade": verdict,
-                "chat_grade_confidence": grade_conf,
-                "had_error_chat": had_error_chat if verdict is not None else None,
-            }
-
-            _save_cognitive_event(
-                db,
-                user_id=current_user.id,
-                session_id=session.id,
-                event_type="response",
-                event_data={
-                    "topic": topic,
-                    "message": request.message,
-                    "response_time_ms": request.response_time_ms,
-                    "typing_speed_cpm": request.typing_speed_cpm,
-                    "pause_before_ms": request.pause_before_ms,
-                    "corrections": request.corrections,
-                    "typing_bursts": request.typing_bursts,
-                    "is_question": request.is_question,
-                    "message_length": len(request.message),
-                    "facial_data": request.facial_data,
-                    "voice_data": request.voice_data,
-                    "cognitive_state": cognitive_state,
-                    "quiz_error_rate": quiz_error_rate,
-                    "weak_concepts": weak_concepts,
-                    **grade_event,
-                },
-                response_time_ms=request.response_time_ms,
-                typing_speed_cpm=request.typing_speed_cpm,
-                error_rate=(1.0 if had_error_chat else 0.0) if verdict is not None else quiz_error_rate,
-                correction_count=request.corrections or 0,
-                pause_duration_ms=request.pause_before_ms,
-                inferred_state=cognitive_state,
-                confidence_score=analysis.probability if analysis else 0.0,
-            )
-            _save_chat_message(
-                db,
-                session.id,
-                role="user",
-                content=request.message,
-                response_time_ms=request.response_time_ms,
-                cognitive_state=cognitive_state,
-                difficulty="medium",
-                extra_data={
-                    "topic": topic,
-                    "response_time_ms": request.response_time_ms,
-                    "typing_speed_cpm": request.typing_speed_cpm,
-                    "corrections": request.corrections,
-                    "pause_before_ms": request.pause_before_ms,
-                    "facial_data": request.facial_data,
-                    "voice_data": request.voice_data,
-                },
-            )
-            _save_conversation_message(
-                db, request.conversation_id, current_user.id, "user",
-                request.message, {"topic": topic},
-            )
-
-            # Patrón 5 — Predicción de Error: inyectar tasa histórica de errores
-            if quiz_error_rate > 0.4:
-                error_risk = max(error_risk, quiz_error_rate * 0.8)
+            if analysis:
+                cognitive_state = analysis.state.value if analysis.sufficient_evidence else "normal"
+                active_modalities = list(analysis.modality_weights.keys())
+                error_risk = analysis.error_risk if analysis.error_risk_available else 0.0
 
             correct_flag = None if verdict is None else (verdict == "correct")
-            session_stats = _update_session_stats(
-                session_stats,
-                response_time_ms=request.response_time_ms,
-                corrections=request.corrections,
-                quiz_error_rate=quiz_error_rate,
-                weak_concepts=weak_concepts,
-                correct=correct_flag,
-            )
-            session_stats = _record_chat_answer(session_stats, correct_flag)
-            _save_session_stats(db, current_user.id, topic, session_stats)
-
-            # ── Persistir el estado compacto del motor (baselines + prior) ──
-            try:
-                state = user_engine.serialize_state()
-                _save_neural_state(db, current_user.id, topic, state)
-            except Exception as exc:
-                logger.debug("No se pudo persistir neural_state: %s", exc)
-
-            if analysis:
-                logger.info(
-                    f"🧠 Estado: {cognitive_state} | P={analysis.probability:.2f} "
-                    f"error_risk={error_risk:.0%}  engagement={analysis.engagement_score:.2f} "
-                    f"chat_grade={verdict or '—'} "
-                    f"[{', '.join(active_modalities)}]"
+            if not duplicate:
+                session_stats = _update_session_stats(
+                    session_stats,
+                    response_time_ms=request.response_time_ms,
+                    corrections=request.corrections,
+                    quiz_error_rate=quiz_error_rate or 0.0,
+                    weak_concepts=weak_concepts,
+                    correct=correct_flag,
                 )
+                session_stats = _record_chat_answer(session_stats, correct_flag)
+                _save_session_stats(db, current_user.id, topic, session_stats)
             else:
-                logger.info(
-                    f"🧠 Estado: {cognitive_state} (sin resultado de motor multimodal) "
-                    f"error_risk={error_risk:.0%}"
+                _refresh_eval_stats(session_stats)
+
+            # Estado de los cinco patrones (lo que se muestra y se persiste)
+            pattern_status = _build_pattern_status(
+                request=request, analysis=analysis,
+                facial_signal=facial_signal, facial_rejected=facial_rejected,
+                voice_signal=voice_signal, voice_rejected=voice_rejected,
+                interaction_signal=interaction_signal, interaction_rejected=interaction_rejected,
+                consent_blocked=consent_blocked,
+                facial_accepted=facial_accepted, voice_accepted=voice_accepted,
+                verdict=verdict, grading_failed=grading_failed, was_question=was_question,
+                session_stats=session_stats, quiz_count=quiz_count,
+                quiz_error_rate=quiz_error_rate, last_quiz_at=last_quiz_at, now=now,
+                duplicate=duplicate,
+            )
+
+            if not duplicate:
+                _save_cognitive_event(
+                    db,
+                    user_id=current_user.id,
+                    session_id=session.id,
+                    event_type="response",
+                    # Solo metadatos: el texto del mensaje ya vive en el
+                    # historial del chat y no se duplica aquí.
+                    event_data={
+                        "topic": topic,
+                        "client_message_id": request.client_message_id,
+                        "input_mode": request.input_mode,
+                        "response_time_ms": request.response_time_ms,
+                        "typing_speed_cpm": request.typing_speed_cpm if keyboard_measured else None,
+                        "pause_before_ms": request.pause_before_ms if keyboard_measured else None,
+                        "corrections": request.corrections if keyboard_measured else None,
+                        "typing_bursts": request.typing_bursts if keyboard_measured else None,
+                        "keystrokes": request.keystrokes,
+                        "is_question": request.is_question,
+                        "message_length": len(request.message),
+                        "facial_data": signal_to_storage(facial_signal) if facial_accepted else None,
+                        "voice_data": signal_to_storage(voice_signal) if voice_accepted else None,
+                        "interaction_data": signal_to_storage(interaction_signal),
+                        "cognitive_state": cognitive_state,
+                        "sufficient_evidence": bool(analysis and analysis.sufficient_evidence),
+                        "modality_weights": analysis.modality_weights if analysis else {},
+                        "quiz_error_rate": quiz_error_rate,
+                        "weak_concepts": weak_concepts,
+                        "chat_grade": verdict,
+                        "chat_grade_confidence": grade_conf,
+                        "chat_grading_failed": grading_failed,
+                        "had_error_chat": had_error_chat if verdict is not None else None,
+                        "pattern_status": {k: v["status"] for k, v in pattern_status.items()},
+                    },
+                    response_time_ms=request.response_time_ms,
+                    typing_speed_cpm=request.typing_speed_cpm if keyboard_measured else None,
+                    error_rate=(1.0 if had_error_chat else 0.0) if verdict is not None else None,
+                    correction_count=(request.corrections or 0) if keyboard_measured else 0,
+                    pause_duration_ms=request.pause_before_ms if keyboard_measured else None,
+                    inferred_state=cognitive_state,
+                    confidence_score=analysis.confidence if analysis else 0.0,
                 )
+                _save_chat_message(
+                    db,
+                    session.id,
+                    role="user",
+                    content=request.message,
+                    response_time_ms=request.response_time_ms,
+                    cognitive_state=cognitive_state,
+                    difficulty="medium",
+                    extra_data={
+                        "topic": topic,
+                        "client_message_id": request.client_message_id,
+                        "pattern_status": {k: v["status"] for k, v in pattern_status.items()},
+                    },
+                )
+                _save_conversation_message(
+                    db, request.conversation_id, current_user.id, "user",
+                    request.message, {"topic": topic},
+                )
+
+                # ── Persistir el estado compacto del motor (baselines + prior) ──
+                try:
+                    state = user_engine.serialize_state()
+                    _save_neural_state(db, current_user.id, topic, state)
+                except Exception as exc:
+                    logger.debug("No se pudo persistir neural_state: %s", exc)
+
+            logger.info(
+                "🧠 Patrones %s | estado=%s suficiente=%s pesos=%s chat_grade=%s duplicado=%s",
+                {k: v["status"] for k, v in pattern_status.items()},
+                cognitive_state, bool(analysis and analysis.sufficient_evidence),
+                analysis.modality_weights if analysis else {}, verdict or "—", duplicate,
+            )
 
         except Exception as e:
-            logger.warning(f"⚠️ Análisis neuroconductual falló: {e}")
+            # El fallo NO se convierte en una medición válida: se informa como
+            # error en el estado de los patrones y del motor.
+            analysis_failed = True
+            analysis = None
+            logger.exception("⚠️ Análisis neuroconductual falló: %s", e)
+            pattern_status = _failed_pattern_status()
 
+        # El historial de quizzes se usa como contexto del prompt, pero no se
+        # mezcla con el riesgo de error que se informa como salida del motor.
+        prompt_error_risk = error_risk
+        if quiz_error_rate is not None and quiz_error_rate > 0.4:
+            prompt_error_risk = max(prompt_error_risk, quiz_error_rate * 0.8)
         system_prompt = _build_system_prompt(
             topic,
             cognitive_state,
             session_stats=session_stats,
-            error_risk=error_risk,
+            error_risk=prompt_error_risk,
         )
 
         # ═══════════════════════════════════════════════════════════════
@@ -1409,7 +1605,7 @@ async def send_message(
             student_model: StudentModel = _student_model_service.load_model(
                 db, current_user.id, skill=skill_key)
 
-            neuro_digest = _available_signals(request)
+            neuro_digest = _available_signals(pattern_status)
 
             strategy = _adaptation_engine.decide(student_model, neuro_digest)
 
@@ -1417,10 +1613,11 @@ async def send_message(
                 system_prompt += build_adaptation_context(
                     student_model, strategy, neuro_digest)
 
-            _persist_adaptive_state(
-                db, current_user.id, subject_key, skill_key,
-                request.topic, verdict, strategy, request.message,
-            )
+            if not duplicate:
+                _persist_adaptive_state(
+                    db, current_user.id, subject_key, skill_key,
+                    request.topic, verdict, strategy, request.message,
+                )
             strategy_meta = {
                 "strategy": {
                     "difficulty": strategy.difficulty,
@@ -1496,7 +1693,7 @@ async def send_message(
         )
 
         neurobot_progress = None
-        if chat_bot is not None and result.get("provider") != "local":
+        if chat_bot is not None and result.get("provider") != "local" and not duplicate:
             neurobot_progress = _track_neurobot(db, current_user, chat_bot, interaction=True)
 
         response_difficulty = "medium"
@@ -1505,15 +1702,19 @@ async def send_message(
             response_difficulty = analysis.suggested_difficulty
             suggested_difficulty = analysis.suggested_difficulty
         corrected = bool(verdict == "correct")
-        chat_error_rate = session_stats.get("chat_error_rate", 0.0)
-        chat_eval_count = session_stats.get("chat_eval_count", 0)
+        chat_error_rate = session_stats.get("chat_error_rate")
+        chat_eval_count = session_stats.get("chat_eval_count", 0) or 0
+        sufficient = bool(analysis is not None and analysis.sufficient_evidence)
 
-        response_confidence = 0.0
-        if analysis is not None and analysis.probability:
-            response_confidence = round(float(analysis.probability), 3)
-        elif strategy_meta.get("strategy", {}).get("decision_confidence"):
-            response_confidence = round(
-                float(strategy_meta["strategy"]["decision_confidence"]), 3)
+        # Confianza = la del motor (convergencia de fuentes con datos válidos).
+        # Ya no se usa la probabilidad MAP ni la confianza de la estrategia
+        # pedagógica como sustituto: sin evidencia suficiente es 0.
+        response_confidence = round(float(analysis.confidence), 3) if sufficient else 0.0
+
+        kb = pattern_status.get("keyboard", {})
+        fa = pattern_status.get("facial", {})
+        vo = pattern_status.get("voice", {})
+        pe = pattern_status.get("performance", {})
 
         return ChatMessageResponse(
             message=clean_message,
@@ -1522,65 +1723,67 @@ async def send_message(
             cognitive_state=cognitive_state,
             confidence=response_confidence,
             suggestions=[],
-            should_pause=cognitive_state in ("fatigue", "overload", "frustration"),
+            should_pause=sufficient and cognitive_state in ("fatigue", "overload", "frustration"),
             metadata={
                 "provider": result["provider"],
                 "fallback_used": result.get("fallback_used", False),
                 "quiz_suggested": quiz_suggested,
+                "duplicate": duplicate,
                 "active_modalities": active_modalities,
-                "error_risk": round(error_risk, 3),
+                # None = el predictor aún no tiene ≥3 respuestas calificadas
+                "error_risk": round(error_risk, 3)
+                if analysis is not None and analysis.error_risk_available else None,
                 "suggested_difficulty": suggested_difficulty,
                 "should_adapt": bool(analysis.should_adapt) if analysis else False,
                 "adaptation": strategy_meta,
                 "knowledge": knowledge_meta,
                 "neurobot_progress": neurobot_progress,
+                # Fuente única de verdad para la interfaz: estado y valores de
+                # los cinco patrones (ver app/ai/cognitive/pattern_status.py).
+                "pattern_status": pattern_status,
+                "engine": engine_summary(analysis, failed=analysis_failed),
+                # Formato heredado (retrocompatible). `active` solo es True con
+                # una medición válida; los valores no medidos son None.
                 "patterns": {
                     "P1_interaction_rhythm": {
-                        "response_time_ms": request.response_time_ms,
-                        "typing_speed_cpm": request.typing_speed_cpm,
-                        "pause_before_ms": request.pause_before_ms,
-                        "active": (request.response_time_ms is not None and request.response_time_ms > 0)
-                                  or (request.typing_speed_cpm is not None and request.typing_speed_cpm > 0)
-                                  or (request.pause_before_ms is not None and request.pause_before_ms > 0),
+                        "response_time_ms": kb.get("values", {}).get("response_time_ms"),
+                        "typing_speed_cpm": kb.get("values", {}).get("typing_speed_cpm"),
+                        "pause_before_ms": kb.get("values", {}).get("pause_before_ms"),
+                        "active": kb.get("status") == "available",
                     },
                     "P2_decision_sequence": {
-                        "corrections": request.corrections,
-                        "typing_bursts": request.typing_bursts,
+                        "corrections": kb.get("values", {}).get("deleted_chars"),
+                        "typing_bursts": kb.get("values", {}).get("typing_bursts"),
                         "is_question": request.is_question,
-                        "active": (request.corrections is not None and request.corrections > 0)
-                                  or (request.typing_bursts is not None and request.typing_bursts > 0)
-                                  or bool(request.is_question),
+                        "active": kb.get("status") == "available",
                     },
                     "P3_facial": {
-                        "active": bool(request.facial_data),
-                        "data": request.facial_data or {},
+                        "active": fa.get("status") == "available",
+                        "data": fa.get("values", {}),
                     },
                     "P4_voice": {
-                        "active": bool(voice_event is not None),
-                        "data": request.voice_data or {},
+                        "active": vo.get("status") == "available",
+                        "data": vo.get("values", {}),
                     },
                     "P5_error_prediction": {
-                        "quiz_error_rate": round(quiz_error_rate, 3),
+                        "quiz_error_rate": round(quiz_error_rate, 3) if quiz_error_rate is not None else None,
                         "weak_concepts": weak_concepts,
-                        "active": (
-                            verdict is not None
-                            or quiz_error_rate > 0
-                            or (session_stats.get("chat_eval_count", 0) or 0) >= 3
-                        ),
+                        "active": pe.get("status") in ("available", "stale"),
                         "real_time": verdict is not None,
                         "last_answer_grade": verdict,
                         "last_answer_correct": corrected if verdict is not None else None,
-                        "chat_error_rate": round(chat_error_rate, 3),
+                        "chat_error_rate": round(chat_error_rate, 3) if chat_error_rate is not None else None,
                         "chat_eval_count": chat_eval_count,
-                        "error_risk_realtime": round(error_risk, 3),
+                        "error_risk_realtime": round(error_risk, 3)
+                        if analysis is not None and analysis.error_risk_available else None,
                     },
                 },
                 "session_stats": {
-                    "msg_count": session_stats.get("msg_count", 1),
+                    "msg_count": session_stats.get("msg_count", 0),
                     "error_streak": session_stats.get("error_streak", 0),
                     "fast_replies": session_stats.get("fast_replies", 0),
                     "slow_replies": session_stats.get("slow_replies", 0),
-                    "chat_error_rate": round(chat_error_rate, 3),
+                    "chat_error_rate": round(chat_error_rate, 3) if chat_error_rate is not None else None,
                     "chat_eval_count": chat_eval_count,
                 },
             },
@@ -1886,9 +2089,12 @@ async def generate_cognitive_quiz(
         quiz_data["questions"] = valid_questions
 
         try:
+            quiz_competency, quiz_classroom_id = _quiz_scope(db, current_user, request)
             quiz_history_entry = QuizHistory(
                 user_id=current_user.id,
                 session_id=None,
+                classroom_id=quiz_classroom_id,
+                competency=quiz_competency,
                 quiz_title=quiz_data["quiz_title"],
                 topic=request.topic,
                 difficulty=quiz_data.get("difficulty", difficulty),
