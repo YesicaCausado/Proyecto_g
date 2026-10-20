@@ -17,13 +17,15 @@ import string
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.api.auth import get_current_user, get_password_hash
 from app.models.user import User, UserRole
 from app.models.institution import Institution, AuditLog
+from app.models.classroom import Classroom, Enrollment
 from app.schemas.schemas import (
     InstitutionCreate, InstitutionResponse,
     TeacherCreate, TeacherUpdate, TeacherListItem,
@@ -265,6 +267,7 @@ async def list_teachers(
 @router.delete("/super/teachers/{user_id}")
 async def delete_teacher(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -283,6 +286,8 @@ async def delete_teacher(
     # Soft-delete: desactiva la cuenta en lugar de eliminarla.
     # Preserva el historial académico y evita IntegrityError por FKs en PostgreSQL.
     teacher.is_active = False
+    _log(db, "deactivate_teacher", current_user, institution.id,
+         teacher.id, "profesor", _client_ip(request), notes="Cuenta desactivada")
     db.commit()
     return {"ok": True, "message": "Profesor desactivado correctamente"}
 
@@ -290,6 +295,7 @@ async def delete_teacher(
 @router.post("/super/teachers/bulk-delete")
 async def bulk_delete_teachers(
     payload: dict,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -310,6 +316,8 @@ async def bulk_delete_teachers(
         if teacher.id == current_user.id:
             continue
         teacher.is_active = False
+        _log(db, "deactivate_teacher", current_user, institution.id,
+             teacher.id, "profesor", _client_ip(request), notes="Desactivación masiva")
         deleted += 1
 
     db.commit()
@@ -412,9 +420,9 @@ async def update_teacher(
     if "is_active" in updates:
         teacher.is_active = updates["is_active"]
 
-    db.commit()
     _log(db, "update_teacher", current_user, institution.id,
          teacher.id, "profesor", _client_ip(request), notes="Edición de docente")
+    db.commit()
     db.refresh(teacher)
     return TeacherListItem(
         id=teacher.id,
@@ -452,6 +460,7 @@ async def bulk_create_teachers(
     errors = []
     seen_docs: set = set()   # duplicados dentro del mismo batch
     seen_emails: set = set()
+    pending_emails: list = []
 
     for i, raw_row in enumerate(reader, start=2):
         row = _normalize_csv_row(raw_row)
@@ -508,16 +517,12 @@ async def bulk_create_teachers(
             temp_password=temp_pwd,
             role=teacher.role,
         ))
-        # Email se envía dentro del loop porque aquí tenemos row["correo"]
-        send_credentials_email(
-            to_email=row["correo"],
-            to_name=teacher.full_name or teacher.username,
-            username=teacher.username,
-            temp_password=temp_pwd,
-            role=teacher.role,
-        )
+        pending_emails.append((row["correo"], teacher.full_name or teacher.username,
+                               teacher.username, temp_pwd, teacher.role))
 
     db.commit()
+    # Los correos salen solo cuando las cuentas ya quedaron guardadas.
+    _send_pending_credentials(pending_emails)
     return BulkCreateResponse(
         credentials=created, errors=errors,
         total_processed=len(created) + len(errors),
@@ -599,6 +604,50 @@ async def preview_bulk_create_teachers(
 
 # ─── Super Profesor: Estudiantes ──────────────────────────────────────────────
 
+def _send_pending_credentials(pending: list) -> None:
+    for to_email, to_name, username, temp_pwd, role in pending:
+        send_credentials_email(to_email=to_email, to_name=to_name, username=username,
+                               temp_password=temp_pwd, role=role)
+
+
+def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set) -> Optional[str]:
+    """Validación de una fila del CSV de estudiantes. La usan la vista previa y
+    la creación, para que una fila «válida» en la vista previa no falle al crear."""
+    doc = row.get("numero_documento") or ""
+    email = (row.get("correo") or "").strip()
+    if not row.get("nombre_completo"):
+        return "Nombre vacío"
+    if not doc:
+        return "Documento vacío"
+    if email and not _validate_email(email):
+        return "Correo inválido"
+    if doc in seen_docs:
+        return "Documento duplicado en este archivo"
+    if email and email.lower() in seen_emails:
+        return "Correo duplicado en este archivo"
+    if db.query(User.id).filter(or_(User.document_number == doc, User.username == doc)).first():
+        return "Documento duplicado en el sistema"
+    if email and db.query(User.id).filter(User.email == email).first():
+        return "Correo duplicado en el sistema"
+    return None
+
+
+def _institution_classroom_for_enrollment(db: Session, institution: Institution, classroom_id: Optional[int]):
+    """Grupo activo de la institución donde se inscribe un lote (None = sin grupo)."""
+    if classroom_id is None:
+        return None
+    classroom = (
+        db.query(Classroom)
+        .join(User, User.id == Classroom.teacher_id)
+        .filter(Classroom.id == classroom_id, User.institution_id == institution.id)
+        .first()
+    )
+    if classroom is None:
+        raise HTTPException(404, "Grupo no encontrado en tu institución")
+    if not classroom.is_active:
+        raise HTTPException(400, "El grupo está desactivado")
+    return classroom
+
 @router.get("/super/students")
 async def list_students(
     db: Session = Depends(get_db),
@@ -630,6 +679,7 @@ async def list_students(
 @router.delete("/super/students/{user_id}")
 async def delete_student(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -648,6 +698,8 @@ async def delete_student(
     # Soft-delete: desactiva la cuenta en lugar de eliminarla.
     # Preserva el historial académico y evita IntegrityError por FKs en PostgreSQL.
     student.is_active = False
+    _log(db, "deactivate_student", current_user, institution.id,
+         student.id, "estudiante", _client_ip(request), notes="Cuenta desactivada")
     db.commit()
     return {"ok": True, "message": "Estudiante desactivado correctamente"}
 
@@ -655,6 +707,7 @@ async def delete_student(
 @router.post("/super/students/bulk-delete")
 async def bulk_delete_students(
     payload: dict,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -675,6 +728,8 @@ async def bulk_delete_students(
         if student.id == current_user.id:
             continue
         student.is_active = False
+        _log(db, "deactivate_student", current_user, institution.id,
+             student.id, "estudiante", _client_ip(request), notes="Desactivación masiva")
         deleted += 1
 
     db.commit()
@@ -795,9 +850,9 @@ async def update_student(
             student.guardian_authorized_by_id = None
             guardian_note = " · autorización del acudiente retirada"
 
-    db.commit()
     _log(db, "update_student", current_user, institution.id,
          student.id, "estudiante", _client_ip(request), notes="Edición de estudiante" + guardian_note)
+    db.commit()
     db.refresh(student)
     return StudentListItem(
         id=student.id,
@@ -817,11 +872,21 @@ async def update_student(
 async def bulk_create_students(
     request: Request,
     file: UploadFile = File(...),
+    # Grupo opcional donde quedan inscritos los estudiantes creados (antes el
+    # formulario enviaba un «profesor» que el backend ignoraba).
+    classroom_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
+    classroom = _institution_classroom_for_enrollment(db, institution, classroom_id)
+    free_seats = None
+    if classroom is not None:
+        taken = db.query(Enrollment).filter(
+            Enrollment.classroom_id == classroom.id, Enrollment.is_active == True,  # noqa: E712
+        ).count()
+        free_seats = max((classroom.max_students or 0) - taken, 0)
     content = await file.read()
     if not content.strip():
         raise HTTPException(400, "El archivo CSV está vacío")
@@ -835,6 +900,9 @@ async def bulk_create_students(
     created: List[CredentialItem] = []
     errors = []
     seen_docs_s: set = set()
+    seen_emails_s: set = set()
+    pending_emails: list = []
+    enrolled = 0
 
     for i, raw_row in enumerate(reader, start=2):
         row = _normalize_csv_row(raw_row)
@@ -845,16 +913,9 @@ async def bulk_create_students(
             errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
             continue
 
-        err = None
-        if not row.get("nombre_completo"):
-            err = "Nombre vacío"
-        elif not row.get("numero_documento"):
-            err = "Documento vacío"
-        elif row["numero_documento"] in seen_docs_s:
-            err = "Documento duplicado en este archivo"
-        elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
-            err = "Documento duplicado"
-
+        err = _student_row_error(db, row, seen_docs_s, seen_emails_s)
+        if err is None and free_seats is not None and enrolled >= free_seats:
+            err = f"El grupo «{classroom.name}» no tiene cupos disponibles"
         if err:
             errors.append({"row": i, "error": err, "data": row})
             continue
@@ -877,8 +938,15 @@ async def bulk_create_students(
         db.add(student)
         db.flush()
         seen_docs_s.add(row["numero_documento"])
+        if row.get("correo"):
+            seen_emails_s.add(row["correo"].lower())
+        notes = ""
+        if classroom is not None:
+            db.add(Enrollment(student_id=student.id, classroom_id=classroom.id))
+            enrolled += 1
+            notes = f"Inscrito en «{classroom.name}»"
         _log(db, "bulk_create_student", current_user, institution.id,
-             student.id, "estudiante", _client_ip(request))
+             student.id, "estudiante", _client_ip(request), notes=notes)
         created.append(CredentialItem(
             full_name=student.full_name,
             username=student.username,
@@ -887,18 +955,17 @@ async def bulk_create_students(
         ))
         # Solo enviar si tiene email real (no el @neurolearn.local generado)
         if row.get("correo"):
-            send_credentials_email(
-                to_email=row["correo"],
-                to_name=student.full_name or student.username,
-                username=student.username,
-                temp_password=temp_pwd,
-                role=student.role,
-            )
+            pending_emails.append((row["correo"], student.full_name or student.username,
+                                   student.username, temp_pwd, student.role))
     db.commit()
+    # Los correos salen solo cuando las cuentas ya quedaron guardadas.
+    _send_pending_credentials(pending_emails)
     return BulkCreateResponse(
         credentials=created, errors=errors,
         total_processed=len(created) + len(errors),
         total_created=len(created), total_errors=len(errors),
+        enrolled=enrolled,
+        classroom=classroom.name if classroom is not None else None,
     )
 
 
@@ -929,6 +996,8 @@ async def preview_bulk_create_students(
 
     errors = []
     valid_count = 0
+    seen_docs: set = set()
+    seen_emails: set = set()
 
     for i, raw_row in enumerate(reader, start=2):
         row = _normalize_csv_row(raw_row)
@@ -939,18 +1008,14 @@ async def preview_bulk_create_students(
             errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
             continue
 
-        err = None
-        if not row.get("nombre_completo"):
-            err = "Nombre vacío"
-        elif not row.get("numero_documento"):
-            err = "Documento vacío"
-        elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
-            err = "Documento duplicado en el sistema"
-
+        err = _student_row_error(db, row, seen_docs, seen_emails)
         if err:
             errors.append({"row": i, "error": err, "data": row})
         else:
             valid_count += 1
+            seen_docs.add(row["numero_documento"])
+            if row.get("correo"):
+                seen_emails.add(row["correo"].lower())
 
     return {
         "preview": True,

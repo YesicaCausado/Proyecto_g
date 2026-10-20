@@ -184,6 +184,8 @@ def keyboard_status(*, request, now: datetime) -> Dict[str, Any]:
     mode = getattr(request, "input_mode", None)
     if mode == "voice":
         return _entry(NOT_APPLICABLE, src, "La respuesta se dictó por voz; no hubo escritura que medir.")
+    if mode == "selection":
+        return _entry(NOT_APPLICABLE, src, "La respuesta se eligió con un botón; no hubo escritura que medir.")
     if mode == "pasted":
         return _entry(UNAVAILABLE, src, "El texto se pegó: no hay ritmo de escritura medible.")
     speed = request.typing_speed_cpm

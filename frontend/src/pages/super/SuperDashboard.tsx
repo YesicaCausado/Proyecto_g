@@ -3,7 +3,6 @@ import { institutionLabel } from '../../utils/institution';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { THEME } from '../../styles/theme';
-import api from '../../services/api';
 import DashboardGeneral from './components/DashboardGeneral';
 import { TeachersTab, StudentsTab } from './components/UsersTabs';
 import NeuroAlertasTab from './components/NeuroAlertasTab';
@@ -18,6 +17,7 @@ import SeguridadTab from './components/SeguridadTab';
 import ProfileSettings from '../../components/ProfileSettings';
 import NeuronWelcome from '../../components/NeuronWelcome';
 import NotificationBell from '../../components/NotificationBell';
+import InstitutionLogo from '../../components/InstitutionLogo';
 import {
   ShieldCheck, LogOut, Users, GraduationCap, LayoutDashboard,
   BrainCircuit, Settings, BookOpen, Bot, FileText,
@@ -85,14 +85,7 @@ export default function SuperDashboard() {
   const requestedTab = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(
     requestedTab && requestedTab in TAB_TITLES ? requestedTab : 'dashboard');
-  const [teachers, setTeachers] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    api.get('/super/teachers')
-      .then(r => setTeachers(r.data))
-      .catch(() => setTeachers([]));
-  }, []);
 
   // Enlaces de las notificaciones (/super?tab=...): abren la pestaña indicada
   // también cuando el panel ya está abierto.
@@ -132,7 +125,7 @@ export default function SuperDashboard() {
       {/* Logo + usuario */}
       <div className="px-3 pt-4 pb-3 border-b border-[#E9E9E7]">
         <div className="flex items-center gap-2 mb-4 px-1">
-          <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white flex-shrink-0" />
+          <InstitutionLogo className="w-6 h-6 rounded-md flex-shrink-0" />
           <div>
             <p className="text-[13px] font-bold text-[#191919] leading-tight">NeuroLearn</p>
             <p className="text-[10px] text-[#787774] truncate" title={institutionLabel(user)}>{institutionLabel(user)}</p>
@@ -192,7 +185,7 @@ export default function SuperDashboard() {
       {/* ══ MOBILE HEADER ════ */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-12 bg-[#F7F6F3] border-b border-[#E9E9E7] flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <img src={`${import.meta.env.BASE_URL}2d.png`} alt="NeuroLearn" className="w-6 h-6 object-contain rounded-md bg-white" />
+          <InstitutionLogo className="w-6 h-6 rounded-md" />
           <span className="text-[13px] font-bold text-[#191919]">NeuroLearn</span>
           <span className="text-[10px] text-[#787774] ml-1 hidden sm:inline">Institucional</span>
         </div>
@@ -244,7 +237,7 @@ export default function SuperDashboard() {
 
             {activeTab === 'dashboard'    && <DashboardGeneral onNavigate={setActiveTab} />}
             {activeTab === 'profesores'   && <TeachersTab />}
-            {activeTab === 'estudiantes'  && <StudentsTab teachers={teachers} />}
+            {activeTab === 'estudiantes'  && <StudentsTab />}
             {activeTab === 'grupos'       && <GruposTab />}
             {activeTab === 'neurobots'    && <NeuroBots />}
             {activeTab === 'alertas'      && <NeuroAlertasTab />}

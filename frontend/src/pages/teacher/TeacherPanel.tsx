@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import NotificationBell from '../../components/NotificationBell';
+import InstitutionLogo from '../../components/InstitutionLogo';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 
@@ -621,18 +622,7 @@ export default function TeacherPanel() {
             px-1
           "
         >
-          <img
-            src={`${import.meta.env.BASE_URL}2d.png`}
-            alt="NeuroLearn"
-            className="
-              w-6
-              h-6
-              object-contain
-              rounded-md
-              bg-white
-              flex-shrink-0
-            "
-          />
+          <InstitutionLogo className="w-6 h-6 rounded-md flex-shrink-0" />
 
           <div>
             <p
@@ -902,17 +892,7 @@ export default function TeacherPanel() {
             gap-2
           "
         >
-          <img
-            src={`${import.meta.env.BASE_URL}2d.png`}
-            alt="NeuroLearn"
-            className="
-              w-6
-              h-6
-              object-contain
-              rounded-md
-              bg-white
-            "
-          />
+          <InstitutionLogo className="w-6 h-6 rounded-md" />
 
           <span
             className="

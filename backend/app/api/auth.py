@@ -913,6 +913,19 @@ async def get_me(
     return current_user
 
 
+@router.get("/institution-branding")
+async def get_institution_branding(
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Nombre y logo de la institución del usuario (lo configura el Súper
+    Profesor) para mostrarlos en los paneles. El Administrador no tiene."""
+    institution = current_user.institution if current_user.institution_id else None
+    return {
+        "name": institution.name if institution else None,
+        "logo_url": (institution.logo_url or None) if institution else None,
+    }
+
+
 # ============================================================
 # ACTUALIZAR PERFIL
 # ============================================================

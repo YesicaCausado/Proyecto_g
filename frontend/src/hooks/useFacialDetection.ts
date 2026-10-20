@@ -85,7 +85,7 @@ const MODEL_PATH = `${import.meta.env.BASE_URL}mediapipe/face_landmarker.task`;
 
 type Landmark = { x: number; y: number; z?: number };
 type LandmarkerLike = {
-  detectForVideo(video: HTMLVideoElement, ts: number): any;
+  detectForVideo(video: HTMLVideoElement, ts: number): unknown;
   close(): void;
 };
 

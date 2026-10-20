@@ -66,6 +66,30 @@ activar o desactivar (`PATCH /bots/{id}` solo con `is_active`) y eliminar los
 NeuroBots creados por profesores de su institución; no puede editar su
 contenido ni actuar sobre bots de otra institución (403).
 
+**Grupos del Súper Profesor** (`api/super_stats.py`, `_require_super`): crea
+grupos (`POST /super/classrooms`) a cargo de un profesor **activo de su
+institución** (otro rol, otra institución o cuenta inactiva → 400), edita su
+nombre, materia, grado y descripción, los activa o desactiva y los transfiere
+(`PATCH /super/classrooms/{id}`; grupo de otra institución → 404). Al cargar un
+lote de estudiantes puede inscribirlos en un grupo activo de su institución
+(`POST /super/students/bulk` con `classroom_id`), respetando el cupo del grupo.
+
+**NeuroAlertas resueltas**: el Súper Profesor (`POST /super/stats/alerts/{id}/resolve`)
+y el Profesor (`POST /classrooms/{id}/alerts/{alerta}/resolve`, solo en sus
+aulas) marcan o reabren (`?resolved=false`) una alerta vigente. La marca es por
+usuario y se pierde sola si cambia la condición que originó la alerta.
+
+**Código de invitación**: el Profesor dueño del aula genera uno nuevo
+(`POST /classrooms/{id}/regenerate-code`); el anterior deja de servir.
+
+**IA generativa**: decisión del equipo (20 oct 2026): el Súper Profesor **no**
+usa IA generativa; `usar_ia_docente` queda para Profesor y Administrador. El
+requisito RF-13 debe ajustarse en el documento de requisitos.
+
+**Logo institucional**: solo el Súper Profesor lo cambia (`PATCH /super/institution`,
+PNG/JPG/WebP de hasta 2 MB; cadena vacía lo quita). Cualquier usuario de la
+institución lo lee con `GET /auth/institution-branding`; nunca ve el de otra.
+
 ## 4. Cómo añadir un permiso
 
 1. Agregar el valor en `Permission` y su conjunto de roles en `ROLE_PERMISSIONS`.

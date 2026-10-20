@@ -26,6 +26,7 @@ import {
 import { useState, useEffect, type ReactNode } from 'react';
 import { navItemStyle } from '../styles/sidebar';
 import { institutionLabel } from '../utils/institution';
+import InstitutionLogo from './InstitutionLogo';
 import NotificationBell from './NotificationBell';
 
 interface NavLinkItem {
@@ -216,11 +217,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Logo */}
       <div className="px-4 pt-5 pb-4 border-b border-[#E9E9E7]">
         <div className="flex items-center gap-2.5">
-          <img
-            src={`${import.meta.env.BASE_URL}2d.png`}
-            alt="NeuroLearn"
-            className="w-8 h-8 object-contain rounded-md bg-white flex-shrink-0"
-          />
+          <InstitutionLogo className="w-8 h-8 rounded-md flex-shrink-0" />
           <div className="min-w-0">
             <p className="text-[14px] font-semibold text-[#37352F] leading-tight tracking-tight">
               NeuroLearn
@@ -367,11 +364,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Mobile header ── */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-[#E9E9E7] z-40 h-12 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <img
-            src={`${import.meta.env.BASE_URL}2d.png`}
-            alt="NeuroLearn"
-            className="w-7 h-7 object-contain rounded-md bg-white"
-          />
+          <InstitutionLogo className="w-7 h-7 rounded-md" />
           <span
             className="text-[14px] font-semibold text-[#37352F] tracking-tight"
             style={{ fontFamily: "'Inter', sans-serif" }}

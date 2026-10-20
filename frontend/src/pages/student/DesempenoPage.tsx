@@ -13,8 +13,15 @@ import api from '../../services/api';
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Tab = 'desempeno' | 'progreso' | 'analisis' | 'logros';
 
+// score/prev_score/trend llegan null cuando no hay datos o no hay un período
+// comparable (el backend ya no devuelve 0 para "sin datos").
+interface SubjectApiRaw {
+  score: number | null; prev_score: number | null; trend: number | null;
+  quizzes: number; avg_time_min: number;
+  topics: string[]; strengths: string[]; weaknesses: string[];
+}
 interface SubjectApiData {
-  score: number; prev_score: number; trend: number;
+  score: number; hasData: boolean; prev_score: number | null; trend: number | null;
   quizzes: number; avg_time_min: number;
   topics: string[]; strengths: string[]; weaknesses: string[];
 }
@@ -25,12 +32,15 @@ interface Overview {
   avg_score: number; total_quizzes: number; total_xp: number;
   streak_days: number; total_hours: number; precision: number;
   weekly_avg: number; prev_weekly_avg: number; weekly_diff: number;
-  total_correct: number; best_day: string; best_time: string;
+  total_correct: number; best_day: string | null; best_time: string | null;
   consistency_pct: number; avg_session_min: number;
 }
-interface CognitiveData { fatigue: number; overload: number; doubt: number; mastery: number; }
+// null = sin análisis neuroconductuales con evidencia suficiente (no 0 %)
+interface CognitiveData { fatigue: number | null; overload: number | null; doubt: number | null; mastery: number | null; }
+interface CognitiveMeta { status: 'available' | 'unavailable'; reason: string | null; events_used: number; last_measured_at: string | null; label: string; }
 interface PerfData {
-  subjects: Record<string, SubjectApiData>;
+  subjects: Record<string, SubjectApiRaw>;
+  cognitive_meta?: CognitiveMeta;
   weekly: WeekPoint[]; calendar: number[];
   recent_history: HistEntry[]; overview: Overview;
   cognitive: CognitiveData; achievements: Achievement[];
@@ -49,11 +59,18 @@ const SUBJECT_STYLES = [
 type StyleEntry = typeof SUBJECT_STYLES[number];
 type Subject = StyleEntry & SubjectApiData;
 
-const EMPTY_SUBJ: SubjectApiData = { score: 0, prev_score: 0, trend: 0, quizzes: 0, avg_time_min: 0, topics: [], strengths: [], weaknesses: [] };
+const EMPTY_SUBJ: SubjectApiRaw = { score: null, prev_score: null, trend: null, quizzes: 0, avg_time_min: 0, topics: [], strengths: [], weaknesses: [] };
 
-function buildSubjects(data: Record<string, SubjectApiData>): Subject[] {
-  return SUBJECT_STYLES.map(s => ({ ...s, ...(data[s.key] ?? EMPTY_SUBJ) }));
+function buildSubjects(data: Record<string, SubjectApiRaw>): Subject[] {
+  return SUBJECT_STYLES.map(s => {
+    const d = data[s.key] ?? EMPTY_SUBJ;
+    // `score` numérico solo para la geometría de las gráficas; los textos usan
+    // `hasData` para mostrar «—» en lugar de un 0 % que no se midió.
+    return { ...s, ...d, score: d.score ?? 0, hasData: d.score != null };
+  });
 }
+
+const fmtScore = (s: { score: number; hasData: boolean }) => (s.hasData ? `${s.score}%` : '—');
 
 // ─── SVG: Radar Chart ─────────────────────────────────────────────────────────
 function RadarChart({ subjects }: { subjects: Subject[] }) {
@@ -119,7 +136,8 @@ function RingProgress({ value, color, size = 84 }: { value: number; color: strin
 }
 
 // ─── Trend badge ──────────────────────────────────────────────────────────────
-function Trend({ v }: { v: number }) {
+function Trend({ v }: { v: number | null }) {
+  if (v == null) return null;  // sin período anterior comparable
   if (v > 0) return <span className="text-[11px] font-bold text-[#0F7B6C] flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />+{v}%</span>;
   if (v < 0) return <span className="text-[11px] font-bold text-[#E03E3E] flex items-center gap-0.5"><TrendingDown className="w-3 h-3" />{v}%</span>;
   return <span className="text-[11px] font-bold text-[#9B9A97] flex items-center gap-0.5"><Minus className="w-3 h-3" />0%</span>;
@@ -142,7 +160,7 @@ function TabDesempeno({ subjects, history }: { subjects: Subject[]; history: His
             {subjects.map(s => (
               <div key={s.key} className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
-                <span className="text-xs text-[#787774] font-medium">{s.label}: <strong style={{ color: s.color }}>{s.score}%</strong></span>
+                <span className="text-xs text-[#787774] font-medium">{s.label}: <strong style={{ color: s.color }}>{fmtScore(s)}</strong></span>
               </div>
             ))}
           </div>
@@ -173,7 +191,7 @@ function TabDesempeno({ subjects, history }: { subjects: Subject[]; history: His
                           <span className="font-medium text-[#37352F] text-sm">{s.label}</span>
                           <div className="flex items-center gap-2">
                             <Trend v={s.trend} />
-                            <span className="font-semibold text-sm text-[#37352F]">{s.score}%</span>
+                            <span className="font-semibold text-sm text-[#37352F]">{fmtScore(s)}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 mt-1.5">
@@ -365,16 +383,17 @@ function TabProgreso({ subjects, weekly, calendar, overview }: {
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-medium text-[#37352F]">{s.label}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-[#9B9A97]">{s.prev_score}%</span>
+                      <span className="text-xs text-[#9B9A97]">{s.prev_score != null ? `${s.prev_score}%` : '—'}</span>
                       <ChevronRight className="w-3 h-3 text-[#E9E9E7]" />
-                      <span className="font-semibold text-sm text-[#37352F]">{s.score}%</span>
-                      <span className={`text-xs font-medium rounded-md px-2 py-0.5 ${s.trend > 0 ? 'bg-[#EEF7F4] text-[#0F7B6C]' : s.trend < 0 ? 'bg-[#FDEEEE] text-[#E03E3E]' : 'bg-[#F7F6F3] text-[#9B9A97]'}`}>
-                        {s.trend > 0 ? '+' : ''}{s.trend}%
+                      <span className="font-semibold text-sm text-[#37352F]">{fmtScore(s)}</span>
+                      <span title={s.trend == null ? 'Sin período anterior comparable' : undefined}
+                        className={`text-xs font-medium rounded-md px-2 py-0.5 ${s.trend != null && s.trend > 0 ? 'bg-[#EEF7F4] text-[#0F7B6C]' : s.trend != null && s.trend < 0 ? 'bg-[#FDEEEE] text-[#E03E3E]' : 'bg-[#F7F6F3] text-[#9B9A97]'}`}>
+                        {s.trend == null ? '—' : `${s.trend > 0 ? '+' : ''}${s.trend}%`}
                       </span>
                     </div>
                   </div>
                   <div className="relative w-full bg-[#E9E9E7] rounded-full h-1.5">
-                    <div className="absolute top-0 left-0 h-1.5 rounded-full bg-[#B0AFAC]" style={{ width: `${s.prev_score}%` }} />
+                    <div className="absolute top-0 left-0 h-1.5 rounded-full bg-[#B0AFAC]" style={{ width: `${s.prev_score ?? 0}%` }} />
                     <div className={`absolute top-0 left-0 h-1.5 rounded-full ${s.bar} transition-all duration-700`} style={{ width: `${s.score}%` }} />
                   </div>
                 </div>
@@ -410,10 +429,18 @@ function TabProgreso({ subjects, weekly, calendar, overview }: {
 }
 
 // ─── Tab 3: Análisis IA ───────────────────────────────────────────────────────
-function TabAnalisisIA({ avgScore, cognitive, subjects, overview, hourly }: {
-  avgScore: number; cognitive: CognitiveData;
+function TabAnalisisIA({ avgScore, cognitive: rawCognitive, cognitiveMeta, subjects, overview, hourly }: {
+  avgScore: number; cognitive: CognitiveData; cognitiveMeta?: CognitiveMeta;
   subjects: Subject[]; overview: Overview; hourly: number[];
 }) {
+  // Los indicadores solo se muestran si TODOS provienen de análisis con
+  // evidencia suficiente; si no, se informa que no hay medición.
+  const cognitiveAvailable = cognitiveMeta?.status === 'available'
+    && [rawCognitive.fatigue, rawCognitive.overload, rawCognitive.doubt, rawCognitive.mastery].every((v) => typeof v === 'number');
+  const cognitive = {
+    fatigue: rawCognitive.fatigue ?? 0, overload: rawCognitive.overload ?? 0,
+    doubt: rawCognitive.doubt ?? 0, mastery: rawCognitive.mastery ?? 0,
+  };
   const COGNITIVO = [
     {
       label: 'Fatiga Cognitiva', value: cognitive.fatigue, threshold: 70,
@@ -447,7 +474,7 @@ function TabAnalisisIA({ avgScore, cognitive, subjects, overview, hourly }: {
     },
   ];
 
-  const sortedByScore = [...subjects].sort((a, b) => a.score - b.score);
+  const sortedByScore = subjects.filter(s => s.hasData).sort((a, b) => a.score - b.score);
   const RECS = sortedByScore.slice(0, 4).map(s => ({
     priority: s.score < 60 ? 'Alta' : s.score < 75 ? 'Media' : 'Baja',
     labelCls: s.score < 60 ? 'bg-[#FDEEEE] text-[#E03E3E] border-[#F4BDBD]' : s.score < 75 ? 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]' : 'bg-[#EEF7F4] text-[#0F7B6C] border-[#B7DDD6]',
@@ -492,9 +519,19 @@ function TabAnalisisIA({ avgScore, cognitive, subjects, overview, hourly }: {
         <h3 className="font-semibold text-[#37352F] text-sm mb-1 flex items-center gap-2">
           <Brain className="w-4 h-4 text-[#9B9A97]" /> Indicadores Cognitivos
         </h3>
-        <p className="text-[#9B9A97] text-xs mb-5">Derivados de tus patrones de respuesta reales</p>
+        <p className="text-[#9B9A97] text-xs mb-5">
+          {cognitiveAvailable
+            ? `${cognitiveMeta?.label ?? 'Estimación experimental.'} Basado en ${cognitiveMeta?.events_used} análisis con evidencia suficiente.`
+            : 'No hay mediciones disponibles para estos indicadores.'}
+        </p>
+        {!cognitiveAvailable && (
+          <p className="text-xs text-[#787774] bg-[#F7F6F3] border border-[#E9E9E7] rounded-md p-4">
+            {cognitiveMeta?.reason ?? 'Aún no hay análisis neuroconductuales con datos suficientes.'} Se calculan
+            cuando el chat dispone de al menos dos fuentes con datos válidos (por ejemplo, escritura y respuestas calificadas).
+          </p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {COGNITIVO.map((c, i) => (
+          {cognitiveAvailable && COGNITIVO.map((c, i) => (
             <div key={i} className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-md p-5">
               <div className="flex items-start justify-between mb-3">
                 <div>
@@ -569,9 +606,9 @@ function TabAnalisisIA({ avgScore, cognitive, subjects, overview, hourly }: {
               <CheckCircle className="w-3.5 h-3.5" /> Temas con mejor desempeño
             </p>
             <div className="space-y-2">
-              {subjects.filter(s => s.score >= 70).length === 0
+              {subjects.filter(s => s.hasData && s.score >= 70).length === 0
                 ? <p className="text-xs text-[#9B9A97] italic">Aún sin temas consolidados — ¡sigue practicando!</p>
-                : subjects.filter(s => s.score >= 70).map(s => (
+                : subjects.filter(s => s.hasData && s.score >= 70).map(s => (
                   <div key={s.key} className="flex items-center gap-2.5 text-sm text-[#37352F] bg-[#EEF7F4] px-3 py-2 rounded-md">
                     <CheckCircle className="w-4 h-4 text-[#0F7B6C] flex-shrink-0" />
                     <span>{s.label}</span>
@@ -585,9 +622,9 @@ function TabAnalisisIA({ avgScore, cognitive, subjects, overview, hourly }: {
               <AlertTriangle className="w-3.5 h-3.5" /> Áreas de mejora prioritarias
             </p>
             <div className="space-y-2">
-              {subjects.filter(s => s.score < 70).length === 0
+              {subjects.filter(s => s.hasData && s.score < 70).length === 0
                 ? <p className="text-xs text-[#9B9A97] italic">¡Todas las materias superan el 70%!</p>
-                : subjects.filter(s => s.score < 70).map(s => (
+                : subjects.filter(s => s.hasData && s.score < 70).map(s => (
                   <div key={s.key} className="flex items-center gap-2.5 text-sm text-[#37352F] bg-[#FDEEEE] px-3 py-2 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-[#E03E3E] flex-shrink-0" />
                     <span>{s.label}</span>
@@ -861,7 +898,7 @@ export default function DesempenoPage() {
               <div className={`w-8 h-8 ${s.bg} border border-[#E9E9E7] rounded-md flex items-center justify-center mx-auto`}>
                 <Icon className={`w-3.5 h-3.5 ${s.text}`} />
               </div>
-              <p className="text-[10px] font-semibold mt-0.5 text-[#37352F]">{s.score}%</p>
+              <p className="text-[10px] font-semibold mt-0.5 text-[#37352F]">{fmtScore(s)}</p>
             </div>
           ); })}
         </div>
@@ -884,7 +921,7 @@ export default function DesempenoPage() {
       {/* ── Tab content ── */}
       {tab === 'desempeno' && <TabDesempeno subjects={subjects} history={perf.recent_history} />}
       {tab === 'progreso'  && <TabProgreso  subjects={subjects} weekly={perf.weekly} calendar={perf.calendar} overview={overview} />}
-      {tab === 'analisis'  && <TabAnalisisIA avgScore={avgScore} cognitive={perf.cognitive} subjects={subjects} overview={overview} hourly={perf.hourly_distribution} />}
+      {tab === 'analisis'  && <TabAnalisisIA avgScore={avgScore} cognitive={perf.cognitive} cognitiveMeta={perf.cognitive_meta} subjects={subjects} overview={overview} hourly={perf.hourly_distribution} />}
       {tab === 'logros'    && <TabLogros     overview={overview} achievements={perf.achievements} />}
     </div>
   );

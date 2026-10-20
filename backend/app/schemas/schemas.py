@@ -99,7 +99,7 @@ class ChatMessageRequest(BaseModel):
     client_message_id: Optional[str] = Field(default=None, max_length=64,
                                              pattern=r"^[A-Za-z0-9_\-]+$")
     # Cómo se produjo el texto: escrito, dictado por voz o pegado.
-    input_mode: Optional[Literal["typed", "voice", "pasted"]] = None
+    input_mode: Optional[Literal["typed", "voice", "pasted", "selection"]] = None
     # Patrón de teclado — ritmo de interacción (límites: valores humanos posibles)
     response_time_ms: Optional[float] = Field(default=None, ge=0, le=86_400_000)
     typing_speed_cpm: Optional[float] = Field(default=None, ge=0, le=5000)
@@ -419,6 +419,8 @@ class ClassroomResponse(BaseModel):
     is_active: bool
     max_students: int
     student_count: int = 0
+    # Promedio 0-10 de los estudiantes con sesiones; None si aún no hay datos.
+    avg: Optional[float] = None
     color: str = "#2E6FDB"
     created_at: datetime
 
@@ -558,6 +560,9 @@ class BulkCreateResponse(BaseModel):
     total_processed: int
     total_created: int
     total_errors: int
+    # Carga de estudiantes con grupo elegido: cuántos quedaron inscritos y dónde.
+    enrolled: int = 0
+    classroom: Optional[str] = None
 
 
 class AdminStats(BaseModel):

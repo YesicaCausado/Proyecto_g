@@ -942,8 +942,15 @@ export function TeachersTab() {
   );
 }
 
-export function StudentsTab({ teachers }: { teachers: any[] }) {
+export function StudentsTab() {
   const [activeTab, setActiveTab] = useState<'individual' | 'batch'>('individual');
+  // Grupos activos de la institución donde se puede inscribir un lote.
+  const [classroomOptions, setClassroomOptions] = useState<{ id: number; name: string; teacher: string; students: number }[]>([]);
+  useEffect(() => {
+    api.get('/super/classrooms')
+      .then(r => setClassroomOptions((r.data.classrooms ?? []).filter((c: any) => c.status === 'activo')))
+      .catch(() => setClassroomOptions([]));
+  }, []);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1068,7 +1075,7 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
   const [documentType, setDocumentType]     = useState('TI');
   const [grade, setGrade]                   = useState('');
   const [birthDate, setBirthDate]           = useState('');
-  const [assignedTeacherId, setAssignedTeacherId] = useState('');
+  const [assignedClassroomId, setAssignedClassroomId] = useState('');
 
 
   const handleCreateIndividual = async (e: React.FormEvent) => {
@@ -1159,8 +1166,8 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
 
     const formData = new FormData();
     formData.append('file', file);
-    if (assignedTeacherId) {
-      formData.append('default_teacher_id', assignedTeacherId);
+    if (assignedClassroomId) {
+      formData.append('classroom_id', assignedClassroomId);
     }
 
     try {
@@ -1168,7 +1175,8 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const d = response.data;
-      setMessage(`Se han creado ${d.total_created || 0} estudiante(s). ${d.total_errors || 0} registro(s) con errores fueron omitidos.`);
+      const enrolledText = d.classroom ? ` ${d.enrolled} inscrito(s) en «${d.classroom}».` : '';
+      setMessage(`Se han creado ${d.total_created || 0} estudiante(s).${enrolledText} ${d.total_errors || 0} registro(s) con errores fueron omitidos.`);
       setNewCredentials(d.credentials || []);
       setPreviewResult(null);
       setPreviewPendingFile(null);
@@ -1190,7 +1198,7 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
             <GraduationCap className="w-6 h-6" /> Gestión de Estudiantes
           </h2>
           <p className="text-sm text-[#787774] mt-1">
-            Genera credenciales temporales para estudiantes y asígnalos a profesores en sistema B2B.
+            Genera credenciales temporales para estudiantes e inscríbelos en los grupos de tu institución.
           </p>
         </div>
         <div className="text-sm font-medium bg-[#F7F6F3] p-2 px-4 rounded border border-[#E9E9E7] shadow-sm">
@@ -1389,18 +1397,21 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
 
                  <div>
                    <label className="block text-sm font-medium text-[#787774] mb-1">
-                     Asignar todo el lote a un Profesor (Opcional)
+                     Inscribir todo el lote en un grupo (opcional)
                    </label>
                    <select
-                     value={assignedTeacherId}
-                     onChange={(e) => setAssignedTeacherId(e.target.value)}
+                     value={assignedClassroomId}
+                     onChange={(e) => setAssignedClassroomId(e.target.value)}
                      className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
                    >
-                     <option value="">-- Sin asignar --</option>
-                     {(teachers || []).map(t => (
-                       <option key={t.id} value={t.id}>{t.full_name}</option>
+                     <option value="">-- Sin inscribir en un grupo --</option>
+                     {classroomOptions.map(c => (
+                       <option key={c.id} value={c.id}>{c.name} · {c.teacher} ({c.students} inscritos)</option>
                      ))}
                    </select>
+                   <p className="text-[11px] text-[#9B9A97] mt-1">
+                     El profesor del grupo verá a estos estudiantes en sus grupos y reportes.
+                   </p>
                  </div>
 
                  <div className="flex justify-end gap-2 pt-1">
@@ -1444,18 +1455,21 @@ export function StudentsTab({ teachers }: { teachers: any[] }) {
 
                  <div>
                    <label className="block text-sm font-medium text-[#787774] mb-1">
-                     Asignar todo el lote a un Profesor (Opcional)
+                     Inscribir todo el lote en un grupo (opcional)
                    </label>
                    <select
-                     value={assignedTeacherId}
-                     onChange={(e) => setAssignedTeacherId(e.target.value)}
+                     value={assignedClassroomId}
+                     onChange={(e) => setAssignedClassroomId(e.target.value)}
                      className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
                    >
-                     <option value="">-- Sin asignar --</option>
-                     {(teachers || []).map(t => (
-                       <option key={t.id} value={t.id}>{t.full_name}</option>
+                     <option value="">-- Sin inscribir en un grupo --</option>
+                     {classroomOptions.map(c => (
+                       <option key={c.id} value={c.id}>{c.name} · {c.teacher} ({c.students} inscritos)</option>
                      ))}
                    </select>
+                   <p className="text-[11px] text-[#9B9A97] mt-1">
+                     El profesor del grupo verá a estos estudiantes en sus grupos y reportes.
+                   </p>
                  </div>
 
                  <div className="pt-2 flex justify-end">

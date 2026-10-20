@@ -36,7 +36,7 @@ const SKILL_ICONS: Record<string, React.ReactNode> = {
 };
 
 interface DashboardStats {
-  progress_percentage: number;
+  progress_percentage: number | null;   // null = aún no hay quizzes completados
   total_exercises: number;
   total_classes: number;
   active_skills: number;
@@ -91,6 +91,9 @@ export default function StudentDashboard() {
     skill_scores: {},
   });
   const [cognitive, setCognitive] = useState<CognitiveData>({ fatigue: 0, overload: 0, doubt: 0, mastery: 0 });
+  // Solo true si el backend informa indicadores calculados con evidencia
+  // suficiente; si no, se muestra el estado vacío (nunca ceros como dato).
+  const [cognitiveAvailable, setCognitiveAvailable] = useState(false);
   const [subjects, setSubjects] = useState<Record<string, SubjectData>>({});
   const [, setLoading] = useState(true);
 
@@ -122,7 +125,7 @@ export default function StudentDashboard() {
 
         if (dashData) {
           setStats({
-            progress_percentage: dashData.progress_percentage ?? 0,
+            progress_percentage: dashData.progress_percentage ?? null,
             total_exercises:     dashData.total_exercises     ?? 0,
             total_classes:       dashData.total_classes       ?? 0,
             active_skills:       dashData.active_skills       ?? 0,
@@ -132,7 +135,11 @@ export default function StudentDashboard() {
           });
         }
 
-        if (perfData?.cognitive) setCognitive(perfData.cognitive);
+        const cog = perfData?.cognitive;
+        const cogOk = perfData?.cognitive_meta?.status === 'available' && cog
+          && ['fatigue', 'overload', 'doubt', 'mastery'].every((k) => typeof cog[k] === 'number');
+        if (cogOk) setCognitive(cog);
+        setCognitiveAvailable(Boolean(cogOk));
         if (perfData?.subjects)  setSubjects(perfData.subjects);
 
       } catch {
@@ -191,16 +198,18 @@ export default function StudentDashboard() {
                                     strokeWidth="12" 
                                     fill="none" 
                                     strokeDasharray="251.2" 
-                                    strokeDashoffset={251.2 - (251.2 * stats.progress_percentage) / 100}
+                                    strokeDashoffset={251.2 - (251.2 * (stats.progress_percentage ?? 0)) / 100}
                                     strokeLinecap="round" 
                                 />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-xl font-semibold text-[#37352F] leading-none">{stats.progress_percentage}%</span>
+                                <span className="text-xl font-semibold text-[#37352F] leading-none">{stats.progress_percentage != null ? `${stats.progress_percentage}%` : '—'}</span>
                             </div>
                         </div>
                         <div>
-                            <p className="text-[#787774] text-sm mb-3">Estás a <strong className="text-[#37352F]">{100 - stats.progress_percentage}%</strong> de tu meta.</p>
+                            <p className="text-[#787774] text-sm mb-3">{stats.progress_percentage != null
+                              ? <>Estás a <strong className="text-[#37352F]">{100 - stats.progress_percentage}%</strong> de tu meta.</>
+                              : 'Aún no hay quizzes completados para calcular tu progreso.'}</p>
                             <Link to="/performance" className="text-sm font-medium text-[#37352F] hover:underline flex items-center gap-1">
                                 Ver analíticas <ArrowRight className="w-3.5 h-3.5" />
                             </Link>
@@ -424,8 +433,8 @@ export default function StudentDashboard() {
                 <Link to="/performance" className="ml-auto text-[10px] text-[#787774] hover:text-[#37352F]">Ver todo →</Link>
               </div>
 
-              {Object.values(cognitive).every((v) => v === 0) ? (
-                <p className="text-xs text-[#9B9A97] text-center py-3">Completa tu primer quiz o usa la IA para activar los NeuroInsights.</p>
+              {!cognitiveAvailable ? (
+                <p className="text-xs text-[#9B9A97] text-center py-3">No hay mediciones disponibles. Los NeuroInsights se calculan cuando el chat reúne al menos dos fuentes con datos válidos.</p>
               ) : (
                 <div className="space-y-3">
                   {[

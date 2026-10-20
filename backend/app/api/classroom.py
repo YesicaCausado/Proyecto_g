@@ -20,6 +20,7 @@ from app.core.permissions import Permission
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment, ClassroomBot
 from app.services.competencies import classroom_competency, from_subject, valid_key
+from app.services import neuroalert_service
 from app.models.expert_bot import ExpertBot
 
 
@@ -113,6 +114,7 @@ def can_manage_classroom(
 def classroom_response(
     classroom: Classroom,
     student_count: int = 0,
+    avg: Optional[float] = None,
 ) -> ClassroomResponse:
     """
     Construye una respuesta ClassroomResponse
@@ -136,6 +138,7 @@ def classroom_response(
             "#2E6FDB",
         ) or "#2E6FDB",
         student_count=student_count,
+        avg=avg,
         created_at=classroom.created_at,
     )
 
@@ -261,9 +264,11 @@ async def list_my_classrooms(
             Enrollment.classroom_id,
             func.count(Enrollment.id).label("cnt"),
         )
+        .join(User, User.id == Enrollment.student_id)
         .filter(
             Enrollment.classroom_id.in_(classroom_ids),
             Enrollment.is_active == True,
+            User.is_active == True,
         )
         .group_by(
             Enrollment.classroom_id
@@ -280,6 +285,28 @@ async def list_my_classrooms(
     # Construir respuesta
     # --------------------------------------------------------
 
+    # Promedio 0-10 de los estudiantes con sesiones; None = sin datos.
+    avg_rows = (
+        db.query(
+            Enrollment.classroom_id,
+            func.avg(Enrollment.average_score),
+        )
+        .join(User, User.id == Enrollment.student_id)
+        .filter(
+            User.is_active == True,
+            Enrollment.classroom_id.in_(classroom_ids),
+            Enrollment.is_active == True,
+            Enrollment.total_sessions > 0,
+        )
+        .group_by(Enrollment.classroom_id)
+        .all()
+    )
+    avg_map = {
+        classroom_id: round(float(value) / 10, 1)
+        for classroom_id, value in avg_rows
+        if value is not None
+    }
+
     result = [
         classroom_response(
             classroom,
@@ -287,6 +314,7 @@ async def list_my_classrooms(
                 classroom.id,
                 0,
             ),
+            avg_map.get(classroom.id),
         )
         for classroom in classrooms
     ]
@@ -1796,155 +1824,132 @@ async def get_classroom_alerts(
     students_by_id = (
         {
             user.id: user
-            for user in (
-                db.query(User)
-                .filter(
-                    User.id.in_(student_ids)
-                )
-                .all()
-            )
+            for user in db.query(User).filter(
+                User.id.in_(student_ids),
+                User.is_active == True,  # noqa: E712
+            ).all()
         }
         if student_ids
         else {}
     )
 
-    alerts = []
-
-    for enrollment in enrollments:
-
-        student = students_by_id.get(
-            enrollment.student_id
-        )
-
-        if not student:
-            continue
-
-        name = (
-            student.full_name
-            or student.username
-        )
-
-        # ----------------------------------------------------
-        # Alerta: inactividad
-        # ----------------------------------------------------
-
-        if enrollment.last_activity:
-
-            days_inactive = (
-                datetime.utcnow()
-                - enrollment.last_activity
-            ).days
-
-            if days_inactive >= 7:
-
-                alerts.append(
-                    {
-                        "type": "inactivity",
-                        "severity": (
-                            "high"
-                            if days_inactive >= 14
-                            else "medium"
-                        ),
-                        "student": name,
-                        "student_id": student.id,
-                        "message": (
-                            f"Sin actividad desde hace "
-                            f"{days_inactive} días"
-                        ),
-                    }
-                )
-
-        elif (enrollment.total_sessions or 0) == 0:
-
-            alerts.append(
-                {
-                    "type": "never_started",
-                    "severity": "medium",
-                    "student": name,
-                    "student_id": student.id,
-                    "message": (
-                        "Nunca ha iniciado una sesión"
-                    ),
-                }
-            )
-
-        # ----------------------------------------------------
-        # Alerta: bajo rendimiento
-        # ----------------------------------------------------
-
-        average_score = (
-            enrollment.average_score or 0
-        )
-
-        total_sessions = (
-            enrollment.total_sessions or 0
-        )
-
-        if (
-            total_sessions >= 3
-            and average_score < 40
-        ):
-
-            alerts.append(
-                {
-                    "type": "low_performance",
-                    "severity": "high",
-                    "student": name,
-                    "student_id": student.id,
-                    "message": (
-                        f"Promedio muy bajo: "
-                        f"{average_score:.0f}%"
-                    ),
-                }
-            )
-
-        # ----------------------------------------------------
-        # Alerta: riesgo cognitivo
-        # ----------------------------------------------------
-
-        if enrollment.risk_level in (
-            "medium",
-            "high",
-        ):
-
-            alerts.append(
-                {
-                    "type": "cognitive_risk",
-                    "severity": enrollment.risk_level,
-                    "student": name,
-                    "student_id": student.id,
-                    "message": (
-                        "Riesgo cognitivo: "
-                        + ", ".join(
-                            enrollment.risk_factors
-                            or ["detectado"]
-                        )
-                    ),
-                }
-            )
-
-    # --------------------------------------------------------
-    # Ordenar por severidad
-    # --------------------------------------------------------
-
-    severity_order = {
-        "high": 0,
-        "medium": 1,
-        "low": 2,
-    }
-
-    alerts.sort(
-        key=lambda alert: severity_order.get(
-            alert["severity"],
-            3,
-        )
-    )
+    alerts = _classroom_alerts(enrollments, students_by_id)
+    acks = neuroalert_service.acknowledged(db, current_user.id, [a["id"] for a in alerts])
+    for a in alerts:
+        a["resolved"] = neuroalert_service.is_resolved(acks, {"key": a["id"], "signature": a.pop("signature")})
 
     return {
         "alerts": alerts,
         "total": len(alerts),
         "classroom": classroom.name,
     }
+
+
+_TEACHER_ALERT_TYPE = {
+    "inactividad": "inactivity",
+    "sin_inicio": "never_started",
+    "bajo_rendimiento": "low_performance",
+    "riesgo_cognitivo": "cognitive_risk",
+}
+
+
+def _classroom_alerts(enrollments, students_by_id) -> list[dict]:
+    """Alertas del aula con las reglas comunes (app/services/neuroalert_service.py)."""
+    now = datetime.utcnow()
+    alerts = []
+    for enrollment in enrollments:
+        student = students_by_id.get(enrollment.student_id)
+        if not student:
+            continue
+        name = student.full_name or student.username
+        sessions = int(enrollment.total_sessions or 0)
+        for a in neuroalert_service.enrollment_alerts(enrollment, now):
+            if a["type"] == "inactividad":
+                message = f"Sin actividad desde hace {a['days_inactive']} días"
+            elif a["type"] == "sin_inicio":
+                message = "Nunca ha iniciado una sesión"
+            elif a["type"] == "bajo_rendimiento":
+                message = f"Promedio muy bajo: {float(enrollment.average_score or 0):.0f}%"
+            else:
+                message = "Riesgo cognitivo: " + ", ".join(enrollment.risk_factors or ["detectado"])
+            alerts.append({
+                "id": a["key"],
+                "signature": a["signature"],
+                "type": _TEACHER_ALERT_TYPE[a["type"]],
+                "severity": a["severity"],
+                "student": name,
+                "student_id": student.id,
+                "message": message,
+                # Promedio 0-100 de la inscripción; None si aún no hay sesiones.
+                "average_score": round(float(enrollment.average_score or 0), 1) if sessions > 0 else None,
+                "total_sessions": sessions,
+                "total_time_minutes": round(float(enrollment.total_time_minutes or 0)),
+                "last_activity": enrollment.last_activity.isoformat() if enrollment.last_activity else None,
+                "risk_factors": enrollment.risk_factors or [],
+            })
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    alerts.sort(key=lambda alert: (severity_order.get(alert["severity"], 3), alert["student"]))
+    return alerts
+
+
+def _managed_classroom(db: Session, current_user: User, classroom_id: int) -> Classroom:
+    classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+    if not classroom:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clase no encontrada")
+    if not can_manage_classroom(current_user, classroom):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a esta clase")
+    return classroom
+
+
+@router.post("/{classroom_id}/alerts/{alert_id}/resolve")
+async def resolve_classroom_alert(
+    classroom_id: int,
+    alert_id: str,
+    resolved: bool = True,
+    current_user: User = Depends(get_current_user),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
+    db: Session = Depends(get_db),
+):
+    """Marca (o reabre con resolved=false) una alerta vigente del aula."""
+    require_teacher(current_user)
+    classroom = _managed_classroom(db, current_user, classroom_id)
+    enrollments = db.query(Enrollment).filter(
+        Enrollment.classroom_id == classroom.id,
+        Enrollment.is_active == True,  # noqa: E712
+    ).all()
+    students = {u.id: u for u in db.query(User).filter(
+        User.id.in_([e.student_id for e in enrollments]),
+        User.is_active == True,  # noqa: E712
+    ).all()} if enrollments else {}
+    alert = next((a for a in _classroom_alerts(enrollments, students) if a["id"] == alert_id), None)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="La alerta ya no está vigente.")
+    neuroalert_service.set_resolved(db, current_user.id, {"key": alert["id"], "signature": alert["signature"]}, resolved)
+    db.commit()
+    return {"id": alert_id, "resolved": resolved}
+
+
+@router.post("/{classroom_id}/regenerate-code")
+async def regenerate_invite_code(
+    classroom_id: int,
+    current_user: User = Depends(get_current_user),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
+    db: Session = Depends(get_db),
+):
+    """Nuevo código de invitación (RF-21); el anterior deja de servir para unirse."""
+    require_teacher(current_user)
+    classroom = _managed_classroom(db, current_user, classroom_id)
+    if not classroom.is_active:
+        raise HTTPException(status_code=400, detail="La clase está desactivada.")
+    for _ in range(10):
+        code = Classroom.generate_invite_code()
+        if not db.query(Classroom.id).filter(Classroom.invite_code == code).first():
+            break
+    else:
+        raise HTTPException(status_code=500, detail="No fue posible generar un código único.")
+    classroom.invite_code = code
+    db.commit()
+    return {"id": classroom.id, "invite_code": code}
 
 
 # ============================================================

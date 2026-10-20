@@ -1,20 +1,21 @@
 import { useState, useEffect } from 'react';
 import {
   BookOpen, Search, Users, TrendingUp,
-  Activity, Eye, Power, RefreshCw, ArrowLeftRight, Loader2, X
+  Activity, Eye, Power, RefreshCw, ArrowLeftRight, Loader2, X, Plus, Pencil
 } from 'lucide-react';
 import api from '../../../services/api';
 
+// avg = promedio 0-10 de los estudiantes con sesiones; null = sin datos.
 interface Group {
-  id: number; name: string; teacher: string; teacherId: number; subject: string; grade: string;
-  students: number; code: string; status: string; avg: number; lastActivity: string;
+  id: number; name: string; teacher: string; teacherId: number; teacherActive: boolean; subject: string; grade: string;
+  students: number; code: string; status: string; avg: number | null; lastActivity: string;
 }
 
 interface GroupDetail {
   id: number; name: string; subject: string; grade: string; description: string; code: string;
   status: string; createdAt: string | null;
   teacher: { id: number; name: string } | null;
-  students: { id: number; name: string; email: string; avg: number; lastActivity: string | null }[];
+  students: { id: number; name: string; email: string; avg: number | null; lastActivity: string | null }[];
 }
 
 interface TeacherOption { id: number; full_name: string; username: string; is_active: boolean }
@@ -25,6 +26,7 @@ export default function GruposTab() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<'todos' | 'activo' | 'inactivo'>('todos');
   const [groups, setGroups] = useState<Group[]>([]);
+  const [uniqueStudents, setUniqueStudents] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
 
@@ -39,12 +41,67 @@ export default function GruposTab() {
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [newTeacherId, setNewTeacherId] = useState<number | ''>('');
   const [transferError, setTransferError] = useState('');
+  // Crear (id null) o editar un grupo (RF-10): POST/PATCH /super/classrooms.
+  const [form, setForm] = useState<{ id: number | null; name: string; subject: string; grade: string; description: string; teacherId: number | '' } | null>(null);
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const loadActiveTeachers = async () => {
+    const { data } = await api.get('/super/teachers');
+    return (Array.isArray(data) ? data : []).filter((t: TeacherOption) => t.is_active);
+  };
+
+  const openCreate = async () => {
+    setForm({ id: null, name: '', subject: '', grade: '', description: '', teacherId: '' });
+    setFormError('');
+    try { setTeachers(await loadActiveTeachers()); }
+    catch (err) { setFormError(errorText(err, 'No se pudo cargar la lista de profesores.')); }
+  };
+
+  const openEdit = async (group: Group) => {
+    setFormError('');
+    setForm({ id: group.id, name: group.name, subject: group.subject, grade: group.grade === '—' ? '' : group.grade, description: '', teacherId: group.teacherId });
+    try {
+      const { data } = await api.get(`/super/classrooms/${group.id}`);
+      setForm(f => (f && f.id === group.id ? { ...f, description: data.description ?? '' } : f));
+    } catch { /* la descripción queda vacía; el resto de campos ya están */ }
+  };
+
+  const saveForm = async () => {
+    if (!form) return;
+    if (!form.name.trim() || !form.subject.trim() || (form.id === null && form.teacherId === '')) {
+      setFormError('Nombre, materia y profesor son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    setFormError('');
+    try {
+      const payload = { name: form.name, subject: form.subject, grade: form.grade, description: form.description };
+      if (form.id === null) {
+        await api.post('/super/classrooms', { ...payload, teacher_id: form.teacherId });
+        showToast(`Grupo «${form.name.trim()}» creado.`);
+      } else {
+        await api.patch(`/super/classrooms/${form.id}`, payload);
+        showToast(`Grupo «${form.name.trim()}» actualizado.`);
+      }
+      setForm(null);
+      await loadGroups();
+    } catch (err) {
+      setFormError(errorText(err, 'No se pudo guardar el grupo.'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const loadGroups = (notify = false) => {
     setLoading(true);
     setLoadError('');
     return api.get('/super/classrooms')
-      .then(r => { setGroups(r.data.classrooms ?? []); if (notify) showToast('Datos actualizados'); })
+      .then(r => {
+        setGroups(r.data.classrooms ?? []);
+        setUniqueStudents(r.data.unique_students ?? null);
+        if (notify) showToast('Datos actualizados');
+      })
       .catch(err => setLoadError(errorText(err, 'No se pudieron cargar los grupos.')))
       .finally(() => setLoading(false));
   };
@@ -63,8 +120,9 @@ export default function GruposTab() {
     if (!activate && !window.confirm(`¿Desactivar el grupo «${group.name}»? Sus estudiantes dejarán de verlo hasta que lo reactives.`)) return;
     setBusyId(group.id);
     try {
-      const { data } = await api.patch(`/super/classrooms/${group.id}`, { is_active: activate });
-      setGroups(prev => prev.map(g => g.id === group.id ? { ...g, status: data.status } : g));
+      await api.patch(`/super/classrooms/${group.id}`, { is_active: activate });
+      // Se recarga para que «Total estudiantes» y el promedio reflejen el cambio.
+      await loadGroups();
       showToast(`Grupo «${group.name}» ${activate ? 'activado' : 'desactivado'}.`);
     } catch (err) {
       showToast(errorText(err, 'No se pudo cambiar el estado del grupo.'));
@@ -104,7 +162,7 @@ export default function GruposTab() {
     setTransferError('');
     try {
       const { data } = await api.patch(`/super/classrooms/${transfer.id}`, { teacher_id: newTeacherId });
-      setGroups(prev => prev.map(g => g.id === transfer.id ? { ...g, teacher: data.teacher, teacherId: data.teacherId } : g));
+      setGroups(prev => prev.map(g => g.id === transfer.id ? { ...g, teacher: data.teacher, teacherId: data.teacherId, teacherActive: true } : g));
       showToast(`Grupo «${transfer.name}» transferido a ${data.teacher}.`);
       setTransfer(null);
     } catch (err) {
@@ -121,9 +179,11 @@ export default function GruposTab() {
      g.subject.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const totalStudents = groups.reduce((s, g) => s + g.students, 0);
   const activeGroups  = groups.filter(g => g.status === 'activo').length;
-  const avgGlobal     = groups.length > 0 ? (groups.reduce((s, g) => s + g.avg, 0) / groups.length).toFixed(1) : '0.0';
+  // Promedio de los grupos activos que tienen datos (los grupos sin sesiones
+  // no cuentan como 0).
+  const withAvg       = groups.filter(g => g.status === 'activo' && g.avg != null);
+  const avgGlobal     = withAvg.length > 0 ? (withAvg.reduce((s, g) => s + (g.avg ?? 0), 0) / withAvg.length).toFixed(1) : null;
 
   return (
     <div className="space-y-6 relative">
@@ -147,8 +207,9 @@ export default function GruposTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { icon: BookOpen, label: 'Grupos activos',      value: activeGroups,   color: 'text-[#0B6E99]', bg: 'bg-[#E5F3FF]' },
-          { icon: Users,    label: 'Total estudiantes',   value: totalStudents,  color: 'text-[#0F7B6C]', bg: 'bg-[#EEF8F6]' },
-          { icon: TrendingUp, label: 'Promedio global',   value: `${avgGlobal}/10`, color: 'text-[#6940A5]', bg: 'bg-purple-50' },
+          // Estudiantes distintos en grupos activos (uno inscrito en dos grupos cuenta una vez).
+          { icon: Users,    label: 'Estudiantes en grupos activos', value: uniqueStudents ?? '—', color: 'text-[#0F7B6C]', bg: 'bg-[#EEF8F6]' },
+          { icon: TrendingUp, label: 'Promedio de grupos activos', value: avgGlobal != null ? `${avgGlobal}/10` : 'Sin datos', color: 'text-[#6940A5]', bg: 'bg-purple-50' },
         ].map((kpi, i) => (
           <div key={i} className="bg-white border border-[#E9E9E7] rounded-lg p-4 flex items-center gap-3">
             <div className={`w-9 h-9 rounded-md ${kpi.bg} flex items-center justify-center flex-shrink-0`}>
@@ -174,6 +235,10 @@ export default function GruposTab() {
             className="w-full pl-9 pr-4 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F] outline-none bg-white"
           />
         </div>
+        <button onClick={openCreate}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-md bg-[#37352F] text-white font-medium hover:bg-[#191919]">
+          <Plus className="w-3.5 h-3.5" /> Crear grupo
+        </button>
         <div className="flex gap-2">
           {(['todos', 'activo', 'inactivo'] as const).map(s => (
             <button
@@ -226,6 +291,11 @@ export default function GruposTab() {
                       {group.teacher.charAt(0)}
                     </div>
                     <span className="text-sm text-[#37352F]">{group.teacher}</span>
+                    {!group.teacherActive && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FCF6E5] text-[#D9730D]" title="La cuenta del profesor está desactivada; transfiere el grupo si sigue en uso">
+                        cuenta inactiva
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3.5 text-sm text-[#787774]">{group.grade}</td>
@@ -236,9 +306,10 @@ export default function GruposTab() {
                 </td>
                 <td className="px-4 py-3.5 text-center">
                   <span className={`text-sm font-bold ${
+                    group.avg == null ? 'text-[#AEADAB]' :
                     group.avg >= 8 ? 'text-[#0F7B6C]' : group.avg >= 7 ? 'text-[#D9730D]' : 'text-[#E03E3E]'
-                  }`}>
-                    {group.avg}
+                  }`} title={group.avg == null ? 'Ningún estudiante tiene sesiones registradas' : 'Promedio 0-10'}>
+                    {group.avg ?? '—'}
                   </span>
                 </td>
                 <td className="px-4 py-3.5">
@@ -263,6 +334,12 @@ export default function GruposTab() {
                       onClick={() => openDetail(group)}
                       className="p-1.5 rounded hover:bg-[#E5F3FF] text-[#787774] hover:text-[#0B6E99] transition-colors">
                       <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      title="Editar datos del grupo"
+                      onClick={() => openEdit(group)}
+                      className="p-1.5 rounded hover:bg-[#F7F6F3] text-[#787774] hover:text-[#37352F] transition-colors">
+                      <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button
                       title={group.status === 'activo' ? 'Desactivar' : 'Activar'}
@@ -342,7 +419,7 @@ export default function GruposTab() {
                               <p className="text-[11px] text-[#AEADAB] truncate">{st.email}</p>
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <p className="text-sm font-semibold text-[#37352F]">{st.avg}/10</p>
+                              <p className="text-sm font-semibold text-[#37352F]">{st.avg != null ? `${st.avg}/10` : 'Sin sesiones'}</p>
                               <p className="text-[10px] text-[#AEADAB]">{st.lastActivity ?? 'Sin actividad'}</p>
                             </div>
                           </li>
@@ -353,6 +430,58 @@ export default function GruposTab() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Crear / editar grupo ── */}
+      {form && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setForm(null)}>
+          <div className="bg-white rounded-lg w-full max-w-md shadow-xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-[#191919]">{form.id === null ? 'Crear grupo' : 'Editar grupo'}</h3>
+            {([
+              ['name', 'Nombre *', 'ej. Matemáticas 9A'],
+              ['subject', 'Materia *', 'ej. Matemáticas'],
+              ['grade', 'Grado', 'ej. 9'],
+            ] as const).map(([key, label, ph]) => (
+              <label key={key} className="block text-xs font-semibold text-[#787774]">
+                {label}
+                <input value={form[key]} placeholder={ph}
+                  onChange={e => setForm(f => (f ? { ...f, [key]: e.target.value } : f))}
+                  className="mt-1 w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm font-normal text-[#191919] outline-none focus:ring-1 focus:ring-[#37352F]" />
+              </label>
+            ))}
+            <label className="block text-xs font-semibold text-[#787774]">
+              Descripción
+              <textarea value={form.description} rows={2}
+                onChange={e => setForm(f => (f ? { ...f, description: e.target.value } : f))}
+                className="mt-1 w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm font-normal text-[#191919] outline-none focus:ring-1 focus:ring-[#37352F] resize-none" />
+            </label>
+            {form.id === null && (
+              <label className="block text-xs font-semibold text-[#787774]">
+                Profesor a cargo *
+                <select value={form.teacherId}
+                  onChange={e => setForm(f => (f ? { ...f, teacherId: e.target.value ? Number(e.target.value) : '' } : f))}
+                  className="mt-1 w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm font-normal outline-none focus:ring-1 focus:ring-[#37352F] bg-white">
+                  <option value="">Elige un profesor…</option>
+                  {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name || t.username}</option>)}
+                </select>
+                {teachers.length === 0 && !formError && (
+                  <span className="block mt-1 font-normal text-[#AEADAB]">No hay profesores activos en la institución.</span>
+                )}
+              </label>
+            )}
+            {form.id !== null && (
+              <p className="text-[11px] text-[#AEADAB]">Para cambiar el profesor usa «Transferir».</p>
+            )}
+            {formError && <p className="text-xs text-[#E03E3E]">{formError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setForm(null)} className="px-3 py-2 text-sm rounded-md border border-[#E9E9E7] hover:bg-[#F7F6F3]">Cancelar</button>
+              <button onClick={saveForm} disabled={saving}
+                className="px-3 py-2 text-sm rounded-md bg-[#37352F] text-white hover:bg-[#191919] disabled:opacity-40">
+                {saving ? 'Guardando…' : form.id === null ? 'Crear' : 'Guardar'}
+              </button>
+            </div>
           </div>
         </div>
       )}

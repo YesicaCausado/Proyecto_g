@@ -40,26 +40,52 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: stri
 
 export default function NeuroAlertasTab() {
   const [filterPriority, setFilterPriority] = useState<Priority | 'todas'>('todas');
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [showResolved, setShowResolved] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Alert | null>(null);
 
-  useEffect(() => {
-    api.get('/super/stats/alerts')
+  // Las alertas se calculan en el backend con datos reales de las
+  // inscripciones; «resuelta» se guarda por usuario y se reabre sola si la
+  // condición que la originó cambia (backend/app/services/neuroalert_service.py).
+  const load = () => {
+    setLoading(true);
+    setLoadError('');
+    api.get('/super/stats/alerts', { params: { _t: Date.now() } })
       .then(r => setAlerts(r.data.alerts ?? []))
-      .catch(() => setAlerts([]))
+      .catch(() => { setAlerts([]); setLoadError('No fue posible cargar las NeuroAlertas.'); })
       .finally(() => setLoading(false));
-  }, []);
+  };
 
+  useEffect(load, []);
+
+  const setResolvedState = async (alert: Alert, resolved: boolean) => {
+    setBusyId(alert.id);
+    setActionError('');
+    try {
+      await api.post(`/super/stats/alerts/${encodeURIComponent(alert.id)}/resolve`, null, { params: { resolved } });
+      setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, resolved } : a));
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setActionError(typeof detail === 'string' ? detail : 'No fue posible actualizar la alerta.');
+      if (err?.response?.status === 404) load();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const resolvedCount = alerts.filter(a => a.resolved).length;
   const filtered = alerts.filter(a =>
-    (filterPriority === 'todas' || a.priority === filterPriority) && !resolved.has(a.id)
+    (filterPriority === 'todas' || a.priority === filterPriority) && (showResolved || !a.resolved)
   );
 
   const counts = {
-    alta:  alerts.filter(a => a.priority === 'alta'  && !resolved.has(a.id)).length,
-    media: alerts.filter(a => a.priority === 'media' && !resolved.has(a.id)).length,
-    baja:  alerts.filter(a => a.priority === 'baja'  && !resolved.has(a.id)).length,
+    alta:  alerts.filter(a => a.priority === 'alta'  && !a.resolved).length,
+    media: alerts.filter(a => a.priority === 'media' && !a.resolved).length,
+    baja:  alerts.filter(a => a.priority === 'baja'  && !a.resolved).length,
   };
 
   return (
@@ -68,6 +94,13 @@ export default function NeuroAlertasTab() {
       {loading && (
         <div className="flex items-center justify-center py-6 gap-2 text-sm text-[#787774]">
           <Loader2 className="w-4 h-4 animate-spin" /> Cargando alertas…
+        </div>
+      )}
+
+      {(loadError || actionError) && (
+        <div className="flex items-center justify-between gap-3 bg-[#FDEEEE] border border-[#F5C7C7] text-[#E03E3E] rounded-md px-4 py-2.5 text-sm">
+          <span className="flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> {loadError || actionError}</span>
+          {loadError && <button onClick={load} className="font-medium hover:underline">Reintentar</button>}
         </div>
       )}
 
@@ -102,18 +135,26 @@ export default function NeuroAlertasTab() {
             {filterPriority === 'todas' ? 'Todas las alertas' : `Alertas de prioridad ${PRIORITY_CONFIG[filterPriority].label}`}
             <span className="text-sm text-[#787774] font-normal">({filtered.length})</span>
           </h3>
-          <button
-            onClick={() => setFilterPriority('todas')}
-            className="flex items-center gap-1 text-xs text-[#787774] hover:text-[#37352F] transition-colors"
-          >
-            <RefreshCw className="w-3 h-3" /> Ver todas
-          </button>
+          <div className="flex items-center gap-3">
+            {resolvedCount > 0 && (
+              <label className="flex items-center gap-1.5 text-xs text-[#787774] cursor-pointer">
+                <input type="checkbox" checked={showResolved} onChange={e => setShowResolved(e.target.checked)} />
+                Mostrar resueltas ({resolvedCount})
+              </label>
+            )}
+            <button
+              onClick={() => { setFilterPriority('todas'); load(); }}
+              className="flex items-center gap-1 text-xs text-[#787774] hover:text-[#37352F] transition-colors"
+            >
+              <RefreshCw className="w-3 h-3" /> Actualizar
+            </button>
+          </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && !loading ? (
           <div className="text-center py-16 text-[#787774]">
             <CheckCircle className="w-10 h-10 mx-auto mb-3 text-[#0F7B6C] opacity-60" />
-            <p className="font-medium">Sin alertas activas en esta categoría</p>
+            <p className="font-medium">{loadError ? 'No se pudieron consultar las alertas' : 'Sin alertas activas en esta categoría'}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -123,7 +164,7 @@ export default function NeuroAlertasTab() {
               return (
                 <div
                   key={alert.id}
-                  className={`bg-white border rounded-lg p-5 ${cfg.border} transition-all hover:shadow-sm`}
+                  className={`bg-white border rounded-lg p-5 ${cfg.border} transition-all hover:shadow-sm ${alert.resolved ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-start gap-4">
                     <div className={`w-8 h-8 rounded-md ${cfg.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
@@ -166,10 +207,14 @@ export default function NeuroAlertasTab() {
                             Ver detalles <ChevronRight className="w-3 h-3" />
                           </button>
                           <button
-                            onClick={() => setResolved(prev => new Set([...prev, alert.id]))}
-                            className="text-xs text-[#0F7B6C] hover:text-[#0A6357] flex items-center gap-1 transition-colors font-medium"
+                            onClick={() => setResolvedState(alert, !alert.resolved)}
+                            disabled={busyId === alert.id}
+                            className="text-xs text-[#0F7B6C] hover:text-[#0A6357] flex items-center gap-1 transition-colors font-medium disabled:opacity-50"
                           >
-                            <CheckCircle className="w-3 h-3" /> Marcar resuelta
+                            {busyId === alert.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <CheckCircle className="w-3 h-3" />}
+                            {alert.resolved ? 'Reabrir' : 'Marcar resuelta'}
                           </button>
                         </div>
                       </div>

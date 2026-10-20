@@ -1,397 +1,269 @@
 /**
  * CognitiveDashboard
- * Visualización en tiempo real de los 5 Patrones Neuroconductuales Digitales
+ * Estado de los 5 patrones neurodigitales del turno actual.
+ *
+ * Fuente única: `metadata.pattern_status` y `metadata.engine` de
+ * /chat/message (backend/app/ai/cognitive/pattern_status.py). El panel NO
+ * recalcula puntuaciones propias: muestra los valores medidos con su unidad, o
+ * el estado real cuando no hay medición (no disponible, no aplica, error,
+ * desactualizado o procesando). Un dato inexistente nunca se muestra como 0.
  */
 import type { ChatMessageResponse } from '../types';
 import type { FacialSnapshot } from '../hooks/useFacialDetection';
 import type { VoiceSnapshot } from '../hooks/useVoiceProsody';
-import { Brain, Activity, Eye, Mic, AlertTriangle, Zap } from 'lucide-react';
+import { Brain, Activity, Eye, Mic, Keyboard, MousePointerClick, Zap } from 'lucide-react';
+
+type PatternKey = 'facial' | 'voice' | 'keyboard' | 'interaction' | 'performance';
+type PatternState = 'available' | 'pending' | 'unavailable' | 'not_applicable' | 'error' | 'stale';
+
+interface PatternEntry {
+  status: PatternState;
+  reason?: string | null;
+  measured_at?: string | null;
+  values?: Record<string, unknown>;
+  units?: Record<string, string>;
+  source?: string;
+  notes?: string | null;
+  engine?: { used: boolean; weight: number | null };
+}
+
+interface EngineSummary {
+  status?: PatternState;
+  reason?: string | null;
+  state?: string | null;
+  confidence?: number | null;
+  engagement_score?: number | null;
+  attention_level?: number | null;
+  error_risk?: number | null;
+  label?: string;
+}
 
 interface Props {
   response: ChatMessageResponse | null;
   isVisible: boolean;
+  /** true mientras se envía el turno: los patrones están "procesando" */
+  pending?: boolean;
   facialSnapshot?: FacialSnapshot | null;
   facialActive?: boolean;
   voiceSnapshot?: VoiceSnapshot | null;
   voiceActive?: boolean;
 }
 
-const PATTERN_CONFIG = [
-  {
-    id: 'interaction_rhythm',
-    label: 'Ritmo de Interacción',
-    icon: Activity,
-    color: 'blue',
-    description: 'Velocidad y regularidad de respuestas',
-  },
-  {
-    id: 'decision_sequence',
-    label: 'Secuencia de Decisión',
-    icon: Brain,
-    color: 'purple',
-    description: 'Confianza y patrones de decisión',
-  },
-  {
-    id: 'facial_microexpression',
-    label: 'Microexpresión Facial',
-    icon: Eye,
-    color: 'amber',
-    description: 'Atención visual y estado emocional',
-  },
-  {
-    id: 'voice_prosody',
-    label: 'Prosodia de Voz',
-    icon: Mic,
-    color: 'green',
-    description: 'Tono y fluidez en respuestas de voz',
-  },
-  {
-    id: 'error_prediction',
-    label: 'Predicción de Error',
-    icon: AlertTriangle,
-    color: 'red',
-    description: 'Riesgo probabilístico de error',
-  },
+const PATTERNS: { id: PatternKey; label: string; icon: typeof Eye; tint: string; text: string }[] = [
+  { id: 'facial',      label: 'Facial',       icon: Eye,               tint: 'bg-[#FCF6E5]', text: 'text-[#9F6B00]' },
+  { id: 'voice',       label: 'Voz',          icon: Mic,               tint: 'bg-[#EEF7F4]', text: 'text-[#0F7B6C]' },
+  { id: 'keyboard',    label: 'Teclado',      icon: Keyboard,          tint: 'bg-[#E5F3FF]', text: 'text-[#0B6E99]' },
+  { id: 'interaction', label: 'Interacción',  icon: MousePointerClick, tint: 'bg-[#F4EFFB]', text: 'text-[#6940A5]' },
+  { id: 'performance', label: 'Rendimiento',  icon: Activity,          tint: 'bg-[#FDEEEE]', text: 'text-[#E03E3E]' },
 ];
 
-const STATE_CONFIG: Record<string, { label: string; color: string; emoji: string }> = {
-  normal:       { label: 'Normal',       color: 'bg-[#F7F6F3] text-[#37352F] border-[#E9E9E7]',       emoji: '😐' },
-  fatigue:      { label: 'Fatiga',       color: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',    emoji: '😴' },
-  overload:     { label: 'Sobrecarga',   color: 'bg-[#FDEEEE] text-[#E03E3E] border-[#F4BDBD]',          emoji: '🤯' },
-  doubt:        { label: 'Duda',         color: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]', emoji: '🤔' },
-  mastery:      { label: 'Dominio',      color: 'bg-[#EEF7F4] text-[#0F7B6C] border-[#B7DDD6]', emoji: '🌟' },
-  flow:         { label: 'Flujo',        color: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',       emoji: '✨' },
-  frustration:  { label: 'Frustración',  color: 'bg-[#FDEEEE] text-[#E03E3E] border-[#F4BDBD]',          emoji: '😤' },
-  curiosity:    { label: 'Curiosidad',   color: 'bg-[#F4EFFB] text-[#6940A5] border-[#D9CCE9]', emoji: '🔍' },
-  // legacy labels
-  focused:      { label: 'Enfocado',     color: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]',       emoji: '🎯' },
-  learning:     { label: 'Aprendiendo',  color: 'bg-[#E5F3FF] text-[#0B6E99] border-[#BFDFF0]', emoji: '📚' },
-  struggling:   { label: 'Dificultad',   color: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',    emoji: '💪' },
-  confused:     { label: 'Confundido',   color: 'bg-[#FDF4EC] text-[#D9730D] border-[#F2D2B7]', emoji: '😕' },
-  mastering:    { label: 'Dominando',    color: 'bg-[#EEF7F4] text-[#0F7B6C] border-[#B7DDD6]', emoji: '🏆' },
+/** Mensajes por estado (solo se muestran cuando el estado es real). */
+const STATE_MESSAGE: Record<Exclude<PatternState, 'available'>, string> = {
+  pending: 'Procesando medición…',
+  unavailable: 'No hay mediciones disponibles para este patrón en la actividad seleccionada.',
+  not_applicable: 'Este patrón no se mide en esta actividad.',
+  error: 'No fue posible obtener la medición. Puedes intentarlo nuevamente.',
+  stale: 'Dato desactualizado.',
 };
 
-const COLOR_CLASSES: Record<string, { bar: string; bg: string; text: string; ring: string }> = {
-  blue:   { bar: 'bg-[#0B6E99]',   bg: 'bg-[#E5F3FF]',   text: 'text-[#0B6E99]',   ring: 'ring-blue-200' },
-  purple: { bar: 'bg-[#6940A5]', bg: 'bg-[#F7F3FB]', text: 'text-[#6940A5]', ring: 'ring-purple-200' },
-  amber:  { bar: 'bg-[#DFAB01]',  bg: 'bg-[#FCF6E5]',  text: 'text-[#DFAB01]',  ring: 'ring-amber-200' },
-  green:  { bar: 'bg-[#0F7B6C]',  bg: 'bg-[#EEF7F4]',  text: 'text-[#0F7B6C]',  ring: 'ring-green-200' },
-  red:    { bar: 'bg-[#E03E3E]',    bg: 'bg-[#FDEEEE]',    text: 'text-[#E03E3E]',    ring: 'ring-red-200' },
+const BADGE: Record<PatternState, { label: string; cls: string }> = {
+  available:      { label: 'Medido',        cls: 'bg-[#EEF7F4] text-[#0F7B6C]' },
+  pending:        { label: 'Procesando',    cls: 'bg-[#E5F3FF] text-[#0B6E99]' },
+  unavailable:    { label: 'Sin datos',     cls: 'bg-[#F7F6F3] text-[#9B9A97]' },
+  not_applicable: { label: 'No aplica',     cls: 'bg-[#F7F6F3] text-[#9B9A97]' },
+  error:          { label: 'Error',         cls: 'bg-[#FDEEEE] text-[#E03E3E]' },
+  stale:          { label: 'Desactualizado', cls: 'bg-[#FCF6E5] text-[#9F6B00]' },
 };
 
-function MetricBar({ value, color, label }: { value: number; color: string; label?: string }) {
-  const pct = Math.round(Math.min(Math.max(value, 0), 1) * 100);
-  const colorClass = COLOR_CLASSES[color]?.bar || 'bg-[#9B9A97]';
+const pct = (v: unknown) => (typeof v === 'number' ? `${Math.round(v * 100)}%` : null);
+const num = (v: unknown, unit = '', d = 0) => (typeof v === 'number' ? `${v.toFixed(d)}${unit}` : null);
+const sec = (v: unknown) => (typeof v === 'number' ? `${(v / 1000).toFixed(1)} s` : null);
+const GAZE: Record<string, string> = { screen: 'Pantalla', away: 'Desviada', down: 'Abajo', up: 'Arriba' };
+
+/** Valores que se muestran por patrón: [clave, etiqueta, formato]. */
+const FIELDS: Record<PatternKey, [string, string, (v: unknown) => string | null][]> = {
+  facial: [
+    ['attention_score', 'Atención visual (heurística)', pct],
+    ['valence', 'Valencia', (v) => num(v, '', 2)],
+    ['gaze_direction', 'Mirada predominante', (v) => (typeof v === 'string' ? GAZE[v] ?? v : null)],
+    ['blink_rate', 'Parpadeo', (v) => num(v, '/min', 1)],
+    ['brow_furrow', 'Ceño', pct],
+    ['valid_frame_ratio', 'Fotogramas con rostro', pct],
+  ],
+  voice: [
+    ['voiced_ms', 'Voz analizada', sec],
+    ['speech_rate_wpm', 'Ritmo de habla (est.)', (v) => num(v, ' ppm')],
+    ['pause_ratio', 'Tiempo en pausa', pct],
+    ['pause_count', 'Pausas', (v) => num(v)],
+    ['volume_dbfs', 'Volumen', (v) => num(v, ' dBFS', 1)],
+    ['spectral_centroid_hz', 'Centroide espectral', (v) => num(v, ' Hz')],
+  ],
+  keyboard: [
+    ['typing_speed_cpm', 'Velocidad de escritura', (v) => num(v, ' cpm')],
+    ['response_time_ms', 'Tiempo de respuesta', sec],
+    ['pause_before_ms', 'Pausa antes de escribir', sec],
+    ['deleted_chars', 'Caracteres borrados', (v) => num(v)],
+    ['typing_bursts', 'Ráfagas de escritura', (v) => num(v)],
+  ],
+  interaction: [
+    ['window_ms', 'Permanencia en el turno', sec],
+    ['tab_hidden_count', 'Cambios de pestaña', (v) => num(v)],
+    ['hidden_ms', 'Tiempo con pestaña oculta', sec],
+    ['suggestion_clicks', 'Sugerencias usadas', (v) => num(v)],
+    ['pointer_clicks', 'Clics en el chat', (v) => num(v)],
+  ],
+  performance: [
+    ['last_answer_correct', 'Última respuesta', (v) => (v === true ? 'Correcta' : v === false ? 'Incorrecta' : null)],
+    ['chat_eval_count', 'Respuestas calificadas', (v) => num(v)],
+    ['chat_error_rate', 'Errores en el chat', pct],
+    ['quiz_count', 'Quizzes considerados', (v) => num(v)],
+    ['quiz_error_rate', 'Errores en quizzes', pct],
+    ['error_risk', 'Riesgo de error (experimental)', pct],
+  ],
+};
+
+const STATE_LABEL: Record<string, string> = {
+  normal: 'Normal', fatigue: 'Fatiga', overload: 'Sobrecarga', doubt: 'Duda',
+  mastery: 'Dominio', flow: 'Flujo', frustration: 'Frustración', curiosity: 'Curiosidad',
+};
+
+function formatTime(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function PatternCard({ cfg, entry, pending }: { cfg: (typeof PATTERNS)[number]; entry: PatternEntry | undefined; pending: boolean }) {
+  const Icon = cfg.icon;
+  const status: PatternState = pending ? 'pending' : entry?.status ?? 'error';
+  const rows = status === 'available' || status === 'stale'
+    ? FIELDS[cfg.id]
+        .map(([key, label, fmt]) => [label, fmt(entry?.values?.[key])] as const)
+        .filter((r): r is readonly [string, string] => r[1] != null)
+    : [];
+  const when = formatTime(entry?.measured_at);
+  const weight = entry?.engine?.used && typeof entry.engine.weight === 'number' ? entry.engine.weight : null;
+
   return (
-    <div>
-      {label && <span className="text-xs text-[#787774]">{label}: {pct}%</span>}
-      <div className="h-1.5 bg-[#F7F6F3] rounded-full overflow-hidden">
-        <div
-          className={`h-full ${colorClass} transition-all duration-700 rounded-full`}
-          style={{ width: `${pct}%` }}
-        />
+    <div className={`rounded-md p-2.5 ${cfg.tint}`}>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className={`flex items-center gap-1.5 text-xs font-medium ${cfg.text}`}>
+          <Icon className="w-3.5 h-3.5" /> {cfg.label}
+        </span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${BADGE[status].cls}`}>{BADGE[status].label}</span>
       </div>
+      {rows.length > 0 && (
+        <dl className="text-xs text-[#37352F] space-y-0.5">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex justify-between gap-2">
+              <dt className="text-[#787774]">{label}</dt>
+              <dd className="font-medium text-right">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {status !== 'available' && (
+        <p className="text-xs text-[#787774]">
+          {status === 'stale' && when ? `Última medición válida: ${when}.` : STATE_MESSAGE[status]}
+        </p>
+      )}
+      {!pending && entry?.reason && <p className="text-[11px] text-[#9B9A97] mt-0.5">{entry.reason}</p>}
+      {status === 'available' && (
+        <p className="text-[10px] text-[#9B9A97] mt-1">
+          {when ? `Medido: ${when}` : ''}
+          {weight != null ? ` · Peso en la estimación: ${Math.round(weight * 100)}%` : ' · No participa en la estimación'}
+        </p>
+      )}
     </div>
   );
 }
 
-function CircleGauge({ value, color, size = 48 }: { value: number; color: string; size?: number }) {
-  const pct = Math.min(Math.max(value, 0), 1);
-  const r = (size / 2) - 5;
-  const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - pct);
-  const colorMap: Record<string, string> = {
-    blue: '#3b82f6', purple: '#8b5cf6', amber: '#f59e0b',
-    green: '#22c55e', red: '#ef4444',
-  };
-  const stroke = colorMap[color] || '#6b7280';
-  return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f3f4f6" strokeWidth="4" />
-      <circle
-        cx={size / 2} cy={size / 2} r={r}
-        fill="none" stroke={stroke} strokeWidth="4"
-        strokeDasharray={circ} strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.7s ease' }}
-      />
-    </svg>
-  );
-}
-
-export default function CognitiveDashboard({ response, isVisible, facialSnapshot, facialActive, voiceSnapshot, voiceActive }: Props) {
+export default function CognitiveDashboard({ response, isVisible, pending = false, facialSnapshot, facialActive, voiceSnapshot, voiceActive }: Props) {
   if (!isVisible || !response) return null;
 
-  const state = response.cognitive_state || 'normal';
-  const stateInfo = STATE_CONFIG[state] || { label: state, color: 'bg-[#F7F6F3] text-[#37352F] border-[#E9E9E7]', emoji: '🧠' };
-  const activeModalities: string[] = response.active_modalities || [];
-  // Métricas globales: se muestran SOLO si el backend las provee. Si no llegan
-  // no se inventa un porcentaje, se muestra "—".
-  const engagement = typeof response.engagement_score === 'number' ? response.engagement_score : null;
-  const attention  = typeof response.attention_level === 'number' ? response.attention_level : null;
-  const errorRisk  = typeof response.error_risk === 'number' ? response.error_risk
-    : (typeof response.metadata?.error_risk === 'number' ? (response.metadata.error_risk as number) : null);
-  const confidence = typeof response.confidence === 'number' ? response.confidence : null;
+  const meta = (response.metadata ?? {}) as Record<string, unknown>;
+  const patterns = meta.pattern_status as Record<PatternKey, PatternEntry> | undefined;
+  const engine = (meta.engine ?? {}) as EngineSummary;
+  const engineOk = !pending && engine.status === 'available';
 
-  // ── Datos reales de los 5 patrones desde metadata.patterns ──
-  const patterns = (response.metadata?.patterns ?? {}) as Record<string, Record<string, unknown>>;
-  const p1 = patterns.P1_interaction_rhythm ?? {};
-  const p2 = patterns.P2_decision_sequence ?? {};
-  const p5 = patterns.P5_error_prediction ?? {};
-  const sessionStats = (response.metadata?.session_stats ?? {}) as Record<string, number>;
-  const _unusedSession = sessionStats; void _unusedSession; // disponible para future use
-
-  // Normalizar valores de patrón 1 a 0-1. Si no hay dato real, el patrón queda
-  // en "Datos insuficientes" (no se inventa un 50% por defecto).
-  const rtMs = typeof p1.response_time_ms === 'number' ? (p1.response_time_ms as number) : 0;
-  const typingCpm = typeof p1.typing_speed_cpm === 'number' ? (p1.typing_speed_cpm as number) : 0;
-  const hasP1 = rtMs > 0 || typingCpm > 0;
-  const p1Score = hasP1
-    ? (Math.min(1, 3200 / Math.max(rtMs, 500)) + Math.min(1, typingCpm / 200)) / 2
-    : null;
-
-  // Patrón 2: decisión — menos correcciones y más bursts = mayor confianza
-  const hasCorrections = typeof p2.corrections === 'number';
-  const bursts = typeof p2.typing_bursts === 'number' ? (p2.typing_bursts as number) : 0;
-  const corrections = hasCorrections ? (p2.corrections as number) : 0;
-  const hasP2 = hasCorrections || bursts >= 1;
-  const p2Score = hasP2
-    ? Math.max(0, Math.min(1, 1 - Math.min(1, corrections / 10) - (bursts >= 3 ? 0.1 : 0)))
-    : null;
-
-  // Patrón 5: predicción de error en tiempo real (chat) + historial de quizzes.
-  const quizErrRate = typeof p5.quiz_error_rate === 'number' ? (p5.quiz_error_rate as number) : 0;
-  const weakConcepts = ((p5.weak_concepts as string[]) || []).slice(0, 3);
-  const errRiskRt = typeof p5.error_risk_realtime === 'number' ? (p5.error_risk_realtime as number) : null;
-  const chatErrRate = typeof p5.chat_error_rate === 'number' ? (p5.chat_error_rate as number) : null;
-  const evalCount = typeof p5.chat_eval_count === 'number' ? (p5.chat_eval_count as number) : 0;
-  const lastGrade = p5.last_answer_grade as string | null | undefined;
-  const hasP5 = errRiskRt != null || chatErrRate != null || quizErrRate > 0 || weakConcepts.length > 0;
-  const p5Score = hasP5
-    ? (errRiskRt != null ? Math.max(0, 1 - errRiskRt) : Math.max(0, 1 - quizErrRate))
-    : null;
-
-  // Facial/voz en vivo: solo se muestra un valor si hay un sensor real activo;
-  // en caso contrario el patrón queda "Datos insuficientes".
-  const facialAttention = facialActive && facialSnapshot?.is_active ? facialSnapshot.attention_score : null;
-
-  const voiceEnergy = voiceActive && voiceSnapshot ? voiceSnapshot.energy_level : null;
-
-  const patternValues: Record<string, number | null> = {
-    interaction_rhythm:     p1Score,
-    decision_sequence:      p2Score,
-    facial_microexpression: facialAttention,
-    voice_prosody:          voiceEnergy,
-    error_prediction:       p5Score,
-  };
+  const globals = [
+    { label: 'Engagement', val: engine.engagement_score },
+    { label: 'Atención', val: engine.attention_level },
+    { label: 'Riesgo de error', val: engine.error_risk },
+  ];
 
   const isFacialLive = !!(facialActive && facialSnapshot?.is_active);
-  const isVoiceLive  = !!(voiceActive && voiceSnapshot?.is_active);
+  const isVoiceLive = !!(voiceActive && voiceSnapshot?.is_active);
 
   return (
     <aside className="fixed md:static right-0 top-12 bottom-16 md:top-auto md:bottom-auto z-40 bg-white border-l border-[#E9E9E7] w-[min(20rem,calc(100vw-1rem))] md:w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4 shadow-[-8px_0_24px_rgba(55,53,47,0.08)] md:shadow-none">
-      {/* Estado Cognitivo */}
+      {/* Estimación del motor */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2">
           <Zap className="w-4 h-4 text-accent-500" />
-          <span className="text-xs font-semibold text-[#787774] uppercase tracking-wide">Estado Cognitivo</span>
+          <span className="text-xs font-semibold text-[#787774] uppercase tracking-wide">Estado estimado</span>
         </div>
-        <div className={`flex items-center gap-3 px-3 py-2.5 rounded-md border ${stateInfo.color}`}>
-          <span className="text-2xl">{stateInfo.emoji}</span>
-          <div>
-            <p className="font-semibold text-sm">{stateInfo.label}</p>
-            <p className="text-xs opacity-70">Confianza: {confidence != null ? `${Math.round(confidence * 100)}%` : '—'}</p>
-          </div>
+        <div className="px-3 py-2.5 rounded-md border border-[#E9E9E7] bg-[#F7F6F3]">
+          {pending ? (
+            <p className="text-sm text-[#787774]">Procesando medición…</p>
+          ) : engineOk ? (
+            <>
+              <p className="font-semibold text-sm text-[#37352F]">
+                <Brain className="inline w-4 h-4 mr-1" />
+                {STATE_LABEL[engine.state ?? ''] ?? engine.state}
+              </p>
+              <p className="text-xs text-[#787774]">
+                Confianza: {typeof engine.confidence === 'number' ? `${Math.round(engine.confidence * 100)}%` : '—'}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-[#787774]">
+              {engine.status === 'error' ? STATE_MESSAGE.error : engine.reason ?? 'Evidencia insuficiente para una estimación.'}
+            </p>
+          )}
         </div>
-        {response.emotional_state && (
-          <p className="text-xs text-[#9B9A97] mt-1 ml-1">Estado emocional: {response.emotional_state}</p>
-        )}
+        <p className="text-[10px] text-[#9B9A97] mt-1">
+          {engine.label ?? 'Estimación experimental del sistema; no es un diagnóstico.'}
+        </p>
       </div>
 
-      {/* Métricas Globales */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {[
-          { label: 'Engagement', val: engagement, color: 'blue' as const, tint: 'bg-[#E5F3FF]', text: 'text-[#0B6E99]' },
-          { label: 'Atención', val: attention, color: 'green' as const, tint: 'bg-[#EEF7F4]', text: 'text-[#0F7B6C]' },
-          { label: 'Riesgo', val: errorRisk, color: 'red' as const, tint: 'bg-[#FDEEEE]', text: 'text-[#E03E3E]' },
-        ].map(m => (
-          <div key={m.label} className={`text-center ${m.tint} rounded-md p-2`}>
-            {m.val != null ? (
-              <>
-                <CircleGauge value={m.val} color={m.color} size={44} />
-                <p className={`text-xs ${m.text} font-medium mt-1`}>{m.label}</p>
-                <p className={`text-xs ${m.text}`}>{Math.round(m.val * 100)}%</p>
-              </>
-            ) : (
-              <>
-                <div className="h-11 flex items-center justify-center text-[#9B9A97] text-xs">—</div>
-                <p className={`text-xs ${m.text} font-medium mt-1`}>{m.label}</p>
-                <p className={`text-xs ${m.text}`}>sin datos</p>
-              </>
-            )}
+      <div className="grid grid-cols-3 gap-2">
+        {globals.map((g) => (
+          <div key={g.label} className="text-center bg-[#F7F6F3] rounded-md p-2">
+            <p className="text-sm font-semibold text-[#37352F]">
+              {!pending && typeof g.val === 'number' ? `${Math.round(g.val * 100)}%` : '—'}
+            </p>
+            <p className="text-[10px] text-[#787774]">{g.label}</p>
           </div>
         ))}
       </div>
 
-      {/* 5 Patrones Neuroconductuales */}
+      {/* 5 patrones */}
       <div>
-        <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mb-3">
-          5 Patrones Neuroconductuales
-        </p>
-        <div className="space-y-2.5">
-          {PATTERN_CONFIG.map((p, i) => {
-            const Icon = p.icon;
-            const val = patternValues[p.id] ?? null;
-            const isBackendActive = patternValues[p.id] != null;
-            const isSensorLive = (p.id === 'facial_microexpression' && isFacialLive)
-                               || (p.id === 'voice_prosody' && isVoiceLive);
-            const isActive = isBackendActive || isSensorLive;
-            const colors = COLOR_CLASSES[p.color];
-            return (
-              <div key={p.id} className={`rounded-md p-2.5 ${colors.bg}`}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-5 h-5 rounded-md flex items-center justify-center ${colors.bg} ${colors.ring} ring-1`}>
-                      <Icon className={`w-3 h-3 ${colors.text}`} />
-                    </div>
-                    <span className={`text-xs font-medium ${colors.text}`}>
-                      {i + 1}. {p.label}
-                    </span>
-                  </div>
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                    isActive
-                      ? `${colors.bg} ${colors.text} ring-1 ${colors.ring}`
-                      : 'bg-[#F7F6F3] text-[#9B9A97]'
-                  }`}>
-                    {isSensorLive ? `🔴 ${Math.round((val ?? 0) * 100)}%` : isActive ? `${Math.round((val ?? 0) * 100)}%` : '—'}
-                  </span>
-                </div>
-                {isActive && (
-                  <>
-                    <MetricBar value={val ?? 0} color={p.color} />
-                    {/* Patrón 1: mostrar RT y velocidad real */}
-                    {p.id === 'interaction_rhythm' && rtMs > 0 && (
-                      <p className="text-xs text-[#9B9A97] mt-1">
-                        RT: {(rtMs/1000).toFixed(1)}s · {typingCpm.toFixed(0)} cpm
-                      </p>
-                    )}
-                    {/* Patrón 2: mostrar correcciones reales */}
-                    {p.id === 'decision_sequence' && (
-                      <p className="text-xs text-[#9B9A97] mt-1">
-                        {corrections} correc. · {bursts} ráfaga{bursts !== 1 ? 's' : ''}
-                        {(p2.is_question as boolean) ? ' · ❓pregunta' : ''}
-                      </p>
-                    )}
-                    {/* Patrón 5: estado en tiempo real del chat + historial */}
-                    {p.id === 'error_prediction' && (
-                      <p className="text-xs text-[#E03E3E] mt-1">
-                        {lastGrade === 'incorrect' ? '❌ Última respuesta incorrecta en chat'
-                          : lastGrade === 'correct' ? '✅ Última respuesta correcta en chat'
-                          : chatErrRate != null ? `⚡ ${Math.round(chatErrRate * 100)}% de fallos en chat`
-                          : ''}
-                      </p>
-                    )}
-                    {p.id === 'error_prediction' && weakConcepts.length > 0 && (
-                      <p className="text-xs text-[#E03E3E] mt-1">
-                        ⚠️ Débil en: {weakConcepts.join(', ')}
-                      </p>
-                    )}
-                    {p.id === 'error_prediction' && quizErrRate > 0 && (
-                      <p className="text-xs text-[#9B9A97] mt-0.5">
-                        {Math.round(quizErrRate * 100)}% errores históricos
-                      </p>
-                    )}
-                    {p.id === 'error_prediction' && evalCount > 0 && (
-                      <p className="text-xs text-[#0F7B6C] mt-0.5 font-medium">
-                        ⏱ {evalCount} respuesta{evalCount !== 1 ? 's' : ''} evaluadas en tiempo real
-                      </p>
-                    )}
-                  </>
-                )}
-                {!isActive && (
-                  <p className="text-xs text-[#9B9A97]">Datos insuficientes</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Recomendaciones */}
-      {response.suggestions && response.suggestions.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mb-2">
-            Recomendaciones IA
-          </p>
-          <div className="space-y-1.5">
-            {response.suggestions.slice(0, 3).map((sug, i) => (
-              <div key={i} className="text-xs text-[#787774] bg-[#F7F6F3] rounded-lg px-2.5 py-2 leading-relaxed">
-                {sug}
-              </div>
+        <p className="text-xs font-semibold text-[#787774] uppercase tracking-wide mb-2">5 patrones neurodigitales</p>
+        {!patterns && !pending ? (
+          <p className="text-xs text-[#E03E3E]">El servidor no informó el estado de los patrones. {STATE_MESSAGE.error}</p>
+        ) : (
+          <div className="space-y-2">
+            {PATTERNS.map((cfg) => (
+              <PatternCard key={cfg.id} cfg={cfg} entry={patterns?.[cfg.id]} pending={pending} />
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Modalidades Activas */}
-      <div className="pt-2 border-t border-[#E9E9E7]">
-        <p className="text-xs text-[#9B9A97] mb-1.5">Canales activos</p>
-        <div className="flex flex-wrap gap-1">
-          {['interaction_rhythm', 'decision_sequence', 'error_prediction'].map((mod) => (
-            <span key={mod} className="text-xs bg-[#E5F3FF] text-[#0B6E99] px-2 py-0.5 rounded-full">
-              {mod === 'interaction_rhythm' ? 'Ritmo' :
-               mod === 'decision_sequence' ? 'Decisión' : 'Predicción'}
-            </span>
-          ))}
-          {(activeModalities.includes('facial_microexpression') || isFacialLive) && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${isFacialLive ? 'bg-[#DFAB01] text-white' : 'bg-[#FCF6E5] text-[#DFAB01]'}`}>
-              {isFacialLive ? '🔴 Facial' : 'Facial'}
-            </span>
-          )}
-          {!isFacialLive && !activeModalities.includes('facial_microexpression') && (
-            <span className="text-xs bg-[#F7F6F3] text-[#9B9A97] px-2 py-0.5 rounded-full">📷 Facial inactivo</span>
-          )}
-          {(activeModalities.includes('voice_prosody') || isVoiceLive) && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${isVoiceLive ? 'bg-[#0F7B6C] text-white' : 'bg-[#EEF7F4] text-[#0F7B6C]'}`}>
-              {isVoiceLive ? '🔴 Voz' : 'Voz'}
-            </span>
-          )}
-          {!isVoiceLive && !activeModalities.includes('voice_prosody') && (
-            <span className="text-xs bg-[#F7F6F3] text-[#9B9A97] px-2 py-0.5 rounded-full">🎤 Voz inactiva</span>
-          )}
-        </div>
-        {/* Detalles en vivo de facial */}
-        {isFacialLive && facialSnapshot && (
-          <div className="mt-2 text-xs text-[#787774] space-y-1 bg-[#FCF6E5] rounded-lg px-2 py-2">
-            <div className="flex items-center justify-between">
-              <span>👁 Mirada:</span>
-              <span className="font-medium text-[#DFAB01]">{facialSnapshot.gaze_direction === 'screen' ? '✅ Pantalla' : facialSnapshot.gaze_direction === 'away' ? '↗ Desviada' : facialSnapshot.gaze_direction === 'down' ? '↓ Abajo' : '↑ Arriba'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>😊 Emoción:</span>
-              <span className="font-medium text-[#DFAB01]">
-                {facialSnapshot.valence > 0.2 ? '😊 Positiva' : facialSnapshot.valence < -0.2 ? '😟 Negativa' : '😐 Neutral'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>🏃 Movimiento:</span>
-              <span className="font-medium text-[#DFAB01]">{Math.round(facialSnapshot.motion_level * 100)}%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>😌 Ceño:</span>
-              <span className="font-medium text-[#DFAB01]">{facialSnapshot.brow_furrow > 0.4 ? '😠 Fruncido' : '😌 Relajado'}</span>
-            </div>
-            <MetricBar value={facialSnapshot.attention_score} color="amber" label="Atención visual" />
-          </div>
-        )}
-        {/* Detalles en vivo de voz */}
-        {isVoiceLive && voiceSnapshot && (
-          <div className="mt-2 text-xs text-[#787774] space-y-0.5 bg-[#EEF7F4] rounded-lg px-2 py-1.5">
-            <p>🎵 Tono: {voiceSnapshot.pitch_mean_hz.toFixed(0)} Hz · Vol: {voiceSnapshot.volume_db.toFixed(0)} dB</p>
-            <p>⚡ Velocidad: {voiceSnapshot.speech_rate_wpm.toFixed(0)} ppm · Silencio: {(voiceSnapshot.silence_duration_ms / 1000).toFixed(1)}s</p>
-          </div>
         )}
       </div>
+
+      {/* Sensores locales en vivo: aún no forman parte de ninguna medición enviada */}
+      {(facialActive || voiceActive) && (
+        <div className="pt-2 border-t border-[#E9E9E7] text-xs text-[#787774] space-y-1">
+          <p className="text-[#9B9A97]">Sensores en vivo (se procesan en tu dispositivo)</p>
+          {facialActive && (
+            <p>📷 {isFacialLive
+              ? `Rostro detectado · mirada ${GAZE[facialSnapshot!.gaze_direction] ?? facialSnapshot!.gaze_direction}`
+              : 'Cámara activa · no se detecta un rostro'}</p>
+          )}
+          {voiceActive && <p>🎤 {isVoiceLive ? 'Detectando voz' : 'Micrófono activo · sin voz'}</p>}
+        </div>
+      )}
     </aside>
   );
 }

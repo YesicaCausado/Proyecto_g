@@ -456,7 +456,9 @@ class NeuroBotsNotificationsTests(unittest.TestCase):
 
         listed = self.client.get(f"{API}/super/bots", headers=self.h("super_a")).json()["bots"]
         row = next(b for b in listed if b["id"] == bot_id)
-        self.assertEqual(row["group"], "Matemáticas 9A")
+        self.assertEqual(row["groups"], ["Matemáticas 9A"])
+        self.assertEqual(row["individualAssignments"], 0)
+        self.assertTrue(row["teacherActive"])
         self.assertEqual(row["docs"], 0)
         self.assertGreaterEqual(row["queries"], 1)
         self.assertNotIn(bot_id, [b["id"] for b in

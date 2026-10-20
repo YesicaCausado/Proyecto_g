@@ -4,7 +4,8 @@ import api from "../../services/api";
 import { COMPETENCIES, findCompetency } from "../../data/competencies";
 import type { ChatMessage, ChatMessageResponse } from "../../types";
 import { Send, Loader2, BarChart2, X, Camera, CameraOff, Mic, MicOff, Captions, Plus, MessageSquare, Trash2, History, RefreshCw, Search, Sparkles } from "lucide-react";
-import { useBehavioralMetrics } from "../../hooks/useBehavioralMetrics";
+import { useBehavioralMetrics, type InputMode } from "../../hooks/useBehavioralMetrics";
+import { useInteractionMetrics } from "../../hooks/useInteractionMetrics";
 import { useFacialDetection } from "../../hooks/useFacialDetection";
 import { useVoiceProsody } from "../../hooks/useVoiceProsody";
 import { useVoiceTutor } from "../../hooks/useVoiceTutor";
@@ -404,6 +405,16 @@ export default function ChatPage() {
   const metrics = useBehavioralMetrics();
   const facial = useFacialDetection();
   const voice = useVoiceProsody();
+  const chatAreaRef = useRef<HTMLDivElement>(null);
+  const interaction = useInteractionMetrics(chatAreaRef);
+  // Inicio de un turno: la respuesta del tutor marca el comienzo de la
+  // ventana de medición de los cinco patrones.
+  const startTurn = () => {
+    metrics.onBotMessageReceived();
+    facial.beginTurn();
+    voice.beginTurn();
+    interaction.beginTurn();
+  };
   // Consentimiento previo: la cámara y el micrófono solo se encienden con un
   // consentimiento vigente registrado en el backend.
   const consents = useConsents();
@@ -460,7 +471,7 @@ export default function ChatPage() {
   const voiceTutor = useVoiceTutor(async (transcript) => {
     if (!transcript.trim() || sending) return;
     setInput(transcript);
-    await sendMessageWithText(transcript);
+    await sendMessageWithText(transcript, undefined, "voice");
   });
 
   // Cambiar idioma del tutor según la habilidad (inglés → voz en inglés)
@@ -610,7 +621,7 @@ export default function ChatPage() {
       setLastResponse(data);
       const startProgress = (data.metadata as { neurobot_progress?: NeuroBotProgress } | undefined)?.neurobot_progress;
       if (startProgress) setBotProgress(startProgress);
-      metrics.onBotMessageReceived();
+      startTurn();
       setMessages([{
         id: Date.now().toString(),
         role: "bot",
@@ -660,10 +671,18 @@ export default function ChatPage() {
     }
   };
 
-  const sendMessageWithText = async (msgContent: string, skillKeyOverride?: string) => {
+  const sendMessageWithText = async (msgContent: string, skillKeyOverride?: string, modeOverride?: InputMode | "selection") => {
     if (!msgContent.trim() || sending) return;
 
+    // Resúmenes del turno, tomados en el instante del envío.
     const behavioralMetrics = metrics.getMetrics(msgContent);
+    const inputMode = modeOverride ?? behavioralMetrics.input_mode;
+    const typedTurn = inputMode === "typed";
+    const facialTurn = facial.getTurnSummary();
+    const voiceTurn = voice.getTurnSummary();
+    const interactionTurn = interaction.getTurnSummary();
+    // Identificador idempotente: un reintento del mismo envío no duplica mediciones.
+    const clientMessageId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, "");
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -695,40 +714,28 @@ export default function ChatPage() {
           role: m.role === "bot" ? "assistant" : "user",
           content: m.content,
         })),
-        response_time_ms:  behavioralMetrics.response_time_ms,
-        typing_speed_cpm:  behavioralMetrics.typing_speed_cpm,
-        corrections:       behavioralMetrics.corrections,
-        pause_before_ms:   behavioralMetrics.pause_before_ms,
-        // Patrón 2 enriquecido
-        typing_bursts:     behavioralMetrics.typing_bursts,
+        client_message_id: clientMessageId,
+        input_mode:        inputMode,
+        // Teclado: null (omitido) cuando no hubo escritura medible
+        response_time_ms:  behavioralMetrics.response_time_ms ?? undefined,
+        typing_speed_cpm:  typedTurn ? behavioralMetrics.typing_speed_cpm ?? undefined : undefined,
+        corrections:       typedTurn ? behavioralMetrics.corrections ?? undefined : undefined,
+        pause_before_ms:   typedTurn ? behavioralMetrics.pause_before_ms ?? undefined : undefined,
+        typing_bursts:     typedTurn ? behavioralMetrics.typing_bursts ?? undefined : undefined,
+        keystrokes:        behavioralMetrics.keystrokes,
         is_question:       behavioralMetrics.is_question,
         message_length:    behavioralMetrics.message_length,
-        ...(facial.isStreaming && facial.snapshot.is_active ? {
-          facial_data: {
-            // Emociones VÁLIDAS para el backend (happy/sad/neutral/confused/focused/bored/surprised).
-            // Se mapea el espectro REAL del snapshot (valencia + arousal + ceño +
-            // atención + mirada) en lugar de las 4 etiquetas anteriores.
-            emotion: mapFacialEmotion(facial.snapshot),
-            valence: facial.snapshot.valence,
-            arousal: facial.snapshot.arousal,
-            attention_score: facial.snapshot.attention_score,
-            blink_rate: facial.snapshot.blink_rate,
-            brow_furrow: facial.snapshot.brow_furrow,
-            smile_intensity: facial.snapshot.smile_intensity,
-            gaze_direction: facial.snapshot.gaze_direction,
-          }
+        // Facial: promedio del turno SOLO con fotogramas con rostro. La
+        // etiqueta de expresión es heurística (blendshapes), no un diagnóstico.
+        facial_status:     facialTurn.status,
+        ...(facialTurn.data ? {
+          facial_data: { ...facialTurn.data, emotion: mapFacialEmotion(facialTurn.data) },
         } : {}),
-        ...(voice.isStreaming ? {
-          voice_data: {
-            pitch_mean_hz:       voice.snapshot.pitch_mean_hz,
-            volume_db:           voice.snapshot.volume_db,
-            speech_rate_wpm:     voice.snapshot.speech_rate_wpm,
-            voice_tremor:        voice.snapshot.voice_tremor,
-            energy_level:        voice.snapshot.energy_level,
-            filler_words_count:  voice.snapshot.filler_words_count,
-            silence_duration_ms: voice.snapshot.silence_duration_ms,
-          }
-        } : {}),
+        // Voz: agregado del turno solo con voz suficiente (≥ 1 s)
+        voice_status:      voiceTurn.status,
+        ...(voiceTurn.data ? { voice_data: voiceTurn.data } : {}),
+        // Interacción: eventos de interfaz del turno (permanencia, no tiempo activo)
+        interaction_data:  interactionTurn,
       });
       data = res.data;
     } catch (err: unknown) {
@@ -777,7 +784,7 @@ export default function ChatPage() {
       setLastResponse(data);
       const msgProgress = (data.metadata as { neurobot_progress?: NeuroBotProgress } | undefined)?.neurobot_progress;
       if (msgProgress) setBotProgress(msgProgress);
-      metrics.onBotMessageReceived();
+      startTurn();
 
       setMessages((prev) => [
         ...prev,
@@ -888,7 +895,7 @@ export default function ChatPage() {
         else if (conv.skill) setSelectedSkill(conv.skill);
       }
       metrics.reset();
-      if (msgs.length) metrics.onBotMessageReceived();
+      if (msgs.length) startTurn();
     } catch { /* ignore */ }
   };
 
@@ -1398,7 +1405,7 @@ export default function ChatPage() {
         )}
 
         {/* Messages */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-5 space-y-5 overscroll-contain scroll-smooth">
+        <div ref={chatAreaRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-5 space-y-5 overscroll-contain scroll-smooth">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex animate-fadeIn ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
               <div className={msg.role === "user" ? "max-w-[92%] sm:max-w-[80%] md:max-w-[65%] min-w-0" : "w-full min-w-0"}>
@@ -1418,7 +1425,12 @@ export default function ChatPage() {
                     {msg.suggestions.map((sug, i) => (
                       <button
                         key={i}
-                        onClick={() => { setInput(sug); inputRef.current?.focus(); }}
+                        onClick={() => {
+                          interaction.markSuggestionClick();
+                          metrics.onPaste(sug.length); // texto no escrito por el estudiante
+                          setInput(sug);
+                          inputRef.current?.focus();
+                        }}
                         className="text-xs bg-primary-50 text-primary-700 px-3 py-1.5 rounded-full hover:bg-primary-100 transition-colors"
                       >
                         {sug}
@@ -1520,6 +1532,7 @@ export default function ChatPage() {
               type="text"
               value={input}
               onChange={(e) => handleInputChange(e.target.value)}
+              onPaste={(e) => metrics.onPaste(e.clipboardData.getData("text").length)}
               onKeyDown={handleSendKeyDown}
               placeholder="Escribe tu respuesta..."
               disabled={sending}
@@ -1533,38 +1546,44 @@ export default function ChatPage() {
               {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </div>
-          {lastResponse && (
+          {lastResponse && (() => {
+            const engine = (lastResponse.metadata?.engine ?? {}) as { engagement_score?: number | null };
+            const errorRisk = lastResponse.metadata?.error_risk as number | null | undefined;
+            const statuses = Object.values((lastResponse.metadata?.pattern_status ?? {}) as Record<string, { status?: string }>);
+            const measured = statuses.filter((p) => p.status === "available").length;
+            return (
             <div className="flex items-center gap-3 mt-2 max-w-4xl mx-auto">
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Engagement:</span>
-                {lastResponse.metadata?.engagement_score != null ? (
+                {typeof engine.engagement_score === "number" ? (
                   <>
                     <div className="w-16 h-1 bg-[#F7F6F3] rounded-full overflow-hidden">
                       <div className="h-full bg-[#0B6E99] rounded-full transition-all duration-700"
-                        style={{ width: `${Math.round((lastResponse.metadata.engagement_score as number) * 100)}%` }} />
+                        style={{ width: `${Math.round(engine.engagement_score * 100)}%` }} />
                     </div>
-                    <span>{Math.round((lastResponse.metadata.engagement_score as number) * 100)}%</span>
+                    <span>{Math.round(engine.engagement_score * 100)}%</span>
                   </>
                 ) : (
-                  <span className="text-[#E9E9E7]">—</span>
+                  <span title="Evidencia insuficiente">—</span>
                 )}
               </div>
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span>Riesgo error:</span>
-                {lastResponse.metadata?.error_risk != null ? (
-                  <span className={`font-medium ${(lastResponse.metadata.error_risk as number) > 0.5 ? "text-[#E03E3E]" : "text-[#0F7B6C]"}`}>
-                    {Math.round((lastResponse.metadata.error_risk as number) * 100)}%
+                {typeof errorRisk === "number" ? (
+                  <span className={`font-medium ${errorRisk > 0.5 ? "text-[#E03E3E]" : "text-[#0F7B6C]"}`}>
+                    {Math.round(errorRisk * 100)}%
                   </span>
                 ) : (
-                  <span className="text-[#E9E9E7]">—</span>
+                  <span title="Se necesitan al menos 3 respuestas calificadas">—</span>
                 )}
               </div>
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <span className="text-[#9B9A97]">|</span>
-                <span>{((lastResponse.metadata?.active_modalities as string[]) ?? []).length}/5 patrones activos</span>
+                <span>{sending ? "Procesando medición…" : `${measured}/5 patrones con medición en este turno`}</span>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* ── Quiz interactivo (modal flotante) ────────────────────────────────────────── */}
           {currentQuiz && (
@@ -1573,7 +1592,7 @@ export default function ChatPage() {
                 quiz={currentQuiz}
                 onAnswer={(key, text) => {
                   setCurrentQuiz(null);
-                  sendMessageWithText(`Mi respuesta es ${key}) ${text}`);
+                  sendMessageWithText(`Mi respuesta es ${key}) ${text}`, undefined, "selection");
                 }}
                 dark
               />
@@ -1587,7 +1606,7 @@ export default function ChatPage() {
                 onClick={async () => {
                   setQuizSuggested(false);
                   // Solicitar quiz explícitamente
-                  await sendMessageWithText("Generame el quiz sobre el tema que acabamos de ver con exactamente 4 opciones (A, B, C, D)");
+                  await sendMessageWithText("Generame el quiz sobre el tema que acabamos de ver con exactamente 4 opciones (A, B, C, D)", undefined, "selection");
                 }}
                 disabled={sending}
                 className="text-sm font-semibold bg-[#6940A5] text-white px-6 py-3 rounded-full hover:shadow-xl transform hover:scale-105 transition-all disabled:opacity-40 flex items-center gap-2"
@@ -1603,7 +1622,7 @@ export default function ChatPage() {
           {!currentQuiz && sessionActive && !quizSuggested && (
             <div className="max-w-4xl mx-auto w-full mb-2 flex justify-end">
               <button
-                onClick={() => sendMessageWithText("Dame un quiz de opción múltiple (A, B, C, D) sobre lo que acabamos de ver para verificar que aprendí.")}
+                onClick={() => sendMessageWithText("Dame un quiz de opción múltiple (A, B, C, D) sobre lo que acabamos de ver para verificar que aprendí.", undefined, "selection")}
                 disabled={sending}
                 className="text-xs text-[#6940A5] hover:text-[#6940A5] border border-[#D9CCE9] hover:bg-[#F7F3FB] px-3 py-1 rounded-full transition-colors disabled:opacity-40"
               >
@@ -1620,6 +1639,7 @@ export default function ChatPage() {
           <CognitiveDashboard
             response={lastResponse}
             isVisible={showDashboard}
+            pending={sending}
             facialSnapshot={facial.snapshot}
             facialActive={facial.isStreaming}
             voiceSnapshot={voice.snapshot}

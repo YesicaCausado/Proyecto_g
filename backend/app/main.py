@@ -114,6 +114,18 @@ def _apply_schema_and_migrations():
             bind=engine
         )
 
+        print("[DB] Schema inicializado correctamente.")
+
+    except Exception as exc:
+
+        print(
+            "[DB] ERROR inicializando schema:",
+            repr(exc),
+        )
+
+    # Las columnas nuevas se agregan aunque create_all haya fallado: sin ellas
+    # cualquier consulta a aulas, evaluaciones o quizzes responde 500.
+    try:
         # SQLite local: create_all no agrega columnas nuevas a tablas que ya
         # existen; se completan aquí para que la base de desarrollo no quede
         # desincronizada. En PostgreSQL las columnas se agregan con las
@@ -126,12 +138,10 @@ def _apply_schema_and_migrations():
             from app.db.migrate import ensure_reporting_schema
             ensure_reporting_schema(engine)
 
-        print("[DB] Schema inicializado correctamente.")
-
     except Exception as exc:
 
         print(
-            "[DB] ERROR inicializando schema:",
+            "[DB] ERROR aplicando columnas nuevas:",
             repr(exc),
         )
 

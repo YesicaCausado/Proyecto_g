@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from datetime import datetime, timedelta
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_permission
@@ -32,6 +32,7 @@ from app.models.learning import ChatMessage, LearningSession, QuizHistory
 from app.models.expert_bot import ExpertBot
 from app.models.messages import DirectMessage
 from app.services.competencies import COMP_NAMES, classroom_competency, valid_key
+from app.services import neuroalert_service
 
 router = APIRouter(prefix="/super", tags=["Super Profesor - Stats"])
 
@@ -65,9 +66,6 @@ async def get_institution(
         "phone":        inst.phone,
         "address":      inst.address,
         "website":      inst.website,
-        "timezone":     inst.timezone or "America/Bogota",
-        "language":     inst.language or "es",
-        "primary_color": inst.primary_color or "#6940A5",
         "logo_url":     inst.logo_url,
         "created_at":   inst.created_at.isoformat() if inst.created_at else None,
     }
@@ -80,10 +78,29 @@ class InstitutionUpdate(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     website: Optional[str] = None
-    timezone: Optional[str] = None
-    language: Optional[str] = None
-    primary_color: Optional[str] = None
     logo_url: Optional[str] = None
+
+
+LOGO_MAX_BYTES = 2 * 1024 * 1024
+_LOGO_PREFIXES = ("data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,")
+
+
+def _validate_logo(logo: str) -> None:
+    """El logo llega como data URL (PNG, JPG o WebP, máximo 2 MB). Se muestra
+    en los paneles de todos los usuarios de la institución."""
+    import base64
+    import binascii
+    prefix = next((p for p in _LOGO_PREFIXES if logo.startswith(p)), None)
+    if prefix is None:
+        raise HTTPException(400, "El logo debe ser una imagen PNG, JPG o WebP.")
+    try:
+        raw = base64.b64decode(logo[len(prefix):], validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(400, "El archivo del logo está dañado.")
+    if not raw:
+        raise HTTPException(400, "El archivo del logo está vacío.")
+    if len(raw) > LOGO_MAX_BYTES:
+        raise HTTPException(400, "El logo supera el límite de 2 MB.")
 
 
 # ── PATCH /super/institution ──────────────────────────────────────────────────
@@ -99,6 +116,18 @@ async def update_institution(
     if not inst:
         raise HTTPException(404, "Institución no encontrada")
 
+    if payload.logo_url:
+        _validate_logo(payload.logo_url)
+    if payload.name is not None and not payload.name.strip():
+        raise HTTPException(400, "El nombre de la institución no puede quedar vacío.")
+    if payload.dane_code is not None:
+        dane = payload.dane_code.strip()
+        if not dane:
+            raise HTTPException(400, "El código DANE no puede quedar vacío.")
+        clash = db.query(Institution.id).filter(Institution.dane_code == dane, Institution.id != inst.id).first()
+        if clash:
+            raise HTTPException(400, "Ya existe otra institución con ese código DANE.")
+
     for field_name in [
         "name",
         "dane_code",
@@ -106,9 +135,6 @@ async def update_institution(
         "phone",
         "address",
         "website",
-        "timezone",
-        "language",
-        "primary_color",
         "logo_url",
     ]:
         value = getattr(payload, field_name, None)
@@ -116,7 +142,7 @@ async def update_institution(
             continue
         if isinstance(value, str):
             value = value.strip()
-            if field_name in {"email", "phone", "address", "website", "timezone", "language", "primary_color", "logo_url"} and value == "":
+            if field_name in {"email", "phone", "address", "website", "logo_url"} and value == "":
                 value = None
         setattr(inst, field_name, value)
 
@@ -130,9 +156,6 @@ async def update_institution(
         "phone": inst.phone,
         "address": inst.address,
         "website": inst.website,
-        "timezone": inst.timezone,
-        "language": inst.language,
-        "primary_color": inst.primary_color,
         "logo_url": inst.logo_url,
     }
 
@@ -159,181 +182,136 @@ async def get_super_dashboard(
         ) from e
 
 
+def _institution_staff_ids(db: Session, inst_id: int) -> list[int]:
+    """Profesores y Súper Profesores de la institución (activos o no): dueños
+    posibles de los grupos que se cuentan en el panel y en Grupos."""
+    return [uid for (uid,) in db.query(User.id).filter(
+        User.role.in_([UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value]),
+        User.institution_id == inst_id,
+    ).all()]
+
+
+def _avg10(values: list[float]) -> Optional[float]:
+    """Promedio 0-100 → escala 0-10; None cuando no hay datos (no 0)."""
+    return round(sum(values) / len(values) / 10, 1) if values else None
+
+
 def _compute_super_dashboard(current_user: User, db: Session):
     inst_id = _get_institution_id(current_user, db)
     if not inst_id:
         raise HTTPException(status_code=400, detail="No tienes una institución asignada")
 
-    # ── Usuarios de la institución ───────────────────────────────
-    teachers_q = db.query(User).filter(
+    # ── Usuarios activos de la institución ───────────────────────
+    teachers = db.query(User).filter(
         User.role == UserRole.PROFESOR.value,
-        User.is_active == True,
+        User.is_active == True,  # noqa: E712
         User.institution_id == inst_id,
-    )
-    students_q = db.query(User).filter(
+    ).order_by(User.full_name).all()
+    student_ids = [uid for (uid,) in db.query(User.id).filter(
         User.role == UserRole.ESTUDIANTE.value,
-        User.is_active == True,
+        User.is_active == True,  # noqa: E712
         User.institution_id == inst_id,
-    )
-    total_teachers = teachers_q.count()
-    total_students = students_q.count()
+    ).all()]
 
-    # ── Clases activas ───────────────────────────────────────────
-    teacher_ids = [t.id for t in teachers_q.all()]
-    groups_q = db.query(Classroom).filter(
-        Classroom.is_active == True,
-        Classroom.teacher_id.in_(teacher_ids),
-    )
-    total_groups = groups_q.count()
+    # ── Grupos activos (misma definición que «Grupos activos» en Grupos) ──
+    classrooms = db.query(Classroom).filter(
+        Classroom.is_active == True,  # noqa: E712
+        Classroom.teacher_id.in_(_institution_staff_ids(db, inst_id)),
+    ).all()
+    classroom_by_id = {c.id: c for c in classrooms}
 
-    # ── Promedio general ─────────────────────────────────────────
-    student_ids = [s.id for s in students_q.all()]
-    avg_score = 0.0
+    # Inscripciones activas de estudiantes activos en esos grupos.
+    enrollments = db.query(Enrollment).filter(
+        Enrollment.classroom_id.in_(list(classroom_by_id)),
+        Enrollment.is_active == True,  # noqa: E712
+        Enrollment.student_id.in_(student_ids),
+    ).all() if classroom_by_id and student_ids else []
+
+    # ── Promedio general (quizzes reales; None si no hay ninguno) ─
+    avg_score = None
     if student_ids:
         avg_raw = db.query(func.avg(QuizHistory.performance_score)).filter(
             QuizHistory.user_id.in_(student_ids),
-            QuizHistory.performance_score != None,
+            QuizHistory.performance_score != None,  # noqa: E711
         ).scalar()
-        # QuizHistory.performance_score está en escala 0-100; normalizamos a 0-10.
-        avg_score = round(float(avg_raw or 0) / 10, 1)
+        avg_score = round(float(avg_raw) / 10, 1) if avg_raw is not None else None
 
-    # ── Estudiantes en riesgo (enrollment con risk_level medium/high) ──
-    at_risk_ids: set[int] = set()
-    if teacher_ids:
-        risk_enrollments = db.query(Enrollment).join(
-            Classroom, Enrollment.classroom_id == Classroom.id
-        ).filter(
-            Classroom.teacher_id.in_(teacher_ids),
-            Enrollment.is_active == True,
-            Enrollment.risk_level.in_(["medium", "high"]),
-        ).all()
-        for e in risk_enrollments:
-            at_risk_ids.add(e.student_id)
-    at_risk_count = len(at_risk_ids)
+    # ── Estudiantes en riesgo (riesgo medio/alto en alguna inscripción) ──
+    risk_rank = {"high": 0, "medium": 1}
+    worst: dict[int, Enrollment] = {}
+    for e in enrollments:
+        if e.risk_level in risk_rank:
+            cur = worst.get(e.student_id)
+            if cur is None or risk_rank[e.risk_level] < risk_rank[cur.risk_level]:
+                worst[e.student_id] = e
+    names = {u.id: u for u in db.query(User).filter(User.id.in_(list(worst))).all()} if worst else {}
+    at_risk_detail = []
+    for sid, e in worst.items():
+        st = names.get(sid)
+        c = classroom_by_id.get(e.classroom_id)
+        at_risk_detail.append({
+            "name":    (st.full_name or st.username) if st else "Estudiante",
+            "grade":   (st.grade if st else None) or "—",
+            "avg":     _avg10([float(e.average_score or 0)]) if (e.total_sessions or 0) > 0 else None,
+            "subject": c.subject if c else "—",
+            "classroom": c.name if c else "—",
+            "risk":    e.risk_level,
+        })
+    at_risk_detail.sort(key=lambda x: (risk_rank[x["risk"]], x["avg"] if x["avg"] is not None else 99))
 
-    # ── Ranking de profesores ─────────────────────────────────────
-    teacher_ranking = []
+    # ── Ranking de profesores (solo promedios con actividad real) ─
     week_ago = datetime.utcnow() - timedelta(days=7)
-    for t in teachers_q.order_by(User.full_name).all():
-        classrooms = db.query(Classroom).filter(
-            Classroom.teacher_id == t.id,
-            Classroom.is_active == True,
-        ).all()
-        if not classrooms:
+    by_teacher: dict[int, list[Enrollment]] = {}
+    for e in enrollments:
+        by_teacher.setdefault(classroom_by_id[e.classroom_id].teacher_id, []).append(e)
+    teacher_ranking = []
+    for t in teachers:
+        if not any(c.teacher_id == t.id for c in classrooms):
             continue
-        cids = [c.id for c in classrooms]
-        enrollments = db.query(Enrollment).filter(
-            Enrollment.classroom_id.in_(cids),
-            Enrollment.is_active == True,
-        ).all()
-        n_students = len(enrollments)
-        avg_t = (sum(e.average_score for e in enrollments) / n_students) if n_students else 0
-        active = sum(1 for e in enrollments if e.last_activity and e.last_activity > week_ago)
-        participation = round((active / n_students * 100)) if n_students else 0
+        ens = by_teacher.get(t.id, [])
+        students = {e.student_id for e in ens}
+        active = {e.student_id for e in ens if e.last_activity and e.last_activity > week_ago}
         teacher_ranking.append({
             "name": t.full_name or t.username,
             "subject": t.subject_area or "—",
-            "avg": round(avg_t / 10, 1),          # score 0-100 → 0-10
-            "participation": participation,
-            "students": n_students,
+            "avg": _avg10([float(e.average_score or 0) for e in ens if (e.total_sessions or 0) > 0]),
+            "participation": round(len(active) / len(students) * 100) if students else None,
+            "students": len(students),
         })
-    # Ordenar por avg desc
-    teacher_ranking.sort(key=lambda x: x["avg"], reverse=True)
+    teacher_ranking.sort(key=lambda x: (x["avg"] is None, -(x["avg"] or 0), x["name"]))
 
-    # ── Estudiantes en riesgo detalle ─────────────────────────────
-    at_risk_detail = []
-    for sid in list(at_risk_ids)[:8]:
-        st = db.query(User).filter(User.id == sid).first()
-        if not st:
-            continue
-        e = db.query(Enrollment).filter(
-            Enrollment.student_id == sid,
-            Enrollment.is_active == True,
-        ).order_by(Enrollment.risk_level.desc()).first()
-        at_risk_detail.append({
-            "name":    st.full_name or st.username,
-            "grade":   st.grade or "—",
-            "avg":     round((e.average_score if e else 0) / 10, 1),
-            "subject": st.subject_area or "—",
-            "risk":    e.risk_level if e else "medium",
-        })
-
-    # ── Detalle de TODOS los estudiantes (no solo en riesgo) ──────
-    # El "Reporte por Estudiante" debe listar a todos los estudiantes de la
-    # institución con su promedio real, grado y área. Se calcula el promedio
-    # desde QuizHistory (actividad real); los que aún no tienen quizzes
-    # aparecen con promedio 0 y riesgo "Sin actividad".
-    students_detail = []
-    if student_ids:
-        agg_rows = (
-            db.query(
-                QuizHistory.user_id,
-                func.avg(QuizHistory.performance_score).label("avg_score"),
-                func.count(QuizHistory.id).label("attempts"),
-            )
-            .filter(
-                QuizHistory.user_id.in_(student_ids),
-                QuizHistory.performance_score != None,
-            )
-            .group_by(QuizHistory.user_id)
-            .all()
-        )
-        avg_by_student: dict[int, float] = {r.user_id: float(r.avg_score or 0) for r in agg_rows}
-        attempts_by_student: dict[int, int] = {r.user_id: int(r.attempts or 0) for r in agg_rows}
-
-        # Riesgo por estudiante (desde Enrollment) para mostrar el estado real.
-        risk_by_student: dict[int, str] = {}
-        enroll_rows = (
-            db.query(Enrollment.student_id, Enrollment.risk_level)
-            .filter(
-                Enrollment.student_id.in_(student_ids),
-                Enrollment.is_active == True,
-            )
-            .all()
-        )
-        for sid, rl in enroll_rows:
-            if rl in ("medium", "high"):
-                risk_by_student[sid] = rl
-
-        for st in students_q.order_by(User.full_name).all():
-            sid = st.id
-            raw_avg = avg_by_student.get(sid, 0.0)
-            attempts = attempts_by_student.get(sid, 0)
-            risk = risk_by_student.get(sid, "none")
-            students_detail.append({
-                "name":     st.full_name or st.username,
-                "grade":    st.grade or "—",
-                "avg":      round(raw_avg / 10, 1),        # 0-100 → 0-10
-                "subject":  st.subject_area or "—",
-                "risk":     risk if risk != "none" else ("Sin actividad" if attempts == 0 else "normal"),
-                "attempts": attempts,
-            })
-
-        # Ordenar: en riesgo primero, luego por promedio desc.
-        risk_prio = {"high": 0, "medium": 1, "normal": 2, "none": 3, "Sin actividad": 3}
-        students_detail.sort(key=lambda x: (risk_prio.get(x["risk"], 3), -x["avg"]))
-
-    # ── Distribución por áreas (clases por materia) ───────────────
+    # ── Áreas: distribución de grupos y rendimiento real por área ─
     areas: dict[str, int] = {}
-    for c in groups_q.all():
-        key = (c.subject or "Otra").strip()
+    scores_by_area: dict[str, list[float]] = {}
+    students_by_area: dict[str, set] = {}
+    for c in classrooms:
+        key = (c.subject or "Otra").strip() or "Otra"
         areas[key] = areas.get(key, 0) + 1
-    total_cls = sum(areas.values()) or 1
+    for e in enrollments:
+        key = (classroom_by_id[e.classroom_id].subject or "Otra").strip() or "Otra"
+        if (e.total_sessions or 0) > 0:
+            scores_by_area.setdefault(key, []).append(float(e.average_score or 0))
+            students_by_area.setdefault(key, set()).add(e.student_id)
+    total_cls = sum(areas.values())
     areas_data = [
-        {"label": k, "pct": round(v / total_cls * 100)}
+        {"label": k, "groups": v, "pct": round(v / total_cls * 100)}
         for k, v in sorted(areas.items(), key=lambda x: -x[1])
+    ]
+    areas_performance = [
+        {"label": k, "avg_pct": round(sum(v) / len(v), 1), "students": len(students_by_area[k])}
+        for k, v in sorted(scores_by_area.items(), key=lambda x: -(sum(x[1]) / len(x[1])))
     ]
 
     return {
-        "total_teachers": total_teachers,
-        "total_students": total_students,
-        "total_groups":   total_groups,
+        "total_teachers": len(teachers),
+        "total_students": len(student_ids),
+        "total_groups":   len(classrooms),
         "avg_score":      avg_score,
-        "at_risk_count":  at_risk_count,
+        "at_risk_count":  len(worst),
         "teacher_ranking": teacher_ranking[:10],
-        "at_risk_detail":  at_risk_detail,
-        "students_detail": students_detail,
+        "at_risk_detail":  at_risk_detail[:8],
         "areas_data":      areas_data[:8],
+        "areas_performance": areas_performance[:8],
     }
 
 
@@ -346,143 +324,202 @@ async def get_super_alerts(
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)
+    alerts = _institution_alerts(current_user, db)
+    acks = neuroalert_service.acknowledged(db, current_user.id, [a["key"] for a in alerts])
+    result = []
+    for a in alerts:
+        item = {k: v for k, v in a.items() if k not in ("key", "signature")}
+        item["resolved"] = neuroalert_service.is_resolved(acks, a)
+        result.append(item)
+    counts = {p: sum(1 for a in result if a["priority"] == p and not a["resolved"]) for p in ("alta", "media", "baja")}
+    return {
+        "alerts": result,
+        "total": len(result),
+        "active": sum(counts.values()),
+        "counts": counts,
+    }
+
+
+_ALERT_TEXT = {
+    "inactividad":      ("Inactividad", "{name} sin actividad", "Sin actividad desde hace {days} días en {cls}."),
+    "sin_inicio":       ("Sin inicio", "{name} nunca inició", "Nunca ha iniciado una sesión en {cls}."),
+    "bajo_rendimiento": ("Bajo rendimiento", "{name} — promedio muy bajo", "Promedio de {score:.0f}% en {cls}."),
+    "riesgo_cognitivo": ("Riesgo cognitivo", "Riesgo detectado: {name}", "Factores: {factors} en {cls}."),
+}
+
+
+def _institution_alerts(current_user: User, db: Session) -> list[dict]:
+    """NeuroAlertas de los grupos activos de la institución (estudiantes activos)."""
     inst_id = _get_institution_id(current_user, db)
-
-    teacher_ids = [t.id for t in db.query(User).filter(
-        User.role == UserRole.PROFESOR.value,
-        User.institution_id == inst_id,
-        User.is_active == True,
-    ).all()]
-
+    if not inst_id:
+        return []
+    rows = (
+        db.query(Enrollment, Classroom, User)
+        .join(Classroom, Classroom.id == Enrollment.classroom_id)
+        .join(User, User.id == Enrollment.student_id)
+        .filter(
+            Classroom.is_active == True,  # noqa: E712
+            Classroom.teacher_id.in_(_institution_staff_ids(db, inst_id)),
+            Enrollment.is_active == True,  # noqa: E712
+            User.is_active == True,  # noqa: E712
+            User.role == UserRole.ESTUDIANTE.value,
+        )
+        .all()
+    )
+    now = datetime.utcnow()
     alerts = []
-    if not teacher_ids:
-        return {"alerts": [], "total": 0}
-
-    classrooms = db.query(Classroom).filter(
-        Classroom.teacher_id.in_(teacher_ids),
-        Classroom.is_active == True,
-    ).all()
-
-    week_ago = datetime.utcnow() - timedelta(days=7)
-
-    for c in classrooms:
-        enrollments = db.query(Enrollment).filter(
-            Enrollment.classroom_id == c.id,
-            Enrollment.is_active == True,
-        ).all()
-        for e in enrollments:
-            st = db.query(User).filter(User.id == e.student_id).first()
-            name = st.full_name or st.username if st else "Estudiante"
-
-            # Datos compartidos a todas las alertas del estudiante en esta clase
-            common = {
-                "studentId":   e.student_id,
-                "studentName": name,
-                "classroom":   c.name,
-                "grade":       st.grade if st else None,
-                "subject":     c.subject,
-                "competency":  classroom_competency(c),
-                "averageScore": round(float(e.average_score or 0), 1),
-                "totalSessions": int(e.total_sessions or 0),
-                "totalTimeMinutes": int(e.total_time_minutes or 0),
-                "riskLevel":    e.risk_level,
-                "riskFactors":  e.risk_factors or [],
+    for e, c, st in rows:
+        name = st.full_name or st.username
+        common = {
+            "studentId":   e.student_id,
+            "studentName": name,
+            "classroom":   c.name,
+            "grade":       st.grade,
+            "subject":     c.subject,
+            "competency":  classroom_competency(c),
+            "averageScore": round(float(e.average_score or 0), 1),
+            "totalSessions": int(e.total_sessions or 0),
+            "totalTimeMinutes": int(e.total_time_minutes or 0),
+            "riskLevel":    e.risk_level,
+            "riskFactors":  e.risk_factors or [],
+        }
+        for a in neuroalert_service.enrollment_alerts(e, now):
+            category, title, desc = _ALERT_TEXT[a["type"]]
+            fmt = {
+                "name": name, "cls": c.name, "days": a.get("days_inactive"),
+                "score": float(e.average_score or 0),
+                "factors": ", ".join(e.risk_factors or ["detectado"]),
             }
-
-            if e.last_activity:
-                days_inactive = (datetime.utcnow() - e.last_activity).days
-                if days_inactive >= 7:
-                    alerts.append({
-                        "id": f"inact-{e.id}",
-                        "priority": "alta" if days_inactive >= 14 else "media",
-                        "category": "Inactividad",
-                        "title": f"{name} sin actividad",
-                        "description": f"Sin actividad desde hace {days_inactive} días en {c.name}.",
-                        "affectedCount": 1,
-                        "affectedLabel": "estudiante",
-                        "time": f"Hace {days_inactive} días",
-                        "resolved": False,
-                        "daysInactive": days_inactive,
-                        **common,
-                    })
-            elif e.total_sessions == 0:
-                alerts.append({
-                    "id": f"never-{e.id}",
-                    "priority": "media",
-                    "category": "Sin inicio",
-                    "title": f"{name} nunca inició",
-                    "description": f"Nunca ha iniciado una sesión en {c.name}.",
-                    "affectedCount": 1,
-                    "affectedLabel": "estudiante",
-                    "time": "Pendiente",
-                    "resolved": False,
-                    **common,
-                })
-
-            if e.total_sessions >= 3 and e.average_score < 40:
-                alerts.append({
-                    "id": f"low-{e.id}",
-                    "priority": "alta",
-                    "category": "Bajo rendimiento",
-                    "title": f"{name} — promedio muy bajo",
-                    "description": f"Promedio de {e.average_score:.0f}% en {c.name}.",
-                    "affectedCount": 1,
-                    "affectedLabel": "estudiante",
-                    "time": "Actual",
-                    "resolved": False,
-                    **common,
-                })
-
-            if e.risk_level in ("medium", "high"):
-                alerts.append({
-                    "id": f"risk-{e.id}",
-                    "priority": "alta" if e.risk_level == "high" else "media",
-                    "category": "Riesgo cognitivo",
-                    "title": f"Riesgo detectado: {name}",
-                    "description": f"Factores: {', '.join(e.risk_factors or ['detectado'])} en {c.name}.",
-                    "affectedCount": 1,
-                    "affectedLabel": "estudiante",
-                    "time": "Reciente",
-                    "resolved": False,
-                    **common,
-                })
+            item = {
+                "id": a["key"],
+                "key": a["key"],
+                "signature": a["signature"],
+                "priority": "alta" if a["severity"] == "high" else "media",
+                "category": category,
+                "title": title.format(**fmt),
+                "description": desc.format(**fmt),
+                "affectedCount": 1,
+                "affectedLabel": "estudiante",
+                "time": {
+                    "inactividad": f"Hace {a.get('days_inactive')} días",
+                    "sin_inicio": "Pendiente",
+                }.get(a["type"], "Actual"),
+                **common,
+            }
+            if a["type"] == "inactividad":
+                item["daysInactive"] = a["days_inactive"]
+            alerts.append(item)
 
     priority_order = {"alta": 0, "media": 1, "baja": 2}
-    alerts.sort(key=lambda a: priority_order.get(a["priority"], 3))
-    return {"alerts": alerts[:50], "total": len(alerts)}
+    alerts.sort(key=lambda a: (priority_order.get(a["priority"], 3), a["studentName"]))
+    return alerts
+
+
+@router.post("/stats/alerts/{alert_id}/resolve")
+async def resolve_super_alert(
+    alert_id: str,
+    resolved: bool = Query(True),
+    current_user: User = Depends(get_current_user),
+    _authorized: User = Depends(require_permission(Permission.VER_NEUROALERTAS)),
+    db: Session = Depends(get_db),
+):
+    """Marca (o reabre con resolved=false) una NeuroAlerta vigente de la institución."""
+    _require_super(current_user)
+    alert = next((a for a in _institution_alerts(current_user, db) if a["key"] == alert_id), None)
+    if alert is None:
+        raise HTTPException(404, "La alerta ya no está vigente o no pertenece a tu institución.")
+    neuroalert_service.set_resolved(db, current_user.id, alert, resolved)
+    db.commit()
+    return {"id": alert_id, "resolved": resolved}
 
 
 # ── GET /super/audit ──────────────────────────────────────────────────────────
 
+# Categoría de cada acción registrada en audit_logs (para filtrar en el servidor).
+AUDIT_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "create":   ("create_teacher", "create_student", "bulk_create_teacher", "bulk_create_student",
+                 "create_institution", "create_classroom"),
+    "update":   ("update_teacher", "update_student", "update_classroom"),
+    "delete":   ("deactivate_teacher", "deactivate_student"),
+    "login":    ("login", "login_success", "login_failed"),
+    "security": ("revoke_sessions", "password_reset_requested", "password_reset_completed"),
+    "broadcast": ("broadcast",),
+}
+_ACTION_CATEGORY = {a: cat for cat, actions in AUDIT_CATEGORIES.items() for a in actions}
+
+
+def _audit_description(lg: AuditLog, target_name: Optional[str]) -> str:
+    """Texto legible del registro (los comunicados guardan JSON interno)."""
+    if lg.action == "broadcast":
+        import json as _json
+        try:
+            data = _json.loads(lg.notes or "{}")
+        except ValueError:
+            data = {}
+        return f"Comunicado «{data.get('subject', '(sin asunto)')}» a {data.get('to', 'la institución')} ({data.get('total', 0)} destinatarios)"
+    parts = [p for p in (lg.notes, target_name and f"Usuario: {target_name}") if p]
+    return " · ".join(parts) or lg.action
+
+
 @router.get("/audit")
 async def get_audit_logs(
-    limit: int = Query(50, le=200),
-    offset: int = Query(0),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     action: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="YYYY-MM-DD (incluido)"),
+    q: Optional[str] = Query(None, description="Texto en la descripción o el nombre de quien actuó"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
 
-    q = db.query(AuditLog).filter(AuditLog.institution_id == inst_id)
+    query = db.query(AuditLog).filter(AuditLog.institution_id == inst_id)
     if action:
-        q = q.filter(AuditLog.action.ilike(f"%{action}%"))
-    total = q.count()
-    logs = q.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit).all()
+        query = query.filter(AuditLog.action.ilike(f"%{action}%"))
+    if category:
+        if category == "other":
+            query = query.filter(AuditLog.action.notin_(list(_ACTION_CATEGORY)))
+        elif category in AUDIT_CATEGORIES:
+            query = query.filter(AuditLog.action.in_(AUDIT_CATEGORIES[category]))
+        else:
+            raise HTTPException(400, "Categoría inválida.")
+    try:
+        if date_from:
+            query = query.filter(AuditLog.created_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+        if date_to:
+            query = query.filter(AuditLog.created_at < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
+    except ValueError:
+        raise HTTPException(400, "Fecha inválida (usa AAAA-MM-DD).")
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        actors = db.query(User.id).filter(User.institution_id == inst_id,
+                                          or_(User.full_name.ilike(term), User.username.ilike(term)))
+        query = query.filter(or_(AuditLog.notes.ilike(term), AuditLog.performed_by_id.in_(actors),
+                                 AuditLog.target_user_id.in_(actors)))
+    total = query.count()
+    logs = query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).offset(offset).limit(limit).all()
+
+    people_ids = {lg.performed_by_id for lg in logs} | {lg.target_user_id for lg in logs}
+    people = {u.id: u for u in db.query(User).filter(User.id.in_([i for i in people_ids if i])).all()}
 
     result = []
     for lg in logs:
-        by = db.query(User).filter(User.id == lg.performed_by_id).first()
-        target = db.query(User).filter(User.id == lg.target_user_id).first()
+        by = people.get(lg.performed_by_id)
+        target = people.get(lg.target_user_id)
+        target_name = (target.full_name or target.username) if target else None
         result.append({
             "id":           lg.id,
             "action":       lg.action,
-            "performed_by": by.full_name or by.username if by else "Sistema",
-            "target_user":  target.full_name or target.username if target else None,
+            "category":     _ACTION_CATEGORY.get(lg.action, "other"),
+            "performed_by": (by.full_name or by.username) if by else "Sistema",
+            "performed_by_role": by.role if by else None,
+            "target_user":  target_name,
             "user_type":    lg.user_type,
             "ip_address":   lg.ip_address,
-            "notes":        lg.notes,
+            "description":  _audit_description(lg, target_name),
             "created_at":   lg.created_at.isoformat(),
         })
 
@@ -596,13 +633,10 @@ async def get_super_classrooms(
 
     # Todos los grupos de profesores de la institución, activos e
     # inactivos: la pantalla filtra por estado y permite reactivarlos.
-    teacher_ids = [t.id for t in db.query(User).filter(
-        User.role.in_([UserRole.PROFESOR.value, UserRole.SUPER_PROFESOR.value]),
-        User.institution_id == inst_id,
-    ).all()]
+    teacher_ids = _institution_staff_ids(db, inst_id) if inst_id else []
 
     if not teacher_ids:
-        return {"classrooms": [], "total": 0}
+        return {"classrooms": [], "total": 0, "unique_students": 0}
 
     q = db.query(Classroom).filter(
         Classroom.teacher_id.in_(teacher_ids),
@@ -611,21 +645,28 @@ async def get_super_classrooms(
         q = q.filter(Classroom.name.ilike(f"%{search}%"))
 
     classrooms = q.order_by(Classroom.created_at.desc()).all()
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    teachers = {u.id: u for u in db.query(User).filter(User.id.in_(teacher_ids)).all()}
+    # Inscripciones activas de estudiantes activos, en una sola consulta.
+    by_classroom: dict[int, list[Enrollment]] = {}
+    if classrooms:
+        for e in (db.query(Enrollment)
+                  .join(User, User.id == Enrollment.student_id)
+                  .filter(Enrollment.classroom_id.in_([c.id for c in classrooms]),
+                          Enrollment.is_active == True,  # noqa: E712
+                          User.is_active == True)  # noqa: E712
+                  .all()):
+            by_classroom.setdefault(e.classroom_id, []).append(e)
 
     result = []
+    unique_students: set[int] = set()
     for c in classrooms:
-        teacher = db.query(User).filter(User.id == c.teacher_id).first()
-        student_count = db.query(Enrollment).filter(
-            Enrollment.classroom_id == c.id,
-            Enrollment.is_active == True,
-        ).count()
-        # Promedio del grupo
-        enrollments = db.query(Enrollment).filter(
-            Enrollment.classroom_id == c.id,
-            Enrollment.is_active == True,
-        ).all()
-        avg = round(sum(e.average_score for e in enrollments) / len(enrollments) / 10, 1) if enrollments else 0.0
+        teacher = teachers.get(c.teacher_id)
+        enrollments = by_classroom.get(c.id, [])
+        student_count = len(enrollments)
+        if c.is_active:
+            unique_students.update(e.student_id for e in enrollments)
+        # Promedio del grupo: solo estudiantes con sesiones (None = sin datos).
+        avg = _avg10([float(e.average_score or 0) for e in enrollments if (e.total_sessions or 0) > 0])
         # Última actividad (más reciente)
         last_act = max((e.last_activity for e in enrollments if e.last_activity), default=None)
         if last_act:
@@ -639,7 +680,8 @@ async def get_super_classrooms(
         result.append({
             "id":          c.id,
             "name":        c.name,
-            "teacher":     teacher.full_name or teacher.username if teacher else "?",
+            "teacher":     (teacher.full_name or teacher.username) if teacher else "?",
+            "teacherActive": bool(teacher and teacher.is_active),
             "teacherId":   c.teacher_id,
             "subject":     c.subject,
             "competency":  classroom_competency(c),
@@ -651,7 +693,7 @@ async def get_super_classrooms(
             "lastActivity": last_active,
         })
 
-    return {"classrooms": result, "total": len(result)}
+    return {"classrooms": result, "total": len(result), "unique_students": len(unique_students)}
 
 
 def _institution_classroom(db: Session, current_user: User, classroom_id: int) -> Classroom:
@@ -675,7 +717,8 @@ async def get_super_classroom_detail(
     rows = (
         db.query(Enrollment, User)
         .join(User, User.id == Enrollment.student_id)
-        .filter(Enrollment.classroom_id == c.id, Enrollment.is_active == True)  # noqa: E712
+        .filter(Enrollment.classroom_id == c.id, Enrollment.is_active == True,  # noqa: E712
+                User.is_active == True)  # noqa: E712
         .order_by(User.full_name)
         .all()
     )
@@ -683,7 +726,7 @@ async def get_super_classroom_detail(
         "id":           u.id,
         "name":         u.full_name or u.username,
         "email":        u.email,
-        "avg":          round((e.average_score or 0) / 10, 1),
+        "avg":          _avg10([float(e.average_score or 0)]) if (e.total_sessions or 0) > 0 else None,
         "lastActivity": e.last_activity.strftime("%Y-%m-%d") if e.last_activity else None,
     } for e, u in rows]
     return {
@@ -706,6 +749,84 @@ class SuperClassroomUpdate(BaseModel):
     teacher_id: Optional[int] = None
     # Competencia Saber 11 del grupo; "general" = aula sin competencia única.
     competency: Optional[str] = None
+    # Datos del grupo (RF-10: el Súper Profesor también los edita).
+    name: Optional[str] = Field(default=None, max_length=150)
+    subject: Optional[str] = Field(default=None, max_length=100)
+    grade: Optional[str] = Field(default=None, max_length=20)
+    description: Optional[str] = None
+
+
+class SuperClassroomCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=150)
+    subject: str = Field(..., min_length=1, max_length=100)
+    grade: str = Field(default="", max_length=20)
+    description: str = ""
+    teacher_id: int
+    competency: Optional[str] = None
+    max_students: int = Field(default=40, ge=1, le=100)
+
+
+def _active_institution_teacher(db: Session, current_user: User, teacher_id: int) -> User:
+    teacher = db.query(User).filter(
+        User.id == teacher_id,
+        User.role == UserRole.PROFESOR.value,
+        User.institution_id == current_user.institution_id,
+        User.is_active == True,  # noqa: E712
+    ).first()
+    if not teacher:
+        raise HTTPException(400, "El profesor elegido no existe o no pertenece a tu institución.")
+    return teacher
+
+
+@router.post("/classrooms", status_code=201)
+async def create_super_classroom(
+    data: SuperClassroomCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Crea un grupo de la institución a cargo de un profesor activo (RF-10)."""
+    _require_super(current_user)
+    if not current_user.institution_id:
+        raise HTTPException(400, "No tienes una institución asignada")
+    teacher = _active_institution_teacher(db, current_user, data.teacher_id)
+    name, subject = data.name.strip(), data.subject.strip()
+    if not name or not subject:
+        raise HTTPException(400, "El nombre y la materia del grupo son obligatorios.")
+    if data.competency and data.competency != "general" and valid_key(data.competency) is None:
+        raise HTTPException(400, "Competencia inválida.")
+    from app.services.competencies import from_subject
+    from app.services import notification_service
+    code = Classroom.generate_invite_code()
+    while db.query(Classroom.id).filter(Classroom.invite_code == code).first():
+        code = Classroom.generate_invite_code()
+    c = Classroom(
+        teacher_id=teacher.id,
+        name=name,
+        subject=subject,
+        grade=data.grade.strip(),
+        description=data.description.strip(),
+        competency=(None if data.competency == "general"
+                    else valid_key(data.competency) if data.competency else from_subject(subject)),
+        max_students=data.max_students,
+        invite_code=code,
+    )
+    db.add(c)
+    db.flush()
+    db.add(AuditLog(
+        action="create_classroom",
+        performed_by_id=current_user.id,
+        target_user_id=teacher.id,
+        institution_id=current_user.institution_id,
+        notes=f"Grupo «{c.name}» creado para {teacher.full_name or teacher.username}",
+    ))
+    notification_service.notify(
+        db, [teacher.id], "actividad_institucional", "Nuevo grupo asignado",
+        f'{current_user.full_name or current_user.username} te asignó el grupo "{c.name}".',
+        link="/teacher?tab=grupos", resource_type="aula", resource_id=c.id,
+    )
+    db.commit()
+    return {"id": c.id, "name": c.name, "code": c.invite_code, "teacherId": teacher.id,
+            "teacher": teacher.full_name or teacher.username, "status": "activo"}
 
 
 @router.patch("/classrooms/{classroom_id}")
@@ -720,16 +841,19 @@ async def update_super_classroom(
     c = _institution_classroom(db, current_user, classroom_id)
     notes = []
     if data.teacher_id is not None and data.teacher_id != c.teacher_id:
-        new_teacher = db.query(User).filter(
-            User.id == data.teacher_id,
-            User.role == UserRole.PROFESOR.value,
-            User.institution_id == current_user.institution_id,
-            User.is_active == True,  # noqa: E712
-        ).first()
-        if not new_teacher:
-            raise HTTPException(400, "El profesor elegido no existe o no pertenece a tu institución.")
+        new_teacher = _active_institution_teacher(db, current_user, data.teacher_id)
         notes.append(f"transferido a {new_teacher.full_name or new_teacher.username}")
         c.teacher_id = new_teacher.id
+    for field, label in (("name", "nombre"), ("subject", "materia"), ("grade", "grado"), ("description", "descripción")):
+        value = getattr(data, field)
+        if value is None:
+            continue
+        value = value.strip()
+        if field in ("name", "subject") and not value:
+            raise HTTPException(400, f"El {label} del grupo no puede quedar vacío.")
+        if value != (getattr(c, field) or ""):
+            setattr(c, field, value)
+            notes.append(f"{label} actualizado")
     if data.is_active is not None and data.is_active != c.is_active:
         c.is_active = data.is_active
         notes.append("activado" if data.is_active else "desactivado")
@@ -770,11 +894,13 @@ async def get_super_bots(
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
 
-    teacher_ids = [t.id for t in db.query(User).filter(
+    # Profesores de la institución, activos o no: los NeuroBots de un profesor
+    # desactivado siguen existiendo (y los públicos siguen disponibles), así
+    # que el Súper Profesor debe poder verlos y moderarlos.
+    teacher_ids = [uid for (uid,) in db.query(User.id).filter(
         User.role == UserRole.PROFESOR.value,
         User.institution_id == inst_id,
-        User.is_active == True,
-    ).all()]
+    ).all()] if inst_id else []
 
     if not teacher_ids:
         return {"bots": [], "total": 0}
@@ -789,10 +915,14 @@ async def get_super_bots(
     creators = {u.id: u for u in db.query(User).filter(User.id.in_({b.creator_id for b in bots})).all()} if bots else {}
 
     # Métricas reales en consultas agrupadas (sin N+1).
-    docs, queries, groups = {}, {}, {}
+    docs, queries, groups, individual = {}, {}, {}, {}
     if bot_ids:
         from app.models.bot_document import BotDocument
         from app.models.classroom import ClassroomBot
+        from app.models.neurobot_assignment import StudentBotAssignment
+        individual = dict(db.query(StudentBotAssignment.bot_id, func.count(StudentBotAssignment.id))
+                          .filter(StudentBotAssignment.bot_id.in_(bot_ids))
+                          .group_by(StudentBotAssignment.bot_id).all())
         docs = dict(db.query(BotDocument.bot_id, func.count(BotDocument.id))
                     .filter(BotDocument.bot_id.in_(bot_ids)).group_by(BotDocument.bot_id).all())
         queries = dict(db.query(LearningSession.bot_id, func.count(ChatMessage.id))
@@ -812,8 +942,10 @@ async def get_super_bots(
             "id":         b.id,
             "name":       b.name,
             "teacher":    (creator.full_name or creator.username) if creator else "?",
-            "subject":    b.category or "—",
-            "group":      ", ".join(groups.get(b.id, [])) or "Sin grupos asignados",
+            "teacherActive": bool(creator and creator.is_active),
+            "subject":    b.category or "",
+            "groups":     groups.get(b.id, []),
+            "individualAssignments": int(individual.get(b.id, 0)),
             "docs":       docs.get(b.id, 0),
             "queries":    queries.get(b.id, 0),
             "status":     "activo" if b.is_active else "inactivo",
@@ -849,8 +981,8 @@ def _broadcast_recipients(body: "BroadcastSend", sender: "User", db: Session):
         return base.filter(User.role == UserRole.PROFESOR.value).all()
     if body.recipient_type == "estudiantes":
         return base.filter(User.role == UserRole.ESTUDIANTE.value).all()
-    if body.recipient_type == "grado" and body.grade:
-        return base.filter(User.grade == body.grade).all()
+    if body.recipient_type == "grado":
+        return base.filter(User.role == UserRole.ESTUDIANTE.value, User.grade == body.grade).all()
     # institucional (default): profesores + estudiantes de la institución
     return base.filter(
         User.role.in_([UserRole.PROFESOR.value, UserRole.ESTUDIANTE.value])
@@ -878,20 +1010,25 @@ async def list_broadcasts(
         except Exception:
             notes = {}
 
-        # Conteo real de lecturas: destinatarios que leyeron el mensaje entregado
+        # Conteo real de lecturas: solo los mensajes que entregó ESTE comunicado
+        # (antes contaba cualquier mensaje leído del rector a esas personas).
         recipient_ids = notes.get("recipient_ids") or []
+        message_ids = notes.get("message_ids") or []
         total = len(recipient_ids) if recipient_ids else notes.get("total", 0)
         reads = 0
-        if recipient_ids:
-            reads = (
-                db.query(func.count(DirectMessage.id))
-                .filter(
-                    DirectMessage.sender_id == lg.performed_by_id,
-                    DirectMessage.receiver_id.in_(recipient_ids),
-                    DirectMessage.is_read == True,
-                )
-                .scalar()
-            ) or 0
+        if message_ids:
+            reads = db.query(func.count(DirectMessage.id)).filter(
+                DirectMessage.id.in_(message_ids),
+                DirectMessage.is_read == True,  # noqa: E712
+            ).scalar() or 0
+        elif recipient_ids:
+            # Comunicados anteriores (sin ids guardados): el mismo texto entregado.
+            reads = db.query(func.count(DirectMessage.id)).filter(
+                DirectMessage.sender_id == lg.performed_by_id,
+                DirectMessage.receiver_id.in_(recipient_ids),
+                DirectMessage.content == _broadcast_content(notes.get("subject", ""), notes.get("body", "")),
+                DirectMessage.is_read == True,  # noqa: E712
+            ).scalar() or 0
 
         result.append({
             "id":       lg.id,
@@ -906,18 +1043,30 @@ async def list_broadcasts(
     return {"broadcasts": result, "total": len(result)}
 
 
+def _broadcast_content(subject: str, body: str) -> str:
+    return f"📢 {subject}\n\n{body}"
+
+
 @router.post("/broadcasts", status_code=201)
 async def send_broadcast(
     subject: str = Form(...),
     body: str = Form(...),
     recipient_type: str = Form("institucional"),
     grade: Optional[str] = Form(None),
-    scheduled_at: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
+    subject, body = subject.strip(), body.strip()
+    grade = (grade or "").strip() or None
+    if not subject or not body:
+        raise HTTPException(400, "El asunto y el mensaje son obligatorios.")
+    if recipient_type not in ("institucional", "profesores", "estudiantes", "grado"):
+        raise HTTPException(400, "Tipo de destinatario inválido.")
+    if recipient_type == "grado" and not grade:
+        # Antes, sin grado el comunicado se enviaba a toda la institución.
+        raise HTTPException(400, "Selecciona el grado al que va dirigido el mensaje.")
 
     # Construir el "body" del broadcast (por motivos de retrocompatibilidad con
     # JSON se aceptan también los campos vía form).
@@ -940,18 +1089,20 @@ async def send_broadcast(
 
     total = len(recipients)
     recipient_ids = [u.id for u in recipients]
+    if not recipient_ids:
+        raise HTTPException(400, "No hay destinatarios activos para ese envío.")
 
     # ── Entregar un mensaje real en el buzón de cada destinatario ─────────────
-    if recipients:
-        db.add_all([
-            DirectMessage(
-                sender_id=current_user.id,
-                receiver_id=uid,
-                content=f"📢 {data.subject}\n\n{data.body}",
-            )
-            for uid in recipient_ids
-        ])
-        db.flush()
+    delivered = [
+        DirectMessage(
+            sender_id=current_user.id,
+            receiver_id=uid,
+            content=_broadcast_content(data.subject, data.body),
+        )
+        for uid in recipient_ids
+    ]
+    db.add_all(delivered)
+    db.flush()
 
     import json as _json
     notes = _json.dumps({
@@ -960,6 +1111,7 @@ async def send_broadcast(
         "to":            to_label,
         "total":         total,
         "recipient_ids": recipient_ids,
+        "message_ids":   [m.id for m in delivered],
     })
 
     log = AuditLog(

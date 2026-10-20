@@ -68,12 +68,10 @@ export interface ChatMessageResponse {
   confidence: number;
   suggestions: string[];
   should_pause: boolean;
+  // Incluye `pattern_status` (estado de los 5 patrones) y `engine` (estimación
+  // del motor). Los indicadores globales (engagement, atención, riesgo) viven en
+  // `metadata.engine`; el backend no los envía en el nivel superior.
   metadata: Record<string, unknown>;
-  emotional_state: string | null;
-  attention_level: number;
-  engagement_score: number;
-  error_risk: number;
-  active_modalities: string[];
 }
 
 export interface SessionStats {

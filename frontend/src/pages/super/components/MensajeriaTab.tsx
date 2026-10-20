@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Send, Users, GraduationCap, BookOpen, User, Clock, CheckCheck, Plus, Trash2 } from 'lucide-react';
+import { MessageSquare, Send, Users, GraduationCap, BookOpen, User, Clock, CheckCheck, Plus, AlertCircle } from 'lucide-react';
 import api from '../../../services/api';
 import Messaging from '../../../components/Messaging';
 
@@ -24,10 +24,11 @@ export default function MensajeriaTab() {
   const [grade, setGrade]         = useState('');
   const [subject, setSubject]     = useState('');
   const [body, setBody]           = useState('');
-  const [scheduleDate, setScheduleDate] = useState('');
   const [sent, setSent]           = useState<SentMsg[]>([]);
+  const [sentError, setSentError] = useState('');
   const [sending, setSending]     = useState(false);
   const [success, setSuccess]     = useState('');
+  const [sendError, setSendError] = useState('');
   const [teacherCount, setTeacherCount] = useState<number | null>(null);
   const [studentCount, setStudentCount] = useState<number | null>(null);
   const [grades, setGrades]             = useState<string[]>([]);
@@ -35,7 +36,7 @@ export default function MensajeriaTab() {
   useEffect(() => {
     api.get('/super/broadcasts')
       .then(r => setSent(r.data.broadcasts ?? []))
-      .catch(() => setSent([]));
+      .catch(() => { setSent([]); setSentError('No fue posible cargar los mensajes enviados.'); });
   }, []);
 
   useEffect(() => {
@@ -47,20 +48,24 @@ export default function MensajeriaTab() {
     }).catch(() => {});
   }, []);
 
+  const missingGrade = recipient === 'grado' && !grade;
+
   const handleSend = async () => {
-    if (!subject.trim() || !body.trim()) return;
+    if (!subject.trim() || !body.trim() || missingGrade) return;
     setSending(true);
+    setSendError('');
     try {
       const form = new URLSearchParams({ subject, body, recipient_type: recipient });
       if (recipient === 'grado') form.set('grade', grade);
       const res = await api.post('/super/broadcasts', form);
       setSent(prev => [res.data, ...prev]);
-      setSubject(''); setBody(''); setScheduleDate('');
-      setSuccess('¡Mensaje enviado exitosamente!');
+      setSubject(''); setBody('');
+      setSuccess(`Mensaje entregado a ${res.data.total} ${res.data.total === 1 ? 'destinatario' : 'destinatarios'}.`);
       setTimeout(() => setSuccess(''), 4000);
       setView('sent');
-    } catch {
-      setSuccess('');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setSendError(typeof detail === 'string' ? detail : 'No fue posible enviar el mensaje. Intenta de nuevo.');
     } finally {
       setSending(false);
     }
@@ -137,23 +142,25 @@ export default function MensajeriaTab() {
               className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm outline-none focus:ring-1 focus:ring-[#0066FF] resize-none" />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-[#787774] mb-1.5 uppercase tracking-wide flex items-center gap-1">
-              <Clock className="w-3 h-3" /> Programar envío (opcional)
-            </label>
-            <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
-              className="px-3 py-2 border border-[#E9E9E7] rounded-md text-sm outline-none focus:ring-1 focus:ring-[#0066FF] bg-white" />
-          </div>
+          {/* El envío programado se retiró: el campo existía pero el mensaje
+              salía de inmediato (no hay tarea que lo envíe después). */}
+          {sendError && (
+            <p className="flex items-center gap-2 text-sm text-[#E03E3E] bg-[#FDEEEE] border border-[#F5C7C7] rounded-md px-3 py-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" /> {sendError}
+            </p>
+          )}
 
           <div className="flex items-center justify-between pt-2 border-t border-[#E9E9E7] gap-3">
+            <p className="text-[11px] text-[#AEADAB]">Se entrega de inmediato en el buzón de Mensajería de cada destinatario activo.</p>
             <div className="flex gap-2">
-              <button onClick={() => { setSubject(''); setBody(''); }}
+              <button onClick={() => { setSubject(''); setBody(''); setSendError(''); }}
                 className="px-4 py-2 border border-[#E9E9E7] rounded-md text-sm text-[#787774] hover:bg-[#F7F6F3] transition-colors">
                 Limpiar
               </button>
-              <button onClick={handleSend} disabled={sending || !subject.trim() || !body.trim()}
+              <button onClick={handleSend} disabled={sending || !subject.trim() || !body.trim() || missingGrade}
+                title={missingGrade ? 'Selecciona el grado' : undefined}
                 className="flex items-center gap-2 px-5 py-2 bg-[#0066FF] text-white text-sm font-medium rounded-md hover:bg-[#0052CC] transition-colors shadow-sm disabled:opacity-50">
-                {sending ? <><span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> {scheduleDate ? 'Programar envío' : 'Enviar ahora'}</>}
+                {sending ? <><span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> Enviar ahora</>}
               </button>
             </div>
           </div>
@@ -165,8 +172,8 @@ export default function MensajeriaTab() {
           <table className="w-full text-sm">
             <thead className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
               <tr>
-                {['Asunto','Destinatarios','Fecha y hora','Lecturas','Acciones'].map(h => (
-                  <th key={h} className={`px-4 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider ${h==='Acciones'?'text-right':'text-left'}`}>{h}</th>
+                {['Asunto','Destinatarios','Fecha y hora','Lecturas'].map(h => (
+                  <th key={h} className="px-4 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider text-left">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -193,19 +200,13 @@ export default function MensajeriaTab() {
                         <span className="text-xs text-[#787774] whitespace-nowrap">{msg.reads}/{msg.total}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 text-right">
-                      <button onClick={() => setSent(prev => prev.filter(m => m.id !== msg.id))}
-                        className="p-1.5 rounded hover:bg-[#FDEEEE] text-[#787774] hover:text-[#E03E3E] transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
           {sent.length === 0 && (
-            <div className="text-center py-12 text-[#787774]"><MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" /><p>No hay mensajes enviados</p></div>
+            <div className="text-center py-12 text-[#787774]"><MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" /><p>{sentError || 'No hay mensajes enviados'}</p></div>
           )}
         </div>
       )}

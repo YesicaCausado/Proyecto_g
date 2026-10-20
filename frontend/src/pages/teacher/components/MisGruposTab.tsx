@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Plus, Copy, Share2, RefreshCw, Users, BookOpen, MoreVertical,
   Check, ChevronLeft, Megaphone, ClipboardList, UserCheck,
-  Trash2, Eye, EyeOff, Loader2,
+  Eye, EyeOff, Loader2,
 } from 'lucide-react';
 import api from '../../../services/api';
 
@@ -14,7 +14,7 @@ interface Group {
   description: string;
   color: string;
   students: number;
-  avg: number;
+  avg: number | null;   // null = ningún estudiante con sesiones
   code: string;
   active: boolean;
   created: string;
@@ -24,9 +24,9 @@ interface StudentRow {
   id: string;
   name: string;
   email: string;
-  avg: number;
+  avg: number | null;
   last: string;
-  status: string;
+  status: 'risk' | 'active' | 'inactive';
 }
 
 const COLORS = [
@@ -47,22 +47,31 @@ function mapGroup(raw: any): Group {
     description: raw.description ?? '',
     color:       raw.color ?? COLORS[0].value,
     students:    raw.student_count ?? 0,
-    avg:         raw.avg ?? 0,
+    avg:         raw.avg ?? null,
     code:        raw.invite_code ?? raw.code ?? '',
     active:      raw.is_active ?? true,
     created:     (raw.created_at ?? '').slice(0, 10),
   };
 }
 
+// GET /classrooms/{id}/students → EnrollmentResponse (student_name,
+// student_email, student_id). Antes se leían full_name/email, que no
+// existen en esa respuesta, y todos los nombres salían como «—».
 function mapStudent(raw: any): StudentRow {
-  const student = raw.student ?? raw;
+  const sessions = raw.total_sessions ?? 0;
+  const inactiveDays = raw.last_activity ? (Date.now() - new Date(raw.last_activity).getTime()) / 86400_000 : null;
   return {
-    id:     String(student.id ?? raw.student_id ?? ''),
-    name:   student.full_name ?? student.username ?? '—',
-    email:  student.email ?? '—',
-    avg:    raw.average_score != null ? Math.round((raw.average_score / 10) * 10) / 10 : 0,
+    id:     String(raw.student_id ?? raw.id ?? ''),
+    name:   raw.student_name || raw.student_username || '—',
+    email:  raw.student_email || '—',
+    avg:    sessions > 0 && raw.average_score != null ? Math.round(raw.average_score) / 10 : null,
     last:   raw.last_activity ? new Date(raw.last_activity).toLocaleDateString('es-CO') : 'Sin actividad',
-    status: raw.average_score < 40 || (raw.last_activity && (new Date().getTime() - new Date(raw.last_activity).getTime()) > 5 * 86400_000) ? 'risk' : 'active',
+    // Mismas reglas que NeuroAlertas: riesgo calculado, promedio < 40 % con
+    // 3+ sesiones o 7+ días sin actividad. Sin sesiones no es «en riesgo».
+    status: (raw.risk_level === 'medium' || raw.risk_level === 'high'
+             || (sessions >= 3 && raw.average_score < 40)
+             || (inactiveDays != null && inactiveDays >= 7)) ? 'risk'
+           : sessions === 0 ? 'inactive' : 'active',
   };
 }
 
@@ -71,13 +80,15 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
   const [tab, setTab] = useState<'inicio' | 'tablero' | 'estudiantes'>('inicio');
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [studentsError, setStudentsError] = useState('');
 
   useEffect(() => {
     if (tab === 'estudiantes') {
       setLoadingStudents(true);
+      setStudentsError('');
       api.get(`/classrooms/${group.id}/students`)
         .then(r => setStudents((r.data ?? []).map(mapStudent)))
-        .catch(() => setStudents([]))
+        .catch(() => { setStudents([]); setStudentsError('No fue posible cargar los estudiantes del grupo.'); })
         .finally(() => setLoadingStudents(false));
     }
   }, [tab, group.id]);
@@ -130,8 +141,8 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label:'Estudiantes', value: group.students, icon: Users      },
-            { label:'Promedio',    value: `${group.avg}/10`, icon: ClipboardList },
-            { label:'Tareas activas', value: '3', icon: ClipboardList     },
+            { label:'Promedio',    value: group.avg != null ? `${group.avg}/10` : 'Sin datos', icon: ClipboardList },
+            { label:'Creado',      value: group.created || '—', icon: BookOpen },
             { label:'Estado',     value: group.active ? 'Activo' : 'Inactivo', icon: UserCheck },
           ].map(c => {
             const Icon = c.icon;
@@ -144,7 +155,7 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
             );
           })}
           <div className="col-span-full bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg p-4 text-center">
-            <p className="text-sm text-[#787774]">Descripción: <span className="text-[#37352F]">{group.description}</span></p>
+            <p className="text-sm text-[#787774]">Descripción: <span className="text-[#37352F]">{group.description || 'Sin descripción'}</span></p>
           </div>
         </div>
       )}
@@ -187,18 +198,21 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
                   </td>
                   <td className="px-4 py-3 text-[#787774] text-xs">{s.email}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`text-sm font-bold ${s.avg < 6 ? 'text-[#E03E3E]' : s.avg < 7.5 ? 'text-[#D9730D]' : 'text-[#0F7B6C]'}`}>{s.avg}</span>
+                    {s.avg == null
+                      ? <span className="text-xs text-[#AEADAB]">—</span>
+                      : <span className={`text-sm font-bold ${s.avg < 6 ? 'text-[#E03E3E]' : s.avg < 7.5 ? 'text-[#D9730D]' : 'text-[#0F7B6C]'}`}>{s.avg}</span>}
                   </td>
                   <td className="px-4 py-3 text-center text-xs text-[#787774]">{s.last}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${s.status === 'risk' ? 'bg-red-50 text-[#E03E3E]' : 'bg-emerald-50 text-[#0F7B6C]'}`}>
-                      {s.status === 'risk' ? 'En riesgo' : 'Activo'}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                      s.status === 'risk' ? 'bg-red-50 text-[#E03E3E]' : s.status === 'inactive' ? 'bg-[#F7F6F3] text-[#787774]' : 'bg-emerald-50 text-[#0F7B6C]'}`}>
+                      {s.status === 'risk' ? 'En riesgo' : s.status === 'inactive' ? 'Sin sesiones' : 'Activo'}
                     </span>
                   </td>
                 </tr>
               ))}
               {students.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-8 text-xs text-[#787774]">Sin estudiantes inscritos aún.</td></tr>
+                <tr><td colSpan={5} className={`text-center py-8 text-xs ${studentsError ? 'text-[#E03E3E]' : 'text-[#787774]'}`}>{studentsError || 'Sin estudiantes inscritos aún.'}</td></tr>
               )}
             </tbody>
           </table>
@@ -213,27 +227,34 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
 export default function MisGruposTab() {
   const [groups,      setGroups]      = useState<Group[]>([]);
   const [loading,     setLoading]     = useState(true);
+  const [loadError,   setLoadError]   = useState('');
+  const [notice,      setNotice]      = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [busyId,      setBusyId]      = useState<string | null>(null);
   const [createError, setCreateError] = useState('');
   const [creating,    setCreating]    = useState(false);
   const [selected,    setSelected]    = useState<Group | null>(null);
   const [showModal,   setShowModal]   = useState(false);
   const [copiedId,    setCopiedId]    = useState<string | null>(null);
   const [menuId,      setMenuId]      = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     name: '', subject: '', grade: '', description: '',
-    color: COLORS[0].value, image: '',
+    color: COLORS[0].value,
   });
 
   useEffect(() => {
     api.get('/classrooms/my-classes')
       .then(r => setGroups((r.data.classrooms ?? []).map(mapGroup)))
-      .catch(() => setGroups([]))
+      .catch(() => { setGroups([]); setLoadError('No fue posible cargar tus grupos.'); })
       .finally(() => setLoading(false));
   }, []);
 
   const usedGroups = groups.length;
+
+  const errorText = (err: any, fallback: string) => {
+    const detail = err?.response?.data?.detail;
+    return typeof detail === 'string' ? detail : fallback;
+  };
 
   const copyCode = (id: string, code: string) => {
     navigator.clipboard.writeText(code).catch(() => {});
@@ -241,22 +262,36 @@ export default function MisGruposTab() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const regenerateCode = (_id: string) => {
-    // No backend endpoint for code regeneration — show copied code
-  };
-
-  const toggleActive = async (id: string) => {
-    // Optimistic toggle — no backend endpoint yet
-    setGroups(prev => prev.map(g => g.id === id ? { ...g, active: !g.active } : g));
-  };
-
-  const deleteGroup = async (id: string) => {
-    if (!window.confirm('¿Eliminar este grupo? Esta acción no se puede deshacer.')) return;
+  // RF-21: el código anterior deja de servir para unirse al grupo.
+  const regenerateCode = async (group: Group) => {
+    if (!window.confirm(`¿Generar un código nuevo para «${group.name}»? El código ${group.code} dejará de funcionar.`)) return;
+    setBusyId(group.id);
+    setNotice(null);
     try {
-      await api.delete(`/classrooms/${id}`);
-      setGroups(prev => prev.filter(g => g.id !== id));
-    } catch {
-      setGroups(prev => prev.filter(g => g.id !== id));
+      const { data } = await api.post(`/classrooms/${group.id}/regenerate-code`);
+      setGroups(prev => prev.map(g => g.id === group.id ? { ...g, code: data.invite_code } : g));
+      setNotice({ kind: 'ok', text: `Nuevo código de «${group.name}»: ${data.invite_code}` });
+    } catch (err) {
+      setNotice({ kind: 'error', text: errorText(err, 'No fue posible generar un código nuevo.') });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // El backend desactiva el grupo (no lo borra): sus estudiantes dejan de
+  // verlo y el Súper Profesor puede reactivarlo desde Grupos.
+  const deactivateGroup = async (group: Group) => {
+    if (!window.confirm(`¿Desactivar el grupo «${group.name}»? Sus estudiantes dejarán de verlo. Solo el Súper Profesor podrá reactivarlo.`)) return;
+    setBusyId(group.id);
+    setNotice(null);
+    try {
+      await api.delete(`/classrooms/${group.id}`);
+      setGroups(prev => prev.filter(g => g.id !== group.id));
+      setNotice({ kind: 'ok', text: `Grupo «${group.name}» desactivado.` });
+    } catch (err) {
+      setNotice({ kind: 'error', text: errorText(err, 'No fue posible desactivar el grupo.') });
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -275,7 +310,7 @@ export default function MisGruposTab() {
       });
       setGroups(prev => [mapGroup(res.data), ...prev]);
       setShowModal(false);
-      setForm({ name:'', subject:'', grade:'', description:'', color: COLORS[0].value, image:'' });
+      setForm({ name:'', subject:'', grade:'', description:'', color: COLORS[0].value });
     } catch (err: any) {
       const msg = err?.response?.data?.detail ?? 'Error al crear el grupo. Intenta de nuevo.';
       setCreateError(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -295,6 +330,13 @@ export default function MisGruposTab() {
         </div>
       )}
 
+      {(loadError || notice) && (
+        <div className={`rounded-lg border px-4 py-2.5 text-sm ${
+          loadError || notice?.kind === 'error' ? 'bg-red-50 border-red-100 text-[#E03E3E]' : 'bg-emerald-50 border-emerald-100 text-[#0F7B6C]'}`}>
+          {loadError || notice?.text}
+        </div>
+      )}
+
       {/* Barra superior */}
       <div className="flex items-center justify-between">
         <div>
@@ -311,7 +353,7 @@ export default function MisGruposTab() {
       </div>
 
       {/* Grid de grupos */}
-      {groups.length === 0 ? (
+      {groups.length === 0 && !loading && !loadError ? (
         <div className="bg-white border border-dashed border-[#E9E9E7] rounded-xl p-12 text-center">
           <BookOpen className="w-12 h-12 text-[#E9E9E7] mx-auto mb-3" />
           <p className="text-sm font-medium text-[#787774]">No tienes grupos creados</p>
@@ -347,19 +389,16 @@ export default function MisGruposTab() {
                           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#37352F] hover:bg-[#F7F6F3]">
                           <Eye className="w-3.5 h-3.5" /> Ver grupo
                         </button>
-                        <button onClick={() => { toggleActive(g.id); setMenuId(null); }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#37352F] hover:bg-[#F7F6F3]">
-                          {g.active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          {g.active ? 'Desactivar' : 'Activar'}
-                        </button>
-                        <button onClick={() => { regenerateCode(g.id); setMenuId(null); }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#37352F] hover:bg-[#F7F6F3]">
+                        <button onClick={() => { regenerateCode(g); setMenuId(null); }}
+                          disabled={busyId === g.id}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#37352F] hover:bg-[#F7F6F3] disabled:opacity-50">
                           <RefreshCw className="w-3.5 h-3.5" /> Nuevo código
                         </button>
                         <hr className="my-1 border-[#E9E9E7]" />
-                        <button onClick={() => { deleteGroup(g.id); setMenuId(null); }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#E03E3E] hover:bg-red-50">
-                          <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                        <button onClick={() => { deactivateGroup(g); setMenuId(null); }}
+                          disabled={busyId === g.id}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#E03E3E] hover:bg-red-50 disabled:opacity-50">
+                          <EyeOff className="w-3.5 h-3.5" /> Desactivar grupo
                         </button>
                       </div>
                     )}
@@ -369,7 +408,7 @@ export default function MisGruposTab() {
                 {/* Stats */}
                 <div className="flex items-center gap-4 mb-3 text-xs text-[#787774]">
                   <span className="flex items-center gap-1"><Users className="w-3 h-3" />{g.students} est.</span>
-                  {g.avg > 0 && <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" />Prom. {g.avg}</span>}
+                  <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" />{g.avg != null ? `Prom. ${g.avg}/10` : 'Sin promedio aún'}</span>
                   {!g.active && (
                     <span className="ml-auto px-1.5 py-0.5 bg-[#F7F6F3] text-[#AEADAB] rounded text-[10px]">Inactivo</span>
                   )}
@@ -392,9 +431,9 @@ export default function MisGruposTab() {
                         className="w-6 h-6 flex items-center justify-center rounded hover:bg-white text-[#787774] hover:text-[#2E6FDB] transition-colors">
                         <Share2 className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => regenerateCode(g.id)} title="Regenerar"
-                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-white text-[#787774] hover:text-[#D9730D] transition-colors">
-                        <RefreshCw className="w-3.5 h-3.5" />
+                      <button onClick={() => regenerateCode(g)} title="Generar un código nuevo" disabled={busyId === g.id}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-white text-[#787774] hover:text-[#D9730D] transition-colors disabled:opacity-50">
+                        {busyId === g.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   </div>
@@ -452,15 +491,8 @@ export default function MisGruposTab() {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#787774] mb-1.5 uppercase tracking-wide">Imagen (opcional)</label>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                  onChange={e => setForm(p => ({...p, image: e.target.files?.[0]?.name ?? ''}))} />
-                <button onClick={() => fileRef.current?.click()}
-                  className="w-full py-2.5 border border-dashed border-[#E9E9E7] rounded-lg text-xs text-[#787774] hover:bg-[#F7F6F3] transition-colors">
-                  {form.image ? `✓ ${form.image}` : '+ Subir imagen del grupo'}
-                </button>
-              </div>
+              {/* Se retiró «Imagen (opcional)»: solo guardaba el nombre del
+                  archivo en pantalla; el grupo no tiene dónde almacenar una imagen. */}
             </div>
             <div className="px-6 pb-5 flex flex-col gap-2">
               {createError && (

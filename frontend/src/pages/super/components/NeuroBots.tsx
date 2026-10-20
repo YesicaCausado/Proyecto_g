@@ -8,9 +8,19 @@ function apiError(err: any, fallback: string): string {
   return typeof detail === 'string' && detail.trim() ? detail : fallback;
 }
 
+// GET /super/bots (backend/app/api/super_stats.py). El Súper Profesor no crea
+// NeuroBots aquí: supervisa los de los profesores de su institución (RF-08).
 interface BotItem {
-  id: number; name: string; teacher: string; group: string; subject: string;
+  id: number; name: string; teacher: string; teacherActive: boolean; subject: string;
+  groups: string[]; individualAssignments: number;
   docs: number; queries: number; status: string; visibility: string; created: string;
+}
+
+function assignmentLabel(b: BotItem): string {
+  const parts: string[] = [];
+  if (b.groups.length) parts.push(b.groups.join(', '));
+  if (b.individualAssignments) parts.push(`${b.individualAssignments} ${b.individualAssignments === 1 ? 'estudiante' : 'estudiantes'} individual${b.individualAssignments === 1 ? '' : 'es'}`);
+  return parts.join(' · ') || 'Sin asignar a grupos ni estudiantes';
 }
 
 type Filter = 'todos' | 'activo' | 'inactivo';
@@ -73,16 +83,22 @@ export default function NeuroBots() {
     }
   };
 
+  const term = search.trim().toLowerCase();
   const filtered = bots.filter(b =>
     (filter === 'todos' || b.status === filter) &&
-    (b.name.toLowerCase().includes(search.toLowerCase()) ||
-     b.teacher.toLowerCase().includes(search.toLowerCase()) ||
-     b.subject.toLowerCase().includes(search.toLowerCase()))
+    (b.name.toLowerCase().includes(term) ||
+     b.teacher.toLowerCase().includes(term) ||
+     b.subject.toLowerCase().includes(term))
   );
 
+  // Tarjetas institucionales: se calculan sobre todos los bots de la
+  // institución (no sobre el filtro), con los mismos datos de la tabla.
+  // Consultas = mensajes enviados por usuarios en sesiones con el bot.
+  const kpi = (n: number) => (loadError ? '—' : n.toLocaleString());
   const totalQueries = bots.reduce((s, b) => s + b.queries, 0);
   const activeBots   = bots.filter(b => b.status === 'activo').length;
   const publicBots   = bots.filter(b => b.visibility === 'publico').length;
+  const totalDocs    = bots.reduce((s, b) => s + b.docs, 0);
 
   return (
     <div className="space-y-6">
@@ -117,10 +133,10 @@ export default function NeuroBots() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { icon: Bot,          label: 'NeuroBots activos', value: activeBots,       color: 'text-[#6940A5]', bg: 'bg-purple-50' },
-          { icon: MessageSquare,label: 'Consultas totales',  value: totalQueries,     color: 'text-[#0B6E99]', bg: 'bg-blue-50' },
-          { icon: Globe,        label: 'Bots públicos',     value: publicBots,       color: 'text-[#0F7B6C]', bg: 'bg-emerald-50' },
-          { icon: FileText,     label: 'Total documentos',  value: bots.reduce((s,b)=>s+b.docs,0), color: 'text-[#D9730D]', bg: 'bg-orange-50' },
+          { icon: Bot,          label: 'NeuroBots activos', value: kpi(activeBots),   color: 'text-[#6940A5]', bg: 'bg-purple-50' },
+          { icon: MessageSquare,label: 'Consultas totales',  value: kpi(totalQueries), color: 'text-[#0B6E99]', bg: 'bg-blue-50' },
+          { icon: Globe,        label: 'Bots públicos',     value: kpi(publicBots),   color: 'text-[#0F7B6C]', bg: 'bg-emerald-50' },
+          { icon: FileText,     label: 'Total documentos',  value: kpi(totalDocs),    color: 'text-[#D9730D]', bg: 'bg-orange-50' },
         ].map((k,i) => (
           <div key={i} className="bg-white border border-[#E9E9E7] rounded-lg p-4 flex items-center gap-3">
             <div className={`w-9 h-9 rounded-md ${k.bg} flex items-center justify-center flex-shrink-0`}>
@@ -170,9 +186,10 @@ export default function NeuroBots() {
                     <div className="w-8 h-8 bg-purple-50 rounded-md flex items-center justify-center flex-shrink-0">
                       <Bot className="w-4 h-4 text-[#6940A5]" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-semibold text-[#191919] text-sm">{bot.name}</p>
-                      <p className="text-[10px] text-[#787774]">{bot.group}</p>
+                      <p className={`text-[10px] truncate max-w-[220px] ${bot.groups.length || bot.individualAssignments ? 'text-[#787774]' : 'text-[#AEADAB] italic'}`}
+                        title={assignmentLabel(bot)}>{assignmentLabel(bot)}</p>
                     </div>
                   </div>
                 </td>
@@ -182,9 +199,14 @@ export default function NeuroBots() {
                       {bot.teacher.charAt(0)}
                     </div>
                     <span className="text-sm text-[#37352F]">{bot.teacher}</span>
+                    {!bot.teacherActive && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FCF6E5] text-[#D9730D]" title="La cuenta del profesor creador está desactivada">
+                        cuenta inactiva
+                      </span>
+                    )}
                   </div>
                 </td>
-                <td className="px-4 py-3.5 text-sm text-[#787774]">{bot.subject}</td>
+                <td className="px-4 py-3.5 text-sm text-[#787774]">{bot.subject || <span className="italic text-[#AEADAB]">Sin materia</span>}</td>
                 <td className="px-4 py-3.5">
                   <span className="inline-flex items-center gap-1 text-sm font-medium text-[#37352F]">
                     <FileText className="w-3.5 h-3.5 text-[#787774]" /> {bot.docs}
