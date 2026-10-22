@@ -101,30 +101,64 @@ def ensure_reporting_schema(engine) -> None:
 
 # Columnas que el código ya usa y que deben existir en PostgreSQL aunque el SQL
 # de migrations/ todavía no se haya ejecutado en Supabase (ver main.py).
+# (tabla, columna, definición)
 RUNTIME_COLUMNS = [
     # Eliminación de mensajes (migrations/applied/delete_fields.sql)
-    "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS deleted_for_sender BOOLEAN NOT NULL DEFAULT FALSE",
-    "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS deleted_for_receiver BOOLEAN NOT NULL DEFAULT FALSE",
-    "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS deleted_for_all BOOLEAN NOT NULL DEFAULT FALSE",
+    ("direct_messages", "deleted_for_sender", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("direct_messages", "deleted_for_receiver", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("direct_messages", "deleted_for_all", "BOOLEAN NOT NULL DEFAULT FALSE"),
     # Retiro de estudiantes (migrations/016_retiro_estudiantes.sql)
-    "ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS removed_at TIMESTAMP",
-    "ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS removed_by INTEGER REFERENCES users(id)",
-    "ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS removed_invite_code VARCHAR(8)",
+    ("enrollments", "removed_at", "TIMESTAMP"),
+    ("enrollments", "removed_by", "INTEGER REFERENCES users(id)"),
+    ("enrollments", "removed_invite_code", "VARCHAR(8)"),
     # Resolución del grupo de cada quiz (016)
-    "ALTER TABLE quiz_history ADD COLUMN IF NOT EXISTS group_resolution VARCHAR(20)",
+    ("quiz_history", "group_resolution", "VARCHAR(20)"),
 ]
 
 
 def ensure_runtime_columns(engine) -> None:
-    """Agrega en PostgreSQL las columnas de RUNTIME_COLUMNS. Idempotente."""
+    """Agrega en PostgreSQL las columnas de RUNTIME_COLUMNS que falten.
+
+    Se ejecuta de forma SÍNCRONA al arrancar (main.py): antes iba en un hilo en
+    segundo plano después de create_all y en Vercel la función se congelaba
+    antes de terminarlo, de modo que las consultas fallaban con
+    «column enrollments.removed_at does not exist».
+
+    Primero se consulta information_schema (una sola consulta) y solo se
+    ejecuta ALTER TABLE para lo que falte: ALTER toma un bloqueo exclusivo de
+    la tabla aunque la columna ya exista. Cada ALTER tiene tiempo límite para
+    no colgar el arranque si la tabla está ocupada. Idempotente.
+    """
     if engine is None or engine.dialect.name != "postgresql":
         return
-    for sql in RUNTIME_COLUMNS:
+    tables = sorted({t for t, _, _ in RUNTIME_COLUMNS})
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() AND table_name = ANY(:tables)"
+                ),
+                {"tables": tables},
+            ).all()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Columnas de arranque: no se pudo leer el esquema: {str(e)[:200]}")
+        return
+    existing = {(r[0], r[1]) for r in rows}
+    present_tables = {r[0] for r in rows}
+    for table, column, definition in RUNTIME_COLUMNS:
+        if (table, column) in existing or table not in present_tables:
+            # Tabla inexistente: la crea create_all ya con la columna.
+            continue
         try:
             with engine.begin() as conn:
-                conn.execute(text(sql))
+                conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+                conn.execute(text("SET LOCAL statement_timeout = '20s'"))
+                conn.execute(text(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"))
+            logger.info(f"Columna agregada al arrancar: {table}.{column}")
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Columna de arranque: {str(e)[:200]}")
+            logger.error(f"Columna de arranque {table}.{column}: {str(e)[:200]}")
 
 
 def run_migrations(engine) -> None:

@@ -131,9 +131,10 @@ def _apply_schema_and_migrations():
             _add_missing_sqlite_columns(engine)
         else:
             # Columnas e índices de la migración 014 (reportes institucionales).
-            from app.db.migrate import ensure_reporting_schema, ensure_runtime_columns
+            # Las columnas de RUNTIME_COLUMNS ya se agregaron de forma síncrona
+            # antes de iniciar este proceso (ver INICIALIZACIÓN).
+            from app.db.migrate import ensure_reporting_schema
             ensure_reporting_schema(engine)
-            ensure_runtime_columns(engine)
 
     except Exception as exc:
 
@@ -166,6 +167,17 @@ elif _secret_len < 32:
 # ============================================================
 # INICIALIZACIÓN
 # ============================================================
+
+# Columnas que el código consulta en cada petición (retiro de estudiantes,
+# borrado de mensajes, grupo del quiz): se garantizan ANTES de atender
+# peticiones, también en Vercel. Es rápido: una consulta a information_schema
+# y ALTER solo si falta algo.
+try:
+    from app.db.migrate import ensure_runtime_columns
+    ensure_runtime_columns(engine)
+except Exception as exc:  # noqa: BLE001
+    print("[DB] ERROR verificando columnas nuevas:", repr(exc))
+
 
 if IS_SERVERLESS:
 
