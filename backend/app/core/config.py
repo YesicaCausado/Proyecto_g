@@ -84,13 +84,18 @@ class Settings(BaseSettings):
     # ── Seguridad ────────────────────────────────────────────────────────────
     # Orígenes permitidos para CORS. NUNCA incluyas "*" cuando
     # allow_credentials=True (los navegadores lo rechazan y expone endpoints).
+    # Es la misma lista para CORS (main.py) y para el chequeo de origen del
+    # login (security.is_allowed_origin). Se amplía sin tocar el código con
+    # ALLOWED_ORIGINS_EXTRA (p. ej. un dominio propio, separado por comas).
     ALLOWED_ORIGINS: list = [
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://localhost:8000",
+        "https://localhost",            # app Android (Capacitor)
         "https://neurolearnym.vercel.app",
-    ]
+    ] + [o.strip() for o in os.getenv("ALLOWED_ORIGINS_EXTRA", "").split(",") if o.strip()]
 
     # Rate limiting (anti fuerza bruta) en endpoints de autenticación.
     RATE_LIMIT_MAX_REQUESTS: int = 20        # intentos permitidos en la ventana

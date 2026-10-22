@@ -263,10 +263,67 @@ def check_rate_limit(request: Request, username: str = "") -> None:
         )
 
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _origin_tuple(url: str) -> Optional[Tuple[str, str, int]]:
+    """(esquema, host, puerto) normalizados de una URL u origen; None si no es válida."""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url.strip())
+        scheme = (parsed.scheme or "").lower()
+        host = (parsed.hostname or "").lower()
+        port = parsed.port or _DEFAULT_PORTS.get(scheme)
+    except Exception:  # noqa: BLE001 (puerto fuera de rango, etc.)
+        return None
+    if scheme not in _DEFAULT_PORTS or not host or port is None:
+        return None
+    return scheme, host, port
+
+
+def _configured_origins() -> set:
+    """Orígenes explícitos: ALLOWED_ORIGINS (incluye ALLOWED_ORIGINS_EXTRA,
+    ver config.py) y FRONTEND_URL."""
+    raw = list(settings.ALLOWED_ORIGINS) + [settings.FRONTEND_URL]
+    return {t for t in (_origin_tuple(o) for o in raw) if t}
+
+
+def _is_local_dev_host(host: str) -> bool:
+    """Equipo local o red privada (desarrollo y pruebas desde el celular)."""
+    import ipaddress
+    if host in ("localhost", "::1"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private
+
+
+def _request_origin(request: Request) -> Optional[Tuple[str, str, int]]:
+    """Origen con el que el navegador ve a la API (tras el proxy de Vercel)."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    if not host:
+        return None
+    return _origin_tuple(f"{scheme.split(',')[0].strip()}://{host.split(',')[0].strip()}")
+
+
+def _origin_allowed(origin: Tuple[str, str, int], request: Request) -> bool:
+    if origin == _request_origin(request):
+        return True                       # misma página que la API (Vercel)
+    if origin in _configured_origins():
+        return True
+    # Fuera de producción: localhost/127.0.0.1 en cualquier puerto y red
+    # local. El proxy de Vite reenvía el Origin del navegador, así que antes
+    # 127.0.0.1:5173, otro puerto o la IP del equipo daban «Origen no permitido».
+    return not settings.IS_PRODUCTION and _is_local_dev_host(origin[1])
+
+
 def is_allowed_origin(request: Request) -> bool:
     """
-    Valida Origin (y como respaldo Referer) contra los orígenes permitidos.
-    Usado en las rutas de autenticación cuando CSRF_ORIGIN_ENFORCEMENT.
+    Valida Origin (y como respaldo Referer) en las rutas de autenticación
+    cuando CSRF_ORIGIN_ENFORCEMENT. Se compara esquema, host y puerto.
     """
     if not settings.CSRF_ORIGIN_ENFORCEMENT:
         return True
@@ -279,38 +336,15 @@ def is_allowed_origin(request: Request) -> bool:
             # Según configuración, dejamos pasar peticiones sin navegador
             # (los clientes API no envían cabeceras de origen).
             return True
-        referer_host = _host_of(referer)
-        return _host_allowed(referer_host)
+        # Antes se comparaba «host:puerto» con el nombre de host y un Referer
+        # con puerto nunca coincidía.
+        parsed = _origin_tuple(referer)
+        return parsed is not None and _origin_allowed(parsed, request)
 
-    try:
-        from urllib.parse import urlparse
-        origin_host = urlparse(origin).hostname or ""
-        origin_port = urlparse(origin).port
-    except Exception:
+    if origin == "null":
         return False
-
-    return _host_allowed(origin_host, origin_port)
-
-
-def _host_allowed(host: str, port: Optional[int] = None) -> bool:
-    for allowed in settings.ALLOWED_ORIGINS:
-        try:
-            from urllib.parse import urlparse
-            a = urlparse(allowed)
-        except Exception:
-            continue
-        if a.hostname == host and (port is None or a.port == port):
-            return True
-    return False
-
-
-def _host_of(url: str) -> str:
-    from urllib.parse import urlparse
-    parsed = urlparse(url)
-    hostname = parsed.hostname or ""
-    if parsed.port:
-        return f"{hostname}:{parsed.port}"
-    return hostname
+    parsed = _origin_tuple(origin)
+    return parsed is not None and _origin_allowed(parsed, request)
 
 
 def check_origin(request: Request) -> None:

@@ -35,6 +35,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.auth import router as auth_router
+from app.core.config import settings
 from app.core.security import (
     SecurityHeadersMiddleware,
     HSTSHeaderMiddleware,
@@ -272,10 +273,15 @@ def test_origin_allowlist_logic():
     _reset_limiters()
     from starlette.requests import Request
 
-    def make_request(origin: str) -> Request:
+    def make_request(origin: str = "", host: str = "127.0.0.1:8000", referer: str = "") -> Request:
+        headers = [(b"host", host.encode())]
+        if origin:
+            headers.append((b"origin", origin.encode()))
+        if referer:
+            headers.append((b"referer", referer.encode()))
         scope = {
             "type": "http",
-            "headers": [(b"origin", origin.encode())],
+            "headers": headers,
             "http_version": "1.1",
             "method": "POST",
             "scheme": "http",
@@ -288,6 +294,43 @@ def test_origin_allowlist_logic():
 
     assert is_allowed_origin(make_request("http://localhost:5173")) is True
     assert is_allowed_origin(make_request("https://evil.example")) is False
+    assert is_allowed_origin(make_request("null")) is False
+    # Referer con puerto: antes nunca coincidía («Origen no permitido»).
+    assert is_allowed_origin(make_request(referer="http://localhost:5173/#/login")) is True
+    assert is_allowed_origin(make_request(referer="https://evil.example/login")) is False
+
+
+def test_origin_local_dev_and_production():
+    """Desarrollo: localhost/127.0.0.1 en cualquier puerto y red local (el
+    proxy de Vite reenvía el Origin del navegador). Producción: solo la
+    lista configurada o el mismo origen."""
+    _reset_limiters()
+    from unittest import mock
+    from starlette.requests import Request
+
+    def make_request(origin: str, host: str = "localhost:8000", proto: str = "http") -> Request:
+        return Request({
+            "type": "http", "http_version": "1.1", "method": "POST", "scheme": "http",
+            "path": "/api/v1/auth/login", "query_string": b"",
+            "headers": [(b"origin", origin.encode()), (b"host", host.encode()),
+                        (b"x-forwarded-proto", proto.encode())],
+            "server": ("127.0.0.1", 8000), "client": ("127.0.0.1", 12345),
+        })
+
+    local = ["http://127.0.0.1:5173", "http://localhost:5175", "http://192.168.1.20:5173"]
+    with mock.patch.object(settings, "IS_PRODUCTION", False):
+        for origin in local:
+            assert is_allowed_origin(make_request(origin)) is True, origin
+        assert is_allowed_origin(make_request("https://evil.example")) is False
+    with mock.patch.object(settings, "IS_PRODUCTION", True):
+        assert is_allowed_origin(make_request("http://127.0.0.1:5173")) is True     # en la lista
+        assert is_allowed_origin(make_request("http://localhost:5175")) is False
+        assert is_allowed_origin(make_request("http://192.168.1.20:5173")) is False
+        assert is_allowed_origin(make_request("https://neurolearnym.vercel.app")) is True
+        # Vista previa de Vercel: la página y la API comparten dominio.
+        preview = "neurolearnym-git-main-equipo.vercel.app"
+        assert is_allowed_origin(make_request(f"https://{preview}", host=preview, proto="https")) is True
+        assert is_allowed_origin(make_request(f"https://{preview}", host="otra.vercel.app", proto="https")) is False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -303,6 +346,7 @@ def main() -> int:
         ("SQLi rechazado", test_sqli_payloads_rejected_by_login),
         ("cabeceras de seguridad presentes", test_security_headers_present),
         ("allowlist de origenes", test_origin_allowlist_logic),
+        ("origenes en desarrollo y produccion", test_origin_local_dev_and_production),
     ]
     print("\n NeuroLearn - PRUEBAS DE SEGURIDAD")
     print("=" * 60)
