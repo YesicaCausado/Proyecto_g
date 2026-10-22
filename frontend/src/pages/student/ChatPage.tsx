@@ -810,16 +810,11 @@ export default function ChatPage() {
       const isQuizSuggested = data?.metadata?.quiz_suggested === true;
       setQuizSuggested(isQuizSuggested);
 
-      if (isQuizSuggested) {
-        console.log("💡 Quiz sugerido por análisis neuroconductual - mostrar botón");
-      }
-
       // Detectar si el mensaje contiene un quiz generado (cuando el usuario acepta el sugerido)
       const generatedQuiz = parseQuizFromMessage(safeMessage);
       if (generatedQuiz) {
         setCurrentQuiz(generatedQuiz);
         setQuizSuggested(false); // Ocultar botón si se generó el quiz
-        console.log("📋 Quiz generado y mostrado");
       }
     } catch (uiErr) {
       console.error("Error procesando la respuesta del mensaje (bug de UI):", uiErr);

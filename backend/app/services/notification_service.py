@@ -11,6 +11,7 @@ Tipos y grupo de preferencia del perfil al que pertenecen:
     neurobot_asignado      nueva_actividad   → estudiante
     neurobot_completado    nueva_actividad   → profesor que asignó
     evaluacion_publicada   nueva_actividad   → estudiantes del aula
+    publicacion_tablero    nueva_actividad   → estudiantes del aula
     alerta_riesgo          nueva_actividad   → profesor del aula y Súper Profesor
     actividad_institucional nueva_actividad  → Súper Profesor
     racha / rendimiento    nueva_actividad   → estudiante
@@ -38,6 +39,7 @@ NOTIFICATION_TYPES: Dict[str, tuple] = {
     "rendimiento":             ("nueva_actividad", "star"),
     "mensaje_directo":         ("mensaje_directo", "message"),
     "material_compartido":     ("nueva_actividad", "clipboard"),
+    "publicacion_tablero":     ("nueva_actividad", "clipboard"),
     "automatizacion":          ("nueva_actividad", "alert"),
     "solicitud_consentimiento": ("nueva_actividad", "shield"),
 }

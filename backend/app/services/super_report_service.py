@@ -7,8 +7,10 @@ aislamiento por institución (el alcance se calcula aquí, en el backend).
 Fuentes de resultados académicos (ambas en la MISMA escala: % de aciertos 0-100)
     quiz        QuizHistory completados (performance_score). Práctica adaptativa
                 que el estudiante hace con el tutor. Se asocian al ESTUDIANTE
-                (igual que /teacher/stats y /teacher/reports/export), porque el
-                sistema no guarda el aula del quiz (classroom_id llega vacío).
+                (igual que /teacher/stats y /teacher/reports/export); en un
+                grupo cuentan solo los de su competencia
+                (enrollment_tracking_service.quiz_counts_for_group, la misma
+                regla del progreso del grupo).
     evaluacion  Evaluaciones publicadas por los docentes. Se toma el resultado
                 OFICIAL de cada estudiante en cada evaluación dentro del período
                 (mejor intento calificado, evaluation_service.official_submission).
@@ -54,6 +56,7 @@ from app.services.competencies import (  # noqa: F401  (re-exportados)
     COMP_KEYS, COMP_NAMES, COMPETENCIES, classify_competency, classroom_competency,
     evaluation_competency, quiz_competency,
 )
+from app.services.enrollment_tracking_service import quiz_counts_for_group
 from app.services.teacher_report_service import COLOMBIA_TZ, ReportError, _utc_bounds
 
 # ── Configuración (criterios explícitos) ─────────────────────────────────────
@@ -635,11 +638,20 @@ def _results_index(results: Iterable[Result]):
     return by_student, evals_by_group
 
 
-def _group_results(gid: int, members: Set[int], by_student, evals_by_group) -> List[Result]:
-    """Evaluaciones publicadas en el grupo + quizzes de sus estudiantes."""
+def _group_results(gid: int, members: Set[int], by_student, evals_by_group,
+                   group_competency: Optional[str]) -> List[Result]:
+    """Evaluaciones publicadas en el grupo + quizzes de práctica que cuentan
+    para él según la regla única del seguimiento (quiz_counts_for_group): los
+    de la competencia del grupo, o todos si el grupo no tiene competencia.
+    Antes entraban todos los quizzes de sus estudiantes (un quiz de inglés
+    contaba en el grupo de matemáticas)."""
     out = [r for r in evals_by_group.get(gid, []) if r.student_id in members]
     for sid in members:
-        out.extend(r for r in by_student.get(sid, []) if r.source == "quiz")
+        out.extend(
+            r for r in by_student.get(sid, [])
+            if r.source == "quiz"
+            and quiz_counts_for_group(r.competency, r.classroom_id, gid, group_competency)
+        )
     return out
 
 
@@ -649,8 +661,8 @@ def group_rows(ctx: Context) -> List[dict]:
     rows = []
     for gid, c in ctx.classrooms.items():
         members = ctx.students_by_group.get(gid, set()) & set(ctx.students)
-        res = _group_results(gid, members, cur_s, cur_g)
-        prev = _group_results(gid, members, prev_s, prev_g)
+        res = _group_results(gid, members, cur_s, cur_g, classroom_competency(c))
+        prev = _group_results(gid, members, prev_s, prev_g, classroom_competency(c))
         agg = aggregate(res)
         comp = [dict(key=k, name=n, **aggregate([r for r in res if r.competency == k])) for k, n in COMPETENCIES]
         best, worst = _best_worst(comp, min_students=1)
@@ -695,7 +707,7 @@ def teacher_rows(ctx: Context) -> List[dict]:
         for c in groups:
             m = ctx.students_by_group.get(c.id, set()) & set(ctx.students)
             members |= m
-            for r in _group_results(c.id, m, cur_s, cur_g):
+            for r in _group_results(c.id, m, cur_s, cur_g, classroom_competency(c)):
                 if id(r) not in seen:
                     seen.add(id(r))
                     res.append(r)
@@ -1181,9 +1193,10 @@ def group_detail(db: Session, user: User, filters: Filters, classroom_id: int) -
     members = ctx.students_by_group.get(classroom_id, set()) & set(ctx.students)
     cur_s, cur_g = _results_index(ctx.results_any_comp)
     prev_s, prev_g = _results_index(ctx.prev_results)
-    res_all = _group_results(classroom_id, members, cur_s, cur_g)
+    group_comp = classroom_competency(ctx.classrooms.get(classroom_id))
+    res_all = _group_results(classroom_id, members, cur_s, cur_g, group_comp)
     res = [r for r in res_all if not ctx.filters.competency or r.competency == ctx.filters.competency]
-    prev = _group_results(classroom_id, members, prev_s, prev_g)
+    prev = _group_results(classroom_id, members, prev_s, prev_g, group_comp)
     cases = followup_cases(ctx, db)
     flagged = {c["student"]["id"] for c in cases}
     by_student: Dict[int, List[Result]] = {}
@@ -1232,11 +1245,12 @@ def teacher_detail(db: Session, user: User, filters: Filters, teacher_id: int) -
     seen: Set[int] = set()
     for gid in ctx.classrooms:
         m = ctx.students_by_group.get(gid, set()) & set(ctx.students)
-        for r in _group_results(gid, m, cur_s, cur_g):
+        group_comp = classroom_competency(ctx.classrooms.get(gid))
+        for r in _group_results(gid, m, cur_s, cur_g, group_comp):
             if id(r) not in seen:
                 seen.add(id(r))
                 res.append(r)
-        for r in _group_results(gid, m, prev_s, prev_g):
+        for r in _group_results(gid, m, prev_s, prev_g, group_comp):
             if id(r) not in seen:
                 seen.add(id(r))
                 prev.append(r)

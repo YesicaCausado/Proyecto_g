@@ -824,7 +824,8 @@ export default function DesempenoPage() {
     <div className="p-10 flex flex-col items-center justify-center min-h-[60vh] gap-3 text-center">
       <AlertTriangle className="w-8 h-8 text-[#9B9A97]" />
       <p className="text-[#37352F] font-medium text-sm">No se pudo conectar con el servidor.</p>
-      <p className="text-[#9B9A97] text-xs">Verifica que el backend esté corriendo en localhost:8000</p>
+      <p className="text-[#9B9A97] text-xs">Revisa tu conexión e inténtalo de nuevo en unos segundos.</p>
+      <button onClick={() => window.location.reload()} className="mt-1 text-sm font-medium text-[#37352F] hover:underline">Reintentar</button>
     </div>
   );
 

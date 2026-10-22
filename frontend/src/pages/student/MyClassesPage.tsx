@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import type { Classroom } from '../../types';
@@ -7,27 +7,26 @@ import { Users, KeyRound, Loader2, CheckCircle, ChevronRight } from 'lucide-reac
 export default function MyClassesPage() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [inviteCode, setInviteCode] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [joinLoading, setJoinLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [fetched, setFetched] = useState(false);
-
-  const fetchClasses = async () => {
+  const fetchClasses = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const { data } = await api.get('/classrooms/my-enrolled');
       setClassrooms(data.classrooms || []);
     } catch {
-      setClassrooms([]);
+      // Un error no es «no estás inscrito»: se avisa y se puede reintentar.
+      setLoadError(true);
     } finally {
       setLoading(false);
-      setFetched(true);
     }
-  };
+  }, []);
 
-  // Fetch on first render
-  if (!fetched && !loading) fetchClasses();
+  useEffect(() => { fetchClasses(); }, [fetchClasses]);
 
   const joinClass = async () => {
     if (!inviteCode.trim()) return;
@@ -85,6 +84,11 @@ export default function MyClassesPage() {
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-5 h-5 animate-spin text-[#9B9A97]" />
+        </div>
+      ) : loadError ? (
+        <div role="alert" className="text-center py-12 text-[#787774]">
+          <p className="font-medium text-sm">No se pudieron cargar tus clases.</p>
+          <button onClick={fetchClasses} className="mt-2 text-sm font-medium text-[#37352F] hover:underline">Reintentar</button>
         </div>
       ) : classrooms.length === 0 ? (
         <div className="text-center py-12 text-[#787774]">

@@ -62,7 +62,7 @@ from app.schemas.schemas import (
     SessionStatsResponse,
     QuizResponse,
     QuizRequest,
-    QuizResponseGemini,
+    QuizPublicResponse,
     QuizSubmission,
     QuizHistoryResponse,
     QuizHistoryEntry,
@@ -178,16 +178,19 @@ def _quiz_scope(db: Session, user: User, request) -> tuple:
     Competencia y aula de un quiz adaptativo al guardarlo.
 
     La competencia es la que eligió el estudiante (o la deducida del tema). El
-    aula se asigna solo si el estudiante está inscrito en exactamente un grupo
-    activo de esa competencia; si hay varios o ninguno queda NULL y el reporte
-    lo asocia a los grupos de esa competencia (ver super_report_service).
+    aula se registra solo si el estudiante está inscrito en exactamente un
+    grupo activo de esa competencia. Con varios no se elige uno al azar: queda
+    NULL con resolución «varios_grupos» y el quiz cuenta en cada uno de esos
+    grupos (enrollment_tracking_service.quiz_counts_for_group).
+
+    Devuelve (competencia, aula, resolución).
     """
     from app.models.classroom import Classroom, Enrollment
     from app.services.competencies import classify_competency, classroom_competency, valid_key
 
     competency = valid_key(getattr(request, "competency", None)) or classify_competency(request.topic)
     if competency is None:
-        return None, None
+        return None, None, "sin_competencia"
     classrooms = (
         db.query(Classroom)
         .join(Enrollment, Enrollment.classroom_id == Classroom.id)
@@ -196,7 +199,13 @@ def _quiz_scope(db: Session, user: User, request) -> tuple:
         .all()
     )
     matching = [c.id for c in classrooms if classroom_competency(c) == competency]
-    return competency, (matching[0] if len(matching) == 1 else None)
+    if len(matching) == 1:
+        return competency, matching[0], "grupo_unico"
+    if matching:
+        logger.info("Quiz de %s: el estudiante %s tiene %s grupos de esa competencia (%s); "
+                    "cuenta en todos ellos", competency, user.id, len(matching), matching)
+        return competency, None, "varios_grupos"
+    return competency, None, "sin_grupo"
 
 
 def _infer_subject(topic: Optional[str]) -> str:
@@ -1864,7 +1873,7 @@ async def get_session_stats(
     )
 
 
-@router.post("/generate-quiz", response_model=QuizResponseGemini)
+@router.post("/generate-quiz", response_model=QuizPublicResponse)
 async def generate_cognitive_quiz(
     request: QuizRequest,
     current_user: User = Depends(get_current_user),
@@ -2089,12 +2098,13 @@ async def generate_cognitive_quiz(
         quiz_data["questions"] = valid_questions
 
         try:
-            quiz_competency, quiz_classroom_id = _quiz_scope(db, current_user, request)
+            quiz_competency, quiz_classroom_id, quiz_resolution = _quiz_scope(db, current_user, request)
             quiz_history_entry = QuizHistory(
                 user_id=current_user.id,
                 session_id=None,
                 classroom_id=quiz_classroom_id,
                 competency=quiz_competency,
+                group_resolution=quiz_resolution,
                 quiz_title=quiz_data["quiz_title"],
                 topic=request.topic,
                 difficulty=quiz_data.get("difficulty", difficulty),
@@ -2112,11 +2122,21 @@ async def generate_cognitive_quiz(
 
             logger.info(f"Quiz guardado con adaptación: {adaptation_note or 'Sin adaptación previa'}")
         except Exception as db_error:
-            logger.warning(f"No se pudo guardar en historial: {db_error}. Quiz generado sin historial.")
+            # Sin el registro no se puede calificar el quiz en el servidor:
+            # antes se devolvía igual y el envío fallaba con 404.
+            logger.warning(f"No se pudo guardar el quiz en el historial: {db_error}")
             db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo guardar el quiz. Intenta de nuevo en unos segundos.",
+            )
 
-        return quiz_data
+        # Las respuestas correctas y las explicaciones se quedan en el
+        # servidor hasta que el estudiante envía el quiz (ver submit-quiz).
+        return _public_quiz(quiz_history_entry.id, quiz_data)
 
+    except HTTPException:
+        raise
     except json.JSONDecodeError as e:
         logger.error(f"Error JSON parsing: {e}\nRespuesta: {result.get('response', '')}")
         raise HTTPException(
@@ -2129,6 +2149,28 @@ async def generate_cognitive_quiz(
             status_code=500,
             detail=f"Error al generar el quiz: {str(e)}"
         )
+
+
+def _public_quiz(quiz_id: int, quiz_data: dict) -> dict:
+    """Quiz tal como lo ve el estudiante mientras responde: sin respuesta ni explicación."""
+    return {
+        "quiz_id": quiz_id,
+        "quiz_title": quiz_data["quiz_title"],
+        "difficulty": quiz_data.get("difficulty") or "Medio",
+        "questions": [
+            {"id": q["id"], "question": q["question"], "options": q["options"]}
+            for q in quiz_data["questions"]
+        ],
+    }
+
+
+def _correct_letter(correct_answer, options) -> Optional[str]:
+    """Letra (A, B, C…) de la opción correcta, o None si no se encuentra."""
+    target = _normalize_text(correct_answer)
+    for idx, opt in enumerate(options or []):
+        if isinstance(opt, str) and _normalize_text(opt) == target:
+            return chr(65 + idx)
+    return None
 
 
 def _normalize_text(value):
@@ -2187,11 +2229,25 @@ async def submit_quiz_answers(
     # ─────────────────────────────────────────────────────────────────────
     # CORRECCIÓN D: completed_at == None → .is_(None) (idiomático en SQLAlchemy)
     # ─────────────────────────────────────────────────────────────────────
-    quiz_entry = db.query(QuizHistory).filter(
+    pending = db.query(QuizHistory).filter(
         QuizHistory.user_id == current_user.id,
-        QuizHistory.quiz_title == submission.quiz_title,
         QuizHistory.completed_at.is_(None)
-    ).order_by(QuizHistory.created_at.desc()).first()
+    )
+    if submission.quiz_id is not None:
+        # Por id: un doble envío no termina calificando otro quiz pendiente
+        # con el mismo título.
+        quiz_entry = pending.filter(QuizHistory.id == submission.quiz_id).first()
+        if not quiz_entry:
+            already = db.query(QuizHistory.id).filter(
+                QuizHistory.id == submission.quiz_id,
+                QuizHistory.user_id == current_user.id,
+            ).first()
+            if already:
+                raise HTTPException(status_code=409, detail="Este quiz ya fue enviado.")
+    else:
+        quiz_entry = pending.filter(
+            QuizHistory.quiz_title == submission.quiz_title,
+        ).order_by(QuizHistory.created_at.desc()).first()
 
     if not quiz_entry:
         raise HTTPException(status_code=404, detail="Quiz no encontrado en el historial")
@@ -2201,6 +2257,7 @@ async def submit_quiz_answers(
     total = len(quiz_data["questions"])
     mistakes_detail = []
     weak_concepts = []
+    review = []
 
     for question in quiz_data["questions"]:
         question_id = question["id"]
@@ -2213,7 +2270,16 @@ async def submit_quiz_answers(
         if user_answer is None:
             user_answer = submission.user_answers.get(str(question_id))
 
-        if _is_quiz_answer_correct(user_answer, correct_answer, question.get("options")):
+        is_correct = _is_quiz_answer_correct(user_answer, correct_answer, question.get("options"))
+        review.append({
+            "question_id": question_id,
+            "user_answer": user_answer or None,
+            "correct_answer": correct_answer,
+            "correct_letter": _correct_letter(correct_answer, question.get("options")),
+            "is_correct": is_correct,
+            "explanation": question.get("explanation", ""),
+        })
+        if is_correct:
             correct += 1
         else:
             mistake_info = {
@@ -2297,30 +2363,29 @@ async def submit_quiz_answers(
     logger.info(f"Quiz analizado: {percentage}% - Conceptos débiles: {weak_concepts}")
 
     # ── Validar y registrar seguimiento (Enrollment) ─────────────
-    validated_classroom_id = None
+    # Grupo indicado por el cliente (opcional): solo si es una inscripción
+    # activa del propio estudiante. Si no llega, vale el que el servidor
+    # registró al generar el quiz (_quiz_scope).
     if submission.classroom_id is not None:
         active_enrollment = db.query(Enrollment).filter(
             Enrollment.student_id == current_user.id,
             Enrollment.classroom_id == submission.classroom_id,
             Enrollment.is_active == True,
         ).first()
-        if active_enrollment:
-            validated_classroom_id = submission.classroom_id
-            quiz_entry.classroom_id = validated_classroom_id
+        if active_enrollment and quiz_entry.classroom_id != submission.classroom_id:
+            quiz_entry.classroom_id = submission.classroom_id
+            quiz_entry.group_resolution = "grupo_unico"
             db.commit()
-        else:
+        elif not active_enrollment:
             logger.warning(
                 f"submit_quiz_answers: classroom_id={submission.classroom_id} "
                 f"no corresponde a un Enrollment activo de user_id={current_user.id}. Se ignora."
             )
 
-    if validated_classroom_id is not None:
-        EnrollmentTrackingService.register_quiz_completion(
-            db=db,
-            student_id=current_user.id,
-            classroom_id=validated_classroom_id,
-            score_percentage=percentage,
-        )
+    # Progreso de los grupos: se recalcula desde el historial con la regla
+    # única (quiz_counts_for_group). Antes solo se actualizaba si el cliente
+    # enviaba classroom_id —nunca lo hacía— y quedaba siempre en 0.
+    EnrollmentTrackingService.refresh_student(db, current_user.id)
 
     return QuizAnalysisResponse(
         score=f"{correct}/{total}",
@@ -2330,7 +2395,8 @@ async def submit_quiz_answers(
         mistakes=mistakes_detail,
         weak_concepts=weak_concepts,
         recommended_difficulty=recommended_difficulty,
-        adaptation_message=adaptation_message
+        adaptation_message=adaptation_message,
+        review=review,
     )
 
 

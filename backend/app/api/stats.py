@@ -28,13 +28,19 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
         func.sum(QuizHistory.questions_count),
         func.avg(QuizHistory.performance_score),
         func.sum(QuizHistory.time_spent_seconds),
-        func.count(func.distinct(QuizHistory.topic)),
     ).filter(*_completed_filter).one()
 
     total_exercises = agg[0] or 0
     avg_performance = agg[1] or 0
     total_study_time_seconds = agg[2] or 0
-    active_skills_count = int(agg[3] or 0)
+    # Competencias practicadas (de 5): antes se contaban temas distintos,
+    # que podían superar 5 con textos de tema diferentes.
+    practiced = {
+        _classify(topic, competency)
+        for topic, competency in db.query(QuizHistory.topic, QuizHistory.competency)
+        .filter(*_completed_filter).distinct().all()
+    }
+    active_skills_count = len(practiced - {"otros"})
 
     # 2. Total Class Sessions
     total_classes = db.query(LearningSession).filter(
@@ -89,8 +95,23 @@ _SUBJECT_LABELS = {
 _DAYS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]  # 0=Mon
 
 
-def _classify(topic: str) -> str:
-    tl = topic.lower()
+# Competencia (app/services/competencies.py) → materia de esta sección.
+_COMPETENCY_SUBJECT = {
+    "matematicas": "matematicas",
+    "lectora":     "lectura",
+    "ingles":      "ingles",
+    "ciudadanas":  "sociales",
+    "cientifico":  "ciencias",
+}
+
+
+def _classify(topic: str, competency: str | None = None) -> str:
+    """Materia de un quiz: su competencia registrada (la misma que usan el
+    progreso del grupo y los reportes) o, en quizzes antiguos sin ella, las
+    palabras clave del tema."""
+    if competency in _COMPETENCY_SUBJECT:
+        return _COMPETENCY_SUBJECT[competency]
+    tl = (topic or "").lower()
     for subj, kws in _SUBJECT_MAP.items():
         if any(kw in tl for kw in kws):
             return subj
@@ -184,7 +205,7 @@ def get_performance_stats(
     subject_prev = defaultdict(list)
 
     for e in all_history:
-        s = _classify(e.topic)
+        s = _classify(e.topic, e.competency)
         subject_all[s].append(e)
         if e.completed_at >= cutoff_cur:
             subject_cur[s].append(e)
@@ -254,7 +275,7 @@ def get_performance_stats(
     # ── 6. Historial reciente (últimos 10) ───────────────────────────────────
     recent: list = []
     for e in all_history[:10]:
-        sk    = _classify(e.topic)
+        sk    = _classify(e.topic, e.competency)
         delta = now - e.completed_at
         if delta.days == 0:
             hrs   = int(delta.total_seconds() / 3600)

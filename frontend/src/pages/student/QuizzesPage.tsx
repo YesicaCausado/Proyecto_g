@@ -9,6 +9,8 @@ type Difficulty = 'auto' | 'facil' | 'medio' | 'dificil';
 
 interface Subject {
   id: string;
+  /** Clave de la competencia (competencies.ts / backend services/competencies.py). */
+  key: string;
   label: string;
   desc: string;
   emoji: string;
@@ -28,11 +30,13 @@ interface QuizQuestion {
   id: number;
   question: string;
   options: QuizOption[];
-  correct_answer: string;
+  /** Letra correcta: el servidor solo la entrega después del envío. */
+  correct_answer: string | null;
   explanation: string;
 }
 
 interface QuizData {
+  quiz_id: number | null;
   quiz_title: string;
   questions: QuizQuestion[];
 }
@@ -44,8 +48,15 @@ interface QuizAnalysis {
   adaptation_message: string;
 }
 
+interface QuizReviewItem {
+  question_id: number;
+  correct_letter?: string | null;
+  explanation?: string;
+}
+
 interface QuizAnalysisResponse {
   analysis?: QuizAnalysis;
+  review?: QuizReviewItem[];
   score?: string | number;
   correct_answers?: number;
   wrong_answers?: number;
@@ -92,6 +103,7 @@ const SUBJECTS: Subject[] = COMPETENCIES.map((c) => {
   const st = SUBJECT_STYLES[c.key] ?? SUBJECT_STYLES.matematicas;
   return {
     id: c.slug,
+    key: c.key,
     label: c.name,
     desc: c.desc,
     emoji: st.emoji,
@@ -110,6 +122,12 @@ const DIFF_COLORS: Record<Difficulty, string> = {
   medio: 'bg-[#FCF6E5] text-[#DFAB01] border-[#EDD88A]',
   dificil: 'bg-[#FDEEEE] text-[#37352F] border-[#F4BDBD]',
 };
+
+/** Mensaje del servidor (campo `detail`) o el texto alternativo. */
+function serverDetail(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof detail === 'string' && detail ? detail : fallback;
+}
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -142,7 +160,7 @@ export default function QuizzesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [localScore, setLocalScore] = useState(0);
+  const [quizError, setQuizError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<QuizAnalysisResponse | null>(null);
   const [quizHistory, setQuizHistory] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -213,13 +231,15 @@ export default function QuizzesPage() {
     setIsLoading(true);
     setSelectedAnswers({});
     setIsSubmitted(false);
-    setLocalScore(0);
+    setQuizError(null);
     setAnalysisResult(null);
     setElapsedTime(0);
     setScreen('generating'); // ← switch immediately so results screen disappears at once
     try {
       const payload: any = {
         topic: subject.label,
+        // Competencia explícita: decide el grupo y la materia del resultado.
+        competency: subject.key,
         num_questions: 10,
       };
       // En modo Adaptativo (auto) no se envía dificultad: el backend la
@@ -233,6 +253,7 @@ export default function QuizzesPage() {
       // Frontend: options = {letter, text}[], correct_answer = letter
       const rawData = res.data;
       const normalizedQuiz: QuizData = {
+        quiz_id: typeof rawData.quiz_id === 'number' ? rawData.quiz_id : null,
         quiz_title: rawData.quiz_title || subject.label,
         questions: (rawData.questions || []).map((q: any, qi: number) => {
           const rawOptions: string[] = Array.isArray(q.options) ? q.options : [];
@@ -240,19 +261,14 @@ export default function QuizzesPage() {
             letter: String.fromCharCode(65 + idx), // A, B, C, D
             text: typeof opt === 'string' ? opt : (opt as any).text || String(opt),
           }));
-          const correctText: string = q.answer || q.correct_answer || '';
-          // Normaliza (minúsculas, sin acentos, espacios colapsados) para que el
-          // texto correcto del backend coincida con una opción aunque haya
-          // diferencias de mayúsculas/acentos/espacios → nota local = nota real.
-          const norm = (s: string) =>
-            (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ');
-          const correctOption = options.find(o => norm(o.text) === norm(correctText));
+          // La respuesta correcta y la explicación llegan con la corrección
+          // del servidor al enviar (no viajan mientras se responde).
           return {
             id: q.id ?? qi + 1,
             question: q.question || '',
             options,
-            correct_answer: correctOption?.letter || options[0]?.letter || 'A',
-            explanation: q.explanation || '',
+            correct_answer: null,
+            explanation: '',
           };
         }),
       };
@@ -260,53 +276,62 @@ export default function QuizzesPage() {
       setQuiz(normalizedQuiz);
       setStartTime(Date.now());
       setScreen('quiz');
-    } catch {
+    } catch (err) {
       setScreen('select');
-      alert('Error al generar el quiz. Intenta de nuevo.');
+      setQuizError(serverDetail(err, 'No se pudo generar el quiz. Intenta de nuevo.'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleAnswerSelect = (questionId: number, answer: string) => {
-    if (isSubmitted) return;
+    if (isSubmitted || isAnalyzing) return;
     setSelectedAnswers(prev => ({ ...prev, [questionId]: answer }));
   };
 
   const handleSubmit = async () => {
-    if (!quiz) return;
-    setIsSubmitted(true);
+    if (!quiz || isAnalyzing) return;
+    setQuizError(null);
     setIsAnalyzing(true);
     // Detiene el cronómetro en el instante del envío: se congela el elapsedTime
     // y se limpia startTime para que el useEffect del timer deje de actualizar.
     const duration = startTime !== null
       ? Math.max(0, Math.floor((Date.now() - startTime) / 1000))
       : elapsedTime;
-    setElapsedTime(duration);
-    setStartTime(null);
-    let score = 0;
-    quiz.questions.forEach(q => {
-      if (selectedAnswers[q.id] === q.correct_answer) score++;
-    });
-    setLocalScore(score);
     try {
       const userAnswers: Record<number, string> = {};
       quiz.questions.forEach(q => {
         userAnswers[q.id] = selectedAnswers[q.id] || '';
       });
 
-      const res = await api.post('/chat/submit-quiz', {
+      const res = await api.post<QuizAnalysisResponse>('/chat/submit-quiz', {
+        quiz_id: quiz.quiz_id,
         quiz_title: quiz.quiz_title,
         user_answers: userAnswers,
         duration,
       });
+      // La corrección mostrada es la del servidor (la misma que se guarda).
+      const review = new Map((res.data.review ?? []).map(r => [r.question_id, r]));
+      setQuiz({
+        ...quiz,
+        questions: quiz.questions.map(q => ({
+          ...q,
+          correct_answer: review.get(q.id)?.correct_letter ?? null,
+          explanation: review.get(q.id)?.explanation ?? '',
+        })),
+      });
       setAnalysisResult(res.data);
-    } catch {
-      // show results without analysis
+      setElapsedTime(duration);
+      setStartTime(null);
+      setIsSubmitted(true);
+      loadHistory(); // fire-and-forget, don't await
+    } catch (err) {
+      // Sin respuesta del servidor el quiz no quedó guardado: no se muestra
+      // una nota local; el estudiante puede reintentar el envío.
+      setQuizError(serverDetail(err, 'No se pudo enviar el quiz. Revisa tu conexión e inténtalo de nuevo.'));
     } finally {
       setIsAnalyzing(false);
     }
-    loadHistory(); // fire-and-forget, don't await
   };
 
   const handleRetryQuiz = () => {
@@ -324,7 +349,6 @@ export default function QuizzesPage() {
 
   const answeredCount = Object.keys(selectedAnswers).length;
   const totalQuestions = quiz?.questions.length ?? 0;
-  const pct = totalQuestions > 0 ? Math.round((localScore / totalQuestions) * 100) : 0;
 
   // ── GENERATING SCREEN ─────────────────────────────────────────
   if (screen === 'generating') {
@@ -370,6 +394,10 @@ export default function QuizzesPage() {
             </button>
           </div>
         </div>
+
+        {quizError && (
+          <div role="alert" className="mb-4 px-4 py-3 rounded-md border border-[#F4BDBD] bg-[#FDEEEE] text-sm text-[#37352F]">{quizError}</div>
+        )}
 
         {/* Difficulty selector */}
         <div className="flex items-center gap-3 mb-2 p-4 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex-wrap">
@@ -511,13 +539,16 @@ export default function QuizzesPage() {
         {/* Submit button */}
         {!isSubmitted && (
           <div className="mt-8 flex flex-col items-center gap-2">
+            {quizError && (
+              <p role="alert" className="text-sm text-[#E03E3E] text-center">{quizError}</p>
+            )}
             <p className="text-sm text-[#9B9A97]">{totalQuestions - answeredCount} pregunta(s) sin responder</p>
             <button
               onClick={handleSubmit}
-              disabled={answeredCount < totalQuestions}
+              disabled={answeredCount < totalQuestions || isAnalyzing}
               className="px-8 py-2.5 bg-[#37352F] text-white rounded-md font-medium hover:bg-[#2F2D2B] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Enviar Respuestas
+              {isAnalyzing ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Enviando…</span> : 'Enviar Respuestas'}
             </button>
           </div>
         )}
@@ -526,12 +557,9 @@ export default function QuizzesPage() {
           <div className="mt-8 flex justify-center gap-4">
             <button
               onClick={() => { loadHistory(); setScreen('results'); }}
-              disabled={isAnalyzing}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#37352F] text-white rounded-md font-medium hover:bg-[#2F2D2B] transition-colors disabled:opacity-70"
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#37352F] text-white rounded-md font-medium hover:bg-[#2F2D2B] transition-colors"
             >
-              {isAnalyzing
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Analizando...</>
-                : 'Ver Resultados'}
+              Ver Resultados
             </button>
           </div>
         )}
@@ -552,12 +580,11 @@ export default function QuizzesPage() {
       : (analysisResult?.correct_answers ?? 0) + (analysisResult?.wrong_answers ?? 0);
     // El backend ya devuelve el porcentaje calculado (analysisResult.percentage).
     // Como fallback, se calcula con el puntaje correcto y el total de preguntas.
-    const correctCount = typeof analysisResult?.correct_answers === 'number'
-      ? analysisResult.correct_answers
-      : localScore;
+    // Solo se llega aquí con la respuesta del servidor (handleSubmit).
+    const correctCount = analysisResult?.correct_answers ?? 0;
     const percentage = typeof analysisResult?.percentage === 'number'
       ? Math.round(analysisResult.percentage)
-      : totalQ > 0 ? Math.round((correctCount / totalQ) * 100) : pct;
+      : totalQ > 0 ? Math.round((correctCount / totalQ) * 100) : 0;
     const currentScore = correctCount;
     const duration = elapsedTime;
     const passed = percentage >= 60;
@@ -649,7 +676,7 @@ export default function QuizzesPage() {
                       <div className="flex-1">
                         <p className="text-sm font-medium text-[#37352F] mb-1">{idx + 1}. {q.question}</p>
                         <p className="text-xs text-[#787774]">Tu respuesta: <span className={`font-semibold ${correct ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>{answer || 'Sin respuesta'}</span></p>
-                        {!correct && <p className="text-xs text-[#787774]">Correcta: <span className="font-semibold text-[#0F7B6C]">{q.correct_answer}</span></p>}
+                        {!correct && q.correct_answer && <p className="text-xs text-[#787774]">Correcta: <span className="font-semibold text-[#0F7B6C]">{q.correct_answer}</span></p>}
                         {q.explanation && <p className="text-xs text-[#9B9A97] mt-1 italic">{q.explanation}</p>}
                       </div>
                     </div>

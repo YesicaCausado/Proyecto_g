@@ -169,6 +169,29 @@ async def list_posts(
     }
 
 
+_POST_TYPE_LABELS = {
+    "tarea": "una tarea", "recordatorio": "un recordatorio", "material": "material",
+    "enlace": "un enlace", "anuncio": "un anuncio",
+}
+
+
+def _notify_new_post(db: Session, post: Post, classroom: Classroom, teacher: User) -> None:
+    """Publicación nueva → estudiantes activos del grupo (misma transacción).
+
+    Antes el estudiante solo se enteraba de una tarea o anuncio si abría el
+    Tablero por su cuenta."""
+    from app.services import notification_service
+    student_ids = [r.student_id for r in db.query(Enrollment.student_id).filter(
+        Enrollment.classroom_id == classroom.id, Enrollment.is_active == True)]  # noqa: E712
+    what = _POST_TYPE_LABELS.get(post.post_type or "", "una publicación")
+    due = f" Fecha límite: {post.due_date}." if post.due_date else ""
+    notification_service.notify(
+        db, student_ids, "publicacion_tablero", f"Nueva publicación: {post.title}",
+        f"{teacher.full_name or teacher.username} publicó {what} en {classroom.name}.{due}",
+        link="/tablero", resource_type="publicacion", resource_id=post.id,
+    )
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_post(
     body: PostCreate,
@@ -215,6 +238,8 @@ async def create_post(
         attachments=attachments,
     )
     db.add(post)
+    db.flush()
+    _notify_new_post(db, post, classroom, current_user)
     db.commit()
     db.refresh(post)
 

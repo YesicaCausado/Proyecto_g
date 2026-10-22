@@ -51,6 +51,7 @@ from app.models.neurobot_assignment import NeuroBotProgress, StudentBotAssignmen
 from app.models.notification import Notification  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.services import notification_service  # noqa: E402
+from app.services.competencies import classroom_competency  # noqa: E402
 from app.services.enrollment_tracking_service import EnrollmentTrackingService  # noqa: E402
 
 API = "/api/v1"
@@ -402,9 +403,17 @@ class NeuroBotsNotificationsTests(unittest.TestCase):
         self.assertEqual(self.of_type("est3", "evaluacion_publicada"), [])
 
     def test_high_risk_transition_notifies_teacher_and_super(self):
+        # El seguimiento se recalcula desde el historial de quizzes completados.
         db = self.Session()
+        classroom = db.get(Classroom, self.c9a_id)
+        competency = classroom_competency(classroom)
         for score in (20.0, 30.0, 25.0, 10.0):
-            EnrollmentTrackingService.register_quiz_completion(db, self.ids["est1"], self.c9a_id, score)
+            db.add(QuizHistory(user_id=self.ids["est1"], quiz_title="Quiz", topic=classroom.subject,
+                               competency=competency, difficulty="Medio", questions_count=4,
+                               quiz_data={"questions": []}, performance_score=score,
+                               user_score="1/4", completed_at=datetime.utcnow()))
+            db.commit()
+            EnrollmentTrackingService.refresh_student(db, self.ids["est1"])
         db.close()
         teacher = self.of_type("profe_a", "alerta_riesgo")
         supers = self.of_type("super_a", "alerta_riesgo")

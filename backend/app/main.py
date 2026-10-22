@@ -135,8 +135,9 @@ def _apply_schema_and_migrations():
             _add_missing_sqlite_columns(engine)
         else:
             # Columnas e índices de la migración 014 (reportes institucionales).
-            from app.db.migrate import ensure_reporting_schema
+            from app.db.migrate import ensure_reporting_schema, ensure_runtime_columns
             ensure_reporting_schema(engine)
+            ensure_runtime_columns(engine)
 
     except Exception as exc:
 

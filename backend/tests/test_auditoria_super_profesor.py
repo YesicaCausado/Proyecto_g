@@ -325,6 +325,23 @@ class SuperProfesorAuditTests(unittest.TestCase):
         self.assertEqual((sent["Otro"]["reads"], sent["Otro"]["total"]), (2, 2))
         self.assertEqual(sent["Reunión"]["reads"], 0)   # antes contaba también las lecturas de «Otro»
 
+    def test_broadcast_request_as_sent_by_the_frontend(self):
+        """Petición idéntica a la de MensajeriaTab.tsx (URLSearchParams).
+
+        Con el Content-Type JSON por defecto del cliente `api` el servidor no
+        lee los campos y responde 422 (el error reportado); con el tipo
+        x-www-form-urlencoded que ahora declara la pantalla, se entrega."""
+        body = "subject=Reuni%C3%B3n&body=Viernes+7+a.+m.&recipient_type=institucional"
+        auth = self.h("super_a")
+        wrong = self.client.post(f"{API}/super/broadcasts", content=body,
+                                 headers={**auth, "Content-Type": "application/json"})
+        self.assertEqual(wrong.status_code, 422)
+        ok = self.client.post(f"{API}/super/broadcasts", content=body,
+                              headers={**auth, "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual(ok.status_code, 201, ok.text)
+        self.assertEqual(ok.json()["subject"], "Reunión")
+        self.assertGreater(ok.json()["total"], 0)
+
     def test_broadcast_by_grade_requires_grade_and_targets_students_only(self):
         h = self.h("super_a")
         r = self.client.post(f"{API}/super/broadcasts", headers=h,

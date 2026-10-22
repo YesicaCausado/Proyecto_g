@@ -262,9 +262,14 @@ class SuperReportsTests(unittest.TestCase):
         d = self.ok()
         g = {x["name"]: x for x in d["groups"]}
         self.assertEqual(set(g), {"Mat 9A", "Inglés 9A", "Ciencias 10A"})
-        self.assertEqual(g["Mat 9A"]["average"], r1(mean([mean([50, 45, 40, 60]), mean([80, 90, 100]), 75])))
+        # En un grupo solo cuentan los quizzes de su competencia
+        # (quiz_counts_for_group): el de inglés (60) y el de lectura (100) no
+        # entran en Matemáticas.
+        self.assertEqual(g["Mat 9A"]["average"], r1(mean([mean([50, 45, 40]), mean([80, 90]), 75])))
         self.assertEqual((g["Mat 9A"]["enrolled"], g["Mat 9A"]["evaluated"]), (3, 3))
-        self.assertEqual(g["Inglés 9A"]["participation"], r1(2 / 3 * 100))
+        # Inglés 9A (est1, est2, est8): solo est1 practicó inglés; los quizzes
+        # de matemáticas y lectura de est2 no cuentan en este grupo.
+        self.assertEqual(g["Inglés 9A"]["participation"], r1(1 / 3 * 100))
         self.assertEqual(g["Ciencias 10A"]["teacher"]["name"], "Lucía Prada")
         t = {x["name"]: x for x in d["teachers"]}
         self.assertIn("Sin Grupos", t)

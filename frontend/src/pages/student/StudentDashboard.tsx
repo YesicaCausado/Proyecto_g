@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { findCompetency } from '../../data/competencies';
-import type { ExpertBot, Classroom } from '../../types';
+import type { Classroom } from '../../types';
 import {
   BookOpen,
   MessageSquare,
@@ -54,8 +54,8 @@ interface CognitiveData {
 }
 
 interface SubjectData {
-  score:      number;
-  trend:      number;
+  score:      number | null;   // null = sin quizzes en la materia
+  trend:      number | null;
   weaknesses: string[];
 }
 
@@ -79,10 +79,9 @@ const SUBJECT_TO_COMPETENCY: Record<string, string> = {
 
 export default function StudentDashboard() {
   const { user } = useAuth();
-  const [, setBots] = useState<ExpertBot[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
-    progress_percentage: 0,
+    progress_percentage: null,
     total_exercises: 0,
     total_classes: 0,
     active_skills: 0,
@@ -96,31 +95,32 @@ export default function StudentDashboard() {
   const [cognitiveAvailable, setCognitiveAvailable] = useState(false);
   const [subjects, setSubjects] = useState<Record<string, SubjectData>>({});
   const [, setLoading] = useState(true);
+  // Error de carga: se avisa en lugar de mostrar ceros como si fueran datos.
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [botsRes, classesRes, statsRes, perfRes] = await Promise.all([
-          api.get('/bots/').catch(() => ({ data: { bots: [] } })),
+        const [classesRes, statsRes, perfRes] = await Promise.all([
           api.get('/classrooms/my-enrolled').catch(() => ({ data: { classrooms: [] } })),
           api.get('/stats/dashboard').catch(() => ({ data: null })),
           api.get('/stats/performance').catch(() => ({ data: null })),
         ]);
+        setLoadError(statsRes.data === null || perfRes.data === null);
 
-        setBots(botsRes.data.bots || []);
         setClassrooms(classesRes.data.classrooms || []);
 
         const dashData = statsRes.data;
         const perfData = perfRes.data;
 
         // Mapear scores por materia → claves del dashboard
+        // Solo materias con quizzes (score null = sin datos, no 0 %).
         const skill_scores: Record<string, number> = {};
         if (perfData?.subjects) {
-          skill_scores.matematicas = Math.round(perfData.subjects.matematicas?.score || 0);
-          skill_scores.lectora     = Math.round(perfData.subjects.lectura?.score     || 0);
-          skill_scores.ingles      = Math.round(perfData.subjects.ingles?.score      || 0);
-          skill_scores.ciudadanas  = Math.round(perfData.subjects.sociales?.score    || 0);
-          skill_scores.cientifico  = Math.round(perfData.subjects.ciencias?.score    || 0);
+          for (const [subject, key] of Object.entries(SUBJECT_TO_COMPETENCY)) {
+            const score = perfData.subjects[subject]?.score;
+            if (typeof score === 'number') skill_scores[key] = Math.round(score);
+          }
         }
 
         if (dashData) {
@@ -143,7 +143,7 @@ export default function StudentDashboard() {
         if (perfData?.subjects)  setSubjects(perfData.subjects);
 
       } catch {
-        // silently fail
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
@@ -159,6 +159,12 @@ export default function StudentDashboard() {
         subtitle="Continúa desarrollando tus habilidades para el Saber 11"
         streakDays={stats.streak_days}
       />
+
+      {loadError && (
+        <div role="alert" className="mb-4 px-4 py-3 rounded-md border border-[#F4BDBD] bg-[#FDEEEE] text-sm text-[#37352F]">
+          No se pudieron cargar todas tus estadísticas. Recarga la página en unos segundos.
+        </div>
+      )}
 
       {/* Top action bar */}
       <div className="flex justify-between items-center mb-6 sm:mb-8">
@@ -274,7 +280,8 @@ export default function StudentDashboard() {
                     { key: 'ciudadanas',  name: 'Competencias Ciudadanas',        desc: 'Sociales y ciudadanía',      color: '#d97706', bg: '#fef3c7', bar: 'linear-gradient(90deg,#d97706,#b45309)' },
                     { key: 'cientifico',  name: 'Pensamiento Científico',         desc: 'Ciencias naturales',         color: '#db2777', bg: '#fce7f3', bar: 'linear-gradient(90deg,#db2777,#be185d)' },
                 ].map((skill) => {
-                    const progress = stats.skill_scores[skill.key] ?? 0;
+                    const score = stats.skill_scores[skill.key];
+                    const progress = score ?? 0;
                     return (
                     <Link
                       key={skill.key}
@@ -297,9 +304,9 @@ export default function StudentDashboard() {
                         </div>
                         <span
                           className="text-[13px] font-bold flex-shrink-0"
-                          style={{ color: progress > 0 ? skill.color : '#9B9A97' }}
+                          style={{ color: score !== undefined ? skill.color : '#9B9A97' }}
                         >
-                          {progress > 0 ? `${progress}%` : '—'}
+                          {score !== undefined ? `${score}%` : '—'}
                         </span>
                       </div>
 
@@ -407,8 +414,8 @@ export default function StudentDashboard() {
                 </div>
                 
                 <div className="space-y-3">
-                    {classrooms.length > 0 ? classrooms.slice(0, 3).map((classroom, idx) => (
-                      <div key={idx} className="flex gap-3 items-center">
+                    {classrooms.length > 0 ? classrooms.slice(0, 3).map((classroom) => (
+                      <Link key={classroom.id} to={`/my-classes/${classroom.id}`} className="flex gap-3 items-center rounded-md -mx-1 px-1 py-0.5 hover:bg-[#F7F6F3] transition-colors">
                           <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0 font-semibold text-[#37352F] text-sm">
                               {classroom.name.charAt(0)}
                           </div>
@@ -416,7 +423,7 @@ export default function StudentDashboard() {
                               <h4 className="font-medium text-[#37352F] text-sm truncate">{classroom.name}</h4>
                               <p className="text-[#9B9A97] text-xs mt-0.5 truncate">{classroom.description?.substring(0, 40)}</p>
                           </div>
-                      </div>
+                      </Link>
                     )) : (
                       <div className="text-center py-6 text-[#9B9A97] text-sm">No estás inscrito en clases aún.</div>
                     )}
@@ -445,23 +452,25 @@ export default function StudentDashboard() {
                       color: cognitive.mastery >= 70 ? '#0F7B6C' : cognitive.mastery >= 40 ? '#D9730D' : '#E03E3E',
                       bg:    cognitive.mastery >= 70 ? 'bg-emerald-50' : cognitive.mastery >= 40 ? 'bg-orange-50' : 'bg-red-50',
                     },
+                    // Mismos indicadores y escala que «Mi Desempeño › Análisis IA»:
+                    // fatiga, carga y duda se muestran tal cual (más bajo = mejor).
                     {
-                      label: 'Dominio activo',
-                      value: 100 - cognitive.fatigue,
+                      label: 'Fatiga',
+                      value: cognitive.fatigue,
                       icon: Zap,
                       color: cognitive.fatigue <= 30 ? '#0F7B6C' : cognitive.fatigue <= 60 ? '#D9730D' : '#E03E3E',
                       bg:    cognitive.fatigue <= 30 ? 'bg-emerald-50' : cognitive.fatigue <= 60 ? 'bg-orange-50' : 'bg-red-50',
                     },
                     {
-                      label: 'Claridad',
-                      value: 100 - cognitive.doubt,
+                      label: 'Duda',
+                      value: cognitive.doubt,
                       icon: TrendingUp,
                       color: cognitive.doubt <= 30 ? '#0F7B6C' : cognitive.doubt <= 60 ? '#D9730D' : '#E03E3E',
                       bg:    cognitive.doubt <= 30 ? 'bg-emerald-50' : cognitive.doubt <= 60 ? 'bg-orange-50' : 'bg-red-50',
                     },
                     {
-                      label: 'Carga cognitiva',
-                      value: 100 - cognitive.overload,
+                      label: 'Carga de trabajo',
+                      value: cognitive.overload,
                       icon: AlertTriangle,
                       color: cognitive.overload <= 40 ? '#0F7B6C' : cognitive.overload <= 65 ? '#D9730D' : '#E03E3E',
                       bg:    cognitive.overload <= 40 ? 'bg-emerald-50' : cognitive.overload <= 65 ? 'bg-orange-50' : 'bg-red-50',
@@ -482,6 +491,7 @@ export default function StudentDashboard() {
                       </div>
                     </div>
                   ))}
+                  <p className="text-[10px] text-[#9B9A97]">Estimación experimental del sistema; no es un diagnóstico.</p>
                 </div>
               )}
             </div>
@@ -497,8 +507,8 @@ export default function StudentDashboard() {
 
               {(() => {
                 const sorted = Object.entries(subjects)
-                  .filter(([, s]) => s.score > 0)
-                  .sort(([, a], [, b]) => a.score - b.score);
+                  .filter(([, s]) => typeof s.score === 'number')
+                  .sort(([, a], [, b]) => (a.score ?? 0) - (b.score ?? 0));
 
                 const seen = new Set<string>();
                 const addRec = (text: string, link: string) => {
@@ -509,20 +519,20 @@ export default function StudentDashboard() {
 
                 const recs: { text: string; link: string }[] = [];
 
-                if (cognitive.fatigue >= 60) {
+                if (cognitiveAvailable && cognitive.fatigue >= 60) {
                   addRec('Tu atención está cansada: haz 10 minutos de repaso breve y vuelve con calma.', '/performance');
                 }
 
-                if (cognitive.doubt >= 50) {
+                if (cognitiveAvailable && cognitive.doubt >= 50) {
                   addRec('Hay varias dudas en tu proceso. Practica 3 ejercicios cortos y revisa tus errores.', '/performance');
                 }
 
-                if (cognitive.overload >= 55) {
+                if (cognitiveAvailable && cognitive.overload >= 55) {
                   addRec('La carga está alta. Divide la práctica en bloques de 15 minutos y prioriza lo más difícil.', '/performance');
                 }
 
                 if (sorted.length === 0) {
-                  addRec('Completa tu primer quiz para recibir recomendaciones personalizadas de IA.', '/performance');
+                  addRec('Completa tu primer quiz para recibir recomendaciones personalizadas de IA.', '/quizzes');
                   return (
                     <div className="space-y-2">
                       {recs.map((r, i) => (
@@ -545,7 +555,7 @@ export default function StudentDashboard() {
                   addRec(actionText, `/chat/${findCompetency(SUBJECT_TO_COMPETENCY[key] ?? key)?.slug ?? key}`);
                 });
 
-                if (sorted[0]?.[1].trend < -5) {
+                if (typeof sorted[0]?.[1].trend === 'number' && sorted[0][1].trend < -5) {
                   const [key] = sorted[0];
                   addRec(`Tu rendimiento en ${SUBJECT_LABELS[key] ?? key} bajó ${Math.abs(sorted[0][1].trend)} puntos esta semana. Revisa la clase y repite un ejercicio clave.`, '/performance');
                 }

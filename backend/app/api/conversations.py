@@ -16,8 +16,10 @@ from typing import List
 
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_permission
-from app.core.permissions import Permission
+from app.core.permissions import FORBIDDEN_MESSAGE, Permission
+from app.models.expert_bot import ExpertBot
 from app.models.user import User
+from app.services.bot_documents import can_use_bot
 from app.schemas.schemas import (
     ConversationCreate,
     ConversationRename,
@@ -84,6 +86,13 @@ async def create_conversation(
 ):
     """Crea una conversación nueva (no reutiliza cargas previas: solo la).
     El StudentModel se recupera automáticamente al decidir (memoria entre chats)."""
+    if body.bot_id is not None:
+        # Mismo criterio que el chat: solo NeuroBots que el usuario puede usar.
+        bot = db.query(ExpertBot).filter(ExpertBot.id == body.bot_id).first()
+        if bot is None:
+            raise HTTPException(status_code=404, detail="NeuroBot no encontrado")
+        if not can_use_bot(db, current_user, bot):
+            raise HTTPException(status_code=403, detail=FORBIDDEN_MESSAGE)
     conv = Conversation(
         student_id=current_user.id,
         bot_id=body.bot_id,

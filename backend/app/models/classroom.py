@@ -66,6 +66,14 @@ class Enrollment(Base):
     enrolled_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
 
+    # Retiro por el profesor (migración 016). Mientras removed_at tenga valor,
+    # ningún código de invitación lo vuelve a inscribir: solo la
+    # reincorporación del profesor. Se guarda el código vigente al retirarlo
+    # como registro. El historial no se borra.
+    removed_at = Column(DateTime, nullable=True)
+    removed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    removed_invite_code = Column(String(8), nullable=True)
+
     # Progreso general del estudiante en la clase
     overall_progress = Column(Float, default=0.0)  # 0.0 - 100.0
     last_activity = Column(DateTime, nullable=True)
@@ -78,7 +86,7 @@ class Enrollment(Base):
     risk_factors = Column(JSON, default=list)
 
     # Relaciones
-    student = relationship("User", backref="enrollments")
+    student = relationship("User", backref="enrollments", foreign_keys=[student_id])
     classroom = relationship("Classroom", back_populates="enrollments")
 
 

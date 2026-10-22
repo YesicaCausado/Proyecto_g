@@ -69,6 +69,19 @@ def require_teacher(user: User):
         )
 
 
+from app.services.enrollment_tracking_service import EnrollmentTrackingService  # noqa: E402
+
+
+def _managed_classroom_or_404(db: Session, user: User, classroom_id: int) -> Classroom:
+    """Grupo que el usuario puede administrar (404/403 en otro caso)."""
+    classroom = db.query(Classroom).filter(Classroom.id == classroom_id).first()
+    if not classroom:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clase no encontrada")
+    if not can_manage_classroom(user, classroom):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a esta clase")
+    return classroom
+
+
 def require_student(user: User):
     """Verifica que el usuario sea estudiante."""
 
@@ -625,7 +638,9 @@ async def get_student_classroom_detail(
             for bot in (
                 db.query(ExpertBot)
                 .filter(
-                    ExpertBot.id.in_(bot_ids)
+                    ExpertBot.id.in_(bot_ids),
+                    # Un bot desactivado no se puede usar en el chat.
+                    ExpertBot.is_active == True,
                 )
                 .all()
             )
@@ -766,11 +781,27 @@ async def join_classroom(
         .first()
     )
 
+    # Solo grupos de la propia institución: un código filtrado de otro
+    # colegio responde igual que un código inexistente.
+    if classroom is not None:
+        teacher = db.query(User).filter(User.id == classroom.teacher_id).first()
+        if teacher is None or teacher.institution_id != current_user.institution_id:
+            classroom = None
+
     if not classroom:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Código de invitación no válido",
         )
+
+    current_count = (
+        db.query(Enrollment)
+        .filter(
+            Enrollment.classroom_id == classroom.id,
+            Enrollment.is_active == True,
+        )
+        .count()
+    )
 
     # --------------------------------------------------------
     # Verificar inscripción existente
@@ -793,12 +824,32 @@ async def join_classroom(
                 detail="Ya estás inscrito en esta clase",
             )
 
+        # Retirado por el profesor: la relación quedó revocada y ningún código
+        # (ni el anterior ni uno regenerado) la reabre. Solo vuelve si el
+        # profesor lo reincorpora (POST .../students/{id}/reinstate).
+        if existing.removed_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=("Tu profesor te retiró de este grupo. Para volver, pídele "
+                        "que te reincorpore desde su lista de estudiantes."),
+            )
+
+        if current_count >= classroom.max_students:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La clase está llena",
+            )
+
         from app.services import neurobot_service
         bots_before = neurobot_service.bot_ids_of_student(db, current_user.id)
         existing.is_active = True
+        existing.removed_at = None
+        existing.removed_by = None
+        existing.removed_invite_code = None
 
         try:
             db.flush()
+            EnrollmentTrackingService.recompute(db, existing)
             neurobot_service.notify_new_member(db, current_user, classroom, bots_before)
             db.commit()
             db.refresh(existing)
@@ -819,15 +870,6 @@ async def join_classroom(
     # --------------------------------------------------------
     # Verificar cupo
     # --------------------------------------------------------
-
-    current_count = (
-        db.query(Enrollment)
-        .filter(
-            Enrollment.classroom_id == classroom.id,
-            Enrollment.is_active == True,
-        )
-        .count()
-    )
 
     if current_count >= classroom.max_students:
         raise HTTPException(
@@ -850,6 +892,9 @@ async def join_classroom(
     try:
         db.add(enrollment)
         db.flush()
+        # Su práctica de la competencia del grupo cuenta desde ya
+        # (quiz_counts_for_group), igual que en los reportes.
+        EnrollmentTrackingService.recompute(db, enrollment)
         # NeuroBots que el grupo ya tenía → notificación al nuevo estudiante.
         neurobot_service.notify_new_member(db, current_user, classroom, bots_before)
         db.commit()
@@ -1035,7 +1080,13 @@ async def remove_student(
             detail="Estudiante no encontrado en la clase",
         )
 
+    # Se revoca la relación; no se borra nada (intentos, quizzes, chats y
+    # resultados anteriores se conservan). Ningún código lo vuelve a inscribir
+    # (ver join_classroom); se guarda el código vigente como registro.
     enrollment.is_active = False
+    enrollment.removed_at = datetime.utcnow()
+    enrollment.removed_by = current_user.id
+    enrollment.removed_invite_code = classroom.invite_code
 
     try:
         db.commit()
@@ -1049,8 +1100,108 @@ async def remove_student(
         )
 
     return {
-        "message": "Estudiante removido de la clase"
+        "message": "Estudiante retirado del grupo"
     }
+
+
+@router.get(
+    "/{classroom_id}/removed-students"
+)
+async def list_removed_students(
+    classroom_id: int,
+    current_user: User = Depends(get_current_user),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
+    db: Session = Depends(get_db),
+):
+    """Estudiantes retirados del grupo por un profesor (para reincorporarlos)."""
+
+    require_teacher(current_user)
+    classroom = _managed_classroom_or_404(db, current_user, classroom_id)
+
+    rows = (
+        db.query(Enrollment, User)
+        .join(User, User.id == Enrollment.student_id)
+        .filter(
+            Enrollment.classroom_id == classroom.id,
+            Enrollment.is_active == False,  # noqa: E712
+            Enrollment.removed_at.isnot(None),
+        )
+        .order_by(Enrollment.removed_at.desc())
+        .all()
+    )
+    return [
+        {
+            "student_id": user.id,
+            "student_name": user.full_name or user.username,
+            "student_email": user.email,
+            "removed_at": enrollment.removed_at.isoformat() if enrollment.removed_at else None,
+        }
+        for enrollment, user in rows
+    ]
+
+
+@router.post(
+    "/{classroom_id}/students/{student_id}/reinstate"
+)
+async def reinstate_student(
+    classroom_id: int,
+    student_id: int,
+    current_user: User = Depends(get_current_user),
+    _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
+    db: Session = Depends(get_db),
+):
+    """Reincorporación autorizada por el profesor de un estudiante retirado."""
+
+    require_teacher(current_user)
+    classroom = _managed_classroom_or_404(db, current_user, classroom_id)
+    if not classroom.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="El grupo está desactivado")
+
+    enrollment = (
+        db.query(Enrollment)
+        .filter(
+            Enrollment.classroom_id == classroom.id,
+            Enrollment.student_id == student_id,
+            Enrollment.is_active == False,  # noqa: E712
+            Enrollment.removed_at.isnot(None),
+        )
+        .first()
+    )
+    if not enrollment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="El estudiante no está retirado de este grupo")
+
+    student = db.query(User).filter(User.id == student_id, User.is_active == True).first()  # noqa: E712
+    if student is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="La cuenta del estudiante está desactivada")
+
+    active_count = (
+        db.query(Enrollment)
+        .filter(Enrollment.classroom_id == classroom.id, Enrollment.is_active == True)  # noqa: E712
+        .count()
+    )
+    if active_count >= classroom.max_students:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La clase está llena")
+
+    from app.services import neurobot_service
+    bots_before = neurobot_service.bot_ids_of_student(db, student.id)
+    enrollment.is_active = True
+    enrollment.removed_at = None
+    enrollment.removed_by = None
+    enrollment.removed_invite_code = None
+    try:
+        db.flush()
+        EnrollmentTrackingService.recompute(db, enrollment)
+        neurobot_service.notify_new_member(db, student, classroom, bots_before)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="No fue posible reincorporar al estudiante")
+
+    return {"message": "Estudiante reincorporado al grupo"}
 
 
 # ============================================================

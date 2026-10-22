@@ -158,6 +158,10 @@ class QuizHistory(Base):
     # Competencia Saber 11 elegida por el estudiante al generar el quiz
     # (app/services/competencies.py). NULL en quizzes anteriores.
     competency = Column(String(30), nullable=True)
+    # Cómo se resolvió el grupo al generar el quiz (migración 016):
+    # grupo_unico | varios_grupos | sin_grupo | sin_competencia.
+    # Ver enrollment_tracking_service.quiz_counts_for_group.
+    group_resolution = Column(String(20), nullable=True)
     quiz_title = Column(String(200), nullable=False)
 
     # Información del quiz

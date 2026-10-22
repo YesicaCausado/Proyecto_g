@@ -39,6 +39,17 @@ DELETE_FOR_ALL_WINDOW_SECONDS = 15 * 60  # 15 minutos
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    """Fecha en ISO con zona UTC explícita. `created_at` se guarda en UTC sin
+    zona; sin el sufijo el navegador lo leía como hora local y en Colombia los
+    mensajes aparecían con 5 horas de adelanto."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 def _can_delete_for_all(msg: DirectMessage) -> bool:
     """Devuelve True si el mensaje aún está dentro de la ventana de 15 min."""
     now = datetime.now(timezone.utc)
@@ -69,7 +80,7 @@ def _msg_to_dict(msg: DirectMessage, current_user_id: int, db: Session) -> Optio
             "receiver_name":   None,
             "content":         "Eliminaste este mensaje" if is_sender else "Se eliminó este mensaje",
             "is_read":         msg.is_read,
-            "created_at":      msg.created_at.isoformat(),
+            "created_at":      _iso_utc(msg.created_at),
             "attachment":      None,
             "is_deleted":      True,
             "deleted_for_all": True,
@@ -97,7 +108,7 @@ def _msg_to_dict(msg: DirectMessage, current_user_id: int, db: Session) -> Optio
         "receiver_name": (receiver.full_name or receiver.username) if receiver else "?",
         "content":       msg.content,
         "is_read":       msg.is_read,
-        "created_at":    msg.created_at.isoformat(),
+        "created_at":    _iso_utc(msg.created_at),
         "attachment": {
             "name": msg.attachment_name,
             "mime": msg.attachment_mime,
@@ -280,14 +291,21 @@ async def list_conversations(
             u.id: u for u in db.query(User).filter(User.id.in_(partner_ids)).all()
         }
 
+    # La vista previa ignora los mensajes que el usuario eliminó para sí.
+    visible_to_me = and_(
+        seg,
+        or_(DirectMessage.sender_id != uid, DirectMessage.deleted_for_sender == False),  # noqa: E712
+        or_(DirectMessage.receiver_id != uid, DirectMessage.deleted_for_receiver == False),  # noqa: E712
+    )
     last_msg_map: dict[int, tuple] = {}
     if partner_ids:
         msg_sub = db.query(
             DirectMessage.id,
             DirectMessage.content,
             DirectMessage.created_at,
+            DirectMessage.deleted_for_all,
             partner_col,
-        ).filter(seg).subquery()
+        ).filter(visible_to_me).subquery()
         max_sub = (
             db.query(msg_sub.c.partner_id, func.max(msg_sub.c.id).label("mid"))
             .group_by(msg_sub.c.partner_id)
@@ -298,6 +316,7 @@ async def list_conversations(
                 msg_sub.c.partner_id,
                 msg_sub.c.content,
                 msg_sub.c.created_at,
+                msg_sub.c.deleted_for_all,
             )
             .join(
                 max_sub,
@@ -305,7 +324,10 @@ async def list_conversations(
             )
             .all()
         )
-        last_msg_map = {pid: (content, created) for pid, content, created in latest_rows}
+        last_msg_map = {
+            pid: ("Se eliminó este mensaje" if gone else content, created)
+            for pid, content, created, gone in latest_rows
+        }
 
     unread_map: dict[int, int] = {}
     if partner_ids:
@@ -315,6 +337,8 @@ async def list_conversations(
                 DirectMessage.receiver_id == uid,
                 DirectMessage.sender_id.in_(partner_ids),
                 DirectMessage.is_read == False,
+                DirectMessage.deleted_for_all == False,  # noqa: E712
+                DirectMessage.deleted_for_receiver == False,  # noqa: E712
             )
             .group_by(DirectMessage.sender_id)
             .all()
@@ -332,7 +356,7 @@ async def list_conversations(
             "other_user_name": other.full_name or other.username,
             "other_user_role": other.role,
             "last_message":    last[0] if last else None,
-            "last_message_at": last[1].isoformat() if last else None,
+            "last_message_at": _iso_utc(last[1]) if last else None,
             "unread_count":    int(unread_map.get(other_id, 0)),
         }
 
@@ -478,6 +502,11 @@ async def delete_message(
         message.deleted_for_sender   = False
         message.deleted_for_receiver = False
         message.content = ""  # Limpiar contenido real por privacidad
+        # El adjunto también: antes seguía descargable por el receptor.
+        message.attachment_name = None
+        message.attachment_mime = None
+        message.attachment_size = None
+        message.attachment_data = None
         db.commit()
         db.refresh(message)
         return {
@@ -514,6 +543,13 @@ async def download_attachment(
         raise HTTPException(status_code=404, detail="Mensaje no encontrado")
     if current_user.id not in (msg.sender_id, msg.receiver_id):
         raise HTTPException(status_code=403, detail="No tienes acceso a este adjunto")
+    # Un mensaje eliminado (para todos o para mí) ya no expone su adjunto.
+    hidden_for_me = (
+        (current_user.id == msg.sender_id and msg.deleted_for_sender)
+        or (current_user.id == msg.receiver_id and msg.deleted_for_receiver)
+    )
+    if msg.deleted_for_all or hidden_for_me:
+        raise HTTPException(status_code=404, detail="Este mensaje no tiene archivo adjunto")
     if not msg.attachment_name or not msg.attachment_data:
         raise HTTPException(status_code=404, detail="Este mensaje no tiene archivo adjunto")
 
@@ -538,8 +574,14 @@ async def send_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Envía un mensaje al otro usuario según las reglas de rol (con adjunto opcional)."""
-    if not (content or "").strip() and file is None:
+    """Envía un mensaje de texto al otro usuario según las reglas de rol.
+
+    Los mensajes ya no admiten archivos adjuntos: si llega uno se rechaza (no se
+    ignora en silencio). Los adjuntos de mensajes anteriores se conservan y se
+    pueden descargar (GET /messages/{id}/attachment)."""
+    if file is not None:
+        raise HTTPException(status_code=400, detail="Los mensajes no admiten archivos adjuntos.")
+    if not (content or "").strip():
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío")
 
     receiver = db.query(User).filter(User.id == other_user_id, User.is_active == True).first()
@@ -552,27 +594,10 @@ async def send_message(
             detail="No tienes permiso para enviar mensajes a este usuario",
         )
 
-    attach_name = attach_mime = None
-    attach_size = None
-    attach_data = None
-    if file is not None:
-        raw = await file.read()
-        if len(raw) > 25 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="El archivo supera el límite de 25 MB.")
-        if raw:
-            attach_name = file.filename or "archivo"
-            attach_mime = file.content_type or _guess_mime(attach_name)
-            attach_size = len(raw)
-            attach_data = raw
-
     msg = DirectMessage(
         sender_id=current_user.id,
         receiver_id=other_user_id,
-        content=(content or "").strip(),
-        attachment_name=attach_name,
-        attachment_mime=attach_mime,
-        attachment_size=attach_size,
-        attachment_data=attach_data,
+        content=content.strip(),
     )
     db.add(msg)
     from app.services import notification_service

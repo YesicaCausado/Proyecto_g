@@ -99,6 +99,34 @@ def ensure_reporting_schema(engine) -> None:
             logger.error(f"Migración 014: {str(e)[:200]}")
 
 
+# Columnas que el código ya usa y que deben existir en PostgreSQL aunque el SQL
+# de migrations/ todavía no se haya ejecutado en Supabase (ver main.py).
+RUNTIME_COLUMNS = [
+    # Eliminación de mensajes (migrations/applied/delete_fields.sql)
+    "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS deleted_for_sender BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS deleted_for_receiver BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE direct_messages ADD COLUMN IF NOT EXISTS deleted_for_all BOOLEAN NOT NULL DEFAULT FALSE",
+    # Retiro de estudiantes (migrations/016_retiro_estudiantes.sql)
+    "ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS removed_at TIMESTAMP",
+    "ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS removed_by INTEGER REFERENCES users(id)",
+    "ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS removed_invite_code VARCHAR(8)",
+    # Resolución del grupo de cada quiz (016)
+    "ALTER TABLE quiz_history ADD COLUMN IF NOT EXISTS group_resolution VARCHAR(20)",
+]
+
+
+def ensure_runtime_columns(engine) -> None:
+    """Agrega en PostgreSQL las columnas de RUNTIME_COLUMNS. Idempotente."""
+    if engine is None or engine.dialect.name != "postgresql":
+        return
+    for sql in RUNTIME_COLUMNS:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(sql))
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Columna de arranque: {str(e)[:200]}")
+
+
 def run_migrations(engine) -> None:
     """
     Aplica todas las migraciones B2B pendientes.

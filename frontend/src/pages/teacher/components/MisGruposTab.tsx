@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Copy, Share2, RefreshCw, Users, BookOpen, MoreVertical,
   Check, ChevronLeft, Megaphone, ClipboardList, UserCheck,
-  Eye, EyeOff, Loader2,
+  Eye, EyeOff, Loader2, UserMinus, UserPlus,
 } from 'lucide-react';
 import api from '../../../services/api';
 
@@ -75,23 +75,84 @@ function mapStudent(raw: any): StudentRow {
   };
 }
 
+interface RemovedRow {
+  id: string;
+  name: string;
+  email: string;
+  removedAt: string;
+}
+
+function apiDetail(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof detail === 'string' && detail ? detail : fallback;
+}
+
 // ── Vista detalle de un grupo ────────────────────────────────────────────────
 function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
   const [tab, setTab] = useState<'inicio' | 'tablero' | 'estudiantes'>('inicio');
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [studentsError, setStudentsError] = useState('');
+  const [removed, setRemoved] = useState<RemovedRow[]>([]);
+  const [busyStudent, setBusyStudent] = useState<string | null>(null);
+  const [studentNotice, setStudentNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
+  const loadStudents = useCallback(() => {
+    setLoadingStudents(true);
+    setStudentsError('');
+    Promise.all([
+      api.get(`/classrooms/${group.id}/students`, { params: { _t: Date.now() } }),
+      api.get(`/classrooms/${group.id}/removed-students`, { params: { _t: Date.now() } }),
+    ])
+      .then(([active, gone]) => {
+        setStudents((active.data ?? []).map(mapStudent));
+        setRemoved((gone.data ?? []).map((r: { student_id: number; student_name: string; student_email: string; removed_at: string | null }) => ({
+          id: String(r.student_id),
+          name: r.student_name,
+          email: r.student_email || '—',
+          removedAt: r.removed_at ? new Date(r.removed_at).toLocaleDateString('es-CO') : '—',
+        })));
+      })
+      .catch(() => { setStudents([]); setRemoved([]); setStudentsError('No fue posible cargar los estudiantes del grupo.'); })
+      .finally(() => setLoadingStudents(false));
+  }, [group.id]);
 
   useEffect(() => {
-    if (tab === 'estudiantes') {
-      setLoadingStudents(true);
-      setStudentsError('');
-      api.get(`/classrooms/${group.id}/students`)
-        .then(r => setStudents((r.data ?? []).map(mapStudent)))
-        .catch(() => { setStudents([]); setStudentsError('No fue posible cargar los estudiantes del grupo.'); })
-        .finally(() => setLoadingStudents(false));
+    if (tab === 'estudiantes') loadStudents();
+  }, [tab, loadStudents]);
+
+  // El retiro revoca el acceso al grupo (actividades, material, NeuroBots del
+  // grupo) sin borrar su historial. Ningún código lo vuelve a inscribir: solo
+  // «Reincorporar».
+  const removeStudent = async (s: StudentRow) => {
+    if (!window.confirm(`¿Retirar a ${s.name} de «${group.name}»? Dejará de ver las actividades, el material y los NeuroBots del grupo. Su historial se conserva y no podrá volver con el código: solo si lo reincorporas.`)) return;
+    setBusyStudent(s.id);
+    setStudentNotice(null);
+    try {
+      await api.delete(`/classrooms/${group.id}/students/${s.id}`);
+      setStudentNotice({ kind: 'ok', text: `${s.name} fue retirado del grupo.` });
+      loadStudents();
+    } catch (err) {
+      setStudentNotice({ kind: 'error', text: apiDetail(err, 'No fue posible retirar al estudiante.') });
+    } finally {
+      setBusyStudent(null);
     }
-  }, [tab, group.id]);
+  };
+
+  const reinstateStudent = async (r: RemovedRow) => {
+    if (!window.confirm(`¿Reincorporar a ${r.name} a «${group.name}»?`)) return;
+    setBusyStudent(r.id);
+    setStudentNotice(null);
+    try {
+      await api.post(`/classrooms/${group.id}/students/${r.id}/reinstate`);
+      setStudentNotice({ kind: 'ok', text: `${r.name} fue reincorporado al grupo.` });
+      loadStudents();
+    } catch (err) {
+      setStudentNotice({ kind: 'error', text: apiDetail(err, 'No fue posible reincorporar al estudiante.') });
+    } finally {
+      setBusyStudent(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -168,6 +229,12 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
         </div>
       )}
 
+      {tab === 'estudiantes' && studentNotice && (
+        <div role="status" className={`px-4 py-2.5 rounded-lg text-sm border ${studentNotice.kind === 'ok' ? 'bg-emerald-50 border-emerald-200 text-[#0F7B6C]' : 'bg-red-50 border-red-200 text-[#E03E3E]'}`}>
+          {studentNotice.text}
+        </div>
+      )}
+
       {tab === 'estudiantes' && (
         <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden overflow-x-auto">
           {loadingStudents ? (
@@ -183,6 +250,7 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#787774] uppercase">Promedio</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#787774] uppercase">Última conexión</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#787774] uppercase">Estado</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[#787774] uppercase"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody>
@@ -209,14 +277,44 @@ function GroupDetail({ group, onBack }: { group: Group; onBack: () => void }) {
                       {s.status === 'risk' ? 'En riesgo' : s.status === 'inactive' ? 'Sin sesiones' : 'Activo'}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => removeStudent(s)} disabled={busyStudent === s.id}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[#787774] hover:text-[#E03E3E] hover:bg-red-50 rounded disabled:opacity-50"
+                      title="Retirar del grupo">
+                      {busyStudent === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserMinus className="w-3.5 h-3.5" />} Retirar
+                    </button>
+                  </td>
                 </tr>
               ))}
               {students.length === 0 && (
-                <tr><td colSpan={5} className={`text-center py-8 text-xs ${studentsError ? 'text-[#E03E3E]' : 'text-[#787774]'}`}>{studentsError || 'Sin estudiantes inscritos aún.'}</td></tr>
+                <tr><td colSpan={6} className={`text-center py-8 text-xs ${studentsError ? 'text-[#E03E3E]' : 'text-[#787774]'}`}>{studentsError || 'Sin estudiantes inscritos aún.'}</td></tr>
               )}
             </tbody>
           </table>
           )}
+        </div>
+      )}
+
+      {tab === 'estudiantes' && !loadingStudents && removed.length > 0 && (
+        <div className="bg-white border border-[#E9E9E7] rounded-lg overflow-hidden">
+          <div className="px-4 py-3 bg-[#F7F6F3] border-b border-[#E9E9E7]">
+            <p className="text-xs font-semibold text-[#787774] uppercase">Retirados ({removed.length})</p>
+            <p className="text-[11px] text-[#9B9A97] mt-0.5">No pueden volver con el código del grupo; solo si los reincorporas.</p>
+          </div>
+          <ul>
+            {removed.map(r => (
+              <li key={r.id} className="flex items-center gap-3 px-4 py-3 border-b border-[#F7F6F3] last:border-0 text-sm">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-[#191919] truncate">{r.name}</p>
+                  <p className="text-xs text-[#787774] truncate">{r.email} · retirado el {r.removedAt}</p>
+                </div>
+                <button onClick={() => reinstateStudent(r)} disabled={busyStudent === r.id}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#2E6FDB] hover:bg-[#EEF3FD] rounded disabled:opacity-50">
+                  {busyStudent === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />} Reincorporar
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

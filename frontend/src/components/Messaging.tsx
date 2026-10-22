@@ -161,6 +161,9 @@ const ROLE_BADGES: Record<string, { bg: string; text: string; label: string }> =
   estudiante:     { bg: 'bg-emerald-50 text-[#0F7B6C]', text: 'text-[#0F7B6C]', label: 'Estudiante'     },
 };
 
+/** Ventana para «eliminar para todos» (la valida también el servidor). */
+const DELETE_FOR_ALL_WINDOW_MS = 15 * 60 * 1000;
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', emptyHint }: MessagingProps) {
@@ -178,7 +181,6 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   const [showNew,       setShowNew]       = useState(false);
   const [contacts,      setContacts]      = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
-  const [attachment,    setAttachment]    = useState<File | null>(null);
   const [messageError,  setMessageError]  = useState('');
   const [mobileListOpen, setMobileListOpen] = useState(true);
 
@@ -186,7 +188,6 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null);
   const [deletingId,    setDeletingId]    = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef    = useRef<HTMLDivElement>(null);
 
   // ── Carga inicial ────────────────────────────────────────────────────────
@@ -244,12 +245,10 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
   };
 
   const sendMessage = async () => {
-    if ((!text.trim() && !attachment) || !active || sending) return;
+    if (!text.trim() || !active || sending) return;
     const content = text.trim();
-    const file    = attachment;
     setText('');
-    setAttachment(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setMessageError('');
     setSending(true);
 
     const now = new Date().toISOString();
@@ -261,12 +260,12 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
       createdAt:      now,
       read:           false,
       canDeleteForAll: true,   // recién enviado → dentro de ventana
-      attachment:     file ? { name: file.name, mime: file.type, size: file.size, url: '' } : null,
+      attachment:     null,
     };
     const updatedActive = {
       ...active,
       messages: [...active.messages, tempMsg],
-      lastMsg:  content || `📎 ${file?.name}`,
+      lastMsg:  content,
       lastTime: 'Ahora',
       unread:   0,
     };
@@ -274,9 +273,9 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
     setConvs(prev => prev.map(c => c.otherId === active.otherId ? updatedActive : c));
 
     try {
+      // Los mensajes ya no admiten archivos adjuntos (el servidor los rechaza).
       const form = new FormData();
       form.append('content', content);
-      if (file) form.append('file', file);
       const { data } = await api.post(`/messages/conversations/${active.otherId}`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -290,13 +289,14 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
         ? { ...c, messages: c.messages.map(m => m.id === tempMsg.id ? realMsg : m) }
         : c,
       ));
-    } catch {
+    } catch (err) {
+      // El texto vuelve al campo y se avisa (antes desaparecía sin aviso).
       setText(content);
-      setAttachment(file);
-      setActive(prev => prev
-        ? { ...prev, messages: prev.messages.filter(m => m.id !== tempMsg.id) }
-        : prev,
-      );
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setMessageError(typeof detail === 'string' && detail ? detail : 'No se pudo enviar el mensaje. Inténtalo de nuevo.');
+      const drop = (msgs: Message[]) => msgs.filter(m => m.id !== tempMsg.id);
+      setActive(prev => prev ? { ...prev, messages: drop(prev.messages) } : prev);
+      setConvs(prev => prev.map(c => c.otherId === active.otherId ? { ...c, messages: drop(c.messages) } : c));
     } finally {
       setSending(false);
     }
@@ -304,11 +304,34 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
 
   // ── Eliminación de mensajes ───────────────────────────────────────────────
 
-  /** Abre el modal de confirmación. El backend dirá si la ventana de 15 min aplica. */
+  /**
+   * Abre el modal de confirmación. «Para todos» solo para mensajes propios y
+   * dentro de los 15 minutos (se recalcula ahora: la conversación pudo quedar
+   * abierta más tiempo); el servidor vuelve a validarlo.
+   */
   const requestDelete = (msg: Message) => {
     if (deletingId) return;
+    if (msg.id.startsWith('tmp-')) {
+      // Aún no tiene id real: el servidor no lo conoce todavía.
+      setMessageError('Espera a que el mensaje se termine de enviar para eliminarlo.');
+      return;
+    }
     setMessageError('');
-    setDeleteConfirm({ msg, canDeleteForAll: msg.canDeleteForAll ?? false });
+    const sentAt = msg.createdAt ? new Date(msg.createdAt).getTime() : NaN;
+    const withinWindow = Number.isFinite(sentAt) && Date.now() - sentAt <= DELETE_FOR_ALL_WINDOW_MS;
+    setDeleteConfirm({
+      msg,
+      canDeleteForAll: msg.senderId === myId && (msg.canDeleteForAll ?? false) && withinWindow,
+    });
+  };
+
+  /** Vista previa de la conversación con el último mensaje visible. */
+  const preview = (msgs: Message[]) => {
+    const last = msgs[msgs.length - 1];
+    return {
+      lastMsg:  last ? (last.text || (last.attachment ? `📎 ${last.attachment.name}` : '')) : '',
+      lastTime: last?.time ?? '',
+    };
   };
 
   /** Ejecuta la eliminación con el scope elegido. */
@@ -334,35 +357,24 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
         };
         const update = (msgs: Message[]) =>
           msgs.map(m => m.id === msg.id ? placeholder : m);
-        setActive(prev => prev ? { ...prev, messages: update(prev.messages) } : prev);
+        // También la vista previa de la lista (antes seguía mostrando el texto).
+        setActive(prev => prev ? { ...prev, messages: update(prev.messages), ...preview(update(prev.messages)) } : prev);
         setConvs(prev => prev.map(c => c.otherId === active.otherId
-          ? { ...c, messages: update(c.messages) }
+          ? { ...c, messages: update(c.messages), ...preview(update(c.messages)) }
           : c,
         ));
       } else {
         // Ocultar completamente para el usuario actual
         const update = (msgs: Message[]) => msgs.filter(m => m.id !== msg.id);
-        const remaining = update(active.messages);
-        const last      = remaining[remaining.length - 1];
-        setActive(prev => prev ? {
-          ...prev,
-          messages: remaining,
-          lastMsg:  last ? (last.text || (last.attachment ? `📎 ${last.attachment.name}` : '')) : '',
-          lastTime: last?.time ?? '',
-        } : prev);
+        setActive(prev => prev ? { ...prev, messages: update(prev.messages), ...preview(update(prev.messages)) } : prev);
         setConvs(prev => prev.map(c => c.otherId === active.otherId
-          ? {
-              ...c,
-              messages: update(c.messages),
-              lastMsg:  last ? (last.text || (last.attachment ? `📎 ${last.attachment.name}` : '')) : '',
-              lastTime: last?.time ?? '',
-            }
+          ? { ...c, messages: update(c.messages), ...preview(update(c.messages)) }
           : c,
         ));
       }
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail ?? 'No se pudo eliminar el mensaje.';
-      setMessageError(detail);
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setMessageError(typeof detail === 'string' && detail ? detail : 'No se pudo eliminar el mensaje.');
     } finally {
       setDeletingId(null);
     }
@@ -400,12 +412,13 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
 
   // ── Descarga de adjuntos ──────────────────────────────────────────────────
 
+  // Solo para adjuntos de mensajes anteriores: ya no se pueden enviar nuevos.
+  // Antes se usaba fetch() sin el token de sesión y la descarga fallaba (401).
   const downloadAttachment = async (msg: Message) => {
     if (!msg.attachment?.url) return;
     try {
-      const res  = await fetch(msg.attachment.url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
+      const res  = await api.get<Blob>(`/messages/${msg.id}/attachment`, { responseType: 'blob' });
+      const blob = res.data;
       const url  = window.URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
@@ -414,7 +427,9 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch { /* noop */ }
+    } catch {
+      setMessageError('No se pudo descargar el archivo.');
+    }
   };
 
   // ── Separadores de fecha ──────────────────────────────────────────────────
@@ -537,7 +552,8 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                 </span>
               </button>
 
-              {/* Eliminar para todos */}
+              {/* Eliminar para todos (solo mensajes propios) */}
+              {deleteConfirm.msg.senderId === myId && (
               <button
                 onClick={() => confirmDelete('for_all')}
                 disabled={!!deletingId || !deleteConfirm.canDeleteForAll}
@@ -552,6 +568,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                     : 'Solo disponible durante los primeros 15 minutos'}
                 </span>
               </button>
+              )}
             </div>
 
             {/* Pie */}
@@ -750,15 +767,16 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                         {isMe && !isDeleted && (
                           <CheckCheck className={`w-3 h-3 ${msg.read ? 'text-white' : 'text-white/50'}`} />
                         )}
-                        {/* Botón eliminar: solo para mis mensajes no eliminados */}
-                        {isMe && !isDeleted && (
+                        {/* Eliminar: propios (para mí / para todos) y recibidos (para mí) */}
+                        {!isDeleted && (
                           <button
                             type="button"
                             onClick={() => requestDelete(msg)}
                             disabled={deletingId === msg.id}
                             aria-label="Eliminar mensaje"
                             title="Eliminar mensaje"
-                            className="ml-1 p-0.5 rounded text-white/70 hover:text-white disabled:opacity-50 transition-colors"
+                            className={`ml-1 p-0.5 rounded disabled:opacity-50 transition-colors ${
+                              isMe ? 'text-white/70 hover:text-white' : 'text-[#AEADAB] hover:text-[#E03E3E]'}`}
                           >
                             {deletingId === msg.id
                               ? <Loader2 className="w-3 h-3 animate-spin" />
@@ -775,34 +793,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
 
             {/* Barra de escritura */}
             <div className="px-5 pt-3 border-t border-[#E9E9E7] flex-shrink-0">
-              {attachment && (
-                <div className="mb-2 flex items-center gap-2 px-3 py-1.5 bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg text-xs text-[#37352F]">
-                  <Paperclip className="w-3.5 h-3.5 text-[#787774]" />
-                  <span className="truncate flex-1">{attachment.name}</span>
-                  <span className="text-[#AEADAB]">{Math.round(attachment.size / 1024)} KB</span>
-                  <button
-                    onClick={() => { setAttachment(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                    className="text-[#787774] hover:text-[#E03E3E]"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
               <div className="flex items-center gap-3 pb-3">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={e => setAttachment(e.target.files?.[0] ?? null)}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Adjuntar archivo"
-                  className="w-9 h-9 flex items-center justify-center rounded-full text-[#787774] hover:bg-[#F7F6F3] hover:text-[#37352F] transition-colors"
-                  style={attachment ? { color: accent } : undefined}
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
                 <input
                   value={text}
                   onChange={e => setText(e.target.value)}
@@ -812,7 +803,7 @@ export default function Messaging({ accent = '#0066FF', height = 'h-[600px]', em
                 />
                 <button
                   onClick={sendMessage}
-                  disabled={(!text.trim() && !attachment) || sending}
+                  disabled={!text.trim() || sending}
                   className="w-9 h-9 flex items-center justify-center text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:opacity-90"
                   style={{ background: accent }}
                 >

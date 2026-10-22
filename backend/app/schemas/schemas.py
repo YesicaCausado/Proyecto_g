@@ -242,6 +242,19 @@ class QuizResponseGemini(BaseModel):
     difficulty: str  # Fácil/Medio/Difícil
     questions: List[QuizQuestionGemini]
 
+class QuizQuestionPublic(BaseModel):
+    """Pregunta de quiz sin respuesta ni explicación (mientras se responde)."""
+    id: int
+    question: str
+    options: List[str]
+
+class QuizPublicResponse(BaseModel):
+    """Quiz que recibe el estudiante: la corrección llega al enviarlo."""
+    quiz_id: int
+    quiz_title: str
+    difficulty: str
+    questions: List[QuizQuestionPublic]
+
 class QuizRequest(BaseModel):
     topic: str
     num_questions: Optional[int] = 5
@@ -271,6 +284,8 @@ class QuizHistoryResponse(BaseModel):
 class QuizSubmission(BaseModel):
     """Envío de respuestas del quiz por parte del usuario"""
     quiz_title: str
+    # Id que devuelve generate-quiz; si falta se busca el último pendiente con ese título.
+    quiz_id: Optional[int] = None
     user_answers: Dict[int, str]  # {question_id: selected_answer}
     classroom_id: Optional[int] = None 
     # Segundos que tardó el estudiante (medido en el cliente). El servidor lo
@@ -287,6 +302,8 @@ class QuizAnalysisResponse(BaseModel):
     weak_concepts: List[str]  # Conceptos a reforzar
     recommended_difficulty: str
     adaptation_message: str
+    # Corrección por pregunta (respuesta correcta, letra y explicación).
+    review: List[Dict[str, Any]] = Field(default_factory=list)
 
 # ===== SCHEMAS LEGACY (mantener compatibilidad) =====
 

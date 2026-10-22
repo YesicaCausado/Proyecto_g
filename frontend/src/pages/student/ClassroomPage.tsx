@@ -223,6 +223,14 @@ export default function ClassroomPage() {
           {/* Progreso del estudiante */}
           <section className="bg-white border border-[#E9E9E7] rounded-md p-6">
             <h2 className="font-medium text-[#37352F] text-sm mb-4">Tu progreso</h2>
+            {/* El progreso del grupo sale de los quizzes de su competencia
+                (Desafíos); sin quizzes no hay dato que mostrar. */}
+            {classroom.total_sessions === 0 ? (
+              <p className="text-xs text-[#9B9A97]">
+                Aún no hay quizzes de la competencia de este grupo. Tu avance aparecerá cuando completes uno en Desafíos.
+              </p>
+            ) : (
+            <>
             <div className="mb-4">
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <span className="text-[#787774]">Avance general</span>
@@ -240,7 +248,7 @@ export default function ClassroomPage() {
             <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[#787774] flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5" /> Sesiones
+                  <MessageSquare className="w-3.5 h-3.5" /> Quizzes
                 </span>
                 <span className="font-medium text-[#37352F]">{classroom.total_sessions}</span>
               </div>
@@ -257,10 +265,12 @@ export default function ClassroomPage() {
                   <Sparkles className="w-3.5 h-3.5" /> Promedio
                 </span>
                 <span className="font-medium text-[#37352F]">
-                  {classroom.average_score.toFixed(1)}
+                  {classroom.average_score.toFixed(1)}%
                 </span>
               </div>
             </div>
+            </>
+            )}
             <button
               onClick={() =>
                 navigate(

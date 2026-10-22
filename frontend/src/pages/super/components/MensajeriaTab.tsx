@@ -57,7 +57,11 @@ export default function MensajeriaTab() {
     try {
       const form = new URLSearchParams({ subject, body, recipient_type: recipient });
       if (recipient === 'grado') form.set('grade', grade);
-      const res = await api.post('/super/broadcasts', form);
+      // El cliente `api` envía JSON por defecto y axios no cambia ese tipo
+      // para URLSearchParams: el backend (campos Form) respondía 422.
+      const res = await api.post('/super/broadcasts', form, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
       setSent(prev => [res.data, ...prev]);
       setSubject(''); setBody('');
       setSuccess(`Mensaje entregado a ${res.data.total} ${res.data.total === 1 ? 'destinatario' : 'destinatarios'}.`);
