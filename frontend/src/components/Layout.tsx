@@ -376,7 +376,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <NotificationBell />
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1.5 rounded-md text-[#787774] hover:bg-[#F1F1EF] transition-colors"
+            aria-label={sidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
+            className="p-2 rounded-md text-[#787774] hover:bg-[#F1F1EF] transition-colors"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -401,7 +402,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* ── Main content ── */}
       <main className="flex-1 min-w-0 min-h-0 overflow-y-auto flex flex-col">
-        <div className="pt-12 md:pt-0 pb-16 md:pb-0 min-h-full flex-1">
+        <div className={`pt-12 md:pt-0 md:pb-0 min-h-full flex-1 ${isTeacher ? '' : 'pb-[calc(4rem+env(safe-area-inset-bottom))]'}`}>
           {children}
         </div>
       </main>

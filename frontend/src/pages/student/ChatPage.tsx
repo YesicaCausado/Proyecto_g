@@ -392,7 +392,10 @@ export default function ChatPage() {
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
   // Progreso real del estudiante con el NeuroBot asignado (null si no está asignado).
   const [botProgress, setBotProgress] = useState<NeuroBotProgress | null>(null);
-  const [showDashboard, setShowDashboard] = useState(!isCustomBot);
+  // En móvil el panel es un cajón que tapa la conversación: arranca cerrado.
+  const [showDashboard, setShowDashboard] = useState(() =>
+    !isCustomBot && !(typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches)
+  );
   const [quizSuggested, setQuizSuggested] = useState(false);
   const [freeInput, setFreeInput] = useState("");
 
@@ -1634,6 +1637,7 @@ export default function ChatPage() {
           <CognitiveDashboard
             response={lastResponse}
             isVisible={showDashboard}
+            onClose={() => setShowDashboard(false)}
             pending={sending}
             facialSnapshot={facial.snapshot}
             facialActive={facial.isStreaming}

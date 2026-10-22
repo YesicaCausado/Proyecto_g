@@ -890,6 +890,7 @@ export default function TeacherPanel() {
             flex
             items-center
             gap-2
+            flex-shrink-0
           "
         >
           <InstitutionLogo className="w-6 h-6 rounded-md" />
@@ -909,6 +910,8 @@ export default function TeacherPanel() {
               text-[10px]
               text-[#787774]
               ml-1
+              hidden
+              sm:inline
             "
           >
             Docente
@@ -920,17 +923,17 @@ export default function TeacherPanel() {
             flex
             items-center
             gap-2
+            min-w-0
           "
         >
           <span
             className="
-              text-[11px]
+              text-[12px]
               font-semibold
               text-[#787774]
               truncate
-              max-w-[120px]
-              hidden
-              sm:block
+              max-w-[160px]
+              sm:max-w-[240px]
             "
           >
             {meta.title}
@@ -943,8 +946,10 @@ export default function TeacherPanel() {
                 (open) => !open
               )
             }
+            aria-label={sidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
             className="
-              p-1.5
+              p-2
+              flex-shrink-0
               rounded-md
               text-[#787774]
               hover:bg-[#EBEBEA]
@@ -1103,12 +1108,12 @@ export default function TeacherPanel() {
           className="
             flex-1
             overflow-y-auto
+            pt-12
+            lg:pt-0
           "
         >
           <div
             className="
-              pt-12
-              lg:pt-0
               p-4
               sm:p-6
               xl:p-8

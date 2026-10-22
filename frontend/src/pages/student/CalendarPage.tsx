@@ -32,12 +32,18 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const fmt  = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
 const todayStr = fmt(today.getFullYear(), today.getMonth(), today.getDate());
 
+// El backend acepta cualquier string en event_type; normalizar para no romper el render
+function normalizeType(value: unknown): EventType {
+  const t = String(value ?? '').trim().toLowerCase();
+  return t in EVENT_COLORS ? (t as EventType) : (t ? 'evento' : 'clase');
+}
+
 function mapEvent(raw: any): CalEvent {
   return {
     id:          String(raw.id),
     title:       raw.title,
     date:        raw.event_date,
-    type:        (raw.event_type ?? 'clase') as EventType,
+    type:        normalizeType(raw.event_type),
     group:       raw.classroom_name ?? undefined,
     teacherName: raw.teacher_name ?? undefined,
     description: raw.description ?? undefined,

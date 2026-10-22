@@ -371,9 +371,9 @@ export default function QuizzesPage() {
   // ── SELECT SCREEN ──────────────────────────────────────────────
   if (screen === 'select') {
     return (
-      <div className="p-6 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
-        <div className="pb-5 mb-6 border-b border-[#E9E9E7] flex items-center justify-between">
-          <div>
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
+        <div className="pb-5 mb-6 border-b border-[#E9E9E7] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold text-[#37352F]">Desafíos</h1>
             <p className="text-[#787774] text-sm mt-1">Elige una competencia y pon a prueba tu conocimiento. Tu desempeño se calcula a partir de estos quizzes.</p>
           </div>
@@ -607,7 +607,7 @@ export default function QuizzesPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
           {[
             { icon: CheckCircle, label: 'Correctas',   value: currentScore,        color: 'text-[#0F7B6C]' },
             { icon: XCircle,     label: 'Incorrectas', value: totalQ - currentScore, color: 'text-[#E03E3E]' },

@@ -184,16 +184,17 @@ export default function SuperDashboard() {
 
       {/* ══ MOBILE HEADER ════ */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-12 bg-[#F7F6F3] border-b border-[#E9E9E7] flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <InstitutionLogo className="w-6 h-6 rounded-md" />
           <span className="text-[13px] font-bold text-[#191919]">NeuroLearn</span>
           <span className="text-[10px] text-[#787774] ml-1 hidden sm:inline">Institucional</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-[#787774] truncate max-w-[120px] hidden sm:block">{currentMeta.title}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[12px] font-semibold text-[#787774] truncate max-w-[160px] sm:max-w-[240px]">{currentMeta.title}</span>
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            className="p-1.5 rounded-md text-[#787774] hover:bg-[#EBEBEA] transition-colors"
+            aria-label={sidebarOpen ? 'Cerrar menú' : 'Abrir menú'}
+            className="p-2 flex-shrink-0 rounded-md text-[#787774] hover:bg-[#EBEBEA] transition-colors"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -232,8 +233,8 @@ export default function SuperDashboard() {
         </header>
 
         {/* Scrollable content */}
-        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <div className="pt-12 lg:pt-0 p-4 sm:p-6 xl:p-8 max-w-7xl mx-auto">
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pt-12 lg:pt-0">
+          <div className="p-4 sm:p-6 xl:p-8 max-w-7xl mx-auto">
 
             {activeTab === 'dashboard'    && <DashboardGeneral onNavigate={setActiveTab} />}
             {activeTab === 'profesores'   && <TeachersTab />}

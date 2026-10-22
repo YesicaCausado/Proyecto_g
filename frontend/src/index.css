@@ -60,6 +60,24 @@ button, input, textarea, select {
   }
 }
 
+/* iOS Safari hace zoom al enfocar campos con fuente < 16px. Esta regla va
+   fuera de las capas de Tailwind, así que se impone a text-sm/text-xs solo en
+   pantallas táctiles pequeñas. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Barra de navegación inferior: deja libre la zona del indicador de inicio
+   en iPhone (requiere viewport-fit=cover en index.html). */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom);
+  height: calc(4rem + env(safe-area-inset-bottom));
+}
+
 h1, h2, h3, h4, h5, h6, .font-heading {
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   color: #191919;

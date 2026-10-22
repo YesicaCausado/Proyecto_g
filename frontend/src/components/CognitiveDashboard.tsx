@@ -11,7 +11,7 @@
 import type { ChatMessageResponse } from '../types';
 import type { FacialSnapshot } from '../hooks/useFacialDetection';
 import type { VoiceSnapshot } from '../hooks/useVoiceProsody';
-import { Brain, Activity, Eye, Mic, Keyboard, MousePointerClick, Zap } from 'lucide-react';
+import { Brain, Activity, Eye, Mic, Keyboard, MousePointerClick, Zap, X } from 'lucide-react';
 
 type PatternKey = 'facial' | 'voice' | 'keyboard' | 'interaction' | 'performance';
 type PatternState = 'available' | 'pending' | 'unavailable' | 'not_applicable' | 'error' | 'stale';
@@ -41,6 +41,8 @@ interface EngineSummary {
 interface Props {
   response: ChatMessageResponse | null;
   isVisible: boolean;
+  /** Cierra el panel (botón visible solo en móvil, donde el panel es un cajón) */
+  onClose?: () => void;
   /** true mientras se envía el turno: los patrones están "procesando" */
   pending?: boolean;
   facialSnapshot?: FacialSnapshot | null;
@@ -178,7 +180,7 @@ function PatternCard({ cfg, entry, pending }: { cfg: (typeof PATTERNS)[number]; 
   );
 }
 
-export default function CognitiveDashboard({ response, isVisible, pending = false, facialSnapshot, facialActive, voiceSnapshot, voiceActive }: Props) {
+export default function CognitiveDashboard({ response, isVisible, onClose, pending = false, facialSnapshot, facialActive, voiceSnapshot, voiceActive }: Props) {
   if (!isVisible || !response) return null;
 
   const meta = (response.metadata ?? {}) as Record<string, unknown>;
@@ -196,12 +198,27 @@ export default function CognitiveDashboard({ response, isVisible, pending = fals
   const isVoiceLive = !!(voiceActive && voiceSnapshot?.is_active);
 
   return (
-    <aside className="fixed md:static right-0 top-12 bottom-16 md:top-auto md:bottom-auto z-40 bg-white border-l border-[#E9E9E7] w-[min(20rem,calc(100vw-1rem))] md:w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4 shadow-[-8px_0_24px_rgba(55,53,47,0.08)] md:shadow-none">
+    <>
+    {/* Fondo del cajón en móvil: tocar fuera lo cierra */}
+    {onClose && (
+      <div className="md:hidden fixed inset-0 z-30 bg-black/20" onClick={onClose} aria-hidden="true" />
+    )}
+    <aside className="fixed md:static right-0 top-12 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:top-auto md:bottom-auto z-40 bg-white border-l border-[#E9E9E7] w-[min(20rem,calc(100vw-1rem))] md:w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4 shadow-[-8px_0_24px_rgba(55,53,47,0.08)] md:shadow-none">
       {/* Estimación del motor */}
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Zap className="w-4 h-4 text-accent-500" />
           <span className="text-xs font-semibold text-[#787774] uppercase tracking-wide">Estado estimado</span>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar panel neuroconductual"
+              className="md:hidden ml-auto -mr-1 p-2 rounded-md text-[#787774] hover:bg-[#F1F1EF]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="px-3 py-2.5 rounded-md border border-[#E9E9E7] bg-[#F7F6F3]">
           {pending ? (
@@ -265,5 +282,6 @@ export default function CognitiveDashboard({ response, isVisible, pending = fals
         </div>
       )}
     </aside>
+    </>
   );
 }
