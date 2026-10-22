@@ -31,9 +31,9 @@ interface Config {
 // ── Componente: fila de info ─────────────────────────────────────────────────
 function InfoRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-[#F3F3F1] last:border-0">
-      <span className="text-sm text-[#787774]">{label}</span>
-      <span className={`text-sm font-medium text-[#191919] ${mono ? 'font-mono' : ''}`}>{value}</span>
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-[#F3F3F1] last:border-0">
+      <span className="text-sm text-[#787774] flex-shrink-0">{label}</span>
+      <span className={`text-sm font-medium text-[#191919] text-right min-w-0 break-words [overflow-wrap:anywhere] ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
 }

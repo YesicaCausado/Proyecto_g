@@ -61,13 +61,13 @@ button, input, textarea, select {
 }
 
 /* iOS Safari hace zoom al enfocar campos con fuente < 16px. Esta regla va
-   fuera de las capas de Tailwind, así que se impone a text-sm/text-xs solo en
-   pantallas táctiles pequeñas. */
+   fuera de las capas de Tailwind y con !important (el login usa estilos en
+   línea), así que se impone a cualquier tamaño solo en pantallas pequeñas. */
 @media (max-width: 767px) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 

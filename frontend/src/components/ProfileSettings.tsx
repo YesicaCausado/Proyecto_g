@@ -254,7 +254,7 @@ export default function ProfileSettings({
                 <input type={showPwd ? 'text' : 'password'} value={f.value} onChange={e => f.set(e.target.value)}
                   placeholder={f.ph} className={inputCls} />
                 {f.icon && (
-                  <button onClick={() => setShowPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#787774]">
+                  <button onClick={() => setShowPwd(v => !v)} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#787774]">
                     {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 )}
@@ -292,7 +292,8 @@ export default function ProfileSettings({
                 <p className="text-xs text-[#787774] mt-0.5">{info.sub}</p>
               </div>
               <button onClick={() => setPrefs(p => ({ ...p, [key]: !p[key] }))}
-                className={`relative w-10 h-5 rounded-full transition-colors ${val ? 'bg-[#0066FF]' : 'bg-[#E9E9E7]'}`}>
+                role="switch" aria-checked={val} aria-label={info.label}
+                className={`relative flex-shrink-0 w-10 h-5 rounded-full transition-colors after:absolute after:-inset-2.5 ${val ? 'bg-[#0066FF]' : 'bg-[#E9E9E7]'}`}>
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${val ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>

@@ -351,7 +351,7 @@ export default function CalendarPage() {
       {detailEv && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4"
           onClick={() => setDetailEv(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6"
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] overflow-y-auto p-6"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -405,7 +405,7 @@ export default function CalendarPage() {
       )}
       {showForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-h-[90dvh] overflow-y-auto max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-[#191919]">{editingId ? 'Editar evento personal' : 'Nuevo evento personal'}</h3>
             <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Título" className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm" />
             <div className="grid grid-cols-2 gap-3">

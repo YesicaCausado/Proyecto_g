@@ -545,7 +545,7 @@ export default function MisGruposTab() {
       {/* ── Modal crear grupo ───────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-md">
             <div className="px-6 py-4 border-b border-[#E9E9E7] flex items-center justify-between">
               <h3 className="font-semibold text-[#191919]">Crear nuevo grupo</h3>
               <button onClick={() => setShowModal(false)} className="text-[#787774] hover:text-[#37352F] text-xl leading-none">×</button>

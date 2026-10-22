@@ -402,6 +402,8 @@ ai_manager = AIManager(
     groq_model=settings.GROQ_MODEL,
     gemini_api_key=settings.GEMINI_API_KEY,
     gemini_model=settings.GEMINI_MODEL,
+    request_timeout=settings.AI_CHAT_REQUEST_TIMEOUT,
+    total_timeout=settings.AI_CHAT_TOTAL_TIMEOUT,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1658,10 +1660,12 @@ async def send_message(
                 except Exception:
                     pass
 
-        # Reconstruir historial de conversación
+        # Reconstruir historial de conversación. Se limita a los últimos 6
+        # mensajes: el historial es la parte más pesada del prompt y Groq
+        # (capa gratuita) solo admite 8.000 tokens/minuto para toda la app.
         context_messages: List[Dict] = []
         if request.history:
-            for msg in request.history[-12:]:
+            for msg in request.history[-6:]:
                 role = msg.get("role", "user")
                 content = msg.get("content", "")
                 if content and role in ("user", "assistant"):
@@ -1672,7 +1676,7 @@ async def send_message(
             system_prompt=system_prompt,
             context_messages=context_messages,
             temperature=0.7,
-            max_tokens=1024,
+            max_tokens=600,
         )
 
         if not result["response"]:

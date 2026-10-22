@@ -437,7 +437,7 @@ export default function GruposTab() {
       {/* ── Crear / editar grupo ── */}
       {form && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setForm(null)}>
-          <div className="bg-white rounded-lg w-full max-w-md shadow-xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg w-full max-h-[90dvh] overflow-y-auto max-w-md shadow-xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-[#191919]">{form.id === null ? 'Crear grupo' : 'Editar grupo'}</h3>
             {([
               ['name', 'Nombre *', 'ej. Matemáticas 9A'],
@@ -489,7 +489,7 @@ export default function GruposTab() {
       {/* ── Transferir a otro profesor ── */}
       {transfer && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setTransfer(null)}>
-          <div className="bg-white rounded-lg w-full max-w-md shadow-xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg w-full max-h-[90dvh] overflow-y-auto max-w-md shadow-xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
               <h3 className="font-semibold text-[#191919]">Transferir «{transfer.name}»</h3>
               <p className="text-xs text-[#787774] mt-1">

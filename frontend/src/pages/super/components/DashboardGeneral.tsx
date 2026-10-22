@@ -107,11 +107,11 @@ export default function DashboardGeneral({
       )}
 
       {/* ── Cabecera institución ── */}
-      <div className="bg-white border border-[#E9E9E7] rounded-xl px-5 py-4 flex items-center gap-4">
+      <div className="bg-white border border-[#E9E9E7] rounded-xl px-4 sm:px-5 py-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="w-10 h-10 rounded-lg bg-[#6940A5]/10 flex items-center justify-center flex-shrink-0">
           <ShieldCheck className="w-5 h-5 text-[#6940A5]" />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-40">
           <p className="text-[11px] text-[#787774] font-semibold uppercase tracking-wide">Institución</p>
           <p className="text-base font-bold text-[#191919] truncate">{institutionName}</p>
         </div>

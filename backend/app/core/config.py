@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     # Presupuesto total de una solicitud de IA, incluyendo el fallback. Debe
     # dejar margen para serialización y respuesta de Vercel.
     AI_TOTAL_TIMEOUT: float = float(os.getenv("AI_TOTAL_TIMEOUT", "24"))
+    # Presupuesto del tutor de chat (/chat/start y /chat/message). Es menor que
+    # el general porque esos endpoints hacen además trabajo de BD antes y
+    # después de la IA, y todo debe caber en los 30 s de Vercel (maxDuration).
+    AI_CHAT_REQUEST_TIMEOUT: float = float(os.getenv("AI_CHAT_REQUEST_TIMEOUT", "9"))
+    AI_CHAT_TOTAL_TIMEOUT: float = float(os.getenv("AI_CHAT_TOTAL_TIMEOUT", "18"))
 
     COGNITIVE_ANALYSIS_WINDOW: int = 30
     FATIGUE_THRESHOLD: float = 0.7

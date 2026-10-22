@@ -240,7 +240,7 @@ export default function MaterialesTab() {
 
   const shareModal = shareFile && (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+      <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-[#191919]">Compartir con grupos</h3>
           <button onClick={closeShare} aria-label="Cerrar"><X className="w-4 h-4 text-[#787774]" /></button>
@@ -387,7 +387,7 @@ export default function MaterialesTab() {
 
         {showLink && (
           <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-3">
+            <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-sm p-6 space-y-3">
               <h3 className="font-semibold text-[#191919]">Agregar enlace</h3>
               <input value={linkForm.name} onChange={e => setLinkForm(p => ({ ...p, name: e.target.value }))}
                 placeholder="Nombre (opcional)" className="w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm" />
@@ -482,7 +482,7 @@ export default function MaterialesTab() {
 
       {showNewFolder && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-sm p-6">
             <h3 className="font-semibold text-[#191919] mb-4">Nueva carpeta</h3>
             <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Nombre de la carpeta"
               onKeyDown={e => e.key === 'Enter' && createFolder()}

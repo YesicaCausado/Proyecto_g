@@ -94,7 +94,7 @@ export default function ClassroomDetailPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="p-4 sm:p-6 md:p-8 max-w-5xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
       <button
         onClick={() => navigate('/classrooms')}
         className="flex items-center gap-1 text-xs text-[#787774] hover:text-[#37352F] mb-6 transition-colors"
@@ -153,7 +153,7 @@ export default function ClassroomDetailPage() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
+            className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 rounded text-xs sm:text-sm font-medium whitespace-nowrap transition-colors ${
               tab === t.key
                 ? 'bg-white text-[#37352F] border border-[#E9E9E7]'
                 : 'text-[#787774] hover:text-[#37352F]'
@@ -172,7 +172,7 @@ export default function ClassroomDetailPage() {
 
       {/* Tab Content */}
       {tab === 'students' && (
-        <div className="bg-white border border-[#E9E9E7] rounded-md overflow-hidden">
+        <div className="bg-white border border-[#E9E9E7] rounded-md overflow-x-auto">
           {students.length === 0 ? (
             <div className="text-center py-12 text-[#787774]">
               <Users className="w-10 h-10 mx-auto mb-2 text-[#E9E9E7]" />
@@ -180,7 +180,7 @@ export default function ClassroomDetailPage() {
               <p className="text-xs mt-1 text-[#9B9A97]">Comparte el código de invitación con tus estudiantes</p>
             </div>
           ) : (
-            <table className="w-full">
+            <table className="w-full min-w-[480px]">
               <thead className="bg-[#F7F6F3] border-b border-[#E9E9E7]">
                 <tr>
                   <th className="text-left text-[11px] font-medium text-[#787774] uppercase px-5 py-3">Estudiante</th>

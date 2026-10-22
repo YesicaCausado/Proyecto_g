@@ -220,7 +220,7 @@ export default function SeguridadTab() {
                     onChange={e => setPwForm({...pwForm, [field.key]: e.target.value})}
                     className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm outline-none focus:ring-1 focus:ring-[#6940A5] pr-10"
                   />
-                  <button type="button" onClick={field.toggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#AEADAB] hover:text-[#787774]">
+                  <button type="button" onClick={field.toggle} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#AEADAB] hover:text-[#787774]">
                     {field.show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>

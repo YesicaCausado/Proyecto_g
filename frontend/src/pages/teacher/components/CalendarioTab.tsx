@@ -255,7 +255,7 @@ export default function CalendarioTab() {
       {/* Modal agregar evento */}
       {showForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-sm p-6 space-y-4">
             <h3 className="font-semibold text-[#191919]">{editingId ? 'Editar evento' : 'Agregar evento'}</h3>
             <div>
               <label className="block text-xs font-semibold text-[#787774] uppercase mb-1.5">Título *</label>

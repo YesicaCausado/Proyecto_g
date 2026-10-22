@@ -193,7 +193,7 @@ function ChatHistorySidebar({
   }
 
   return (
-    <aside className="fixed md:static left-0 top-12 bottom-16 md:top-auto md:bottom-auto z-50 w-[min(20rem,calc(100vw-1rem))] md:w-72 flex-shrink-0 border-r border-[#E9E9E7] bg-white flex flex-col shadow-[8px_0_24px_rgba(55,53,47,0.08)] md:shadow-none">
+    <aside className="fixed lg:static left-0 top-12 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:top-0 md:bottom-0 lg:top-auto lg:bottom-auto z-50 w-[min(20rem,calc(100vw-1rem))] lg:w-72 flex-shrink-0 border-r border-[#E9E9E7] bg-white flex flex-col shadow-[8px_0_24px_rgba(55,53,47,0.08)] lg:shadow-none">
       {/* Encabezado */}
       <div className="px-3.5 pt-4 pb-3 border-b border-[#E9E9E7] bg-[#FBFBFA]">
         <div className="flex items-center justify-between mb-2.5">
@@ -384,7 +384,7 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [historyCollapsed, setHistoryCollapsed] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 1023px)").matches : false
   );
   const [sessionActive, setSessionActive] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<string>(skillParam || routeCompetency?.key || "");
@@ -392,9 +392,9 @@ export default function ChatPage() {
   const [lastResponse, setLastResponse] = useState<ChatMessageResponse | null>(null);
   // Progreso real del estudiante con el NeuroBot asignado (null si no está asignado).
   const [botProgress, setBotProgress] = useState<NeuroBotProgress | null>(null);
-  // En móvil el panel es un cajón que tapa la conversación: arranca cerrado.
+  // En móvil y tablet el panel es un cajón que tapa la conversación: arranca cerrado.
   const [showDashboard, setShowDashboard] = useState(() =>
-    !isCustomBot && !(typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches)
+    !isCustomBot && !(typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches)
   );
   const [quizSuggested, setQuizSuggested] = useState(false);
   const [freeInput, setFreeInput] = useState("");
@@ -1031,7 +1031,7 @@ export default function ChatPage() {
     };
 
     return (
-      <div className="relative flex w-full max-w-full h-[calc(100dvh-48px-64px)] md:h-[calc(100dvh-64px)] min-h-0 overflow-hidden bg-[#F7F6F3]">
+      <div className="relative flex w-full max-w-full h-[calc(100dvh-48px-64px)] md:h-[100dvh] min-h-0 overflow-hidden bg-[#F7F6F3]">
         {newChatPicker}
         {/* Sidebar historial de chats */}
         <ChatHistorySidebar
@@ -1160,7 +1160,7 @@ export default function ChatPage() {
 
   // ===== CHAT VIEW =====
   return (
-    <div className="flex h-[calc(100dvh-48px-64px)] md:h-[calc(100dvh-64px)] min-h-0 bg-[#F7F6F3]">
+    <div className="flex h-[calc(100dvh-48px-64px)] md:h-[100dvh] min-h-0 bg-[#F7F6F3]">
       {newChatPicker}
       {consentPrompt && (
         <ConsentModal
@@ -1183,7 +1183,7 @@ export default function ChatPage() {
       {/* Sidebar historial de chats (estilo ChatGPT) */}
       {!historyCollapsed && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/20"
+          className="lg:hidden fixed inset-0 z-40 bg-black/20"
           onClick={() => setHistoryCollapsed(true)}
           aria-hidden="true"
         />

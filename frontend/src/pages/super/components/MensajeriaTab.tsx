@@ -79,10 +79,10 @@ export default function MensajeriaTab() {
     <div className="space-y-6">
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[#F7F6F3] p-1 rounded-md w-fit border border-[#E9E9E7]">
+      <div className="flex gap-1 bg-[#F7F6F3] p-1 rounded-md w-full sm:w-fit border border-[#E9E9E7]">
         {[{ id: 'compose', label: 'Nuevo mensaje', icon: Plus }, { id: 'sent', label: 'Enviados', icon: Clock }, { id: 'chat', label: 'Chat directo', icon: MessageSquare }].map(t => (
           <button key={t.id} onClick={() => setView(t.id as View)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded transition-colors ${view===t.id ? 'bg-white text-[#191919] shadow-sm border border-[#E9E9E7]' : 'text-[#787774] hover:bg-white/50 hover:text-[#37352F]'}`}>
+            className={`flex-1 sm:flex-none min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap rounded transition-colors ${view===t.id ? 'bg-white text-[#191919] shadow-sm border border-[#E9E9E7]' : 'text-[#787774] hover:bg-white/50 hover:text-[#37352F]'}`}>
             <t.icon className="w-4 h-4" /> {t.label}
           </button>
         ))}
@@ -95,7 +95,7 @@ export default function MensajeriaTab() {
       )}
 
       {view === 'compose' && (
-        <div className="bg-white border border-[#E9E9E7] rounded-lg p-6 space-y-5 max-w-3xl">
+        <div className="bg-white border border-[#E9E9E7] rounded-lg p-4 sm:p-6 space-y-5 max-w-3xl">
           <h3 className="font-semibold text-[#191919] border-b border-[#E9E9E7] pb-3 flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-[#787774]" /> Redactar mensaje institucional
           </h3>

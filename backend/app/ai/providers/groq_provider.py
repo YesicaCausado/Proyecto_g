@@ -1,14 +1,13 @@
 """
 NeuroLearn AI - Proveedor de IA: Groq
-API Gratuita: 14,400 peticiones/día
-https://console.groq.com/
+https://console.groq.com/settings/limits
 
-Límites de tokens por minuto (TPM) según modelo:
-  openai/gpt-oss-120b       →  modelo chat principal de Groq Cloud (JSON estable)
-  (los modelos llama-3.1-8b-instant y qwen3-32b fueron retirados de Groq)
+Límites de la capa gratuita para openai/gpt-oss-120b (compartidos por toda
+la app, ya que hay una sola clave):
+  1.000 peticiones/día · 8.000 tokens/minuto · ~200.000 tokens/día
 
-La clase reintenta automáticamente 1 vez si recibe 429,
-esperando el tiempo indicado por Retry-After (máx. 8 s).
+Ante un 429 la clase reintenta 1 vez solo si Groq pide esperar
+≤ MAX_RETRY_WAIT segundos; si no, cede el turno a Gemini.
 """
 import asyncio
 import os
@@ -24,6 +23,10 @@ logger = logging.getLogger(__name__)
 # en vez de que Vercel mate la función por tiempo (que era lo que causaba el
 # "error en el tutor IA" intermitente en cold start).
 DEFAULT_HTTP_TIMEOUT = float(os.getenv("AI_HTTP_TIMEOUT", "15"))
+
+# Espera máxima (s) ante un 429 para reintentar con Groq. Por encima de esto
+# es mejor pasar directamente a Gemini.
+MAX_RETRY_WAIT = 2.0
 
 
 class GroqProvider:
@@ -78,6 +81,10 @@ class GroqProvider:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        # gpt-oss razona antes de responder y esos tokens cuentan para el
+        # límite por minuto; con "low" razona lo mínimo y responde antes.
+        if self.model.startswith("openai/gpt-oss"):
+            payload["reasoning_effort"] = "low"
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -88,21 +95,28 @@ class GroqProvider:
                 )
 
                 # --- Retry automático si hay rate-limit (429) ---
+                # Solo se reintenta si Groq pide una espera corta. Si la espera
+                # es larga (límite por minuto agotado o límite diario), se
+                # devuelve None de inmediato para que el AIManager pase a
+                # Gemini sin gastar el presupuesto de tiempo de la petición.
                 if response.status_code == 429:
-                    # Groq indica cuántos ms esperar en el mensaje de error
-                    retry_after = 1.0  # default 1 segundo
+                    retry_after = None
+                    err_msg = ""
                     try:
                         err_msg = response.json().get("error", {}).get("message", "")
-                        m = re.search(r"try again in (\d+(?:\.\d+)?)(\w+)", err_msg, re.I)
+                        m = re.search(r"try again in (?:(\d+)m)?(\d+(?:\.\d+)?)(ms|s)\b", err_msg, re.I)
                         if m:
-                            val = float(m.group(1))
-                            unit = m.group(2).lower()
-                            retry_after = val / 1000 if "ms" in unit else val
-                            retry_after = min(retry_after + 0.2, 8.0)  # máx 8 s
+                            minutes = float(m.group(1) or 0)
+                            val = float(m.group(2))
+                            secs = val / 1000 if m.group(3).lower() == "ms" else val
+                            retry_after = minutes * 60 + secs
                     except Exception:
                         pass
+                    if retry_after is None or retry_after > MAX_RETRY_WAIT:
+                        logger.warning(f"Groq 429 ({self.model}): límite alcanzado, se pasa al siguiente proveedor. {err_msg[:200]}")
+                        return None
                     logger.warning(f"Groq 429 ({self.model}): esperando {retry_after:.1f}s y reintentando...")
-                    await asyncio.sleep(retry_after)
+                    await asyncio.sleep(retry_after + 0.2)
                     response = await client.post(
                         self.BASE_URL,
                         json=payload,

@@ -191,8 +191,8 @@ export default function InstitutionList() {
 
       {/* ── Tabla ──────────────────────────────────────── */}
       {!loading && !error && filtered.length > 0 && (
-        <div className="bg-white border border-[#E9E9E7] rounded-md overflow-hidden">
-          <table className="w-full text-left">
+        <div className="bg-white border border-[#E9E9E7] rounded-md overflow-x-auto">
+          <table className="w-full text-left min-w-[760px]">
             <thead>
               <tr className="border-b border-[#E9E9E7] bg-[#F7F6F3]">
                 <th className="px-5 py-3 text-xs font-semibold text-[#787774] uppercase tracking-wider">

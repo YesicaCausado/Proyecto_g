@@ -372,7 +372,7 @@ export default function TableroTab({ onNavigate }: { onNavigate?: (tab: string) 
       {/* Modal componer */}
       {showCompose && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-lg">
             <div className="px-6 py-4 border-b border-[#E9E9E7] flex items-center justify-between">
               <h3 className="font-semibold text-[#191919]">Nueva publicación</h3>
               <button onClick={() => setShowCompose(false)} className="text-[#787774] hover:text-[#37352F] text-xl">×</button>

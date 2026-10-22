@@ -225,7 +225,7 @@ export default function UserManagement() {
             placeholder="Buscar por nombre, usuario, email o documento..."
             className="w-full pl-9 pr-4 py-2.5 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F] outline-none"
           />
-          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9B9A97] hover:text-[#37352F]"><X className="w-4 h-4" /></button>}
+          {search && <button onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#9B9A97] hover:text-[#37352F]"><X className="w-4 h-4" /></button>}
         </div>
         <div className="flex gap-2">
           <div className="relative">
@@ -351,7 +351,7 @@ export default function UserManagement() {
       {/* ══ Modal: Editar usuario ════════════════════════════════════════════════ */}
       {editing && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E9E9E7]">
               <h2 className="font-semibold text-[#191919]">Editar usuario</h2>
               <button onClick={() => setEditing(null)} className="text-[#787774] hover:text-[#37352F]"><X className="w-5 h-5" /></button>
@@ -398,7 +398,7 @@ export default function UserManagement() {
       {/* ══ Modal: Reset contraseña ══════════════════════════════════════════════ */}
       {resetUser && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-sm">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E9E9E7]">
               <h2 className="font-semibold text-[#191919]">Resetear contraseña</h2>
               <button onClick={() => { setResetUser(null); setNewPwd(''); }} className="text-[#787774] hover:text-[#37352F]"><X className="w-5 h-5" /></button>
@@ -445,7 +445,7 @@ export default function UserManagement() {
       {/* ══ Modal: Confirmar eliminación ══════════════════════════════════════════ */}
       {deleteUser && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-sm">
             <div className="px-6 py-5">
               <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trash2 className="w-6 h-6 text-[#E03E3E]" />

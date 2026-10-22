@@ -382,7 +382,7 @@ export default function AutomatizacionesTab({ onNavigate }: { onNavigate?: (t: s
       {/* ── Modal crear automatización ─────────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-[#191919]">{editingId != null ? 'Editar automatización' : 'Nueva automatización'}</h3>
               <button onClick={() => { setShowModal(false); setEditingId(null); }}><X className="w-4 h-4 text-[#787774]" /></button>

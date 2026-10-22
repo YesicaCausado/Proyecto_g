@@ -258,7 +258,7 @@ export default function CalendarioTab() {
       {/* Modal agregar evento */}
       {showForm && selected && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-[#191919]">{editingId ? 'Editar evento' : 'Nuevo evento'} — {selected}</h3>
               <button onClick={() => setShowForm(false)} className="text-[#787774] hover:text-[#37352F]"><X className="w-5 h-5" /></button>

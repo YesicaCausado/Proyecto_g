@@ -309,7 +309,7 @@ export default function NeuroAlertasTab() {
                 </button>
               ))}
             </div>
-            <button onClick={load} title="Actualizar" className="text-[#787774] hover:text-[#37352F]"><RefreshCw className="w-3.5 h-3.5" /></button>
+            <button onClick={load} title="Actualizar" aria-label="Actualizar" className="p-1.5 -m-1.5 rounded text-[#787774] hover:text-[#37352F]"><RefreshCw className="w-3.5 h-3.5" /></button>
           </div>
         </div>
 

@@ -83,7 +83,7 @@ function BotChatModal({ bot, onClose }: { bot: NeuroBot; onClose: () => void }) 
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col h-[600px]">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col h-[min(600px,90dvh)]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#E9E9E7] bg-[#F7F6F3] rounded-t-xl">
           <div className="flex items-center gap-3">
@@ -634,8 +634,8 @@ export default function NeuroBotsTab() {
       {testBot && <BotChatModal bot={testBot} onClose={() => setTestBot(null)} />}
 
       {/* Barra */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-4 text-sm text-[#787774]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#787774]">
           <span><strong className="text-[#191919]">{bots.filter(b=>b.active).length}</strong> activos</span>
           <span><strong className="text-[#191919]">{bots.reduce((a,b)=>a+b.queries,0).toLocaleString()}</strong> consultas totales</span>
           <span><strong className="text-[#191919]">{bots.reduce((a,b)=>a+b.docCount,0)}</strong> documentos</span>
@@ -738,7 +738,7 @@ export default function NeuroBotsTab() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-md">
             <div className="px-6 py-4 border-b border-[#E9E9E7] flex items-center justify-between">
               <h3 className="font-semibold text-[#191919]">Crear NeuroBot</h3>
               <button onClick={closeCreate} className="text-[#787774] hover:text-[#37352F] text-xl">×</button>

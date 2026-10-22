@@ -41,7 +41,7 @@ interface EngineSummary {
 interface Props {
   response: ChatMessageResponse | null;
   isVisible: boolean;
-  /** Cierra el panel (botón visible solo en móvil, donde el panel es un cajón) */
+  /** Cierra el panel (botón visible por debajo de lg, donde el panel es un cajón) */
   onClose?: () => void;
   /** true mientras se envía el turno: los patrones están "procesando" */
   pending?: boolean;
@@ -201,9 +201,9 @@ export default function CognitiveDashboard({ response, isVisible, onClose, pendi
     <>
     {/* Fondo del cajón en móvil: tocar fuera lo cierra */}
     {onClose && (
-      <div className="md:hidden fixed inset-0 z-30 bg-black/20" onClick={onClose} aria-hidden="true" />
+      <div className="lg:hidden fixed inset-0 z-30 bg-black/20" onClick={onClose} aria-hidden="true" />
     )}
-    <aside className="fixed md:static right-0 top-12 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:top-auto md:bottom-auto z-40 bg-white border-l border-[#E9E9E7] w-[min(20rem,calc(100vw-1rem))] md:w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4 shadow-[-8px_0_24px_rgba(55,53,47,0.08)] md:shadow-none">
+    <aside className="fixed lg:static right-0 top-12 bottom-[calc(4rem+env(safe-area-inset-bottom))] md:top-0 md:bottom-0 lg:top-auto lg:bottom-auto z-40 bg-white border-l border-[#E9E9E7] w-[min(20rem,calc(100vw-1rem))] lg:w-72 flex-shrink-0 overflow-y-auto p-4 space-y-4 shadow-[-8px_0_24px_rgba(55,53,47,0.08)] lg:shadow-none">
       {/* Estimación del motor */}
       <div>
         <div className="flex items-center gap-2 mb-2">
@@ -214,7 +214,7 @@ export default function CognitiveDashboard({ response, isVisible, onClose, pendi
               type="button"
               onClick={onClose}
               aria-label="Cerrar panel neuroconductual"
-              className="md:hidden ml-auto -mr-1 p-2 rounded-md text-[#787774] hover:bg-[#F1F1EF]"
+              className="lg:hidden ml-auto -mr-1 p-2 rounded-md text-[#787774] hover:bg-[#F1F1EF]"
             >
               <X className="w-4 h-4" />
             </button>

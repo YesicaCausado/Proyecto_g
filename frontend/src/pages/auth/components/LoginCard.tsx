@@ -118,11 +118,11 @@ function NeuInput({ id, label, type = 'text', placeholder, value, onChange, onFo
           <button type="button" tabIndex={-1} onClick={() => setShow(v => !v)}
              aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             style={{
-              position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+              position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)',
               background: 'none', border: 'none', cursor: 'pointer',
-              color: C.textMute, display: 'flex', alignItems: 'center', padding: 0,
+              color: C.textMute, display: 'flex', alignItems: 'center', padding: '8px',
             }}>
-            {show ? <EyeOff size={14} strokeWidth={1.8}/> : <Eye size={14} strokeWidth={1.8}/>}
+            {show ? <EyeOff size={16} strokeWidth={1.8}/> : <Eye size={16} strokeWidth={1.8}/>}
           </button>
         )}
       </div>

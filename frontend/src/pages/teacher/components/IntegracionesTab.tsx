@@ -280,7 +280,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
         <div className="space-y-6">
           {/* ── Google Drive ─────────────────────────────────────────────── */}
           <div className="bg-white border border-[#E9E9E7] rounded-xl overflow-hidden">
-            <div className="p-5 flex items-center gap-4 border-b border-[#E9E9E7]">
+            <div className="p-4 sm:p-5 flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-3 border-b border-[#E9E9E7]">
               <div className="w-11 h-11 rounded-lg bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center flex-shrink-0 text-xl">📁</div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -289,7 +289,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
                 </div>
                 <p className="text-xs text-[#787774] mt-0.5">Agrega enlaces a archivos de tu Google Drive en tus Materiales. Solo lectura: NeuroLearn no copia ni modifica tus archivos ni sus permisos.</p>
               </div>
-              <div className="flex gap-2 flex-shrink-0">
+              <div className="flex flex-wrap gap-2 flex-shrink-0 w-full sm:w-auto">
                 {driveConnected ? (
                   <ActionButton color="red" disabled={busy('disconnect-google_drive')} onClick={() => disconnect('google_drive')}>Desconectar</ActionButton>
                 ) : (
@@ -364,7 +364,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
 
           {/* ── Google Calendar ───────────────────────────────────────────── */}
           <div className="bg-white border border-[#E9E9E7] rounded-xl overflow-hidden">
-            <div className="p-5 flex items-center gap-4 border-b border-[#E9E9E7]">
+            <div className="p-4 sm:p-5 flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-3 border-b border-[#E9E9E7]">
               <div className="w-11 h-11 rounded-lg bg-[#EEF3FD] text-[#2E6FDB] flex items-center justify-center flex-shrink-0 text-xl">📅</div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -373,7 +373,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
                 </div>
                 <p className="text-xs text-[#787774] mt-0.5">Crea eventos en tu Google Calendar. No se sincroniza con el calendario de NeuroLearn.</p>
               </div>
-              <div className="flex gap-2 flex-shrink-0">
+              <div className="flex flex-wrap gap-2 flex-shrink-0 w-full sm:w-auto">
                 {calendarConnected ? (
                   <ActionButton color="red" disabled={busy('disconnect-google_calendar')} onClick={() => disconnect('google_calendar')}>Desconectar</ActionButton>
                 ) : (
@@ -448,8 +448,8 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
           </div>
 
           {/* Sugerencia de automatizaciones */}
-          <div className="flex items-center justify-between bg-white border border-[#E9E9E7] rounded-xl p-5">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-[#E9E9E7] rounded-xl p-4 sm:p-5">
+            <div className="flex items-center gap-3 min-w-0">
               <Zap className="w-5 h-5 text-[#2E6FDB]" />
               <div>
                 <h3 className="font-semibold text-[#191919] text-sm">Conecta y automatiza</h3>
@@ -458,7 +458,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
             </div>
             {onNavigate && (
               <button onClick={() => onNavigate('automatizaciones')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[#2E6FDB] text-white rounded-lg text-xs font-medium hover:bg-[#255DC0] transition-colors flex-shrink-0">
+                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[#2E6FDB] text-white rounded-lg text-xs font-medium hover:bg-[#255DC0] transition-colors flex-shrink-0 self-start sm:self-auto">
                 Ir a Automatizaciones <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -469,7 +469,7 @@ export default function IntegracionesTab({ onNavigate }: { onNavigate?: (t: stri
       {/* Modal crear evento de calendario */}
       {showCalForm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-[#191919]">Crear evento en Google Calendar</h3>
               <button onClick={() => setShowCalForm(false)}><X className="w-4 h-4 text-[#787774]" /></button>

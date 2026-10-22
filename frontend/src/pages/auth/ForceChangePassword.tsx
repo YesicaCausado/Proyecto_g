@@ -86,7 +86,7 @@ export default function ForceChangePassword() {
                 className="w-full pr-10 pl-3 py-2.5 text-sm border border-[#E9E9E7] rounded-md focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99]"
               />
               <button type="button" onClick={() => setShowC(p => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9B9A97] hover:text-[#787774]">
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#9B9A97] hover:text-[#787774]">
                 {showC ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
@@ -104,7 +104,7 @@ export default function ForceChangePassword() {
                 className="w-full pr-10 pl-3 py-2.5 text-sm border border-[#E9E9E7] rounded-md focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99]"
               />
               <button type="button" onClick={() => setShowN(p => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9B9A97] hover:text-[#787774]">
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#9B9A97] hover:text-[#787774]">
                 {showN ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>

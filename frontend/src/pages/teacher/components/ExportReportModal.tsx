@@ -104,7 +104,7 @@ export default function ExportReportModal({ onClose }: { onClose: () => void }) 
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+      <div className="bg-white rounded-xl shadow-xl w-full max-h-[90dvh] overflow-y-auto max-w-lg">
         <div className="px-6 py-4 border-b border-[#E9E9E7] flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-[#191919]">Exportar reporte</h3>

@@ -501,7 +501,7 @@ export function TeachersTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-6 border-b border-[#E9E9E7] pb-4">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-6 border-b border-[#E9E9E7] pb-4">
         <div>
           <h2 className="text-xl font-bold text-[#37352F] flex items-center gap-2">
             <Users className="w-6 h-6" /> Gestión de Profesores
@@ -888,8 +888,8 @@ export function TeachersTab() {
       )}
 
       {deleteTeacherId && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 p-4 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-h-[90dvh] overflow-y-auto max-w-md">
             <h3 className="text-lg font-semibold text-[#191919] mb-2">Eliminar profesor</h3>
             <p className="text-sm text-[#787774] mb-4">¿Seguro que quieres eliminar este profesor? Esta acción no se puede deshacer.</p>
             <div className="flex justify-end gap-3">
@@ -1192,7 +1192,7 @@ export function StudentsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-6 border-b border-[#E9E9E7] pb-4">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-6 border-b border-[#E9E9E7] pb-4">
         <div>
           <h2 className="text-xl font-bold text-[#37352F] flex items-center gap-2">
             <GraduationCap className="w-6 h-6" /> Gestión de Estudiantes
@@ -1604,8 +1604,8 @@ export function StudentsTab() {
       )}
 
       {deleteStudentId && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 p-4 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-h-[90dvh] overflow-y-auto max-w-md">
             <h3 className="text-lg font-semibold text-[#191919] mb-2">Eliminar estudiante</h3>
             <p className="text-sm text-[#787774] mb-4">¿Seguro que quieres eliminar este estudiante? Esta acción no se puede deshacer.</p>
             <div className="flex justify-end gap-3">

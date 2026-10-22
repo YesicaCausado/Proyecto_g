@@ -14,6 +14,14 @@ import { PASSWORD_RULES as RULES } from '../../data/passwordRules';
 
 type PageState = 'validating' | 'valid' | 'invalid' | 'success';
 
+// FastAPI devuelve `detail` como texto en los errores propios y como lista de
+// objetos en los de validación (422); renderizar esa lista dejaba la página
+// en blanco (p. ej. con un enlace recortado por el cliente de correo).
+function detailText(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof detail === 'string' && detail ? detail : fallback;
+}
+
 export default function ResetPasswordPage() {
   const navigate                  = useNavigate();
   const [params, setParams]       = useSearchParams();
@@ -52,10 +60,7 @@ export default function ResetPasswordPage() {
         await api.post('/auth/reset-password/validate', { token });
         setPageState('valid');
       } catch (err: unknown) {
-        const msg = (err as { response?: { data?: { detail?: string } } })
-          ?.response?.data?.detail
-          ?? 'El enlace es inválido o ha expirado.';
-        setTokenError(msg);
+        setTokenError(detailText(err, 'El enlace es inválido o ha expirado.'));
         setPageState('invalid');
       }
     };
@@ -78,10 +83,7 @@ export default function ResetPasswordPage() {
       setPageState('success');
       setTimeout(() => navigate('/login'), 3000);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })
-        ?.response?.data?.detail
-        ?? 'Error al restablecer la contraseña. Intenta de nuevo.';
-      setError(msg);
+      setError(detailText(err, 'Error al restablecer la contraseña. Intenta de nuevo.'));
     } finally {
       setLoading(false);
     }
@@ -186,7 +188,7 @@ export default function ResetPasswordPage() {
               <button
                 type="button"
                 onClick={() => setShowNew(p => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9B9A97] hover:text-[#787774]"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#9B9A97] hover:text-[#787774]"
               >
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -233,7 +235,7 @@ export default function ResetPasswordPage() {
               <button
                 type="button"
                 onClick={() => setShowCon(p => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9B9A97] hover:text-[#787774]"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#9B9A97] hover:text-[#787774]"
               >
                 {showCon ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>

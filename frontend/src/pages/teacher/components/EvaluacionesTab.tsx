@@ -502,8 +502,8 @@ export default function EvaluacionesTab() {
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="col-span-2 sm:col-span-1">
                       <label className={labelCls}>Fecha límite</label>
                       <input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} className={inputCls} />
                     </div>
