@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.models.institution import AuditLog, Institution
 from app.models.user import User, UserRole
+from app.services.account_purge import purge
 from app.schemas.schemas import (
     AdminStats,
     CredentialItem,
@@ -178,41 +179,6 @@ async def reset_user_password_admin(
     return {"temp_password": temporary_password}
 
 
-def _delete_user_data(db: Session, user_id: int) -> None:
-    """Borra datos dependientes en orden para respetar las FK existentes."""
-    statements = (
-        # Hijos de sesiones, conversaciones, bots y publicaciones.
-        "DELETE FROM chat_messages WHERE session_id IN (SELECT id FROM learning_sessions WHERE user_id = :user_id)",
-        "DELETE FROM cognitive_events WHERE user_id = :user_id OR session_id IN (SELECT id FROM learning_sessions WHERE user_id = :user_id)",
-        "DELETE FROM quiz_history WHERE user_id = :user_id OR session_id IN (SELECT id FROM learning_sessions WHERE user_id = :user_id)",
-        "DELETE FROM learning_sessions WHERE user_id = :user_id",
-        "DELETE FROM conversation_messages WHERE student_id = :user_id OR conversation_id IN (SELECT id FROM conversations WHERE student_id = :user_id)",
-        "DELETE FROM conversations WHERE student_id = :user_id",
-        "DELETE FROM classroom_events WHERE teacher_id = :user_id OR classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = :user_id)",
-        "DELETE FROM post_reactions WHERE user_id = :user_id OR post_id IN (SELECT id FROM posts WHERE teacher_id = :user_id OR classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = :user_id))",
-        "DELETE FROM post_comments WHERE author_id = :user_id OR post_id IN (SELECT id FROM posts WHERE teacher_id = :user_id OR classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = :user_id))",
-        "DELETE FROM posts WHERE teacher_id = :user_id OR classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = :user_id)",
-        "DELETE FROM classroom_bots WHERE classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = :user_id)",
-        "DELETE FROM enrollments WHERE student_id = :user_id OR classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = :user_id)",
-        "DELETE FROM classroom_users WHERE user_id = :user_id OR classroom_id IN (SELECT id FROM classrooms WHERE teacher_id = :user_id)",
-        "DELETE FROM classrooms WHERE teacher_id = :user_id",
-        "DELETE FROM direct_messages WHERE sender_id = :user_id OR receiver_id = :user_id",
-        "UPDATE user_conversations SET last_message_id = NULL WHERE last_message_id IN (SELECT id FROM messages WHERE sender_id = :user_id)",
-        "DELETE FROM messages WHERE sender_id = :user_id",
-        "DELETE FROM password_reset_tokens WHERE user_id = :user_id",
-        "DELETE FROM cognitive_session_state WHERE user_id = :user_id",
-        "DELETE FROM student_mastery WHERE student_id = :user_id",
-        "DELETE FROM learning_state WHERE student_id = :user_id",
-        "DELETE FROM student_memory WHERE student_id = :user_id",
-        "DELETE FROM integrations WHERE user_id = :user_id OR created_by = :user_id",
-        "DELETE FROM bot_training_data WHERE bot_id IN (SELECT id FROM expert_bots WHERE creator_id = :user_id)",
-        "UPDATE learning_sessions SET bot_id = NULL WHERE bot_id IN (SELECT id FROM expert_bots WHERE creator_id = :user_id)",
-        "DELETE FROM expert_bots WHERE creator_id = :user_id",
-    )
-    for statement in statements:
-        db.execute(text(statement), {"user_id": user_id})
-
-
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_admin(
     user_id: int,
@@ -232,12 +198,9 @@ async def delete_user_admin(
             detail="Solo se pueden eliminar usuarios con rol profesor o estudiante.",
         )
 
-    _delete_user_data(db, user.id)
-    # La auditoría se conserva; sus FK ya están configuradas con SET NULL.
-    db.execute(
-        text("DELETE FROM users WHERE id = :user_id"),
-        {"user_id": user.id},
-    )
+    # Borra al usuario y sus datos dependientes según las FK reales de la BD.
+    # La auditoría se conserva (sus FK son SET NULL).
+    purge(db, "users", [user.id])
     db.commit()
 
 
@@ -878,21 +841,9 @@ async def delete_institution_admin(
             detail="Institución no encontrada.",
         )
 
-    # ------------------------------------------------------------------------
-    # Eliminar usuarios asociados
-    # ------------------------------------------------------------------------
-
-    db.query(User).filter(
-        User.institution_id == institution.id
-    ).delete(
-        synchronize_session=False
-    )
-
-    # ------------------------------------------------------------------------
-    # Eliminar institución
-    # ------------------------------------------------------------------------
-
-    db.delete(institution)
+    # Usuarios de la institución y todos sus datos, según las FK reales de
+    # la BD (antes un DELETE masivo de users fallaba en PostgreSQL por FK).
+    purge(db, "institutions", [institution.id])
     db.commit()
 
     return None

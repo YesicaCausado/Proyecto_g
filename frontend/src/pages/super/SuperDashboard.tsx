@@ -120,7 +120,7 @@ export default function SuperDashboard() {
     );
   };
 
-  const SidebarContent = () => (
+  const sidebarContent = (
     <>
       {/* Logo + usuario */}
       <div className="px-3 pt-4 pb-3 border-b border-[#E9E9E7]">
@@ -179,7 +179,7 @@ export default function SuperDashboard() {
 
       {/* ══ SIDEBAR DESKTOP ══ */}
       <aside className="hidden lg:flex lg:flex-col w-60 border-r border-[#E9E9E7] flex-shrink-0" style={{ background: THEME.background }}>
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       {/* ══ MOBILE HEADER ════ */}
@@ -209,7 +209,7 @@ export default function SuperDashboard() {
             style={{ background: THEME.background }}
             onClick={e => e.stopPropagation()}
           >
-            <SidebarContent />
+            {sidebarContent}
           </div>
         </div>
       )}

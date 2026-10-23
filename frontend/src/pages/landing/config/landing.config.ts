@@ -24,13 +24,6 @@ export const NL = {
   blueSoft:   '#60A5FA', // azul suave (efectos)
 } as const;
 
-// ── Fuentes ──────────────────────────────────────────────────
-export const FONT = {
-  ui:       "'Inter', 'Segoe UI', system-ui, sans-serif",
-  display:  "'Space Grotesk', 'Inter', system-ui, sans-serif",
-  mono:     "'IBM Plex Mono', ui-monospace, 'SF Mono', monospace",
-} as const;
-
 // ── Marca ────────────────────────────────────────────────────
 export const BRAND = {
   name:     'NeuroLearn',
@@ -51,68 +44,6 @@ export const HERO = {
   scrollHint:      'Explorar la inteligencia',
   badge:           'Sistema de aprendizaje adaptativo',
 } as const;
-
-// ── Story-telling · Story sections ───────────────────────────
-export interface StorySection {
-  id:        string;
-  /** Sección contínua: título editorial */
-  title:     string;
-  highlight: string;   // palabra resaltada en azul
-  lead:      string;   // párrafo corto
-  /** Fase narrativa (para el eyebrow) */
-  phase:     string;
-}
-
-export const STORY: StorySection[] = [
-  {
-    id: 'analisis',
-    phase: '01 · Análisis',
-    title: 'Cada señal se convierte en',
-    highlight: 'comprensión.',
-    lead:
-      'Mientras el estudiante interactúa, Neuron lee cómo se expresa, cómo escribe y cómo progresa — y traduce esas señales en un perfil de aprendizaje vivo.',
-  },
-  {
-    id: 'capacidades',
-    phase: '02 · Competencias',
-    title: 'Cinco saberes, una sola',
-    highlight: 'red neuronal.',
-    lead:
-      'Pensamiento lógico-matemático, lectura crítica, inglés, competencias ciudadanas y pensamiento científico — conectados y analizados como una sola inteligencia.',
-  },
-  {
-    id: 'pipeline',
-    phase: '03 · Proceso',
-    title: 'De los datos al',
-    highlight: 'aprendizaje.',
-    lead:
-      'Un pipeline continuo transforma la información cruda en una experiencia que se adapta a cada estudiante, sesión a sesión.',
-  },
-  {
-    id: 'chattutor',
-    phase: '04 · NeuroTutor',
-    title: 'Habla con una IA que',
-    highlight: 'te conoce.',
-    lead:
-      'NeuroChat acompaña, responde y ajusta cada explicación al momento de duda real — como un tutor disponible 24/7.',
-  },
-  {
-    id: 'plataforma',
-    phase: '05 · Plataforma',
-    title: 'Todo tu ecosistema',
-    highlight: 'en un solo lugar.',
-    lead:
-      'Estudiantes y docentes viven la misma experiencia: dashboards claros, contenido inteligente y seguimiento preciso del progreso.',
-  },
-  {
-    id: 'integracion',
-    phase: '06 · Integración',
-    title: 'Automatización que',
-    highlight: 'se conecta contigo.',
-    lead:
-      'NeuroLearn se integra con tus herramientas y automatiza el flujo de trabajo para que tú te enfoques en enseñar.',
-  },
-];
 
 // ── Competencias (Sección capacidades) ──────────────────────
 export interface Competency {
@@ -168,59 +99,6 @@ export const PIPELINE: PipelineStage[] = [
   { id: 'ia',        label: 'IA',        note: 'Modelo neuronal predictivo.' },
   { id: 'adaptacion',label: 'Adaptación',note: 'Contenido y ritmo ajustados.' },
   { id: 'aprendizaje',label: 'Aprendizaje', note: 'Progreso y dominio real.' },
-];
-
-// ── Platorm features (Sección estudiante / docente) ─────────
-export interface PlatformCard {
-  id:    string;
-  icon:  string;          // clave lucide
-  title: string;
-  desc:  string;
-  tag:   string;          // 'Estudiante' | 'Docente' | 'Institución'
-}
-
-export const PLATFORM_CARDS: PlatformCard[] = [
-  {
-    id: 'chat',        icon: 'MessageSquare',   tag: 'Estudiante',
-    title: 'NeuroChat', desc: 'Tutor IA personalizado que te acompaña en cada tema y momento de duda.',
-  },
-  {
-    id: 'desempeno',   icon: 'Activity',        tag: 'Estudiante',
-    title: 'Desempeño', desc: 'Visualiza tu progreso, rachas y áreas de mejora en tiempo real.',
-  },
-  {
-    id: 'tablero',     icon: 'LayoutDashboard', tag: 'Estudiante',
-    title: 'Tablero adaptativo', desc: 'Un panel vivo que reorganiza tu ruta de aprendizaje según avanzas.',
-  },
-  {
-    id: 'analitica',   icon: 'BarChart3',       tag: 'Docente',
-    title: 'Analítica inteligente', desc: 'Seguimiento por estudiante con predicción de riesgo de error.',
-  },
-  {
-    id: 'materiales',  icon: 'FileText',        tag: 'Docente',
-    title: 'Materiales', desc: 'Crea, organiza y comparte contenidos potenciados por IA.',
-  },
-  {
-    id: 'grupos',      icon: 'Users',           tag: 'Docente',
-    title: 'Grupos y clases', desc: 'Gestiona aulas, notificaciones y comunicación sin fricción.',
-  },
-];
-
-// ── Integración / automatización ─────────────────────────────
-export interface Integration {
-  id:    string;
-  label: string;
-  icon:  string;          // clave lucide
-  kind:  string;          // 'Plataforma' | 'Automatización'
-}
-
-export const INTEGRATIONS: Integration[] = [
-  { id: 'sso',         label: 'SSO / AAA',        icon: 'Fingerprint',   kind: 'Plataforma' },
-  { id: 'lms',         label: 'LMS',              icon: 'PanelLeft',     kind: 'Plataforma' },
-  { id: 'calendario',  label: 'Calendario',       icon: 'CalendarDays',  kind: 'Plataforma' },
-  { id: 'webhook',     label: 'Webhooks',         icon: 'Webhook',       kind: 'Automatización' },
-  { id: 'api',         label: 'API abierta',      icon: 'Code2',         kind: 'Automatización' },
-  { id: 'reportes',    label: 'Reportes',         icon: 'FileBarChart',  kind: 'Automatización' },
 ];
 
 // ── CTA final ────────────────────────────────────────────────

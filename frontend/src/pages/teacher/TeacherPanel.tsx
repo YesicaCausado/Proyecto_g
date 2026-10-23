@@ -598,7 +598,7 @@ export default function TeacherPanel() {
   // SIDEBAR
   // ==========================================================
 
-  const SidebarContent = () => (
+  const sidebarContent = (
     <>
       {/* ====================================================
           LOGO + USUARIO
@@ -860,7 +860,7 @@ export default function TeacherPanel() {
             THEME.background,
         }}
       >
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       {/* ====================================================
@@ -1003,7 +1003,7 @@ export default function TeacherPanel() {
               event.stopPropagation()
             }
           >
-            <SidebarContent />
+            {sidebarContent}
           </div>
         </div>
       )}

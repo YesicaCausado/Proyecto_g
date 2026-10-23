@@ -209,18 +209,22 @@ async def list_events(
         ).all()
         cids = [c.id for c in my_classrooms]
         cls_cond = ClassroomEvent.classroom_id.in_(cids) if cids else False
-        # Solo sus eventos y los eventos institucionales publicados por el
-        # Súper Profesor. Los eventos de otros profesores quedan aislados.
+        # Solo sus eventos y los publicados por el Súper Profesor como
+        # institucionales o en sus propias clases. Los eventos de otros
+        # profesores (y los del súper en clases ajenas) quedan aislados.
         conditions.append(or_(
             and_(
                 ClassroomEvent.teacher_id == current_user.id,
                 ClassroomEvent.institution_id == inst_id,
             ),
-            ClassroomEvent.teacher_id.in_(
-                db.query(User.id).filter(
-                    User.institution_id == inst_id,
-                    User.role == UserRole.SUPER_PROFESOR.value,
-                )
+            and_(
+                or_(ClassroomEvent.classroom_id == None, cls_cond),
+                ClassroomEvent.teacher_id.in_(
+                    db.query(User.id).filter(
+                        User.institution_id == inst_id,
+                        User.role == UserRole.SUPER_PROFESOR.value,
+                    )
+                ),
             ),
         ))
     else:
@@ -232,9 +236,10 @@ async def list_events(
         cids = [e.classroom_id for e in enrollments]
         cls_cond = ClassroomEvent.classroom_id.in_(cids) if cids else False
         # Eventos de clases inscritas publicados por docentes, eventos
-        # institucionales de docentes/súper y su evento personal.
+        # institucionales (sin clase) de docentes/súper y su evento personal.
         conditions.append(or_(
             and_(
+                ClassroomEvent.classroom_id == None,
                 ClassroomEvent.teacher_id.in_(
                     db.query(User.id).filter(
                         User.institution_id == inst_id,

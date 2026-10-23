@@ -87,7 +87,7 @@ export default function AdminDashboard() {
     ?? 'A';
 
   // ── Sidebar content ──────────────────────────────────────────────
-  const SidebarContent = () => (
+  const sidebarContent = (
     <>
       {/* Logo */}
       <div className="px-6 py-5 border-b border-[#37352F]/60">
@@ -163,7 +163,7 @@ export default function AdminDashboard() {
 
       {/* ── SIDEBAR DESKTOP ─────────────────────────────────────── */}
       <aside className="hidden lg:flex lg:flex-col w-64 bg-[#191919] text-white shrink-0">
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       {/* ── MOBILE HEADER ────────────────────────────────────────── */}
@@ -191,7 +191,7 @@ export default function AdminDashboard() {
             className="absolute left-0 top-12 bottom-0 w-64 bg-[#191919] text-white flex flex-col overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            <SidebarContent />
+            {sidebarContent}
           </div>
         </div>
       )}

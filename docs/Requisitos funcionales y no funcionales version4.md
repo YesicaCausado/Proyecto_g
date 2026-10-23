@@ -166,7 +166,7 @@ RF-77. El Administrador debe asignar y modificar los roles de los usuarios autor
 
 RF-78. El Administrador debe moderar los NeuroBots públicos de acuerdo con las políticas de uso.
 
-RF-79. El Administrador debe gestionar los NeuroBots preentrenados disponibles en la plataforma.
+RF-79. El Administrador debe consultar todos los NeuroBots de la plataforma (públicos y privados) y cambiar su visibilidad y su estado (activo o inactivo).
 
 RF-80. El Administrador debe consultar estadísticas globales de la plataforma.
 

@@ -171,6 +171,10 @@ export function useVoiceTutor(
   const activeRef      = useRef(false);
   const ttsActiveRef   = useRef(false);   // true mientras el TTS está hablando → STT NO escucha
   const languageRef    = useRef<'es' | 'en'>('es'); // idioma actual del tutor
+  // Idioma de la sesión para el reconocimiento de voz. No lo cambia la
+  // autodetección del TTS: en inglés el estudiante habla inglés aunque el
+  // tutor explique algo en español.
+  const sttLanguageRef = useRef<'es' | 'en'>('es');
 
   const [isVoiceMode,      setIsVoiceMode]      = useState(false);
   const [isListening,      setIsListening]      = useState(false);
@@ -301,7 +305,7 @@ export function useVoiceTutor(
     }
 
     const recognition = new SpeechRecognitionAPI() as ISpeechRecognition;
-    recognition.lang            = 'es-BO';
+    recognition.lang            = sttLanguageRef.current === 'en' ? 'en-US' : 'es-CO';
     recognition.continuous      = true;
     recognition.interimResults  = true;
     recognition.maxAlternatives = 1;
@@ -381,6 +385,7 @@ export function useVoiceTutor(
 
   const setLanguage = useCallback((lang: 'es' | 'en') => {
     languageRef.current = lang;
+    sttLanguageRef.current = lang;
   }, []);
 
   // ── Push-to-talk (Modo Live) ──────────────────────────────────────────────
@@ -396,7 +401,7 @@ export function useVoiceTutor(
       try { recognitionRef.current.stop(); } catch { /* ok */ }
     }
     const recognition = new SpeechRecognitionAPI() as ISpeechRecognition;
-    recognition.lang            = 'es-BO';
+    recognition.lang            = sttLanguageRef.current === 'en' ? 'en-US' : 'es-CO';
     recognition.continuous      = false;  // una sola frase por pulsación
     recognition.interimResults  = true;
     recognition.maxAlternatives = 1;

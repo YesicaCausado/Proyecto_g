@@ -275,10 +275,24 @@ class SuperProfesorAuditTests(unittest.TestCase):
         self.assertEqual({a["type"] for a in est1}, {"low_performance", "cognitive_risk"})
         self.assertEqual(est1[0]["average_score"], 30.0)
         target = est1[0]["id"]
+
+        def pending_alerts():
+            # Contador del panel = alertas sin resolver que muestra la pestaña NeuroAlertas.
+            classes = self.client.get(f"{API}/classrooms/my-classes", headers=self.h("profe_a2")).json()["classrooms"]
+            return sum(not a["resolved"] for c in classes for a in
+                       self.client.get(f"{API}/classrooms/{c['id']}/alerts", headers=self.h("profe_a2")).json()["alerts"])
+
+        def stats_count():
+            return self.client.get(f"{API}/teacher/stats", headers=self.h("profe_a2")).json()["alert_count"]
+
+        before = pending_alerts()
+        self.assertGreater(before, 0)
+        self.assertEqual(stats_count(), before)
         self.assertEqual(self.client.post(f"{API}/classrooms/{self.c_fis}/alerts/{target}/resolve",
                                           headers=self.h("profe_a")).status_code, 403)
         self.assertEqual(self.client.post(f"{API}/classrooms/{self.c_fis}/alerts/{target}/resolve",
                                           headers=self.h("profe_a2")).status_code, 200)
+        self.assertEqual(stats_count(), before - 1)
         again = self.client.get(f"{API}/classrooms/{self.c_fis}/alerts", headers=self.h("profe_a2")).json()["alerts"]
         self.assertTrue(next(a for a in again if a["id"] == target)["resolved"])
         mat = self.client.get(f"{API}/classrooms/{self.c_mat}/alerts", headers=self.h("profe_a")).json()["alerts"]

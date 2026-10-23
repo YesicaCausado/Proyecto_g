@@ -13,6 +13,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.auth import create_access_token, get_password_hash
 from app.db.database import Base, get_db
 from app.main import app
+from app.models.classroom import Classroom, Enrollment
 from app.models.institution import Institution
 from app.models.user import User, UserRole
 
@@ -177,6 +178,41 @@ class CalendarPermissionsTests(unittest.TestCase):
         self.assertTrue(any(event["id"] == institutional_id for event in student_events))
         self.assertTrue(any(event["id"] == other_teacher_id for event in student_events))
         self.assertFalse(any(event["id"] == personal_id for event in student_events))
+
+    def test_class_events_only_reach_enrolled_students_and_class_teacher(self):
+        db = self.session_factory()
+        mine = Classroom(teacher_id=self.teacher.id, name="9A calendario", subject="Matemáticas", invite_code="CALEV001")
+        other = Classroom(teacher_id=self.other_teacher.id, name="9B calendario", subject="Inglés", invite_code="CALEV002")
+        db.add_all([mine, other])
+        db.flush()
+        db.add(Enrollment(student_id=self.student.id, classroom_id=mine.id))
+        db.commit()
+        mine_id, other_id = mine.id, other.id
+        db.close()
+
+        def create_in(role, classroom_id, title):
+            response = self.client.post("/api/v1/events", headers=self.headers(role), json={
+                "title": title, "event_type": "examen", "event_date": "2026-12-03", "classroom_id": classroom_id,
+            })
+            self.assertEqual(response.status_code, 201, response.text)
+            return response.json()["id"]
+
+        teacher_class_event = create_in("teacher", mine_id, "Examen 9A")
+        super_in_mine = create_in("super", mine_id, "Aviso del súper en 9A")
+        super_in_other = create_in("super", other_id, "Aviso del súper en 9B")
+
+        def visible(role):
+            events = self.client.get("/api/v1/events?month=2026-12", headers=self.headers(role)).json()["events"]
+            return {event["id"] for event in events}
+
+        self.assertTrue({teacher_class_event, super_in_mine} <= visible("student"))
+        self.assertNotIn(super_in_other, visible("student"))
+        # Un estudiante sin inscripción no ve los eventos de clases ajenas.
+        self.assertFalse({teacher_class_event, super_in_mine, super_in_other} & visible("other_student"))
+        # El profesor ve lo del súper en su clase, pero no lo publicado en la clase de otro.
+        self.assertTrue({teacher_class_event, super_in_mine} <= visible("teacher"))
+        self.assertNotIn(super_in_other, visible("teacher"))
+        self.assertIn(super_in_other, visible("other_teacher"))
 
 
 if __name__ == "__main__":

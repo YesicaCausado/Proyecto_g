@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, Globe, Lock, ShieldCheck, RefreshCw, ToggleLeft, ToggleRight, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Bot, Globe, Lock, RefreshCw, ToggleLeft, ToggleRight, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import api from '../../services/api';
 
 interface AdminBot {
@@ -17,26 +17,8 @@ interface AdminBot {
   created_at: string | null;
 }
 
-interface PretrainedBot {
-  filename: string;
-  name: string;
-  description: string;
-  category: string;
-  personality: string;
-  steps: number;
-  warnings: number;
-  rules: number;
-  tips: number;
-  scenarios: number;
-  faq: number;
-  total_items: number;
-  saved_at: string;
-  is_public: boolean;
-}
-
 export default function BotManagement() {
   const [bots, setBots] = useState<AdminBot[]>([]);
-  const [pretrained, setPretrained] = useState<PretrainedBot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -45,12 +27,8 @@ export default function BotManagement() {
   const fetchBotData = async () => {
     try {
       setLoading(true);
-      const [botsRes, pretrainedRes] = await Promise.all([
-        api.get('/admin/bots'),
-        api.get('/admin/bots/pretrained'),
-      ]);
+      const botsRes = await api.get('/admin/bots');
       setBots(botsRes.data.bots ?? []);
-      setPretrained(pretrainedRes.data.bots ?? []);
       setError('');
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'No se pudieron cargar los bots del sistema.');
@@ -216,37 +194,6 @@ export default function BotManagement() {
         )}
       </div>
 
-      <div className="bg-white border border-[#E9E9E7] rounded-lg p-4 shadow-sm">
-        <div className="flex items-center gap-2 mb-4">
-          <ShieldCheck className="w-5 h-5 text-[#6940A5]" />
-          <h2 className="font-semibold text-[#191919]">Bots pre-entrenados</h2>
-        </div>
-
-        {pretrained.length === 0 ? (
-          <div className="text-sm text-[#787774] py-4">No hay bots pre-entrenados disponibles.</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {pretrained.map((bot) => (
-              <div key={bot.filename} className="border border-[#E9E9E7] rounded-md p-3 bg-[#F7F6F3]/40">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="font-semibold text-[#191919] text-sm">{bot.name}</div>
-                    <div className="text-[11px] text-[#787774] mt-0.5">{bot.category}</div>
-                  </div>
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${bot.is_public ? 'bg-[#EEF7F4] text-[#0F7B6C]' : 'bg-[#F7F6F3] text-[#787774]'}`}>
-                    {bot.is_public ? 'Público' : 'Base'}
-                  </span>
-                </div>
-                <p className="text-xs text-[#787774] mt-2 line-clamp-3">{bot.description || 'Bot de conocimiento base sin descripción.'}</p>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-[#787774]">
-                  <span>{bot.total_items} items</span>
-                  <span>{bot.steps} pasos</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

@@ -429,10 +429,28 @@ def _compute_teacher_stats(
             else:
                 risk_dist["bajo"] += 1
 
-    alert_count = (
-        risk_dist["medio"]
-        + risk_dist["alto"]
-    )
+    # Mismas reglas y filtros que la pestaña NeuroAlertas
+    # (GET /classrooms/{id}/alerts): antes se contaba risk_dist medio+alto y
+    # el contador decía 0 mientras la pestaña mostraba alertas (p. ej.
+    # «Nunca ha iniciado una sesión»). Las resueltas no cuentan.
+    from app.services import neuroalert_service
+
+    alert_count = 0
+    if classroom_ids:
+        alert_enrollments = (
+            db.query(Enrollment)
+            .join(User, User.id == Enrollment.student_id)
+            .filter(
+                Enrollment.classroom_id.in_(classroom_ids),
+                Enrollment.is_active.is_(True),
+                User.is_active.is_(True),
+            )
+            .all()
+        )
+        now = datetime.utcnow()
+        pending = [a for e in alert_enrollments for a in neuroalert_service.enrollment_alerts(e, now)]
+        acks = neuroalert_service.acknowledged(db, current_user.id, [a["key"] for a in pending])
+        alert_count = sum(1 for a in pending if not neuroalert_service.is_resolved(acks, a))
 
     # ========================================================
     # 7. RENDIMIENTO POR GRUPO

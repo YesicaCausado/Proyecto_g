@@ -1,15 +1,12 @@
 """
 NeuroLearn AI — Admin: Moderación de Bots
 ==========================================
-Endpoints para la moderación global de bots (públicos/privados) y
-consulta de bots pre-entrenados.
+Endpoints para la moderación global de bots (públicos/privados).
 
   GET   /admin/bots               → lista todos los bots del sistema
-  GET   /admin/bots/pretrained    → bots pre-entrenados (data/trained_bots)
   PATCH /admin/bots/{bot_id}      → cambiar visibilidad (is_public) / estado (is_active)
 """
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,7 +17,6 @@ from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.expert_bot import ExpertBot
 from app.models.learning import LearningSession, ChatMessage
-from app.ai.expert_bot.persistence import list_bots as list_pretrained_bots
 
 router = APIRouter(prefix="/admin/bots", tags=["Admin - Moderación de Bots"])
 
@@ -63,22 +59,6 @@ async def list_all_bots(
 
     bots = db.query(ExpertBot).order_by(ExpertBot.created_at.desc()).all()
     return {"bots": [_admin_bot_out(b, db) for b in bots]}
-
-
-@router.get("/pretrained")
-async def list_pretrained(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Lista los bots pre-entrenados disponibles (data/trained_bots/*.json)."""
-    _require_admin(current_user)
-
-    try:
-        bots = list_pretrained_bots()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error leyendo bots pre-entrenados: {e}")
-
-    return {"bots": bots}
 
 
 class AdminBotPatchPayload(BaseModel):
