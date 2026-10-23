@@ -151,8 +151,11 @@ class User(Base):
         nullable=True,
     )
 
+    # Texto AAAA-MM-DD, igual que la columna real (VARCHAR(20) en la migración
+    # 001 y en db/migrate.py) y que los esquemas. Con DateTime, una base creada
+    # desde el modelo rechazaba la fecha de la carga masiva con un error 500.
     birth_date = Column(
-        DateTime,
+        String(20),
         nullable=True,
     )
 

@@ -12,6 +12,7 @@ import {
   Eye, Download, MoreVertical, X, Loader2, AlertTriangle, Check, Users,
 } from 'lucide-react';
 import api from '../../../services/api';
+import FilePreviewModal from '../../../components/FilePreviewModal';
 
 type FileType = 'pdf' | 'doc' | 'ppt' | 'link' | 'img';
 
@@ -29,6 +30,8 @@ interface MaterialFile {
   downloadUrl: string | null;
   url: string | null;
   fromDrive?: boolean;
+  mimeType?: string | null;
+  originalName?: string | null;
 }
 
 interface MaterialFolder { id: number; name: string; color: string; files: MaterialFile[]; }
@@ -57,6 +60,7 @@ function toFile(m: any): MaterialFile {
     id: m.id, name: m.name, type: m.type, size: m.size, date: m.date,
     sharedWith: m.sharedWith ?? [], sharedGroups: m.sharedGroups ?? [],
     hasFile: !!m.hasFile, downloadUrl: m.downloadUrl ?? null, url: m.url ?? null, fromDrive: !!m.fromDrive,
+    mimeType: m.mimeType ?? null, originalName: m.originalName ?? null,
   };
 }
 
@@ -76,6 +80,7 @@ export default function MaterialesTab() {
   const [shareIds, setShareIds] = useState<number[]>([]);
   const [showLink, setShowLink] = useState(false);
   const [linkForm, setLinkForm] = useState({ name: '', url: '' });
+  const [previewFile, setPreviewFile] = useState<MaterialFile | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const ok = (text: string) => setNotice({ kind: 'ok', text });
@@ -364,6 +369,12 @@ export default function MaterialesTab() {
                               className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#EEF3FD] text-[#2E6FDB]">
                               <Share2 className="w-3.5 h-3.5" />
                             </button>
+                            {!file.url && file.hasFile && file.downloadUrl && (
+                              <button onClick={() => setPreviewFile(file)} title="Vista previa"
+                                className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#F7F6F3] text-[#787774]">
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button onClick={() => openFile(file)} disabled={busy === `dl-${file.id}`}
                               title={file.url ? (file.fromDrive ? 'Abrir en Drive' : 'Abrir enlace') : 'Descargar'}
                               className="w-7 h-7 flex items-center justify-center rounded hover:bg-[#F7F6F3] text-[#787774]">
@@ -404,6 +415,18 @@ export default function MaterialesTab() {
           </div>
         )}
         {shareModal}
+        {previewFile && previewFile.downloadUrl && (
+          <FilePreviewModal
+            key={previewFile.id}
+            source={{
+              name: previewFile.originalName || previewFile.name,
+              subtitle: `${previewFile.size} · ${previewFile.date}`,
+              mimeType: previewFile.mimeType,
+              load: async () => (await api.get(previewFile.downloadUrl!.replace(/^\/api\/v1/, ''), { responseType: 'blob' })).data as Blob,
+            }}
+            onClose={() => setPreviewFile(null)}
+          />
+        )}
       </>
     );
   }

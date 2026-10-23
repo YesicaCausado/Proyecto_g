@@ -5,7 +5,14 @@
  * Estrictamente monocromo + azul.
  * ─────────────────────────────────────────────────────────────
  */
+import { Link } from 'react-router-dom';
 import { FOOTER_LINKS, NL } from '../config/landing.config';
+import { PRIVACY_POLICY_PATH } from '../../../data/legal';
+
+// Enlaces del pie que llevan a una página real de la app (el resto, a «#»).
+const FOOTER_ROUTES: Record<string, string> = {
+  'Política de privacidad': PRIVACY_POLICY_PATH,
+};
 
 export default function LandingFooter() {
   return (
@@ -50,7 +57,11 @@ function FooterCol({ title, links }: { title: string; links: readonly string[] }
       <ul className="mt-4 space-y-2.5">
         {links.map((l) => (
           <li key={l}>
-            <a href="#" className="text-[13.5px] text-neutral-400 transition-colors hover:text-white">{l}</a>
+            {FOOTER_ROUTES[l] ? (
+              <Link to={FOOTER_ROUTES[l]} className="text-[13.5px] text-neutral-400 transition-colors hover:text-white">{l}</Link>
+            ) : (
+              <a href="#" className="text-[13.5px] text-neutral-400 transition-colors hover:text-white">{l}</a>
+            )}
           </li>
         ))}
       </ul>

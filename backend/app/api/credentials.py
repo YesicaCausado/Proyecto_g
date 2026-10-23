@@ -33,6 +33,7 @@ from app.schemas.schemas import (
     BulkCreateResponse, CredentialItem, AdminStats,
 )
 
+from app.services.consent_service import _parse_birth_date
 from app.services.email_service import send_credentials_email
 from app.services.mail.addresses import placeholder_email_for
 
@@ -72,6 +73,57 @@ def _normalize_csv_row(raw_row: Optional[dict]) -> dict:
             continue
         normalized[str(key).strip().lower()] = "" if value is None else str(value).strip()
     return normalized
+
+
+DOCUMENT_TYPES = ("CC", "TI", "CE", "PA")
+TEACHER_CSV_COLUMNS = ("nombre_completo", "tipo_documento", "numero_documento", "correo", "area")
+STUDENT_CSV_COLUMNS = ("nombre_completo", "tipo_documento", "numero_documento", "correo", "grado", "fecha_nacimiento")
+
+
+def _csv_reader(content: bytes, required: set, expected: tuple) -> csv.DictReader:
+    """Lector del CSV de carga masiva tolerante a cómo lo guardan las hojas de
+    cálculo: UTF-8 (con o sin BOM) o ANSI/Windows-1252 (Excel «CSV delimitado
+    por comas»), separador coma, punto y coma (Excel en español) o tabulador,
+    y la línea «sep=,» que Excel admite. Antes solo se aceptaba UTF-8 con coma:
+    un archivo guardado desde Excel en español fallaba entero o con un 500."""
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("cp1252", errors="replace")
+    lines = text.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    delimiter = ","
+    if lines and lines[0].strip().lower().startswith("sep=") and len(lines[0].strip()) == 5:
+        delimiter = lines.pop(0).strip()[4]
+    elif lines:
+        delimiter = max((",", ";", "\t"), key=lines[0].count)
+    reader = csv.DictReader(io.StringIO("\n".join(lines)), delimiter=delimiter)
+    if not reader.fieldnames:
+        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
+    found = {str(f).strip().lower() for f in reader.fieldnames if f is not None}
+    missing = [c for c in expected if c in required and c not in found]
+    if missing:
+        raise HTTPException(
+            400,
+            f"Faltan columnas en la primera fila: {', '.join(missing)}. "
+            f"Usa la plantilla; los encabezados esperados son: {','.join(expected)}.",
+        )
+    return reader
+
+
+def _common_row_error(row: dict) -> Optional[str]:
+    """Reglas de la fila que comparten profesores y estudiantes (las mismas
+    del formulario individual)."""
+    if not row.get("nombre_completo"):
+        return "Nombre vacío"
+    if not row.get("numero_documento"):
+        return "Documento vacío"
+    doc_type = (row.get("tipo_documento") or "").upper()
+    if doc_type not in DOCUMENT_TYPES:
+        return f"tipo_documento inválido «{row.get('tipo_documento') or ''}» (usa CC, TI, CE o PA)"
+    row["tipo_documento"] = doc_type
+    return None
 
 
 def _require_role(current_user: User, *roles: str):
@@ -436,6 +488,24 @@ async def update_teacher(
     )
 
 
+def _teacher_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set) -> Optional[str]:
+    """Validación de una fila del CSV de profesores (vista previa y creación)."""
+    err = _common_row_error(row)
+    if err:
+        return err
+    if not _validate_email(row.get("correo", "")):
+        return "Correo inválido"
+    if row["numero_documento"] in seen_docs:
+        return "Documento duplicado en este archivo"
+    if row["correo"] in seen_emails:
+        return "Correo duplicado en este archivo"
+    if db.query(User).filter(User.document_number == row["numero_documento"]).first():
+        return "Documento duplicado en el sistema"
+    if db.query(User).filter(User.email == row["correo"]).first():
+        return "Correo duplicado en el sistema"
+    return None
+
+
 @router.post("/super/teachers/bulk", response_model=BulkCreateResponse, status_code=201)
 async def bulk_create_teachers(
     request: Request,
@@ -450,11 +520,8 @@ async def bulk_create_teachers(
     if not content.strip():
         raise HTTPException(400, "El archivo CSV está vacío")
 
-    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-    if not reader.fieldnames:
-        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
-
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
+    reader = _csv_reader(content, required_cols, TEACHER_CSV_COLUMNS)
 
     created: List[CredentialItem] = []
     errors = []
@@ -471,23 +538,7 @@ async def bulk_create_teachers(
             errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
             continue
 
-        # Validaciones
-        err = None
-        if not row.get("nombre_completo"):
-            err = "Nombre vacío"
-        elif not row.get("numero_documento"):
-            err = "Documento vacío"
-        elif not _validate_email(row.get("correo", "")):
-            err = "Correo inválido"
-        elif row["numero_documento"] in seen_docs:
-            err = "Documento duplicado en este archivo"
-        elif row["correo"] in seen_emails:
-            err = "Correo duplicado en este archivo"
-        elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
-            err = "Documento duplicado en el sistema"
-        elif db.query(User).filter(User.email == row["correo"]).first():
-            err = "Correo duplicado en el sistema"
-
+        err = _teacher_row_error(db, row, seen_docs, seen_emails)
         if err:
             errors.append({"row": i, "error": err, "data": row})
             continue
@@ -554,14 +605,15 @@ async def preview_bulk_create_teachers(
     if not content.strip():
         raise HTTPException(400, "El archivo CSV está vacío")
 
-    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-    if not reader.fieldnames:
-        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
-
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
+    reader = _csv_reader(content, required_cols, TEACHER_CSV_COLUMNS)
 
     errors = []
     valid_count = 0
+    # Igual que en la creación: lo que la vista previa da por válido es
+    # exactamente lo que se crea (antes no detectaba duplicados en el archivo).
+    seen_docs: set = set()
+    seen_emails: set = set()
 
     for i, raw_row in enumerate(reader, start=2):
         row = _normalize_csv_row(raw_row)
@@ -572,22 +624,13 @@ async def preview_bulk_create_teachers(
             errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
             continue
 
-        err = None
-        if not row.get("nombre_completo"):
-            err = "Nombre vacío"
-        elif not row.get("numero_documento"):
-            err = "Documento vacío"
-        elif not _validate_email(row.get("correo", "")):
-            err = "Correo inválido"
-        elif db.query(User).filter(User.document_number == row["numero_documento"]).first():
-            err = "Documento duplicado en el sistema"
-        elif db.query(User).filter(User.email == row["correo"]).first():
-            err = "Correo duplicado en el sistema"
-
+        err = _teacher_row_error(db, row, seen_docs, seen_emails)
         if err:
             errors.append({"row": i, "error": err, "data": row})
         else:
             valid_count += 1
+            seen_docs.add(row["numero_documento"])
+            seen_emails.add(row["correo"])
 
     return {
         "preview": True,
@@ -615,10 +658,15 @@ def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set)
     la creación, para que una fila «válida» en la vista previa no falle al crear."""
     doc = row.get("numero_documento") or ""
     email = (row.get("correo") or "").strip()
-    if not row.get("nombre_completo"):
-        return "Nombre vacío"
-    if not doc:
-        return "Documento vacío"
+    err = _common_row_error(row)
+    if err:
+        return err
+    if row.get("fecha_nacimiento"):
+        birth = _parse_birth_date(row["fecha_nacimiento"])
+        if birth is None:
+            return f"fecha_nacimiento inválida «{row['fecha_nacimiento']}» (usa AAAA-MM-DD, p. ej. 2009-05-14)"
+        # Se guarda en un único formato (Excel la reescribe como 14/05/2009).
+        row["fecha_nacimiento"] = birth.isoformat()
     if email and not _validate_email(email):
         return "Correo inválido"
     if doc in seen_docs:
@@ -891,11 +939,8 @@ async def bulk_create_students(
     if not content.strip():
         raise HTTPException(400, "El archivo CSV está vacío")
 
-    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-    if not reader.fieldnames:
-        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
-
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
+    reader = _csv_reader(content, required_cols, STUDENT_CSV_COLUMNS)
 
     created: List[CredentialItem] = []
     errors = []
@@ -988,11 +1033,8 @@ async def preview_bulk_create_students(
     if not content.strip():
         raise HTTPException(400, "El archivo CSV está vacío")
 
-    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-    if not reader.fieldnames:
-        raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
-
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
+    reader = _csv_reader(content, required_cols, STUDENT_CSV_COLUMNS)
 
     errors = []
     valid_count = 0

@@ -2,7 +2,8 @@
 Material compartido por los profesores — vista del estudiante (parche 14C).
 
   GET /student/materials                  materiales compartidos con sus grupos
-  GET /student/materials/{id}/download    descarga autorizada
+  GET /student/materials/{id}/download    descarga autorizada (también la usa
+                                          la vista previa, que la pide como blob)
 
 Un estudiante solo ve los materiales que un profesor compartió con un grupo
 activo en el que él está inscrito (inscripción activa). Antes la página
@@ -82,6 +83,9 @@ async def list_my_materials(
             "groups": [groups[cid].name for cid in mine],
             "hasFile": bool(m.has_file),
             "url": material_url(m),
+            # Para la vista previa: tipo real y nombre original (los enlaces no tienen archivo).
+            "mimeType": None if material_url(m) or not m.has_file else m.mime_type,
+            "originalName": None if material_url(m) or not m.has_file else m.original_name,
         })
     return {"materials": items, "total": len(items)}
 

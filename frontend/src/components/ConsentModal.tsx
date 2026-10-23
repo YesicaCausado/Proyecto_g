@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Camera, Mic, ShieldCheck, X, Loader2, AlertCircle, Check, Ban } from 'lucide-react';
 import type { ConsentState, ConsentType } from '../hooks/useConsents';
+import { PRIVACY_POLICY_PATH } from '../data/legal';
 
 /**
  * Modal de consentimiento previo a activar la cámara o el micrófono.
@@ -101,6 +102,12 @@ export default function ConsentModal({ type, state, loadError, blockedMessage = 
                 <p className="flex gap-2"><ShieldCheck className="w-3.5 h-3.5 mt-0.5 text-[#2E6FDB] flex-shrink-0" /><span>{doc.revocation}</span></p>
                 <p>{doc.voluntary}</p>
                 <p>{doc.minors}</p>
+                {/* Pestaña nueva: el modal vive dentro del chat y no debe perderse. */}
+                <p>
+                  Más información en la{' '}
+                  <a href={`#${PRIVACY_POLICY_PATH}`} target="_blank" rel="noopener noreferrer"
+                    className="font-medium text-[#2E6FDB] hover:underline">Política de privacidad</a>.
+                </p>
               </div>
               {blockedMessage && (
                 <div className="p-3 rounded-lg bg-[#FCF6E5] text-xs text-[#9A6700] space-y-2">

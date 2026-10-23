@@ -5,6 +5,7 @@ import { NotificationsProvider } from './context/NotificationsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import { PRIVACY_POLICY_PATH } from './data/legal';
 
 // ── Carga diferida (code splitting) por ruta ───────────────────
 // Cada página solo se descarga cuando el usuario navega a ella,
@@ -15,6 +16,7 @@ const LoginPage            = lazy(() => import('./pages/auth/LoginPage'));
 const ForceChangePassword  = lazy(() => import('./pages/auth/ForceChangePassword'));
 const ForgotPasswordPage   = lazy(() => import('./pages/auth/ForgotPasswordPage'));
 const ResetPasswordPage    = lazy(() => import('./pages/auth/ResetPasswordPage'));
+const PrivacyPolicyPage    = lazy(() => import('./pages/legal/PrivacyPolicyPage'));
 const StudentDashboard     = lazy(() => import('./pages/student/StudentDashboard'));
 const ChatPage             = lazy(() => import('./pages/student/ChatPage'));
 const BotsPage             = lazy(() => import('./pages/student/BotsPage'));
@@ -71,6 +73,8 @@ function AppRoutes() {
         <Route path="/login"           element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password"  element={<ResetPasswordPage />} />
+        {/* Política de privacidad: pública (la enlazan la landing y el estudiante) */}
+        <Route path={PRIVACY_POLICY_PATH} element={<PrivacyPolicyPage />} />
         {/* Dashboard universal — redirige por rol */}
         <Route path="/dashboard" element={
           <ProtectedRoute><Layout><DashboardRouter /></Layout></ProtectedRoute>

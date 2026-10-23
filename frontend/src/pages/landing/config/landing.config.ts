@@ -237,7 +237,7 @@ export const CTA_FINAL = {
 export const FOOTER_LINKS = {
   producto: ['Plataforma', 'NeuroChat', 'Analítica', 'Integraciones'],
   saberes:  ['Pensamiento lógico-matemático', 'Lectura crítica', 'Inglés', 'Competencias ciudadanas', 'Pensamiento científico'],
-  empresa:  ['Sobre NeuroLearn', 'Contacto', 'Privacidad', 'Términos'],
+  empresa:  ['Sobre NeuroLearn', 'Contacto', 'Política de privacidad', 'Términos'],
 } as const;
 
 // ── Cinco patrones neurodigitales (experiencia horizontal) ──

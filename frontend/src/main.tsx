@@ -29,7 +29,8 @@ if (import.meta.env.DEV) {
 // abrían la landing: se reescriben a /#/reset-password?token=… sin recargar.
 {
   const { pathname, search, hash } = window.location;
-  const routes = ['/reset-password', '/login', '/forgot-password'];
+  // También /politica-de-privacidad, para que el enlace sin «#» abra la política.
+  const routes = ['/reset-password', '/login', '/forgot-password', '/politica-de-privacidad'];
   if (!hash && routes.includes(pathname.replace(/\/+$/, ''))) {
     window.history.replaceState(null, '', `/#${pathname.replace(/\/+$/, '')}${search}`);
   }

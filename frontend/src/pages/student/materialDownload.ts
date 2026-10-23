@@ -5,9 +5,14 @@
  */
 import api from '../../services/api';
 
-export async function downloadStudentMaterial(id: number, name: string): Promise<void> {
+/** Archivo del material como blob (lo usan la descarga y la vista previa). */
+export async function fetchStudentMaterial(id: number): Promise<Blob> {
   const res = await api.get(`/student/materials/${id}/download`, { responseType: 'blob' });
-  const url = URL.createObjectURL(res.data as Blob);
+  return res.data as Blob;
+}
+
+export async function downloadStudentMaterial(id: number, name: string): Promise<void> {
+  const url = URL.createObjectURL(await fetchStudentMaterial(id));
   const a = document.createElement('a');
   a.href = url;
   a.download = name || 'material';

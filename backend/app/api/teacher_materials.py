@@ -387,7 +387,7 @@ async def download_file(
     mime = mat.mime_type or _guess_mime(mat.original_name or mat.name)
     filename = mat.original_name or mat.name
     # Content-Disposition con filename* para soportar caracteres UTF-8
-    ascii_name = "".join(ch if 32 <= ord(ch) < 127 else "_" for ch in filename)
+    ascii_name = "".join(ch if 32 <= ord(ch) < 127 and ch != '"' else "_" for ch in filename)
     disposition = (
         f'attachment; filename="{ascii_name}"; '
         f"filename*=UTF-8''{quote(filename)}"

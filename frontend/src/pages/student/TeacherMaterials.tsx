@@ -3,9 +3,10 @@
  * compartieron con los grupos del estudiante (GET /student/materials).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Download, ExternalLink, FileText, Loader2, RotateCcw, Users } from 'lucide-react';
+import { AlertCircle, Download, ExternalLink, Eye, FileText, Loader2, RotateCcw, Users } from 'lucide-react';
 import api from '../../services/api';
-import { downloadStudentMaterial } from './materialDownload';
+import FilePreviewModal from '../../components/FilePreviewModal';
+import { downloadStudentMaterial, fetchStudentMaterial } from './materialDownload';
 
 interface SharedMaterial {
   id: number;
@@ -18,6 +19,8 @@ interface SharedMaterial {
   groups: string[];
   hasFile: boolean;
   url: string | null;
+  mimeType?: string | null;
+  originalName?: string | null;
 }
 
 export default function TeacherMaterials({ search }: { search: string }) {
@@ -26,6 +29,7 @@ export default function TeacherMaterials({ search }: { search: string }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<number | null>(null);
   const [rowError, setRowError] = useState('');
+  const [previewing, setPreviewing] = useState<SharedMaterial | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +99,12 @@ export default function TeacherMaterials({ search }: { search: string }) {
                     {m.teacher} · {m.groups.join(', ')}{m.folder ? ` · ${m.folder}` : ''} · {m.date}{m.size && m.size !== '—' ? ` · ${m.size}` : ''}
                   </p>
                 </div>
+                {!m.url && m.hasFile && (
+                  <button onClick={() => { setRowError(''); setPreviewing(m); }} title="Vista previa"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-[#E9E9E7] text-[#37352F] hover:bg-[#F7F6F3]">
+                    <Eye className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Vista previa</span>
+                  </button>
+                )}
                 <button onClick={() => open(m)} disabled={busy === m.id || (!m.url && !m.hasFile)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-[#E9E9E7] text-[#2E6FDB] hover:bg-[#EEF3FD] disabled:opacity-50">
                   {busy === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -105,6 +115,19 @@ export default function TeacherMaterials({ search }: { search: string }) {
             ))}
           </div>
         </>
+      )}
+
+      {previewing && (
+        <FilePreviewModal
+          key={previewing.id}
+          source={{
+            name: previewing.originalName || previewing.name,
+            subtitle: `${previewing.teacher}${previewing.size && previewing.size !== '—' ? ` · ${previewing.size}` : ''}`,
+            mimeType: previewing.mimeType,
+            load: () => fetchStudentMaterial(previewing.id),
+          }}
+          onClose={() => setPreviewing(null)}
+        />
       )}
     </section>
   );

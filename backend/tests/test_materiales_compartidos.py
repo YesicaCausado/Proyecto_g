@@ -133,6 +133,40 @@ class MaterialesCompartidosTests(unittest.TestCase):
                           json={"sharedWith": []})
         self.assertEqual(self.client.get(f"{API}/student/materials", headers=self.h("est1")).json()["materials"], [])
 
+    def test_vista_previa_recibe_el_archivo_real_y_respeta_permisos(self):
+        """La vista previa usa las mismas descargas autorizadas (como blob):
+        tipo MIME real, contenido completo y los mismos permisos."""
+        fid = self.folder()
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        pdf = self.upload(fid, shared=[self.g1_id]).json()
+        img = self.client.post(f"{API}/teacher/materials/files", headers=self.h("profe"),
+                               data={"folder_id": str(fid), "shared_with": json.dumps([self.g1_id])},
+                               files={"file": ("diagrama.PNG", png, "image/png")}).json()
+        link = self.client.post(f"{API}/teacher/materials/files", headers=self.h("profe"),
+                                data={"folder_id": str(fid), "url": "https://example.org/x",
+                                      "shared_with": json.dumps([self.g1_id])}).json()
+
+        mine = {m["id"]: m for m in self.client.get(f"{API}/student/materials", headers=self.h("est1")).json()["materials"]}
+        self.assertEqual((mine[pdf["id"]]["mimeType"], mine[pdf["id"]]["originalName"]), ("application/pdf", "guia.pdf"))
+        self.assertEqual(mine[img["id"]]["mimeType"], "image/png")
+        self.assertIsNone(mine[link["id"]]["mimeType"])   # un enlace no tiene archivo que previsualizar
+
+        for mat, body, mime in ((pdf, PDF, "application/pdf"), (img, png, "image/png")):
+            r = self.client.get(f"{API}/student/materials/{mat['id']}/download", headers=self.h("est1"))
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.headers["content-type"], mime)
+            self.assertEqual(r.content, body)
+            t = self.client.get(f"{API}/teacher/materials/files/{mat['id']}/download", headers=self.h("profe"))
+            self.assertEqual((t.status_code, t.headers["content-type"], t.content), (200, mime, body))
+
+        # Inexistente, de otro grupo, de otro profesor o con otro rol: no se entrega.
+        self.assertEqual(self.client.get(f"{API}/student/materials/999999/download", headers=self.h("est1")).status_code, 404)
+        self.assertEqual(self.client.get(f"{API}/student/materials/{pdf['id']}/download", headers=self.h("est2")).status_code, 404)
+        self.assertEqual(self.client.get(f"{API}/teacher/materials/files/{pdf['id']}/download", headers=self.h("profe2")).status_code, 404)
+        self.assertEqual(self.client.get(f"{API}/student/materials/{pdf['id']}/download", headers=self.h("profe")).status_code, 403)
+        self.assertEqual(self.client.get(f"{API}/teacher/materials/files/{pdf['id']}/download", headers=self.h("est1")).status_code, 403)
+        self.assertEqual(self.client.get(f"{API}/student/materials/{pdf['id']}/download").status_code, 401)
+
     def test_no_se_aceptan_grupos_ajenos_ni_inventados(self):
         fid = self.folder()
         self.assertEqual(self.upload(fid, shared=[self.ajeno_id]).status_code, 400)

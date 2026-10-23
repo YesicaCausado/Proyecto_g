@@ -43,7 +43,15 @@ export default defineConfig({
         // el service worker devolvía index.html; sus estilos relativos se
         // pedían a /api/v1/.../assets/*.css, el backend respondía JSON
         // («MIME type application/json») y la página quedaba en blanco.
-        navigateFallbackDenylist: [/^\/api\//, /^\/docs/, /^\/redoc/, /^\/openapi\.json/, /^\/health/],
+        //
+        // Tampoco los archivos (PDF de /material, imágenes, etc.): abrir uno en
+        // el visor (iframe) o en una pestaña nueva es una navegación, y el
+        // service worker respondía index.html en vez del archivo, así que la
+        // vista previa quedaba en blanco o mostraba la app.
+        navigateFallbackDenylist: [
+          /^\/api\//, /^\/docs/, /^\/redoc/, /^\/openapi\.json/, /^\/health/,
+          /\/material\//, /\/[^/]+\.[a-z0-9]{2,5}$/i,
+        ],
       }
     })
   ],

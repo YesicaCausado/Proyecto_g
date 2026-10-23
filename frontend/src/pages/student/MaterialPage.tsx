@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import TeacherMaterials from './TeacherMaterials';
+import FilePreviewModal from '../../components/FilePreviewModal';
 import {
   FileText, Download, Eye, Search,
   BookOpen, Calculator, MessageSquare,
@@ -247,51 +248,6 @@ const FILTER_TABS: { key: SubjectKey; label: string; Icon: LucideIcon }[] = [
   { key: 'sociales',    label: 'Sociales',       Icon: Users         },
   { key: 'ingles',      label: 'Inglés',         Icon: MessageSquare },
 ];
-
-// ─── Visor modal ──────────────────────────────────────────────────────────────
-function PDFViewer({ material, onClose }: { material: Material; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white border border-[#E9E9E7] rounded-md w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden"
-        onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#E9E9E7]">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 bg-[#F7F6F3] border border-[#E9E9E7] rounded-md flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4 text-[#787774]" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-medium text-[#37352F] text-sm truncate">{material.title}</p>
-              <p className="text-[11px] text-[#9B9A97]">{material.pages} páginas</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-            <a href={material.file} download
-              className="flex items-center gap-1.5 bg-[#37352F] hover:bg-[#2F2D2B] text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
-              <Download className="w-3.5 h-3.5" /> Descargar
-            </a>
-            <a href={material.file} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 bg-[#F7F6F3] hover:bg-[#F1F1EF] border border-[#E9E9E7] text-[#787774] text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
-              <ExternalLink className="w-3.5 h-3.5" /> Abrir
-            </a>
-            <button onClick={onClose}
-              className="w-7 h-7 rounded-md text-[#9B9A97] hover:text-[#37352F] hover:bg-[#F7F6F3] flex items-center justify-center transition-colors text-lg font-bold border border-[#E9E9E7]">
-              ×
-            </button>
-          </div>
-        </div>
-        {/* PDF embed */}
-        <div className="flex-1 overflow-hidden">
-          <iframe
-            src={`${material.file}#toolbar=1&navpanes=1`}
-            title={material.title}
-            className="w-full h-full border-0"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Tarjeta de recurso en línea ──────────────────────────────────────────────
 function ExternalResourceCard({ r }: { r: ExternalResource }) {
@@ -604,8 +560,14 @@ export default function MaterialPage() {
         </div>
       )}
 
-      {/* ── PDF Viewer modal ── */}
-      {viewing && <PDFViewer material={viewing} onClose={() => setViewing(null)} />}
+      {/* ── Visor de vista previa ── */}
+      {viewing && (
+        <FilePreviewModal
+          key={viewing.id}
+          source={{ name: viewing.title, subtitle: `${viewing.pages} páginas`, mimeType: 'application/pdf', src: viewing.file }}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </div>
   );
 }

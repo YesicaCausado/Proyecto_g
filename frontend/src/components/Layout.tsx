@@ -28,6 +28,7 @@ import { navItemStyle } from '../styles/sidebar';
 import { institutionLabel } from '../utils/institution';
 import InstitutionLogo from './InstitutionLogo';
 import NotificationBell from './NotificationBell';
+import { PRIVACY_POLICY_PATH } from '../data/legal';
 
 interface NavLinkItem {
   id: string;
@@ -344,6 +345,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
+        <Link
+          to={PRIVACY_POLICY_PATH}
+          onClick={() => mobile && setSidebarOpen(false)}
+          className="mt-2 block px-1 text-[11px] text-[#9B9A97] hover:text-[#37352F] hover:underline"
+        >
+          Política de privacidad
+        </Link>
       </div>
     </div>
   );
@@ -390,8 +398,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           className="md:hidden fixed inset-0 z-30 bg-black/20"
           onClick={() => setSidebarOpen(false)}
         >
+          {/* Termina sobre la barra inferior del estudiante: si no, esta tapaba
+              el pie del menú (cerrar sesión y Política de privacidad). */}
           <div
-            className="absolute left-0 top-12 bottom-0 w-[240px] border-r border-[#E9E9E7]"
+            className={`absolute left-0 top-12 w-[240px] border-r border-[#E9E9E7] ${isTeacher ? 'bottom-0' : 'bottom-[calc(4rem+env(safe-area-inset-bottom))]'}`}
             style={{ background: THEME.background }}
             onClick={(e) => e.stopPropagation()}
           >

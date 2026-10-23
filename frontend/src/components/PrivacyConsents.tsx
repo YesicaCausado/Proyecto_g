@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { PRIVACY_POLICY_PATH } from '../data/legal';
 import { Camera, Mic, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { useConsents, type ConsentType } from '../hooks/useConsents';
 
@@ -92,6 +94,10 @@ export default function PrivacyConsents() {
         </div>
       )}
       {actionError && <p className="px-5 pb-4 text-xs text-[#E03E3E]">{actionError}</p>}
+      <p className="px-5 py-3 border-t border-[#E9E9E7] text-xs text-[#787774]">
+        Cómo tratamos tus datos y cómo ejercer tus derechos:{' '}
+        <Link to={PRIVACY_POLICY_PATH} className="font-medium text-[#2E6FDB] hover:underline">Política de privacidad</Link>
+      </p>
     </section>
   );
 }
