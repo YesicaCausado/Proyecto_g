@@ -9,7 +9,7 @@ class ExpertBot(Base):
     __tablename__ = "expert_bots"
 
     id = Column(Integer, primary_key=True, index=True)
-    creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
 
     name = Column(String(100), nullable=False)
     description = Column(Text)

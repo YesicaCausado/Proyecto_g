@@ -115,7 +115,7 @@ class EvaluationCreate(BaseModel):
 
 
 class QuestionGrade(BaseModel):
-    points: float = Field(..., ge=0)
+    points: float = Field(..., ge=0, allow_inf_nan=False)
     feedback: Optional[str] = Field(None, max_length=1000)
 
 

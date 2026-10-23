@@ -32,7 +32,9 @@ router = APIRouter(prefix="/student", tags=["Student Evaluations"])
 
 class AnswersPayload(BaseModel):
     submission_id: int
-    answers: Dict[str, Optional[str]] = Field(default_factory=dict)
+    # Hasta 100 preguntas por evaluación (teacher_evaluations.EvaluationCreate);
+    # cada respuesta abierta se recorta en evaluation_service.clean_answers.
+    answers: Dict[str, Optional[str]] = Field(default_factory=dict, max_length=100)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

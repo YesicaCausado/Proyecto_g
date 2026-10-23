@@ -45,7 +45,7 @@ class TeacherEvaluation(Base):
     __tablename__ = "teacher_evaluations"
 
     id          = Column(Integer, primary_key=True, index=True)
-    teacher_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
+    teacher_id  = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True, index=True)
     title       = Column(String(200), nullable=False)
     group_name  = Column(String(120), default="")      # nombre del aula (copia para mostrar)

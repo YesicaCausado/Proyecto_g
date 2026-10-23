@@ -43,14 +43,20 @@ function ForgotPasswordCard() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    // Acepta el usuario (n.º de documento) o el correo: 3 a 100 caracteres sin espacios.
+    const identifier = username.trim();
+    if (!identifier) { setError('Escribe tu usuario o tu correo.'); return; }
+    if (identifier.length < 3 || identifier.length > 100 || /\s/.test(identifier)) {
+      setError('Escribe tu usuario (número de documento) o tu correo, sin espacios.');
+      return;
+    }
     setError('');
     setLoading(true);
     driver.onEmailBlur();           // robot deja de mirar el campo
     driver.notifySuccess();         // robot va a "loading" (reutilizamos driver)
 
     try {
-      await api.post('/auth/forgot-password', { username: username.trim() });
+      await api.post('/auth/forgot-password', { username: identifier });
       setSent(true);
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -166,6 +172,11 @@ function ForgotPasswordCard() {
             value={username}
             autoFocus
             required
+            maxLength={100}
+            autoComplete="username"
+            spellCheck={false}
+            autoCapitalize="none"
+            aria-invalid={error ? true : undefined}
             placeholder="Ej: 1023456789 o tu@correo.com"
             onChange={e => {
               setUsername(e.target.value);

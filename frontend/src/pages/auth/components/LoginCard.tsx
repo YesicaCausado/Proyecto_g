@@ -89,6 +89,7 @@ function NeuInput({ id, label, type = 'text', placeholder, value, onChange, onFo
           id={id} type={resolvedType} placeholder={placeholder}
           value={value} onChange={onChange} required={required}
           autoComplete={isPass ? 'current-password' : 'username'}
+          maxLength={isPass ? 256 : 100} spellCheck={false} autoCapitalize="none" autoCorrect="off"
           style={{
             width: '100%', boxSizing: 'border-box',
             padding: isPass ? '11px 40px 11px 14px' : '11px 14px',
@@ -147,7 +148,9 @@ export default function LoginCard({ className = '' }: LoginCardProps) {
     setError('');
     setLoading(true);
     try {
-      await login(form);
+      // El usuario (documento o correo) se envía sin espacios externos; la
+      // contraseña se envía exactamente como se escribió.
+      await login({ ...form, username: form.username.trim() });
       navigate('/dashboard');
     } catch (err: unknown) {
       setError(getLoginErrorMessage(err));

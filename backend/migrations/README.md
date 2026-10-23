@@ -39,6 +39,7 @@ migrations/
 | 011 | `011_neurobots_notificaciones.sql` | **Pendiente de ejecutar — ANTES de desplegar el parche 11B.** Columnas `goal_interactions` y `assigned_by_id` en `classroom_bots`; tablas `student_bot_assignments`, `neurobot_progress`, `notifications` y `notification_preferences` (con RLS). Idempotente. | Oct 2026 |
 | 012 | `012_auditoria_sesiones_acudiente.sql` | **Pendiente de ejecutar — ANTES de desplegar el parche 14.** Columnas en `users` para cerrar sesiones (`sessions_valid_after`) y registrar la autorización del acudiente (`guardian_name`, `guardian_authorized_at`, `guardian_authorized_by_id`). Idempotente. | Oct 2026 |
 | 015 | `015_alertas_resueltas.sql` | **Pendiente de ejecutar** (antes o después del despliegue; el backend crea la tabla al arrancar). Tabla `alert_acknowledgements` para que «Marcar resuelta» en NeuroAlertas persista (con RLS). Idempotente. | Oct 2026 |
+| 017 | `017_indices_rendimiento.sql` | **Opcional** (el backend crea los índices al arrancar si faltan). Índices sobre claves foráneas muy consultadas (mensajes, tablero, calendario, NeuroBots, materiales). Usa `CREATE INDEX CONCURRENTLY`: ejecutar fuera de una transacción. Idempotente. | Oct 2026 |
 
 ## RLS multi-tenant (005)
 

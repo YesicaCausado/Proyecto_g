@@ -15,11 +15,12 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc, func, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.auth import get_current_user, get_password_hash
+from app.core import validators as v
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.institution import AuditLog, Institution
@@ -148,8 +149,12 @@ async def update_user_admin(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No puedes desactivar tu propia cuenta.")
 
     changes = payload.model_dump(exclude_unset=True)
-    if "email" in changes and changes["email"] != user.email:
-        duplicate = db.query(User).filter(User.email == changes["email"], User.id != user.id).first()
+    # Rol y estado son obligatorios en la cuenta: un null no los borra.
+    for required in ("role", "is_active"):
+        if required in changes and changes[required] is None:
+            changes.pop(required)
+    if changes.get("email") and changes["email"] != (user.email or "").lower():
+        duplicate = db.query(User).filter(func.lower(User.email) == changes["email"], User.id != user.id).first()
         if duplicate:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El correo ya está registrado.")
     for field, value in changes.items():
@@ -398,7 +403,13 @@ async def list_audit_logs_admin(
         query = query.filter(AuditLog.created_at < date_to + timedelta(days=1))
 
     total = query.count()
-    logs = query.order_by(desc(AuditLog.created_at)).offset(
+    # selectinload: autor, usuario afectado e institución en 3 consultas para
+    # toda la página (antes hasta 3 consultas por fila).
+    logs = query.options(
+        selectinload(AuditLog.performed_by),
+        selectinload(AuditLog.target_user),
+        selectinload(AuditLog.institution),
+    ).order_by(desc(AuditLog.created_at)).offset(
         (page - 1) * page_size
     ).limit(page_size).all()
 
@@ -625,9 +636,27 @@ async def update_institution_admin(
 class InstitutionPatchPayload(BaseModel):
     """Campos que el panel puede actualizar sin recrear la institución."""
 
-    name: Optional[str] = Field(None, min_length=2, max_length=200)
-    dane_code: Optional[str] = Field(None, min_length=3, max_length=20)
+    name: Optional[str] = Field(None, max_length=200)
+    dane_code: Optional[str] = Field(None, max_length=20)
     is_active: Optional[bool] = None
+
+    # null no borra: nombre y código DANE son obligatorios en la institución.
+    @field_validator("name", mode="before")
+    @classmethod
+    def _name(cls, value):
+        return v.clean_text(value, label="El nombre de la institución", min_len=2, max_len=200)
+
+    @field_validator("dane_code", mode="before")
+    @classmethod
+    def _dane(cls, value):
+        return v.dane_code(value)
+
+    @field_validator("is_active", mode="before")
+    @classmethod
+    def _is_active(cls, value):
+        if value is None:
+            raise ValueError("El estado debe ser verdadero o falso.")
+        return value
 
 
 @router.patch(

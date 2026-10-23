@@ -72,7 +72,7 @@ class LearningSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    bot_id = Column(Integer, ForeignKey("expert_bots.id"), nullable=True)
+    bot_id = Column(Integer, ForeignKey("expert_bots.id"), index=True, nullable=True)
     topic = Column(String(200))
     started_at = Column(DateTime, default=utcnow)
     ended_at = Column(DateTime, nullable=True)
@@ -154,7 +154,7 @@ class QuizHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     session_id = Column(Integer, ForeignKey("learning_sessions.id"), nullable=True)
-    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)  # ← NUEVO
+    classroom_id = Column(Integer, ForeignKey("classrooms.id"), index=True, nullable=True)  # ← NUEVO
     # Competencia Saber 11 elegida por el estudiante al generar el quiz
     # (app/services/competencies.py). NULL en quizzes anteriores.
     competency = Column(String(30), nullable=True)

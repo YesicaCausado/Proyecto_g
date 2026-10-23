@@ -22,7 +22,6 @@ from typing import Optional
 import base64
 import binascii
 import logging
-import re
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -30,10 +29,12 @@ from fastapi.security import OAuth2PasswordBearer
 import jwt
 from jwt import InvalidTokenError
 from passlib.context import CryptContext
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.core import validators
 from app.core.config import settings
 from app.core.security import (
     check_origin,
@@ -124,43 +125,19 @@ def validate_password_strength(
     """
     Valida la fortaleza de una contraseña.
 
-    Reglas:
-    - mínimo 8 caracteres
-    - una mayúscula
-    - una minúscula
+    Reglas (app/core/validators.py → password_policy_error, igual que
+    frontend/src/data/passwordRules.ts):
+    - entre 8 y 128 caracteres
+    - una mayúscula y una minúscula (también Ñ, Á…)
     - un número
-    - un carácter especial
+    - un carácter especial: cualquier símbolo o espacio
 
     Retorna:
     - None si la contraseña es válida.
     - mensaje de error si no cumple.
     """
 
-    if not isinstance(password, str):
-        return "La contraseña no es válida."
-
-    if len(password) < 8:
-        return "La contraseña debe tener al menos 8 caracteres."
-
-    if not re.search(r"[A-Z]", password):
-        return "La contraseña debe incluir una letra mayúscula."
-
-    if not re.search(r"[a-z]", password):
-        return "La contraseña debe incluir una letra minúscula."
-
-    if not re.search(r"\d", password):
-        return "La contraseña debe incluir un número."
-
-    if not re.search(
-        r"[!@#$%^&*(),.?\":{}|<>_\-+=\[\]\\/~`';]",
-        password,
-    ):
-        return (
-            "La contraseña debe incluir un carácter especial "
-            "(!@#$%^&*...)."
-        )
-
-    return None
+    return validators.password_policy_error(password)
 
 
 # ============================================================
@@ -353,6 +330,11 @@ def validate_profile_photo(
             "Formato de imagen no permitido. "
             "Usa JPG, PNG, WEBP o GIF."
         )
+
+    # El contenido debe ser realmente del tipo declarado.
+    declared = header[len("data:"):].split(";", 1)[0]
+    if not decoded or not validators.image_matches(decoded, declared):
+        return "El archivo no es una imagen válida."
 
     return None
 
@@ -964,10 +946,13 @@ async def update_me(
         full_name = data["full_name"]
 
         if full_name is not None:
-            full_name = str(full_name).strip()
+            if not isinstance(full_name, str):
+                raise HTTPException(status_code=400, detail="El nombre debe ser texto.")
 
-            if full_name:
-                current_user.full_name = full_name
+            if full_name.strip():
+                current_user.full_name = validators.or_400(
+                    validators.person_name, full_name, label="El nombre completo"
+                )
 
     # --------------------------------------------------------
     # Email
@@ -978,14 +963,16 @@ async def update_me(
         email = data["email"]
 
         if email is not None:
-            email = str(email).strip().lower()
+            if not isinstance(email, str):
+                raise HTTPException(status_code=400, detail="El correo debe ser texto.")
+            email = validators.or_400(validators.email, email, required=False)
 
             if email:
 
                 existing = (
                     db.query(UserModel)
                     .filter(
-                        UserModel.email == email,
+                        func.lower(UserModel.email) == email,
                         UserModel.id
                         != current_user.id,
                     )
@@ -1102,6 +1089,9 @@ async def change_password(
         "new_password",
         "",
     )
+
+    if not isinstance(current_pwd, str) or not current_pwd or len(current_pwd) > 256:
+        raise HTTPException(status_code=400, detail="Escribe tu contraseña actual.")
 
     # --------------------------------------------------------
     # Validar contraseña actual

@@ -14,8 +14,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
+from app.core import validators as v
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.core.permissions import Permission, has_permission
@@ -56,70 +57,124 @@ def _check_post_access(post: Post, current_user: User, db: Session) -> None:
 
 # ── Schemas internos ────────────────────────────────────────────────────────
 
+POST_TYPES = ("anuncio", "tarea", "recordatorio", "material", "enlace")
+
+
 class PostCreate(BaseModel):
     classroom_id: int
     post_type: str = "anuncio"   # anuncio|tarea|recordatorio|material|enlace
     title: str
     content: str = ""
     due_date: Optional[str] = None
-    attachments: Optional[list] = []
+    attachments: Optional[list] = Field(default_factory=list, max_length=10)
+
+    @field_validator("post_type")
+    @classmethod
+    def _type(cls, value: str) -> str:
+        value = (value or "").strip().lower()
+        if value not in POST_TYPES:
+            raise ValueError("Tipo de publicación no válido.")
+        return value
+
+    @field_validator("title")
+    @classmethod
+    def _title(cls, value: str) -> str:
+        return v.clean_text(value, label="El título", max_len=200)
+
+    @field_validator("content")
+    @classmethod
+    def _content(cls, value: str) -> str:
+        return v.clean_text(value, label="El contenido", max_len=5000, required=False, multiline=True)
+
+    @field_validator("due_date")
+    @classmethod
+    def _due(cls, value: Optional[str]) -> Optional[str]:
+        return v.iso_date(value, label="La fecha de entrega", required=False, min_year=2000)
+
 
 class CommentCreate(BaseModel):
     content: str
 
+    @field_validator("content")
+    @classmethod
+    def _content(cls, value: str) -> str:
+        return v.clean_text(value, label="El comentario", max_len=2000, multiline=True)
+
+
+def _posts_to_dicts(posts: List[Post], current_user_id: int, db: Session) -> List[dict]:
+    """Serializa posts con reacciones y comentarios en 4 consultas en total.
+
+    Antes eran ~4 consultas POR post (reacciones, comentarios, un usuario por
+    comentario, docente y aula): el Tablero tardaba más cuanto más se usaba.
+    """
+    if not posts:
+        return []
+    post_ids = [p.id for p in posts]
+
+    reactions_by_post: dict = {pid: [] for pid in post_ids}
+    for r in db.query(PostReaction.post_id, PostReaction.user_id).filter(PostReaction.post_id.in_(post_ids)):
+        reactions_by_post[r.post_id].append(r.user_id)
+
+    comments_by_post: dict = {pid: [] for pid in post_ids}
+    all_comments = db.query(PostComment).filter(
+        PostComment.post_id.in_(post_ids),
+        PostComment.is_active == True,
+    ).order_by(PostComment.created_at).all()
+    for c in all_comments:
+        comments_by_post[c.post_id].append(c)
+
+    user_ids = {p.teacher_id for p in posts} | {c.author_id for c in all_comments}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids))}
+    classrooms = {c.id: c for c in db.query(Classroom).filter(
+        Classroom.id.in_({p.classroom_id for p in posts}))}
+
+    out = []
+    for post in posts:
+        reactors = reactions_by_post[post.id]
+        comments = []
+        for c in comments_by_post[post.id]:
+            author = users.get(c.author_id)
+            comments.append({
+                "id": c.id,
+                "author_id": c.author_id,
+                "author_name": (author.full_name or author.username) if author else "?",
+                "author_role": author.role if author else "estudiante",
+                "content": c.content,
+                "created_at": c.created_at.isoformat(),
+            })
+        teacher = users.get(post.teacher_id)
+        classroom = classrooms.get(post.classroom_id)
+        out.append({
+            "id": post.id,
+            "classroom_id": post.classroom_id,
+            "classroom_name": classroom.name if classroom else "",
+            "teacher_id": post.teacher_id,
+            "teacher_name": (teacher.full_name or teacher.username) if teacher else "Profesor",
+            "post_type": post.post_type,
+            "title": post.title,
+            "content": post.content,
+            "due_date": post.due_date,
+            # [{id, name}] = material real descargable; los antiguos (solo
+            # nombre) se marcan sin id para que no aparenten ser descargables.
+            "attachments": [
+                {"id": a.get("id"), "name": a.get("name") or "Adjunto"} if isinstance(a, dict)
+                else {"id": None, "name": str(a)}
+                for a in (post.attachments or [])
+            ],
+            "is_pinned": post.is_pinned,
+            "created_at": post.created_at.isoformat(),
+            "updated_at": post.updated_at.isoformat(),
+            "reactions_count": len(reactors),
+            "user_reacted": current_user_id in reactors,
+            "comments": comments,
+            "comments_count": len(comments),
+        })
+    return out
+
 
 def _post_to_dict(post: Post, current_user_id: int, db: Session) -> dict:
     """Serializa un Post a dict con metadatos de reacciones y comentarios."""
-    # Reacciones
-    reactions = db.query(PostReaction).filter(PostReaction.post_id == post.id).all()
-    user_reacted = any(r.user_id == current_user_id for r in reactions)
-
-    # Comentarios activos
-    comments_q = db.query(PostComment).filter(
-        PostComment.post_id == post.id,
-        PostComment.is_active == True,
-    ).order_by(PostComment.created_at).all()
-
-    comments = []
-    for c in comments_q:
-        author = db.query(User).filter(User.id == c.author_id).first()
-        comments.append({
-            "id": c.id,
-            "author_id": c.author_id,
-            "author_name": (author.full_name or author.username) if author else "?",
-            "author_role": author.role if author else "estudiante",
-            "content": c.content,
-            "created_at": c.created_at.isoformat(),
-        })
-
-    teacher = db.query(User).filter(User.id == post.teacher_id).first()
-    classroom = db.query(Classroom).filter(Classroom.id == post.classroom_id).first()
-
-    return {
-        "id": post.id,
-        "classroom_id": post.classroom_id,
-        "classroom_name": classroom.name if classroom else "",
-        "teacher_id": post.teacher_id,
-        "teacher_name": (teacher.full_name or teacher.username) if teacher else "Profesor",
-        "post_type": post.post_type,
-        "title": post.title,
-        "content": post.content,
-        "due_date": post.due_date,
-        # [{id, name}] = material real descargable; los antiguos (solo
-        # nombre) se marcan sin id para que no aparenten ser descargables.
-        "attachments": [
-            {"id": a.get("id"), "name": a.get("name") or "Adjunto"} if isinstance(a, dict)
-            else {"id": None, "name": str(a)}
-            for a in (post.attachments or [])
-        ],
-        "is_pinned": post.is_pinned,
-        "created_at": post.created_at.isoformat(),
-        "updated_at": post.updated_at.isoformat(),
-        "reactions_count": len(reactions),
-        "user_reacted": user_reacted,
-        "comments": comments,
-        "comments_count": len(comments),
-    }
+    return _posts_to_dicts([post], current_user_id, db)[0]
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -164,7 +219,7 @@ async def list_posts(
 
     posts = q.order_by(Post.is_pinned.desc(), Post.created_at.desc()).all()
     return {
-        "posts": [_post_to_dict(p, current_user.id, db) for p in posts],
+        "posts": _posts_to_dicts(posts, current_user.id, db),
         "total": len(posts),
     }
 

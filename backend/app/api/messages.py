@@ -30,8 +30,12 @@ from app.api.auth import get_current_user
 from app.models.user import User, UserRole
 from app.models.classroom import Classroom, Enrollment
 from app.models.messages import DirectMessage
+from app.core.validators import clean_text, or_400
 
 router = APIRouter(prefix="/messages", tags=["Mensajes Directos"])
+
+# Igual que maxLength del cuadro de mensaje (frontend/src/components/Messaging.tsx).
+MESSAGE_MAX_CHARS = 2000
 
 # Ventana de tiempo para "eliminar para todos" (segundos)
 DELETE_FOR_ALL_WINDOW_SECONDS = 15 * 60  # 15 minutos
@@ -583,6 +587,7 @@ async def send_message(
         raise HTTPException(status_code=400, detail="Los mensajes no admiten archivos adjuntos.")
     if not (content or "").strip():
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío")
+    content = or_400(clean_text, content, label="El mensaje", max_len=MESSAGE_MAX_CHARS, multiline=True)
 
     receiver = db.query(User).filter(User.id == other_user_id, User.is_active == True).first()
     if not receiver:

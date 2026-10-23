@@ -1,10 +1,21 @@
 import { useState, useRef, useEffect } from 'react';
 import {
-  Camera, Lock, Bell, Eye, EyeOff, CheckCircle, LogOut, Hash, Shield, Calendar, Save, Building2,
+  Camera, Lock, Bell, Eye, EyeOff, CheckCircle, XCircle, LogOut, Hash, Shield, Calendar, Save, Building2,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { institutionLabel } from '../utils/institution';
+import { FieldError } from './FieldError';
+import { useFieldErrors } from '../hooks/useFieldErrors';
+import { fieldA11y, focusFirstInvalid } from '../utils/formFields';
+import { PASSWORD_MAX, PASSWORD_RULES, passesAllPasswordRules } from '../data/passwordRules';
+import {
+  apiErrorMessage, normalizeEmail, normalizePersonName, validateEmail, validateFile, validatePersonName,
+} from '../utils/validation';
+
+// Foto de perfil: se comprime en el navegador a JPG (el backend acepta hasta 3 MB).
+const PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
 /**
  * PerfilSettings — Componente único y reutilizable de configuración de perfil.
@@ -75,7 +86,9 @@ export default function ProfileSettings({
 
   const [saved, setSaved] = useState<'perfil' | 'password' | 'prefs' | null>(null);
   const [error, setError] = useState('');
+  const [avatarError, setAvatarError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user?.full_name) {
@@ -118,43 +131,63 @@ export default function ProfileSettings({
   const handleAvatarChange = async (files: FileList | null) => {
     const f = files?.[0];
     if (!f) return;
-    try { setAvatarPrev(await compressImage(f)); } catch { /* keep previous */ }
+    setAvatarError('');
+    const fileError = validateFile(f, { extensions: PHOTO_EXTENSIONS, maxBytes: PHOTO_MAX_BYTES, label: 'La foto' });
+    if (fileError || !f.type.startsWith('image/')) {
+      setAvatarError(fileError ?? 'Elige una imagen JPG, PNG, WebP o GIF.');
+      return;
+    }
+    try { setAvatarPrev(await compressImage(f)); } catch {
+      setAvatarError('No se pudo leer la imagen. Elige otro archivo JPG, PNG, WebP o GIF.');
+    }
   };
+
+  const profileFields = useFieldErrors({
+    firstName: v => validatePersonName(v, { label: 'El nombre', max: 60 }),
+    lastName: v => validatePersonName(v, { label: 'Los apellidos', max: 60, required: false })
+      ?? (normalizePersonName(`${firstName} ${v}`).length > 100 ? 'El nombre completo no puede superar 100 caracteres.' : null),
+    email: v => validateEmail(v),
+  });
 
   const handleSaveProfile = async () => {
     setError('');
+    if (!profileFields.validateAll({ firstName, lastName, email })) {
+      focusFirstInvalid(profileRef.current);
+      return;
+    }
     try {
-      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-      const payload: Record<string, unknown> = { full_name: fullName, email: email.trim() };
+      const fullName = normalizePersonName(`${firstName} ${lastName}`);
+      const payload: Record<string, unknown> = { full_name: fullName, email: normalizeEmail(email) };
       if (avatarPrev && avatarPrev !== user?.photo) payload.photo = avatarPrev;
       const { data: savedUser } = await api.patch('/auth/me', payload);
       updateUser({
         ...user,
         full_name: ((savedUser?.full_name ?? fullName) || user?.full_name || ''),
-        email: email.trim() || user?.email || '',
+        email: savedUser?.email ?? (normalizeEmail(email) || user?.email || ''),
         photo: savedUser?.photo ?? avatarPrev ?? user?.photo ?? null,
       });
       setSaved('perfil');
       setTimeout(() => setSaved(null), 2000);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'No se pudo guardar el perfil. Inténtalo de nuevo.');
+      setError(apiErrorMessage(e, 'No se pudo guardar el perfil. Inténtalo de nuevo.'));
     }
   };
 
-  const strength = (pwd: string) =>
-    [pwd.length >= 8, /[A-Z]/.test(pwd), /[0-9]/.test(pwd), /[^A-Za-z0-9]/.test(pwd)].filter(Boolean).length;
-  const pwdStrength = strength(newPwd);
+  const pwdRulesOk = passesAllPasswordRules(newPwd);
+  const pwdMatches = newPwd === confirmPwd;
+  const canSavePassword = Boolean(currentPwd) && pwdRulesOk && pwdMatches && newPwd !== currentPwd;
 
   const savePassword = async () => {
-    if (!currentPwd || !newPwd || newPwd !== confirmPwd || pwdStrength < 2) return;
+    if (!canSavePassword) return;
     setError('');
     try {
       await api.post('/auth/change-password', { current_password: currentPwd, new_password: newPwd });
       setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
       setSaved('password');
       setTimeout(() => setSaved(null), 2000);
-    } catch {
-      setError('No se pudo actualizar la contraseña. Verifica tu contraseña actual.');
+    } catch (e: any) {
+      // El backend explica el motivo (contraseña actual incorrecta, política…).
+      setError(apiErrorMessage(e, 'No se pudo actualizar la contraseña. Verifica tu contraseña actual.'));
     }
   };
 
@@ -183,6 +216,7 @@ export default function ProfileSettings({
 
   const inputCls = 'w-full px-3 py-2 border border-[#E9E9E7] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30 focus:border-[#0066FF]';
   const labelCls = 'block text-xs font-semibold text-[#787774] uppercase mb-1.5';
+  const errorCls = 'w-full px-3 py-2 border border-[#E03E3E] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#E03E3E]/20 focus:border-[#E03E3E]';
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -199,7 +233,7 @@ export default function ProfileSettings({
               className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#0066FF] text-white rounded-full flex items-center justify-center hover:bg-[#0052CC] transition-colors shadow-sm">
               <Camera className="w-3.5 h-3.5" />
             </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => handleAvatarChange(e.target.files)} />
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={e => handleAvatarChange(e.target.files)} />
           </div>
           <div>
             <p className="font-semibold text-[#191919]">{`${firstName} ${lastName}`.trim() || 'Nombre del usuario'}</p>
@@ -210,20 +244,36 @@ export default function ProfileSettings({
 
         <hr className="border-[#E9E9E7]" />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div ref={profileRef} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={labelCls}>Nombre</label>
-            <input value={firstName} onChange={e => setFirstName(e.target.value)} className={inputCls} />
+            <label htmlFor="profile-firstName" className={labelCls}>Nombre *</label>
+            <input {...fieldA11y('profile-firstName', profileFields.errors.firstName)}
+              value={firstName} maxLength={60} autoComplete="given-name"
+              onChange={e => { setFirstName(e.target.value); profileFields.onChange('firstName', e.target.value); }}
+              onBlur={e => profileFields.onBlur('firstName', e.target.value)}
+              className={`${profileFields.errors.firstName ? errorCls : inputCls}`} />
+            <FieldError id="profile-firstName" error={profileFields.errors.firstName} />
           </div>
           <div>
-            <label className={labelCls}>Apellidos</label>
-            <input value={lastName} onChange={e => setLastName(e.target.value)} className={inputCls} />
+            <label htmlFor="profile-lastName" className={labelCls}>Apellidos</label>
+            <input {...fieldA11y('profile-lastName', profileFields.errors.lastName)}
+              value={lastName} maxLength={60} autoComplete="family-name"
+              onChange={e => { setLastName(e.target.value); profileFields.onChange('lastName', e.target.value); }}
+              onBlur={e => profileFields.onBlur('lastName', e.target.value)}
+              className={`${profileFields.errors.lastName ? errorCls : inputCls}`} />
+            <FieldError id="profile-lastName" error={profileFields.errors.lastName} />
           </div>
           <div className="sm:col-span-2">
-            <label className={labelCls}>Correo electrónico</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} />
+            <label htmlFor="profile-email" className={labelCls}>Correo electrónico *</label>
+            <input {...fieldA11y('profile-email', profileFields.errors.email)}
+              type="email" inputMode="email" autoComplete="email" maxLength={100} value={email}
+              onChange={e => { setEmail(e.target.value); profileFields.onChange('email', e.target.value); }}
+              onBlur={e => profileFields.onBlur('email', e.target.value)}
+              className={`${profileFields.errors.email ? errorCls : inputCls}`} />
+            <FieldError id="profile-email" error={profileFields.errors.email} />
           </div>
         </div>
+        {avatarError && <FieldError id="profile-photo" error={avatarError} />}
 
         {/* Info de cuenta (solo lectura) */}
         <div className="bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -244,37 +294,49 @@ export default function ProfileSettings({
         <h3 className="font-semibold text-[#191919] flex items-center gap-2"><Lock className="w-4 h-4 text-[#787774]" /> Cambiar contraseña</h3>
         <div className="grid grid-cols-1 gap-3">
           {[
-            { key: 'current', label: 'Contraseña actual', value: currentPwd, set: setCurrentPwd, ph: 'Tu contraseña actual', icon: true },
-            { key: 'new', label: 'Nueva contraseña', value: newPwd, set: setNewPwd, ph: 'Mínimo 8 caracteres', icon: false },
-            { key: 'confirm', label: 'Confirmar contraseña', value: confirmPwd, set: setConfirmPwd, ph: 'Repite la nueva contraseña', icon: false },
+            { key: 'current', label: 'Contraseña actual', value: currentPwd, set: setCurrentPwd, ph: 'Tu contraseña actual', icon: true, auto: 'current-password' },
+            { key: 'new', label: 'Nueva contraseña', value: newPwd, set: setNewPwd, ph: 'Mínimo 8 caracteres', icon: false, auto: 'new-password' },
+            { key: 'confirm', label: 'Confirmar contraseña', value: confirmPwd, set: setConfirmPwd, ph: 'Repite la nueva contraseña', icon: false, auto: 'new-password' },
           ].map(f => (
             <div key={f.key}>
-              <label className={labelCls}>{f.label}</label>
+              <label htmlFor={`pwd-${f.key}`} className={labelCls}>{f.label}</label>
               <div className="relative">
-                <input type={showPwd ? 'text' : 'password'} value={f.value} onChange={e => f.set(e.target.value)}
+                {/* La contraseña no se recorta ni se transforma. */}
+                <input id={`pwd-${f.key}`} type={showPwd ? 'text' : 'password'} value={f.value} onChange={e => f.set(e.target.value)}
+                  autoComplete={f.auto} maxLength={PASSWORD_MAX} spellCheck={false} autoCapitalize="off"
+                  aria-invalid={f.key === 'confirm' && confirmPwd && !pwdMatches ? true : undefined}
+                  aria-describedby={f.key === 'new' ? 'pwd-rules' : f.key === 'confirm' && confirmPwd && !pwdMatches ? 'pwd-confirm-error' : undefined}
                   placeholder={f.ph} className={inputCls} />
                 {f.icon && (
-                  <button onClick={() => setShowPwd(v => !v)} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#787774]">
+                  <button type="button" onClick={() => setShowPwd(v => !v)}
+                    aria-label={showPwd ? 'Ocultar contraseñas' : 'Mostrar contraseñas'}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-[#787774]">
                     {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 )}
               </div>
               {f.key === 'new' && newPwd && (
-                <div className="mt-1.5 flex items-center gap-2">
-                  <div className="flex gap-1 flex-1">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i} className={`h-1 flex-1 rounded-full ${i <= pwdStrength ? (pwdStrength >= 3 ? 'bg-[#0F7B6C]' : 'bg-[#D9730D]') : 'bg-[#E9E9E7]'}`} />
-                    ))}
-                  </div>
-                  <span className="text-[10px] text-[#787774]">{['Muy débil','Débil','Regular','Fuerte','Muy fuerte'][pwdStrength]}</span>
-                </div>
+                <ul id="pwd-rules" className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {PASSWORD_RULES.map(rule => {
+                    const passed = rule.test(newPwd);
+                    return (
+                      <li key={rule.id} className={`flex items-center gap-1.5 text-xs ${passed ? 'text-[#0F7B6C]' : 'text-[#9B9A97]'}`}>
+                        {passed ? <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" /> : <XCircle className="w-3.5 h-3.5" aria-hidden="true" />}
+                        {rule.label}<span className="sr-only">{passed ? ' (cumplido)' : ' (pendiente)'}</span>
+                      </li>
+                    );
+                  })}
+                  {currentPwd && newPwd === currentPwd && (
+                    <li className="text-xs text-[#E03E3E] sm:col-span-2">La nueva contraseña debe ser diferente de la actual.</li>
+                  )}
+                </ul>
               )}
             </div>
           ))}
         </div>
-        {newPwd && confirmPwd && newPwd !== confirmPwd && <p className="text-xs text-[#E03E3E]">⚠ Las contraseñas no coinciden.</p>}
+        {newPwd && confirmPwd && !pwdMatches && <FieldError id="pwd-confirm" error="Las contraseñas no coinciden." />}
         <button onClick={savePassword}
-          disabled={!currentPwd || !newPwd || newPwd !== confirmPwd || pwdStrength < 2}
+          disabled={!canSavePassword}
           className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${saved === 'password' ? 'bg-[#0F7B6C] text-white' : 'bg-[#0066FF] text-white hover:bg-[#0052CC]'}`}>
           {saved === 'password' ? <><CheckCircle className="w-4 h-4" /> Contraseña actualizada</> : <><Shield className="w-4 h-4" /> Actualizar contraseña</>}
         </button>

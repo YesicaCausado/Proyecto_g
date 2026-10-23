@@ -1,7 +1,9 @@
 """
-NeuroLearn AI — Auto-migración B2B para Supabase / PostgreSQL
-Se ejecuta en cada startup. Usa ALTER TABLE ... ADD COLUMN IF NOT EXISTS
-que es idempotente y seguro para correr múltiples veces.
+NeuroLearn AI — Preparación del esquema al arrancar.
+
+En PostgreSQL, prepare_postgres_schema solo lee el catálogo y ejecuta DDL
+para lo que falte (ver el comentario de esa sección). En SQLite (desarrollo),
+_add_missing_sqlite_columns completa las columnas nuevas.
 """
 import logging
 from sqlalchemy import text
@@ -64,44 +66,22 @@ def _add_missing_sqlite_columns(engine) -> None:
         logger.info(f"SQLite schema drift: {added} columnas añadidas, {errors} errores.")
 
 
-def ensure_reporting_schema(engine) -> None:
-    """
-    Migración 014 (reportes institucionales) aplicada al arrancar en PostgreSQL.
+# ─── Esquema al arrancar (PostgreSQL) ────────────────────────────────────────
+#
+# Antes, en CADA arranque en frío de Vercel se ejecutaban create_all (una
+# consulta por tabla), tres ALTER TABLE sin lock_timeout, tres CREATE INDEX y
+# un UPDATE de todas las aulas, y parte de ello en un hilo de fondo que Vercel
+# congelaba a mitad de la transacción. ALTER TABLE toma un bloqueo exclusivo
+# aunque la columna ya exista: si había una consulta larga sobre la tabla, el
+# ALTER quedaba en cola y TODAS las consultas siguientes esperaban detrás de él
+# hasta el statement_timeout → «se cae la base de datos».
+#
+# Ahora `prepare_postgres_schema` lee el catálogo con 3 consultas de solo
+# lectura y solo ejecuta DDL para lo que de verdad falta, con lock_timeout
+# corto. Los índices se crean CONCURRENTLY (no bloquean lecturas ni escrituras).
 
-    Las tablas nuevas (academic_periods, followup_cases, followup_notes) las
-    crea Base.metadata.create_all; aquí se agregan las columnas nuevas de
-    tablas existentes y los índices. Sin esto, cualquier consulta a aulas,
-    evaluaciones o quizzes fallaría con «column does not exist» si el
-    despliegue llega antes de ejecutar el SQL en Supabase. Idempotente.
-    """
-    if engine is None or engine.dialect.name != "postgresql":
-        return
-    from pathlib import Path
-    sql_file = Path(__file__).resolve().parents[2] / "migrations" / "014_reportes_institucionales.sql"
-    statements = [
-        "ALTER TABLE classrooms          ADD COLUMN IF NOT EXISTS competency VARCHAR(30)",
-        "ALTER TABLE teacher_evaluations ADD COLUMN IF NOT EXISTS competency VARCHAR(30)",
-        "ALTER TABLE quiz_history        ADD COLUMN IF NOT EXISTS competency VARCHAR(30)",
-        "CREATE INDEX IF NOT EXISTS idx_eval_submissions_eval_student ON evaluation_submissions (evaluation_id, student_id)",
-        "CREATE INDEX IF NOT EXISTS idx_eval_submissions_submitted    ON evaluation_submissions (submitted_at)",
-        "CREATE INDEX IF NOT EXISTS idx_teacher_evaluations_classroom ON teacher_evaluations (classroom_id)",
-    ]
-    if sql_file.exists():
-        # El backfill de competencias de las aulas vive en el archivo SQL.
-        backfill = sql_file.read_text(encoding="utf-8").split("-- Backfill", 1)
-        if len(backfill) == 2:
-            statements.append(backfill[1].split("\n", 2)[-1].strip().rstrip(";"))
-    for sql in statements:
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(sql))
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"Migración 014: {str(e)[:200]}")
-
-
-# Columnas que el código ya usa y que deben existir en PostgreSQL aunque el SQL
-# de migrations/ todavía no se haya ejecutado en Supabase (ver main.py).
-# (tabla, columna, definición)
+# Columnas que el código usa aunque el SQL de migrations/ no se haya ejecutado
+# en Supabase. (tabla, columna, definición)
 RUNTIME_COLUMNS = [
     # Eliminación de mensajes (migrations/applied/delete_fields.sql)
     ("direct_messages", "deleted_for_sender", "BOOLEAN NOT NULL DEFAULT FALSE"),
@@ -113,52 +93,142 @@ RUNTIME_COLUMNS = [
     ("enrollments", "removed_invite_code", "VARCHAR(8)"),
     # Resolución del grupo de cada quiz (016)
     ("quiz_history", "group_resolution", "VARCHAR(20)"),
+    # Reportes institucionales (014)
+    ("classrooms", "competency", "VARCHAR(30)"),
+    ("teacher_evaluations", "competency", "VARCHAR(30)"),
+    ("quiz_history", "competency", "VARCHAR(30)"),
 ]
 
+# Índices que deben existir. (nombre, tabla, columnas). Los ix_* coinciden con
+# los que crea SQLAlchemy para index=True, así una BD nueva no los duplica.
+# Ver migrations/017_indices_rendimiento.sql.
+REQUIRED_INDEXES = [
+    # Reportes institucionales (014)
+    ("idx_eval_submissions_eval_student", "evaluation_submissions", "evaluation_id, student_id"),
+    ("idx_eval_submissions_submitted", "evaluation_submissions", "submitted_at"),
+    ("idx_teacher_evaluations_classroom", "teacher_evaluations", "classroom_id"),
+    # Rendimiento (017): claves foráneas que se filtran en casi todas las
+    # páginas y que PostgreSQL no indexa por sí solo.
+    ("ix_direct_messages_sender_id", "direct_messages", "sender_id"),
+    ("ix_direct_messages_receiver_id", "direct_messages", "receiver_id"),
+    ("ix_posts_classroom_id", "posts", "classroom_id"),
+    ("ix_posts_teacher_id", "posts", "teacher_id"),
+    ("ix_post_comments_post_id", "post_comments", "post_id"),
+    ("ix_post_reactions_post_id", "post_reactions", "post_id"),
+    ("ix_classroom_events_classroom_id", "classroom_events", "classroom_id"),
+    ("ix_classroom_events_teacher_id", "classroom_events", "teacher_id"),
+    ("ix_expert_bots_creator_id", "expert_bots", "creator_id"),
+    ("ix_classroom_bots_bot_id", "classroom_bots", "bot_id"),
+    ("ix_learning_sessions_bot_id", "learning_sessions", "bot_id"),
+    ("ix_teacher_evaluations_teacher_id", "teacher_evaluations", "teacher_id"),
+    ("ix_teacher_materials_teacher_id", "teacher_materials", "teacher_id"),
+    ("ix_teacher_materials_folder_id", "teacher_materials", "folder_id"),
+    ("ix_teacher_folders_teacher_id", "teacher_folders", "teacher_id"),
+    ("ix_quiz_history_classroom_id", "quiz_history", "classroom_id"),
+    ("ix_student_bot_assignments_teacher_id", "student_bot_assignments", "teacher_id"),
+]
 
-def ensure_runtime_columns(engine) -> None:
-    """Agrega en PostgreSQL las columnas de RUNTIME_COLUMNS que falten.
+_DDL_LOCK_TIMEOUT = "3s"
+_DDL_STATEMENT_TIMEOUT = "30s"
 
-    Se ejecuta de forma SÍNCRONA al arrancar (main.py): antes iba en un hilo en
-    segundo plano después de create_all y en Vercel la función se congelaba
-    antes de terminarlo, de modo que las consultas fallaban con
-    «column enrollments.removed_at does not exist».
 
-    Primero se consulta information_schema (una sola consulta) y solo se
-    ejecuta ALTER TABLE para lo que falte: ALTER toma un bloqueo exclusivo de
-    la tabla aunque la columna ya exista. Cada ALTER tiene tiempo límite para
-    no colgar el arranque si la tabla está ocupada. Idempotente.
-    """
+# Backfill de la migración 014: competencia de las aulas antiguas por
+# equivalencia exacta con las opciones de «Crear clase». Va aquí y no se lee de
+# migrations/014_*.sql porque vercel.json excluye migrations/ del despliegue.
+_BACKFILL_CLASSROOM_COMPETENCY = """
+UPDATE classrooms SET competency = CASE lower(translate(subject, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU'))
+    WHEN 'matematicas' THEN 'matematicas'
+    WHEN 'razonamiento cuantitativo' THEN 'matematicas'
+    WHEN 'lenguaje' THEN 'lectora'
+    WHEN 'lectura critica' THEN 'lectora'
+    WHEN 'ingles' THEN 'ingles'
+    WHEN 'ciencias naturales' THEN 'cientifico'
+    WHEN 'ciencias sociales' THEN 'ciudadanas'
+    WHEN 'competencias ciudadanas' THEN 'ciudadanas'
+    ELSE NULL END
+WHERE competency IS NULL
+"""
+
+
+def _backfill_classroom_competency(engine) -> None:
+    """Solo se ejecuta cuando la columna se acaba de crear, no en cada arranque."""
+    with engine.begin() as conn:
+        conn.execute(text(f"SET LOCAL statement_timeout = '{_DDL_STATEMENT_TIMEOUT}'"))
+        conn.execute(text(_BACKFILL_CLASSROOM_COMPETENCY))
+
+
+def prepare_postgres_schema(engine) -> None:
+    """Crea tablas, columnas e índices que falten. Barato si no falta nada."""
     if engine is None or engine.dialect.name != "postgresql":
         return
-    tables = sorted({t for t, _, _ in RUNTIME_COLUMNS})
+    from app.db.database import Base
+
     try:
         with engine.connect() as conn:
-            rows = conn.execute(
-                text(
-                    "SELECT table_name, column_name FROM information_schema.columns "
-                    "WHERE table_schema = current_schema() AND table_name = ANY(:tables)"
-                ),
-                {"tables": tables},
-            ).all()
+            tables = {r[0] for r in conn.execute(text(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()"))}
+            columns = {(r[0], r[1]) for r in conn.execute(text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema()"))}
+            indexes = {r[0]: r[1] for r in conn.execute(text(
+                "SELECT c.relname, i.indisvalid FROM pg_index i "
+                "JOIN pg_class c ON c.oid = i.indexrelid "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = current_schema()"))}
     except Exception as e:  # noqa: BLE001
-        logger.error(f"Columnas de arranque: no se pudo leer el esquema: {str(e)[:200]}")
+        logger.error(f"Esquema: no se pudo leer el catálogo: {str(e)[:200]}")
         return
-    existing = {(r[0], r[1]) for r in rows}
-    present_tables = {r[0] for r in rows}
+
+    missing_tables = [t for t in Base.metadata.tables.values() if t.name not in tables]
+    if missing_tables:
+        try:
+            Base.metadata.create_all(bind=engine, tables=missing_tables)
+            logger.info("Tablas creadas al arrancar: %s", ", ".join(t.name for t in missing_tables))
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Esquema: no se pudieron crear tablas: {str(e)[:200]}")
+    created = {t.name for t in missing_tables}
+    tables |= created
+
+    added = set()
     for table, column, definition in RUNTIME_COLUMNS:
-        if (table, column) in existing or table not in present_tables:
-            # Tabla inexistente: la crea create_all ya con la columna.
+        # Tabla recién creada: create_all ya la creó con la columna.
+        if table not in tables or table in created or (table, column) in columns:
             continue
         try:
             with engine.begin() as conn:
-                conn.execute(text("SET LOCAL lock_timeout = '5s'"))
-                conn.execute(text("SET LOCAL statement_timeout = '20s'"))
-                conn.execute(text(
-                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"))
+                conn.execute(text(f"SET LOCAL lock_timeout = '{_DDL_LOCK_TIMEOUT}'"))
+                conn.execute(text(f"SET LOCAL statement_timeout = '{_DDL_STATEMENT_TIMEOUT}'"))
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}"))
+            added.add((table, column))
             logger.info(f"Columna agregada al arrancar: {table}.{column}")
         except Exception as e:  # noqa: BLE001
             logger.error(f"Columna de arranque {table}.{column}: {str(e)[:200]}")
+
+    if ("classrooms", "competency") in added:
+        try:
+            _backfill_classroom_competency(engine)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Backfill de competencias: {str(e)[:200]}")
+
+    pending = [(n, t, c) for n, t, c in REQUIRED_INDEXES if t in tables and indexes.get(n) is not True]
+    if not pending:
+        return
+    # CREATE INDEX CONCURRENTLY no admite transacción: conexión en autocommit.
+    try:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text(f"SET lock_timeout = '{_DDL_LOCK_TIMEOUT}'"))
+            conn.execute(text(f"SET statement_timeout = '{_DDL_STATEMENT_TIMEOUT}'"))
+            for name, table, cols in pending:
+                try:
+                    if indexes.get(name) is False:
+                        # Un CONCURRENTLY interrumpido deja el índice inválido.
+                        conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {name}"))
+                    conn.execute(text(f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {name} ON {table} ({cols})"))
+                    logger.info(f"Índice creado al arrancar: {name}")
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"Índice {name}: {str(e)[:200]}")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Índices de arranque: {str(e)[:200]}")
 
 
 def run_migrations(engine) -> None:

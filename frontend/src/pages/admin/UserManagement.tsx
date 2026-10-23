@@ -9,6 +9,11 @@ import {
   GraduationCap, BookOpen, ShieldCheck, User, Copy, Eye, EyeOff,
 } from 'lucide-react';
 import api from '../../services/api';
+import { FieldError } from '../../components/FieldError';
+import { fieldA11y, focusFirstInvalid } from '../../utils/formFields';
+import {
+  apiErrorMessage, apiFieldErrors, normalizeEmail, normalizePersonName, validateEmail, validatePersonName,
+} from '../../utils/validation';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 interface UserRow {
@@ -77,6 +82,8 @@ export default function UserManagement() {
   // Modal editar
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [editForm, setEditForm] = useState({ full_name: '', email: '', role: '', is_active: true });
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const editRef = useRef<HTMLDivElement>(null);
   const [editLoading, setEditLoading] = useState(false);
 
   // Modal reset password
@@ -129,19 +136,45 @@ export default function UserManagement() {
   // ─── Editar ─────────────────────────────────────────────────────────────────
   const openEdit = (u: UserRow) => {
     setEditing(u);
-    setEditForm({ full_name: u.full_name, email: u.email, role: u.role, is_active: u.is_active });
+    setEditForm({ full_name: u.full_name ?? '', email: u.email ?? '', role: u.role, is_active: u.is_active });
+    setEditErrors({});
+  };
+
+  const editRules = {
+    full_name: (v: string) => validatePersonName(v, { label: 'El nombre completo', required: false }),
+    email: (v: string) => validateEmail(v, { required: false }),
   };
 
   const saveEdit = async () => {
     if (!editing) return;
+    // Solo se envía lo que cambió: un dato antiguo que no cumple las reglas
+    // actuales no impide cambiar, por ejemplo, el rol o el estado.
+    const payload: Record<string, unknown> = {};
+    const nextErrors: Record<string, string> = {};
+    const fullName = normalizePersonName(editForm.full_name);
+    if (fullName !== (editing.full_name ?? '')) {
+      const err = editRules.full_name(fullName);
+      if (err) nextErrors.full_name = err; else payload.full_name = fullName || null;
+    }
+    const email = normalizeEmail(editForm.email);
+    if (email !== (editing.email ?? '').toLowerCase()) {
+      const err = editRules.email(email);
+      if (err) nextErrors.email = err; else payload.email = email || null;
+    }
+    if (editForm.role !== editing.role) payload.role = editForm.role;
+    if (editForm.is_active !== editing.is_active) payload.is_active = editForm.is_active;
+    setEditErrors(nextErrors);
+    if (Object.keys(nextErrors).length) { focusFirstInvalid(editRef.current); return; }
+    if (!Object.keys(payload).length) { setEditing(null); return; }
     setEditLoading(true);
     try {
-      await api.patch(`/admin/users/${editing.id}`, editForm);
+      await api.patch(`/admin/users/${editing.id}`, payload);
       notify('ok', 'Usuario actualizado');
       setEditing(null);
       fetchUsers();
     } catch (e: any) {
-      notify('err', e.response?.data?.detail || 'Error al guardar');
+      setEditErrors(apiFieldErrors(e));
+      notify('err', apiErrorMessage(e, 'Error al guardar'));
     } finally {
       setEditLoading(false);
     }
@@ -356,16 +389,24 @@ export default function UserManagement() {
               <h2 className="font-semibold text-[#191919]">Editar usuario</h2>
               <button onClick={() => setEditing(null)} className="text-[#787774] hover:text-[#37352F]"><X className="w-5 h-5" /></button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div ref={editRef} className="px-6 py-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-[#787774] mb-1">Nombre completo</label>
-                <input value={editForm.full_name} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none" />
+                <label htmlFor="adm-edit-name" className="block text-xs font-semibold text-[#787774] mb-1">Nombre completo</label>
+                <input {...fieldA11y('adm-edit-name', editErrors.full_name)} value={editForm.full_name} maxLength={100}
+                  onChange={e => { const value = e.target.value; setEditForm(f => ({ ...f, full_name: value }));
+                    if (editErrors.full_name) setEditErrors(x => ({ ...x, full_name: editRules.full_name(value) ?? '' })); }}
+                  onBlur={e => setEditErrors(x => ({ ...x, full_name: editRules.full_name(e.target.value) ?? '' }))}
+                  className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none ${editErrors.full_name ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`} />
+                <FieldError id="adm-edit-name" error={editErrors.full_name} />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-[#787774] mb-1">Correo electrónico</label>
-                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none" />
+                <label htmlFor="adm-edit-email" className="block text-xs font-semibold text-[#787774] mb-1">Correo electrónico</label>
+                <input {...fieldA11y('adm-edit-email', editErrors.email)} type="email" inputMode="email" maxLength={100} value={editForm.email}
+                  onChange={e => { const value = e.target.value; setEditForm(f => ({ ...f, email: value }));
+                    if (editErrors.email) setEditErrors(x => ({ ...x, email: editRules.email(value) ?? '' })); }}
+                  onBlur={e => setEditErrors(x => ({ ...x, email: editRules.email(e.target.value) ?? '' }))}
+                  className={`w-full px-3 py-2 border rounded-md text-sm focus:ring-1 focus:ring-[#37352F] outline-none ${editErrors.email ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`} />
+                <FieldError id="adm-edit-email" error={editErrors.email} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[#787774] mb-1">Rol</label>

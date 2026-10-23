@@ -12,7 +12,7 @@ usuario no tiene el consentimiento vigente (app/api/chat.py).
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_client_ip, get_current_user
@@ -29,7 +29,7 @@ ConsentType = Literal["camara_facial", "microfono_voz"]
 
 class ConsentAccept(BaseModel):
     consent_type: ConsentType
-    version: str
+    version: str = Field(..., max_length=20)
     accepted: bool
 
 

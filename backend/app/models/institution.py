@@ -22,7 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 
 from app.db.database import Base
 
@@ -107,10 +107,12 @@ class Institution(Base):
         nullable=True,
     )
 
-    logo_url = Column(
+    # Data URL de hasta 2 MB. Diferida: la institución se carga en cada
+    # petición (¿está activa?) y no necesita traer el logo.
+    logo_url = deferred(Column(
         Text,
         nullable=True,
-    )
+    ))
 
     # =====================================================
     # AUDITORÍA

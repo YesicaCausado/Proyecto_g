@@ -155,7 +155,7 @@ class CargaMasivaTests(unittest.TestCase):
         self.assertEqual(preview["total_valid"], 1)
         self.assertIn("tipo_documento", errors[2])
         self.assertIn("fecha_nacimiento", errors[3])
-        self.assertEqual(errors[4], "Correo inválido")
+        self.assertIn("Correo inválido", errors[4])
         bulk = self.send("students", "bulk", content).json()
         self.assertEqual((bulk["total_created"], bulk["total_errors"]), (1, 3))
         self.assertIsNone(self.user("4000000001"))

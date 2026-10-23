@@ -1,22 +1,34 @@
 """
 NeuroLearn AI - Schemas Pydantic
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Dict, Optional, Any, Literal
 from datetime import datetime
+
+from app.core import validators as v
 
 
 # ===== USUARIO =====
 
 class UserCreate(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._@-]+$")
     email: str = Field(..., max_length=100)
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=8, max_length=v.PASSWORD_MAX)
     full_name: Optional[str] = None
     role: str = Field(
         default="estudiante",
         pattern="^(estudiante|profesor|super_profesor|admin)$"
     )
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        return v.email(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def _full_name(cls, value: Optional[str]) -> Optional[str]:
+        return v.person_name(value, label="El nombre completo", required=False)
 
 
 class UserUpdate(BaseModel):
@@ -30,10 +42,22 @@ class UserUpdate(BaseModel):
     )
     is_active: Optional[bool] = None
 
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        return v.email(value, required=False)
+
+    @field_validator("full_name")
+    @classmethod
+    def _full_name(cls, value: Optional[str]) -> Optional[str]:
+        return v.person_name(value, label="El nombre completo", required=False)
+
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    # Sin reglas de formato: el login solo compara (un error de formato aquí
+    # revelaría qué usuarios existen). Solo se acota el tamaño.
+    username: str = Field(..., max_length=100)
+    password: str = Field(..., max_length=256)
 
 
 class UserResponse(BaseModel):
@@ -86,7 +110,7 @@ class StartSessionRequest(BaseModel):
 
 
 class ChatMessageRequest(BaseModel):
-    message: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1, max_length=4000)
     topic: Optional[str] = None
     history: Optional[List[Dict[str, Any]]] = None
     cognitive_state: Optional[str] = None
@@ -147,14 +171,19 @@ class BotDocumentListResponse(BaseModel):
 
 
 class ConversationCreate(BaseModel):
-    subject: str = Field(default="")
-    skill: str = Field(default="")
-    topic: str = Field(default="")
+    subject: str = Field(default="", max_length=200)
+    skill: str = Field(default="", max_length=200)
+    topic: str = Field(default="", max_length=200)
     bot_id: Optional[int] = None
 
 
 class ConversationRename(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
+
+    @field_validator("title")
+    @classmethod
+    def _title(cls, value: str) -> str:
+        return v.clean_text(value, label="El título", max_len=200)
 
 
 class ConversationMeta(BaseModel):
@@ -256,11 +285,11 @@ class QuizPublicResponse(BaseModel):
     questions: List[QuizQuestionPublic]
 
 class QuizRequest(BaseModel):
-    topic: str
-    num_questions: Optional[int] = 5
-    difficulty: Optional[str] = None  # Opcional: Fácil/Medio/Difícil
+    topic: str = Field(..., min_length=1, max_length=200)
+    num_questions: Optional[int] = Field(default=5, ge=1, le=20)
+    difficulty: Optional[str] = Field(default=None, max_length=20)  # Opcional: Fácil/Medio/Difícil
     # Clave de la competencia Saber 11 (frontend/src/data/competencies.ts).
-    competency: Optional[str] = None
+    competency: Optional[str] = Field(default=None, max_length=30)
 
 class QuizHistoryEntry(BaseModel):
     """Entrada individual del historial de quizzes con adaptación"""
@@ -283,10 +312,10 @@ class QuizHistoryResponse(BaseModel):
 
 class QuizSubmission(BaseModel):
     """Envío de respuestas del quiz por parte del usuario"""
-    quiz_title: str
+    quiz_title: str = Field(..., max_length=200)
     # Id que devuelve generate-quiz; si falta se busca el último pendiente con ese título.
     quiz_id: Optional[int] = None
-    user_answers: Dict[int, str]  # {question_id: selected_answer}
+    user_answers: Dict[int, str] = Field(..., max_length=50)  # {question_id: selected_answer}
     classroom_id: Optional[int] = None 
     # Segundos que tardó el estudiante (medido en el cliente). El servidor lo
     # acota al tiempo real transcurrido desde que se generó el quiz.
@@ -417,13 +446,38 @@ class BotListResponse(BaseModel):
 
 class ClassroomCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=150)
-    description: str = ""
+    description: str = Field(default="", max_length=2000)
     subject: str = Field(..., max_length=100)
     grade: str = Field(default="", max_length=20)
     max_students: int = Field(default=40, ge=1, le=100)
     color: str = Field(default="#2E6FDB", max_length=20)
     # Competencia Saber 11 del aula; vacía = la que corresponde a la materia.
     competency: Optional[str] = Field(default=None, max_length=30)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return v.clean_text(value, label="El nombre de la clase", max_len=150)
+
+    @field_validator("subject")
+    @classmethod
+    def _subject(cls, value: str) -> str:
+        return v.clean_text(value, label="La materia", max_len=100)
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, value: str) -> str:
+        return v.clean_text(value, label="La descripción", max_len=2000, required=False, multiline=True)
+
+    @field_validator("grade")
+    @classmethod
+    def _grade(cls, value: str) -> str:
+        return v.grade(value) or ""
+
+    @field_validator("color")
+    @classmethod
+    def _color(cls, value: str) -> str:
+        return v.hex_color(value, default="#2E6FDB")
 
 
 class ClassroomResponse(BaseModel):
@@ -453,7 +507,13 @@ class ClassroomListResponse(BaseModel):
 
 
 class EnrollByCodeRequest(BaseModel):
-    invite_code: str = Field(..., min_length=8, max_length=8)
+    # Se aceptan espacios externos y minúsculas al pegar el código.
+    invite_code: str = Field(..., max_length=40)
+
+    @field_validator("invite_code")
+    @classmethod
+    def _code(cls, value: str) -> str:
+        return v.invite_code(value)
 
 
 class EnrollmentResponse(BaseModel):
@@ -546,12 +606,42 @@ class ClassroomStudentDetailResponse(BaseModel):
 
 class InstitutionCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
-    dane_code: str = Field(..., min_length=3, max_length=20)
+    dane_code: str = Field(..., max_length=20)
     # Datos del Super Profesor
-    sp_full_name: str = Field(..., min_length=2, max_length=100)
-    sp_document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    sp_document_number: str = Field(..., min_length=4, max_length=30)
+    sp_full_name: str = Field(..., max_length=100)
+    sp_document_type: str = Field(..., max_length=2)
+    sp_document_number: str = Field(..., max_length=30)
     sp_email: str = Field(..., max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return v.clean_text(value, label="El nombre de la institución", min_len=2, max_len=200)
+
+    @field_validator("dane_code")
+    @classmethod
+    def _dane(cls, value: str) -> str:
+        return v.dane_code(value)
+
+    @field_validator("sp_full_name")
+    @classmethod
+    def _sp_name(cls, value: str) -> str:
+        return v.person_name(value, label="El nombre del Súper Profesor")
+
+    @field_validator("sp_document_type")
+    @classmethod
+    def _sp_doc_type(cls, value: str) -> str:
+        return v.document_type(value)
+
+    @field_validator("sp_email")
+    @classmethod
+    def _sp_email(cls, value: str) -> str:
+        return v.email(value, label="El correo del Súper Profesor")
+
+    @model_validator(mode="after")
+    def _sp_doc_number(self):
+        self.sp_document_number = v.document_number(self.sp_document_number, self.sp_document_type)
+        return self
 
 
 class CredentialItem(BaseModel):
@@ -594,8 +684,8 @@ class AdminStats(BaseModel):
 
     
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str = Field(..., min_length=8)
+    current_password: str = Field(..., max_length=256)
+    new_password: str = Field(..., min_length=8, max_length=v.PASSWORD_MAX)
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -611,7 +701,7 @@ class ValidateResetTokenRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     """CU-03 paso 3 — restablecer contraseña con el token recibido por correo."""
     token: str = Field(..., min_length=10, max_length=256)
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=v.PASSWORD_MAX)
 
 
 class CSVValidationRow(BaseModel):
@@ -623,12 +713,57 @@ class CSVValidationRow(BaseModel):
 
 # ===== SCHEMAS B2B FALTANTES =====
 
-class TeacherCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
+class _PersonFields(BaseModel):
+    """Reglas compartidas por el alta y la edición de profesores y
+    estudiantes (app/core/validators.py). Los campos opcionales ausentes no se
+    validan; los enviados sí."""
+
+    @field_validator("full_name", check_fields=False)
+    @classmethod
+    def _full_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return v.person_name(value, label="El nombre completo")
+
+    @field_validator("document_type", check_fields=False)
+    @classmethod
+    def _document_type(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else v.document_type(value)
+
+    @field_validator("grade", check_fields=False)
+    @classmethod
+    def _grade(cls, value: Optional[str]) -> Optional[str]:
+        return v.grade(value)
+
+    @field_validator("birth_date", check_fields=False)
+    @classmethod
+    def _birth_date(cls, value: Optional[str]) -> Optional[str]:
+        return v.birth_date(value)
+
+    @field_validator("subject_area", check_fields=False)
+    @classmethod
+    def _subject_area(cls, value: Optional[str]) -> Optional[str]:
+        return v.clean_text(value, label="El área de enseñanza", max_len=100, required=False)
+
+    @model_validator(mode="after")
+    def _document_number(self):
+        number = getattr(self, "document_number", None)
+        if number is not None:
+            self.document_number = v.document_number(number, self.document_type)
+        return self
+
+
+class TeacherCreate(_PersonFields):
+    full_name: str = Field(..., max_length=100)
+    document_type: str = Field(..., max_length=2)
+    document_number: str = Field(..., max_length=30)
     email: str = Field(..., max_length=100)
-    subject_area: Optional[str] = None
+    subject_area: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        return v.email(value)
 
 
 class TeacherListItem(BaseModel):
@@ -646,28 +781,41 @@ class TeacherListItem(BaseModel):
         from_attributes = True
 
 
-class StudentCreate(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=100)
-    document_type: str = Field(..., pattern="^(CC|TI|CE|PA)$")
-    document_number: str = Field(..., min_length=4, max_length=30)
-    email: Optional[str] = None
-    grade: Optional[str] = None
-    birth_date: Optional[str] = None
+class StudentCreate(_PersonFields):
+    full_name: str = Field(..., max_length=100)
+    document_type: str = Field(..., max_length=2)
+    document_number: str = Field(..., max_length=30)
+    email: Optional[str] = Field(None, max_length=100)
+    grade: Optional[str] = Field(None, max_length=20)
+    birth_date: Optional[str] = Field(None, max_length=20)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        # Opcional: sin correo se le asigna una dirección interna no entregable.
+        return v.email(value, required=False)
 
 
-class TeacherUpdate(BaseModel):
+class TeacherUpdate(_PersonFields):
     """Edición parcial de un docente (solo envía los campos que cambian)."""
-    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
-    document_type: Optional[str] = Field(None, pattern="^(CC|TI|CE|PA)$")
+    full_name: Optional[str] = Field(None, max_length=100)
+    document_type: Optional[str] = Field(None, max_length=2)
     email: Optional[str] = Field(None, max_length=100)
     subject_area: Optional[str] = Field(None, max_length=100)
     is_active: Optional[bool] = None
 
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        # El correo del docente es obligatorio: si se envía, no puede quedar vacío.
+        return None if value is None else v.email(value)
 
-class StudentUpdate(BaseModel):
+
+class StudentUpdate(_PersonFields):
     """Edición parcial de un estudiante (solo envía los campos que cambian)."""
-    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
-    document_type: Optional[str] = Field(None, pattern="^(CC|TI|CE|PA)$")
+    full_name: Optional[str] = Field(None, max_length=100)
+    document_type: Optional[str] = Field(None, max_length=2)
+    # "" = quitar el correo (se vuelve a la dirección interna no entregable).
     email: Optional[str] = Field(None, max_length=100)
     grade: Optional[str] = Field(None, max_length=20)
     birth_date: Optional[str] = Field(None, max_length=20)
@@ -675,6 +823,20 @@ class StudentUpdate(BaseModel):
     # Autorización del acudiente para cámara y micrófono (menores de edad)
     guardian_authorized: Optional[bool] = None
     guardian_name: Optional[str] = Field(None, max_length=150)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return v.email(value, required=False) or ""
+
+    @field_validator("guardian_name")
+    @classmethod
+    def _guardian_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return v.person_name(value, label="El nombre del acudiente", max_len=150, required=False) or ""
 
 
 class StudentListItem(BaseModel):

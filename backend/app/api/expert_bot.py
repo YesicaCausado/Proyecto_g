@@ -4,13 +4,14 @@ NeuroLearn AI — Gestión de Expert Bots
 Endpoints para CRUD, creación y compartición de bots expertos
 """
 import secrets
-from typing import Optional, List
+from typing import Literal, Optional, List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
+from app.core import validators as v
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User, UserRole
@@ -68,7 +69,26 @@ def _document_count(db: Session, bot_id: int) -> int:
 router = APIRouter(tags=["Expert Bots"])
 
 
-class BotCreatePayload(BaseModel):
+class _BotFields(BaseModel):
+    """Reglas de los datos del NeuroBot (app/core/validators.py)."""
+
+    @field_validator("name", check_fields=False)
+    @classmethod
+    def _name(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else v.clean_text(value, label="El nombre del NeuroBot", min_len=2, max_len=100)
+
+    @field_validator("description", check_fields=False)
+    @classmethod
+    def _description(cls, value: Optional[str]) -> Optional[str]:
+        return v.clean_text(value, label="La descripción", max_len=2000, required=False, multiline=True)
+
+    @field_validator("category", "subject_area", check_fields=False)
+    @classmethod
+    def _category(cls, value: Optional[str]) -> Optional[str]:
+        return v.clean_text(value, label="La materia o categoría", max_len=50, required=False)
+
+
+class BotCreatePayload(_BotFields):
     name: str
     description: Optional[str] = None
     # Main field: category (technology, medicine, etc.)
@@ -76,11 +96,11 @@ class BotCreatePayload(BaseModel):
     # Alias used by some codepaths (subject_area)
     subject_area: Optional[str] = None
     is_public: bool = False
-    knowledge_base: Optional[list] = None
-    language: str = "es"
+    knowledge_base: Optional[list] = Field(default=None, max_length=200)
+    language: Literal["es", "en"] = "es"
 
 
-class BotPatchPayload(BaseModel):
+class BotPatchPayload(_BotFields):
     """Payload ligero para actualizaciones parciales (PATCH)."""
     name: Optional[str] = None
     description: Optional[str] = None
@@ -88,7 +108,7 @@ class BotPatchPayload(BaseModel):
     category: Optional[str] = None
     is_public: Optional[bool] = None
     is_active: Optional[bool] = None
-    language: Optional[str] = None
+    language: Optional[Literal["es", "en"]] = None
 
 
 # ─── GET /bots (montado en main.py con prefix="/api/v1/bots") ─────────────────

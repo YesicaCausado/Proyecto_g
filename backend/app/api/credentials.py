@@ -11,14 +11,13 @@ Endpoints:
 """
 import csv
 import io
-import re
 import secrets
 import string
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -26,6 +25,7 @@ from app.api.auth import get_current_user, get_password_hash
 from app.models.user import User, UserRole
 from app.models.institution import Institution, AuditLog
 from app.models.classroom import Classroom, Enrollment
+from app.core import validators as v
 from app.schemas.schemas import (
     InstitutionCreate, InstitutionResponse,
     TeacherCreate, TeacherUpdate, TeacherListItem,
@@ -59,8 +59,21 @@ def _gen_temp_password(length: int = 10) -> str:
     return "".join(pwd)
 
 
-def _validate_email(email: str) -> bool:
-    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email))
+def _email_taken(db: Session, email: str, exclude_id: Optional[int] = None) -> bool:
+    """¿Otro usuario usa ya ese correo? Sin distinguir mayúsculas (los
+    correos antiguos pudieron guardarse con mayúsculas)."""
+    q = db.query(User.id).filter(func.lower(User.email) == email.lower())
+    if exclude_id is not None:
+        q = q.filter(User.id != exclude_id)
+    return q.first() is not None
+
+
+def _document_taken(db: Session, number: str) -> bool:
+    """El documento es también el usuario de acceso: no puede repetirse en
+    ninguna de las dos columnas."""
+    return db.query(User.id).filter(
+        or_(User.document_number == number, User.username == number)
+    ).first() is not None
 
 
 def _normalize_csv_row(raw_row: Optional[dict]) -> dict:
@@ -75,9 +88,37 @@ def _normalize_csv_row(raw_row: Optional[dict]) -> dict:
     return normalized
 
 
-DOCUMENT_TYPES = ("CC", "TI", "CE", "PA")
+DOCUMENT_TYPES = tuple(v.DOCUMENT_RULES)
+# Límites del archivo de carga masiva: un CSV de texto de hasta 1 MB y 2.000
+# filas cubre de sobra una institución y evita lotes que agoten el servidor.
+CSV_MAX_BYTES = 1024 * 1024
+CSV_MAX_ROWS = 2000
 TEACHER_CSV_COLUMNS = ("nombre_completo", "tipo_documento", "numero_documento", "correo", "area")
 STUDENT_CSV_COLUMNS = ("nombre_completo", "tipo_documento", "numero_documento", "correo", "grado", "fecha_nacimiento")
+
+
+async def _read_csv_upload(file: UploadFile) -> bytes:
+    """Lee el archivo de carga masiva y comprueba que sea un CSV de texto."""
+    name = (file.filename or "").lower()
+    if name and not name.endswith((".csv", ".txt")):
+        raise HTTPException(400, "El archivo debe ser .csv (en Excel: Guardar como → CSV).")
+    content = await file.read(CSV_MAX_BYTES + 1)
+    if len(content) > CSV_MAX_BYTES:
+        raise HTTPException(413, "El archivo CSV supera el máximo de 1 MB.")
+    if not content.strip():
+        raise HTTPException(400, "El archivo CSV está vacío")
+    if content.startswith(b"PK") or b"\x00" in content[:4096]:
+        # .xlsx (ZIP) o binario renombrado como .csv
+        raise HTTPException(400, "El archivo no es un CSV de texto. En Excel usa Guardar como → CSV.")
+    return content
+
+
+def _csv_rows(reader: csv.DictReader):
+    """Filas del CSV numeradas como en la hoja de cálculo (la 1 es el encabezado)."""
+    for i, raw_row in enumerate(reader, 2):
+        if i - 1 > CSV_MAX_ROWS:
+            raise HTTPException(400, f"El archivo supera el máximo de {CSV_MAX_ROWS} filas. Divídelo en varios lotes.")
+        yield i, raw_row
 
 
 def _csv_reader(content: bytes, required: set, expected: tuple) -> csv.DictReader:
@@ -114,7 +155,8 @@ def _csv_reader(content: bytes, required: set, expected: tuple) -> csv.DictReade
 
 def _common_row_error(row: dict) -> Optional[str]:
     """Reglas de la fila que comparten profesores y estudiantes (las mismas
-    del formulario individual)."""
+    del formulario individual, app/core/validators.py). Deja la fila
+    normalizada."""
     if not row.get("nombre_completo"):
         return "Nombre vacío"
     if not row.get("numero_documento"):
@@ -123,7 +165,20 @@ def _common_row_error(row: dict) -> Optional[str]:
     if doc_type not in DOCUMENT_TYPES:
         return f"tipo_documento inválido «{row.get('tipo_documento') or ''}» (usa CC, TI, CE o PA)"
     row["tipo_documento"] = doc_type
+    try:
+        row["nombre_completo"] = v.person_name(row["nombre_completo"], label="nombre_completo")
+        row["numero_documento"] = v.document_number(row["numero_documento"], doc_type)
+    except ValueError as exc:
+        return str(exc)
     return None
+
+
+def _bad_email(value: Optional[str]) -> str:
+    shown = (value or "").strip()
+    shown = shown if len(shown) <= 60 else shown[:57] + "…"
+    if not shown:
+        return "Correo vacío (es obligatorio para profesores)"
+    return f"Correo inválido «{shown}» (usa el formato nombre@colegio.edu.co)"
 
 
 def _require_role(current_user: User, *roles: str):
@@ -174,12 +229,10 @@ async def create_institution(
     # Validar unicidad
     if db.query(Institution).filter(Institution.dane_code == payload.dane_code).first():
         raise HTTPException(400, "Ya existe una institución con ese Código DANE")
-    if db.query(User).filter(User.document_number == payload.sp_document_number).first():
+    if _document_taken(db, payload.sp_document_number):
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
-    if db.query(User).filter(User.email == payload.sp_email).first():
+    if _email_taken(db, payload.sp_email):
         raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
-    if not _validate_email(payload.sp_email):
-        raise HTTPException(400, "Formato de correo inválido")
 
     # Crear institución
     institution = Institution(
@@ -353,9 +406,7 @@ async def bulk_delete_teachers(
 ):
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
-    ids = payload.get("ids") or []
-    if not isinstance(ids, list) or not ids:
-        raise HTTPException(400, "Debes enviar al menos un ID válido")
+    ids = v.or_400(v.parse_int_list, payload.get("ids") if isinstance(payload, dict) else None)
 
     teachers = db.query(User).filter(
         User.id.in_(ids),
@@ -386,12 +437,10 @@ async def create_teacher(
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
 
-    if db.query(User).filter(User.document_number == payload.document_number).first():
+    if _document_taken(db, payload.document_number):
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
-    if db.query(User).filter(User.email == payload.email).first():
+    if _email_taken(db, payload.email):
         raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
-    if not _validate_email(payload.email):
-        raise HTTPException(400, "Formato de correo inválido")
 
     temp_pwd = _gen_temp_password()
     teacher = User(
@@ -452,22 +501,15 @@ async def update_teacher(
         raise HTTPException(400, "No hay campos para actualizar")
 
     new_email = updates.get("email")
-    if new_email is not None:
-        if not _validate_email(new_email):
-            raise HTTPException(400, "Formato de correo inválido")
-        conflict = db.query(User).filter(
-            User.email == new_email,
-            User.id != user_id,
-        ).first()
-        if conflict:
-            raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
+    if new_email is not None and _email_taken(db, new_email, exclude_id=user_id):
+        raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
     if updates.get("full_name"):
         teacher.full_name = updates["full_name"]
     if "document_type" in updates and updates["document_type"]:
         teacher.document_type = updates["document_type"]
     if "subject_area" in updates:
         teacher.subject_area = updates["subject_area"]
-    if "email" in updates:
+    if updates.get("email"):
         teacher.email = updates["email"]
     if "is_active" in updates:
         teacher.is_active = updates["is_active"]
@@ -493,15 +535,21 @@ def _teacher_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set)
     err = _common_row_error(row)
     if err:
         return err
-    if not _validate_email(row.get("correo", "")):
-        return "Correo inválido"
+    try:
+        row["correo"] = v.email(row.get("correo"), label="correo")
+    except ValueError:
+        return _bad_email(row.get("correo"))
+    try:
+        row["area"] = v.clean_text(row.get("area"), label="area", max_len=100, required=False) or ""
+    except ValueError as exc:
+        return str(exc)
     if row["numero_documento"] in seen_docs:
         return "Documento duplicado en este archivo"
     if row["correo"] in seen_emails:
         return "Correo duplicado en este archivo"
-    if db.query(User).filter(User.document_number == row["numero_documento"]).first():
+    if _document_taken(db, row["numero_documento"]):
         return "Documento duplicado en el sistema"
-    if db.query(User).filter(User.email == row["correo"]).first():
+    if _email_taken(db, row["correo"]):
         return "Correo duplicado en el sistema"
     return None
 
@@ -516,9 +564,7 @@ async def bulk_create_teachers(
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
 
-    content = await file.read()
-    if not content.strip():
-        raise HTTPException(400, "El archivo CSV está vacío")
+    content = await _read_csv_upload(file)
 
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
     reader = _csv_reader(content, required_cols, TEACHER_CSV_COLUMNS)
@@ -529,7 +575,7 @@ async def bulk_create_teachers(
     seen_emails: set = set()
     pending_emails: list = []
 
-    for i, raw_row in enumerate(reader, start=2):
+    for i, raw_row in _csv_rows(reader):
         row = _normalize_csv_row(raw_row)
         if not row or not any((value or "").strip() for value in row.values()):
             continue
@@ -601,9 +647,7 @@ async def preview_bulk_create_teachers(
     """
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
 
-    content = await file.read()
-    if not content.strip():
-        raise HTTPException(400, "El archivo CSV está vacío")
+    content = await _read_csv_upload(file)
 
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
     reader = _csv_reader(content, required_cols, TEACHER_CSV_COLUMNS)
@@ -615,7 +659,7 @@ async def preview_bulk_create_teachers(
     seen_docs: set = set()
     seen_emails: set = set()
 
-    for i, raw_row in enumerate(reader, start=2):
+    for i, raw_row in _csv_rows(reader):
         row = _normalize_csv_row(raw_row)
         if not row or not any((value or "").strip() for value in row.values()):
             continue
@@ -656,26 +700,30 @@ def _send_pending_credentials(pending: list) -> None:
 def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set) -> Optional[str]:
     """Validación de una fila del CSV de estudiantes. La usan la vista previa y
     la creación, para que una fila «válida» en la vista previa no falle al crear."""
-    doc = row.get("numero_documento") or ""
-    email = (row.get("correo") or "").strip()
     err = _common_row_error(row)
     if err:
         return err
-    if row.get("fecha_nacimiento"):
-        birth = _parse_birth_date(row["fecha_nacimiento"])
-        if birth is None:
-            return f"fecha_nacimiento inválida «{row['fecha_nacimiento']}» (usa AAAA-MM-DD, p. ej. 2009-05-14)"
+    doc = row["numero_documento"]
+    if row.get("fecha_nacimiento") and _parse_birth_date(row["fecha_nacimiento"]) is None:
+        return f"fecha_nacimiento inválida «{row['fecha_nacimiento']}» (usa AAAA-MM-DD, p. ej. 2009-05-14)"
+    try:
+        row["correo"] = v.email(row.get("correo"), label="correo", required=False) or ""
+    except ValueError:
+        return _bad_email(row.get("correo"))
+    try:
         # Se guarda en un único formato (Excel la reescribe como 14/05/2009).
-        row["fecha_nacimiento"] = birth.isoformat()
-    if email and not _validate_email(email):
-        return "Correo inválido"
+        row["fecha_nacimiento"] = v.birth_date(row.get("fecha_nacimiento"))
+        row["grado"] = v.grade(row.get("grado")) or ""
+    except ValueError as exc:
+        return str(exc)
+    email = row["correo"]
     if doc in seen_docs:
         return "Documento duplicado en este archivo"
-    if email and email.lower() in seen_emails:
+    if email and email in seen_emails:
         return "Correo duplicado en este archivo"
-    if db.query(User.id).filter(or_(User.document_number == doc, User.username == doc)).first():
+    if _document_taken(db, doc):
         return "Documento duplicado en el sistema"
-    if email and db.query(User.id).filter(User.email == email).first():
+    if email and _email_taken(db, email):
         return "Correo duplicado en el sistema"
     return None
 
@@ -761,9 +809,7 @@ async def bulk_delete_students(
 ):
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
-    ids = payload.get("ids") or []
-    if not isinstance(ids, list) or not ids:
-        raise HTTPException(400, "Debes enviar al menos un ID válido")
+    ids = v.or_400(v.parse_int_list, payload.get("ids") if isinstance(payload, dict) else None)
 
     students = db.query(User).filter(
         User.id.in_(ids),
@@ -794,9 +840,9 @@ async def create_student(
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
 
-    if db.query(User).filter(User.document_number == payload.document_number).first():
+    if _document_taken(db, payload.document_number):
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
-    if payload.email and db.query(User).filter(User.email == payload.email).first():
+    if payload.email and _email_taken(db, payload.email):
         raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
 
     temp_pwd = _gen_temp_password()
@@ -862,15 +908,11 @@ async def update_student(
         raise HTTPException(400, "No hay campos para actualizar")
 
     new_email = updates.get("email")
-    if new_email is not None:
-        if not _validate_email(new_email):
-            raise HTTPException(400, "Formato de correo inválido")
-        conflict = db.query(User).filter(
-            User.email == new_email,
-            User.id != user_id,
-        ).first()
-        if conflict:
-            raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
+    if new_email == "":
+        # Sin correo: vuelve a la dirección interna (la columna es única).
+        updates["email"] = new_email = placeholder_email_for(student.document_number or student.username)
+    if new_email is not None and _email_taken(db, new_email, exclude_id=user_id):
+        raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
     if updates.get("full_name"):
         student.full_name = updates["full_name"]
     if "document_type" in updates and updates["document_type"]:
@@ -879,13 +921,13 @@ async def update_student(
         student.grade = updates["grade"]
     if "birth_date" in updates:
         student.birth_date = updates["birth_date"]
-    if "email" in updates:
+    if updates.get("email"):
         student.email = updates["email"]
     if "is_active" in updates:
         student.is_active = updates["is_active"]
     guardian_note = ""
     if "guardian_name" in updates:
-        student.guardian_name = (updates["guardian_name"] or "").strip() or None
+        student.guardian_name = updates["guardian_name"] or None
     if "guardian_authorized" in updates:
         if updates["guardian_authorized"]:
             if not student.guardian_name:
@@ -935,9 +977,7 @@ async def bulk_create_students(
             Enrollment.classroom_id == classroom.id, Enrollment.is_active == True,  # noqa: E712
         ).count()
         free_seats = max((classroom.max_students or 0) - taken, 0)
-    content = await file.read()
-    if not content.strip():
-        raise HTTPException(400, "El archivo CSV está vacío")
+    content = await _read_csv_upload(file)
 
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
     reader = _csv_reader(content, required_cols, STUDENT_CSV_COLUMNS)
@@ -949,7 +989,7 @@ async def bulk_create_students(
     pending_emails: list = []
     enrolled = 0
 
-    for i, raw_row in enumerate(reader, start=2):
+    for i, raw_row in _csv_rows(reader):
         row = _normalize_csv_row(raw_row)
         if not row or not any((value or "").strip() for value in row.values()):
             continue
@@ -1029,9 +1069,7 @@ async def preview_bulk_create_students(
       2) POST /super/students/bulk    → solo si el usuario confirma
     """
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
-    content = await file.read()
-    if not content.strip():
-        raise HTTPException(400, "El archivo CSV está vacío")
+    content = await _read_csv_upload(file)
 
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
     reader = _csv_reader(content, required_cols, STUDENT_CSV_COLUMNS)
@@ -1041,7 +1079,7 @@ async def preview_bulk_create_students(
     seen_docs: set = set()
     seen_emails: set = set()
 
-    for i, raw_row in enumerate(reader, start=2):
+    for i, raw_row in _csv_rows(reader):
         row = _normalize_csv_row(raw_row)
         if not row or not any((value or "").strip() for value in row.values()):
             continue

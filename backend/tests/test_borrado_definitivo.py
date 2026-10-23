@@ -100,15 +100,16 @@ class HardDeleteTest(unittest.TestCase):
     def seed_institution(self, n):
         """Institución con actividad real en casi todas las tablas que apuntan a usuarios."""
         c = self.client
+        letra = " ABCDEFGH"[n]   # los nombres de personas no admiten números
         r = self.ok(c.post(f"{API}/admin/institutions", headers=self.admin, json={
-            "name": f"Colegio Borrado {n}", "dane_code": f"7770000000{n}", "sp_full_name": f"Rectora {n}",
+            "name": f"Colegio Borrado {n}", "dane_code": f"7770000000{n}", "sp_full_name": f"Rectora {letra}",
             "sp_document_type": "CC", "sp_document_number": f"810000{n}", "sp_email": f"rectora{n}@borrado.co"}))
         d = {"inst": r["id"], "sp": self.first_login(r["credential"])}
         t = self.ok(c.post(f"{API}/super/teachers", headers=d["sp"], json={
-            "full_name": f"Docente {n}", "document_type": "CC", "document_number": f"820000{n}",
+            "full_name": f"Docente {letra}", "document_type": "CC", "document_number": f"820000{n}",
             "email": f"docente{n}@borrado.co", "subject_area": "Matemáticas"}))
         s = self.ok(c.post(f"{API}/super/students", headers=d["sp"], json={
-            "full_name": f"Estudiante {n}", "document_type": "TI", "document_number": f"830000{n}"}))
+            "full_name": f"Estudiante {letra}", "document_type": "TI", "document_number": f"830000{n}"}))
         d["teacher"], d["student"] = self.first_login(t), self.first_login(s)
         d["teacher_id"] = c.get(f"{API}/auth/me", headers=d["teacher"]).json()["id"]
         d["student_id"] = c.get(f"{API}/auth/me", headers=d["student"]).json()["id"]
@@ -147,7 +148,7 @@ class HardDeleteTest(unittest.TestCase):
         self.ok(c.post(f"{API}/messages/conversations/{d['student_id']}", headers=d["teacher"], data={"content": "Hola"}))
         self.ok(c.post(f"{API}/teacher/materials/folders", headers=d["teacher"], json={"name": "Guías"}))
         self.ok(c.put(f"{API}/super/students/{d['student_id']}", headers=d["sp"],
-                      json={"guardian_name": f"Acudiente {n}", "guardian_authorized": True}))
+                      json={"guardian_name": f"Acudiente {letra}", "guardian_authorized": True}))
         self.ok(c.post(f"{API}/consents", headers=d["student"],
                        json={"consent_type": "camara_facial", "version": "1.0", "accepted": True}))
         return d

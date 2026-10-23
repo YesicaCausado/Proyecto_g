@@ -110,7 +110,12 @@ else:
     IS_DB_DISABLED = True
 
 if engine is not None:
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # expire_on_commit=False: con el valor por defecto, cada commit expiraba
+    # todos los objetos cargados y el siguiente acceso volvía a consultarlos
+    # (un mensaje del chat recargaba al usuario 8 veces: ~50 consultas por
+    # turno). Los valores calculados en Python (default/onupdate) quedan en
+    # memoria; los generados por la BD se recargan solos al leerlos.
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
 else:
     SessionLocal = None
 

@@ -1,20 +1,32 @@
 import { useState, useRef, useEffect } from 'react';
 import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User, Trash2, Pencil, X } from 'lucide-react';
 import api from '../../../services/api';
+import { FieldError } from '../../../components/FieldError';
+import { useFieldErrors } from '../../../hooks/useFieldErrors';
+import { fieldA11y, focusFirstInvalid } from '../../../utils/formFields';
+import {
+  DOCUMENT_TYPES, apiErrorMessage, apiFieldErrors, documentInputHint, escapeHtml,
+  filterDocumentInput, isDocumentType, normalizeEmail, normalizePersonName, todayISO,
+  validateBirthDate, validateDocumentNumber, validateEmail, validateFile, validateGrade,
+  validatePersonName, validateText,
+  type DocumentType, type FieldError as FieldErrorText,
+} from '../../../utils/validation';
 
 // ── Utilidad: imprime solo las credenciales en una ventana nueva ─────────────
+// Los datos se escapan: un nombre cargado por CSV como «<img onerror=…>» se
+// ejecutaría en la ventana nueva, que comparte origen (y sesión) con la app.
 function printCredentials(credentials: any[], title: string) {
   const rows = credentials.map((c, i) => `
     <tr>
       <td>${i + 1}</td>
-      <td>${c.full_name || '-'}</td>
-      <td class="mono">${c.username}</td>
-      <td class="pwd">${c.temp_password}</td>
+      <td>${escapeHtml(c.full_name || '-')}</td>
+      <td class="mono">${escapeHtml(c.username)}</td>
+      <td class="pwd">${escapeHtml(c.temp_password)}</td>
     </tr>`).join('');
 
   const html = `<!DOCTYPE html><html lang="es"><head>
     <meta charset="UTF-8"/>
-    <title>Credenciales — ${title}</title>
+    <title>Credenciales — ${escapeHtml(title)}</title>
     <style>
       body{font-family:Arial,sans-serif;padding:32px;color:#191919;max-width:800px;margin:0 auto}
       h1{font-size:20px;margin-bottom:4px}
@@ -28,7 +40,7 @@ function printCredentials(credentials: any[], title: string) {
       @media print{button{display:none}}
     </style></head><body>
     <h1>Credenciales Nuevas</h1>
-    <p class="sub">${title} — ${new Date().toLocaleDateString('es-CO')}</p>
+    <p class="sub">${escapeHtml(title)} — ${new Date().toLocaleDateString('es-CO')}</p>
     <table>
       <thead><tr><th>#</th><th>Nombre completo</th><th>Usuario</th><th>Contraseña temporal</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -213,6 +225,20 @@ function CredentialsTable({
   );
 }
 
+// ── Carga masiva: el archivo debe ser CSV de texto (igual que el backend) ────
+const CSV_MAX_BYTES = 1024 * 1024;
+
+function csvFileError(file: File | undefined): string | null {
+  if (!file) return 'Selecciona un archivo CSV.';
+  return validateFile(file, { extensions: ['.csv', '.txt'], maxBytes: CSV_MAX_BYTES, label: 'El archivo' });
+}
+
+// Nombres de los campos del backend → campos de los formularios individuales.
+const PERSON_FIELD_MAP = {
+  full_name: 'lastName', document_number: 'documentNumber', document_type: 'documentNumber',
+  email: 'email', subject_area: 'subjectArea', grade: 'grade', birth_date: 'birthDate',
+};
+
 // ── Modal de edición reutilizable (docentes / estudiantes) ───────────────────
 interface EditField {
   key: string;
@@ -220,6 +246,10 @@ interface EditField {
   type?: 'text' | 'select' | 'date' | 'email';
   required?: boolean;
   options?: { value: string | number | boolean; label: string }[];
+  maxLength?: number;
+  max?: string;
+  autoComplete?: string;
+  validate?: (value: string) => FieldErrorText;
 }
 
 interface EditUserModalProps {
@@ -227,21 +257,42 @@ interface EditUserModalProps {
   fields: EditField[];
   initial: Record<string, any>;
   saving: boolean;
+  serverErrors?: Record<string, string>;
   onSave: (values: Record<string, any>) => void;
   onCancel: () => void;
 }
 
-function EditUserModal({ title, fields, initial, saving, onSave, onCancel }: EditUserModalProps) {
+function EditUserModal({ title, fields, initial, saving, serverErrors, onSave, onCancel }: EditUserModalProps) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [values, setValues] = useState<Record<string, any>>(() => {
     const v: Record<string, any> = {};
     fields.forEach(f => { v[f.key] = initial[f.key] ?? ''; });
     return v;
   });
+  const rules = Object.fromEntries(
+    fields.map(f => [f.key, (value: string) => (f.validate ? f.validate(value) : null)]),
+  ) as Record<string, (value: string) => FieldErrorText>;
+  const { errors, setErrors, onBlur, onChange, validateAll } = useFieldErrors(rules);
 
-  const setValue = (key: string, val: any) => setValues(prev => ({ ...prev, [key]: val }));
+  useEffect(() => {
+    if (serverErrors && Object.keys(serverErrors).length) {
+      setErrors(serverErrors);
+      focusFirstInvalid(formRef.current);
+    }
+  }, [serverErrors, setErrors]);
+
+  const setValue = (key: string, val: any) => {
+    setValues(prev => ({ ...prev, [key]: val }));
+    onChange(key, String(val ?? ''));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const asText = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v ?? '')]));
+    if (!validateAll(asText)) {
+      focusFirstInvalid(formRef.current);
+      return;
+    }
     onSave(values);
   };
 
@@ -254,32 +305,43 @@ function EditUserModal({ title, fields, initial, saving, onSave, onCancel }: Edi
             <X className="w-5 h-5" />
           </button>
         </div>
-        <form onSubmit={handleSubmit}>
+        <form ref={formRef} onSubmit={handleSubmit} noValidate>
           <div className="px-6 py-5 space-y-4">
-            {fields.map(f => (
-              <div key={f.key}>
-                <label className="block text-sm font-medium text-[#787774] mb-1">
-                  {f.label}{f.required && <span className="text-[#E03E3E]"> *</span>}
-                </label>
-                {f.type === 'select' ? (
-                  <select
-                    value={String(values[f.key] ?? '')}
-                    onChange={(e) => setValue(f.key, e.target.value)}
-                    className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
-                  >
-                    {f.options?.map(o => <option key={String(o.value)} value={String(o.value)}>{o.label}</option>)}
-                  </select>
-                ) : (
-                  <input
-                    type={f.type || 'text'}
-                    value={values[f.key] ?? ''}
-                    onChange={(e) => setValue(f.key, e.target.value)}
-                    required={f.required}
-                    className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
-                  />
-                )}
-              </div>
-            ))}
+            {fields.map(f => {
+              const id = `edit-${f.key}`;
+              const error = errors[f.key];
+              return (
+                <div key={f.key}>
+                  <label htmlFor={id} className="block text-sm font-medium text-[#787774] mb-1">
+                    {f.label}{f.required && <span className="text-[#E03E3E]" aria-hidden="true"> *</span>}
+                  </label>
+                  {f.type === 'select' ? (
+                    <select
+                      id={id}
+                      value={String(values[f.key] ?? '')}
+                      onChange={(e) => setValue(f.key, e.target.value)}
+                      className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
+                    >
+                      {f.options?.map(o => <option key={String(o.value)} value={String(o.value)}>{o.label}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      {...fieldA11y(id, error)}
+                      type={f.type || 'text'}
+                      value={values[f.key] ?? ''}
+                      onChange={(e) => setValue(f.key, e.target.value)}
+                      onBlur={(e) => onBlur(f.key, e.target.value)}
+                      required={f.required}
+                      maxLength={f.maxLength}
+                      max={f.max}
+                      autoComplete={f.autoComplete ?? 'off'}
+                      className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${error ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
+                    />
+                  )}
+                  <FieldError id={id} error={error} />
+                </div>
+              );
+            })}
           </div>
           <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#E9E9E7] bg-[#F7F6F3]/40">
             <button
@@ -322,22 +384,25 @@ export function TeachersTab() {
   const [deletingTeacher, setDeletingTeacher] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<any | null>(null);
   const [savingTeacher, setSavingTeacher] = useState(false);
+  const [editTeacherErrors, setEditTeacherErrors] = useState<Record<string, string>>({});
 
   const updateTeacher = async (values: Record<string, any>) => {
     if (!editingTeacher) return;
     setSavingTeacher(true);
     setMessage('');
     setError('');
+    setEditTeacherErrors({});
     try {
       const payload: Record<string, any> = {};
-      if (typeof values.full_name === 'string' && values.full_name.trim() && values.full_name !== editingTeacher.full_name) {
-        payload.full_name = values.full_name.trim();
+      const fullName = normalizePersonName(values.full_name ?? '');
+      if (fullName && fullName !== editingTeacher.full_name) {
+        payload.full_name = fullName;
       }
-      if (values.email !== editingTeacher.email) {
-        payload.email = values.email?.trim() || '';
+      if (normalizeEmail(values.email ?? '') !== (editingTeacher.email || '').toLowerCase()) {
+        payload.email = normalizeEmail(values.email ?? '');
       }
-      if (values.subject_area !== (editingTeacher.subject_area || '')) {
-        payload.subject_area = values.subject_area || '';
+      if ((values.subject_area ?? '').trim() !== (editingTeacher.subject_area || '')) {
+        payload.subject_area = (values.subject_area ?? '').trim();
       }
       if (values.document_type !== (editingTeacher.document_type || '')) {
         payload.document_type = values.document_type;
@@ -353,7 +418,8 @@ export function TeachersTab() {
       setEditingTeacher(null);
       await loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'No se pudo actualizar el profesor.');
+      setEditTeacherErrors(apiFieldErrors(err));
+      setError(err?.response ? apiErrorMessage(err, 'No se pudo actualizar el profesor.') : (err.message || 'No se pudo actualizar el profesor.'));
     } finally {
       setSavingTeacher(false);
     }
@@ -410,7 +476,7 @@ export function TeachersTab() {
       await loadTeachers();
       setMessage('Profesor eliminado correctamente.');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'No se pudo eliminar el profesor.');
+      setError(apiErrorMessage(err, 'No se pudo eliminar el profesor.'));
     } finally {
       setDeletingTeacher(false);
     }
@@ -421,27 +487,45 @@ export function TeachersTab() {
   const [lastName, setLastName]         = useState('');
   const [email, setEmail]               = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
-  const [documentType, setDocumentType] = useState('CC');
+  const [documentType, setDocumentType] = useState<DocumentType>('CC');
   const [subjectArea, setSubjectArea]   = useState('');
+  const [docNotice, setDocNotice]       = useState('');
+  const teacherFormRef = useRef<HTMLFormElement>(null);
+  const teacherForm = { firstName, lastName, documentNumber, email, subjectArea };
+  const fields = useFieldErrors<keyof typeof teacherForm>({
+    firstName: v => validatePersonName(v, { label: 'El nombre', max: 60 }),
+    lastName: v => validatePersonName(v, { label: 'El apellido', max: 60 })
+      ?? (normalizePersonName(`${firstName} ${v}`).length > 100 ? 'El nombre completo no puede superar 100 caracteres.' : null),
+    documentNumber: v => validateDocumentNumber(v, documentType),
+    email: v => validateEmail(v),
+    subjectArea: v => validateText(v, { label: 'El área de enseñanza', max: 100, required: false }),
+  });
+
+  const onDocumentInput = (raw: string, type: DocumentType = documentType) => {
+    const { value, removed } = filterDocumentInput(raw, type);
+    setDocumentNumber(value);
+    setDocNotice(removed ? `Se quitaron caracteres no permitidos. ${documentInputHint(type)}` : '');
+    fields.onChange('documentNumber', value);
+  };
 
   const handleCreateIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName || !lastName || !documentNumber) {
-      setError('Nombre, Apellido y Documento son obligatorios para generar credenciales de Profesor.');
+    if (!fields.validateAll(teacherForm)) {
+      focusFirstInvalid(teacherFormRef.current);
       return;
     }
-    
+
     setIsLoading(true);
     setMessage('');
     setError('');
-    
+
     try {
       const response = await api.post('/super/teachers', {
-        full_name: `${firstName.trim()} ${lastName.trim()}`,
+        full_name: normalizePersonName(`${firstName} ${lastName}`),
         document_type: documentType,
-        document_number: documentNumber,
-        email: email,
-        subject_area: subjectArea,
+        document_number: documentNumber.trim(),
+        email: normalizeEmail(email),
+        subject_area: subjectArea.trim(),
       });
       
       setMessage('¡Profesor creado exitosamente!');
@@ -455,8 +539,15 @@ export function TeachersTab() {
       setDocumentNumber('');
       setDocumentType('CC');
       setSubjectArea('');
+      setDocNotice('');
+      fields.reset();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al crear el profesor');
+      const byField = apiFieldErrors(err, PERSON_FIELD_MAP);
+      if (Object.keys(byField).length) {
+        fields.setErrors(byField);
+        focusFirstInvalid(teacherFormRef.current);
+      }
+      setError(apiErrorMessage(err, 'Error al crear el profesor'));
     } finally {
       setIsLoading(false);
     }
@@ -466,8 +557,9 @@ export function TeachersTab() {
   const handleReviewBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     const file = previewFileInputRef.current?.files?.[0];
-    if (!file) {
-      setError('Por favor sube un archivo CSV');
+    const fileError = csvFileError(file);
+    if (fileError || !file) {
+      setError(fileError ?? 'Selecciona un archivo CSV.');
       return;
     }
 
@@ -487,7 +579,7 @@ export function TeachersTab() {
       setPreviewPendingFile(file);
       setMessage(response.data.message || 'Archivo revisado. Confirma para crear las cuentas.');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al revisar el archivo CSV');
+      setError(apiErrorMessage(err, 'Error al revisar el archivo CSV'));
       setPreviewPendingFile(null);
     } finally {
       setIsLoading(false);
@@ -524,7 +616,7 @@ export function TeachersTab() {
       if (previewFileInputRef.current) previewFileInputRef.current.value = '';
       loadTeachers();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al procesar el archivo CSV');
+      setError(apiErrorMessage(err, 'Error al procesar el archivo CSV'));
     } finally {
       setIsLoading(false);
     }
@@ -585,92 +677,121 @@ export function TeachersTab() {
 
       <div className="bg-white border border-[#E9E9E7] rounded-lg p-6 shadow-sm">
         {activeTab === 'individual' ? (
-          <form onSubmit={handleCreateIndividual} className="space-y-4">
+          <form ref={teacherFormRef} onSubmit={handleCreateIndividual} className="space-y-4" noValidate>
             <h3 className="font-medium text-[#37352F] mb-4 border-b border-[#E9E9E7] pb-2">Datos del Profesor</h3>
+            <p className="text-xs text-[#9B9A97] -mt-2">Los campos marcados con * son obligatorios.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
-                  <User className="w-3 h-3" /> Nombre
+                <label htmlFor="teacher-firstName" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                  <User className="w-3 h-3" /> Nombre *
                 </label>
                 <input
+                  {...fieldA11y('teacher-firstName', fields.errors.firstName)}
                   type="text"
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setFirstName(e.target.value); fields.onChange('firstName', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('firstName', e.target.value)}
+                  autoComplete="off"
+                  maxLength={60}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.firstName ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: Carlos"
                   required
                 />
+                <FieldError id="teacher-firstName" error={fields.errors.firstName} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
-                  <User className="w-3 h-3" /> Apellido
+                <label htmlFor="teacher-lastName" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                  <User className="w-3 h-3" /> Apellido *
                 </label>
                 <input
+                  {...fieldA11y('teacher-lastName', fields.errors.lastName)}
                   type="text"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setLastName(e.target.value); fields.onChange('lastName', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('lastName', e.target.value)}
+                  autoComplete="off"
+                  maxLength={60}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.lastName ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: Martínez"
                   required
                 />
+                <FieldError id="teacher-lastName" error={fields.errors.lastName} />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
-                  <Hash className="w-3 h-3" /> Tipo de documento
+                <label htmlFor="teacher-documentType" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                  <Hash className="w-3 h-3" /> Tipo de documento *
                 </label>
                 <select
+                  id="teacher-documentType"
                   value={documentType}
-                  onChange={(e) => setDocumentType(e.target.value)}
+                  onChange={(e) => {
+                    const type = isDocumentType(e.target.value) ? e.target.value : 'CC';
+                    setDocumentType(type);
+                    onDocumentInput(documentNumber, type);
+                    if (documentNumber) fields.setOne('documentNumber', validateDocumentNumber(filterDocumentInput(documentNumber, type).value, type));
+                  }}
                   className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
                   required
                 >
-                  <option value="CC">CC — Cédula de Ciudadanía</option>
-                  <option value="TI">TI — Tarjeta de Identidad</option>
-                  <option value="CE">CE — Cédula de Extranjería</option>
-                  <option value="PA">PA — Pasaporte</option>
+                  {DOCUMENT_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
-                  <Hash className="w-3 h-3" /> Número de documento
+                <label htmlFor="teacher-documentNumber" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                  <Hash className="w-3 h-3" /> Número de documento *
                 </label>
                 <input
+                  {...fieldA11y('teacher-documentNumber', fields.errors.documentNumber, docNotice || documentInputHint(documentType))}
                   type="text"
+                  inputMode={documentType === 'PA' ? 'text' : 'numeric'}
+                  autoComplete="off"
                   value={documentNumber}
-                  onChange={(e) => setDocumentNumber(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-mono"
+                  onChange={(e) => onDocumentInput(e.target.value)}
+                  onBlur={(e) => fields.onBlur('documentNumber', e.target.value)}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-mono ${fields.errors.documentNumber ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: 1234567890"
                   required
                 />
+                <FieldError id="teacher-documentNumber" error={fields.errors.documentNumber} hint={docNotice || documentInputHint(documentType)} />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                <label htmlFor="teacher-email" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
                   <Mail className="w-3 h-3" /> Correo electrónico *
                 </label>
                 <input
+                  {...fieldA11y('teacher-email', fields.errors.email)}
                   type="email"
+                  inputMode="email"
+                  autoComplete="off"
+                  maxLength={100}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setEmail(e.target.value); fields.onChange('email', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('email', e.target.value)}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.email ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="profesor@colegio.edu.co"
                   required
                 />
+                <FieldError id="teacher-email" error={fields.errors.email} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                <label htmlFor="teacher-subjectArea" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
                   <User className="w-3 h-3" /> Área de enseñanza (opcional)
                 </label>
                 <input
+                  {...fieldA11y('teacher-subjectArea', fields.errors.subjectArea)}
                   type="text"
+                  maxLength={100}
                   value={subjectArea}
-                  onChange={(e) => setSubjectArea(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setSubjectArea(e.target.value); fields.onChange('subjectArea', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('subjectArea', e.target.value)}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.subjectArea ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: Matemáticas"
                 />
+                <FieldError id="teacher-subjectArea" error={fields.errors.subjectArea} />
               </div>
             </div>
             
@@ -775,7 +896,7 @@ export function TeachersTab() {
                    </label>
                    <input
                      type="file"
-                     accept=".csv"
+                     accept=".csv,text/csv"
                      ref={previewFileInputRef}
                      onChange={() => { setMessage(''); setError(''); }}
                      className="block w-full text-sm text-[#787774]
@@ -845,7 +966,7 @@ export function TeachersTab() {
                     await loadTeachers();
                     setMessage('Profesores seleccionados eliminados correctamente.');
                   } catch (err: any) {
-                    setError(err.response?.data?.detail || 'No se pudieron eliminar los profesores seleccionados.');
+                    setError(apiErrorMessage(err, 'No se pudieron eliminar los profesores seleccionados.'));
                   }
                 }}
                 disabled={selectedTeacherIds.length === 0}
@@ -932,8 +1053,9 @@ export function TeachersTab() {
         <EditUserModal
           title={`Editar Profesor — ${editingTeacher.full_name || editingTeacher.username}`}
           saving={savingTeacher}
+          serverErrors={editTeacherErrors}
           onSave={updateTeacher}
-          onCancel={() => setEditingTeacher(null)}
+          onCancel={() => { setEditingTeacher(null); setEditTeacherErrors({}); }}
           initial={{
             full_name: editingTeacher.full_name || '',
             email: editingTeacher.email || '',
@@ -942,17 +1064,15 @@ export function TeachersTab() {
             is_active: editingTeacher.is_active,
           }}
           fields={[
-            { key: 'full_name', label: 'Nombre completo', required: true },
-            { key: 'email', label: 'Correo electrónico', type: 'email', required: true },
-            { key: 'subject_area', label: 'Área de enseñanza' },
+            { key: 'full_name', label: 'Nombre completo', required: true, maxLength: 100,
+              validate: v => validatePersonName(v, { label: 'El nombre completo' }) },
+            { key: 'email', label: 'Correo electrónico', type: 'email', required: true, maxLength: 100,
+              validate: v => validateEmail(v) },
+            { key: 'subject_area', label: 'Área de enseñanza', maxLength: 100,
+              validate: v => validateText(v, { label: 'El área de enseñanza', max: 100, required: false }) },
             {
               key: 'document_type', label: 'Tipo de documento', type: 'select',
-              options: [
-                { value: 'CC', label: 'CC — Cédula de Ciudadanía' },
-                { value: 'TI', label: 'TI — Tarjeta de Identidad' },
-                { value: 'CE', label: 'CE — Cédula de Extranjería' },
-                { value: 'PA', label: 'PA — Pasaporte' },
-              ],
+              options: DOCUMENT_TYPES,
             },
             {
               key: 'is_active', label: 'Estado', type: 'select',
@@ -990,22 +1110,26 @@ export function StudentsTab() {
   const [deletingStudent, setDeletingStudent] = useState(false);
   const [editingStudent, setEditingStudent] = useState<any | null>(null);
   const [savingStudent, setSavingStudent] = useState(false);
+  const [editStudentErrors, setEditStudentErrors] = useState<Record<string, string>>({});
 
   const updateStudent = async (values: Record<string, any>) => {
     if (!editingStudent) return;
     setSavingStudent(true);
     setMessage('');
     setError('');
+    setEditStudentErrors({});
     try {
       const payload: Record<string, any> = {};
-      if (typeof values.full_name === 'string' && values.full_name.trim() && values.full_name !== editingStudent.full_name) {
-        payload.full_name = values.full_name.trim();
+      const fullName = normalizePersonName(values.full_name ?? '');
+      if (fullName && fullName !== editingStudent.full_name) {
+        payload.full_name = fullName;
       }
-      if (values.email !== (editingStudent.email || '')) {
-        payload.email = values.email?.trim() || '';
+      // Correo vacío = sin correo (el servidor le asigna una dirección interna).
+      if (normalizeEmail(values.email ?? '') !== (editingStudent.email || '').toLowerCase()) {
+        payload.email = normalizeEmail(values.email ?? '');
       }
-      if (values.grade !== (editingStudent.grade || '')) {
-        payload.grade = values.grade || '';
+      if ((values.grade ?? '').trim() !== (editingStudent.grade || '')) {
+        payload.grade = (values.grade ?? '').trim();
       }
       if (values.birth_date !== (editingStudent.birth_date || '')) {
         payload.birth_date = values.birth_date || '';
@@ -1016,8 +1140,8 @@ export function StudentsTab() {
       if (values.is_active !== editingStudent.is_active) {
         payload.is_active = values.is_active === true || values.is_active === 'true';
       }
-      if ((values.guardian_name ?? '') !== (editingStudent.guardian_name || '')) {
-        payload.guardian_name = values.guardian_name?.trim() || '';
+      if (normalizePersonName(values.guardian_name ?? '') !== (editingStudent.guardian_name || '')) {
+        payload.guardian_name = normalizePersonName(values.guardian_name ?? '');
       }
       const guardianAuthorized = values.guardian_authorized === true || values.guardian_authorized === 'true';
       if (guardianAuthorized !== Boolean(editingStudent.guardian_authorized)) {
@@ -1031,7 +1155,8 @@ export function StudentsTab() {
       setEditingStudent(null);
       await loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'No se pudo actualizar el estudiante.');
+      setEditStudentErrors(apiFieldErrors(err));
+      setError(err?.response ? apiErrorMessage(err, 'No se pudo actualizar el estudiante.') : (err.message || 'No se pudo actualizar el estudiante.'));
     } finally {
       setSavingStudent(false);
     }
@@ -1088,7 +1213,7 @@ export function StudentsTab() {
       await loadStudents();
       setMessage('Estudiante eliminado correctamente.');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'No se pudo eliminar el estudiante.');
+      setError(apiErrorMessage(err, 'No se pudo eliminar el estudiante.'));
     } finally {
       setDeletingStudent(false);
     }
@@ -1098,36 +1223,53 @@ export function StudentsTab() {
   const [firstName, setFirstName]           = useState('');
   const [lastName, setLastName]             = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
-  const [documentType, setDocumentType]     = useState('TI');
+  const [documentType, setDocumentType]     = useState<DocumentType>('TI');
   const [grade, setGrade]                   = useState('');
   const [birthDate, setBirthDate]           = useState('');
   const [assignedClassroomId, setAssignedClassroomId] = useState('');
+  const [docNotice, setDocNotice]           = useState('');
+  const studentFormRef = useRef<HTMLFormElement>(null);
+  const studentForm = { firstName, lastName, documentNumber, grade, birthDate };
+  const fields = useFieldErrors<keyof typeof studentForm>({
+    firstName: v => validatePersonName(v, { label: 'El nombre', max: 60 }),
+    lastName: v => validatePersonName(v, { label: 'El apellido', max: 60 })
+      ?? (normalizePersonName(`${firstName} ${v}`).length > 100 ? 'El nombre completo no puede superar 100 caracteres.' : null),
+    documentNumber: v => validateDocumentNumber(v, documentType),
+    grade: v => validateGrade(v),
+    birthDate: v => validateBirthDate(v),
+  });
 
+  const onDocumentInput = (raw: string, type: DocumentType = documentType) => {
+    const { value, removed } = filterDocumentInput(raw, type);
+    setDocumentNumber(value);
+    setDocNotice(removed ? `Se quitaron caracteres no permitidos. ${documentInputHint(type)}` : '');
+    fields.onChange('documentNumber', value);
+  };
 
   const handleCreateIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName || !lastName || !documentNumber) {
-      setError('Nombre, Apellido y Documento son obligatorios.');
+    if (!fields.validateAll(studentForm)) {
+      focusFirstInvalid(studentFormRef.current);
       return;
     }
-    
+
     setIsLoading(true);
     setMessage('');
     setError('');
-    
+
     try {
       const response = await api.post('/super/students', {
-        full_name: `${firstName.trim()} ${lastName.trim()}`,
+        full_name: normalizePersonName(`${firstName} ${lastName}`),
         document_type: documentType,
-        document_number: documentNumber,
-        grade: grade,
+        document_number: documentNumber.trim(),
+        grade: grade.trim(),
         birth_date: birthDate || null,
       });
-      
+
       setMessage('¡Estudiante creado exitosamente!');
       setNewCredentials(prev => [response.data, ...prev]);
       loadStudents();
-      
+
       // Reset form
       setFirstName('');
       setLastName('');
@@ -1135,10 +1277,15 @@ export function StudentsTab() {
       setDocumentType('TI');
       setGrade('');
       setBirthDate('');
-
-
+      setDocNotice('');
+      fields.reset();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al crear el estudiante');
+      const byField = apiFieldErrors(err, PERSON_FIELD_MAP);
+      if (Object.keys(byField).length) {
+        fields.setErrors(byField);
+        focusFirstInvalid(studentFormRef.current);
+      }
+      setError(apiErrorMessage(err, 'Error al crear el estudiante'));
     } finally {
       setIsLoading(false);
     }
@@ -1148,8 +1295,9 @@ export function StudentsTab() {
   const handleReviewBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     const file = previewFileInputRef.current?.files?.[0];
-    if (!file) {
-      setError('Por favor sube un archivo CSV');
+    const fileError = csvFileError(file);
+    if (fileError || !file) {
+      setError(fileError ?? 'Selecciona un archivo CSV.');
       return;
     }
 
@@ -1169,7 +1317,7 @@ export function StudentsTab() {
       setPreviewPendingFile(file);
       setMessage(response.data.message || 'Archivo revisado. Confirma para crear las cuentas.');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al revisar el archivo CSV');
+      setError(apiErrorMessage(err, 'Error al revisar el archivo CSV'));
       setPreviewPendingFile(null);
     } finally {
       setIsLoading(false);
@@ -1210,7 +1358,7 @@ export function StudentsTab() {
       if (previewFileInputRef.current) previewFileInputRef.current.value = '';
       loadStudents();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error al procesar el archivo CSV');
+      setError(apiErrorMessage(err, 'Error al procesar el archivo CSV'));
     } finally {
       setIsLoading(false);
     }
@@ -1271,90 +1419,121 @@ export function StudentsTab() {
 
       <div className="bg-white border border-[#E9E9E7] rounded-lg p-6 shadow-sm">
         {activeTab === 'individual' ? (
-          <form onSubmit={handleCreateIndividual} className="space-y-4">
+          <form ref={studentFormRef} onSubmit={handleCreateIndividual} className="space-y-4" noValidate>
             <h3 className="font-medium text-[#37352F] mb-4 border-b border-[#E9E9E7] pb-2">Datos del Estudiante</h3>
+            <p className="text-xs text-[#9B9A97] -mt-2">Los campos marcados con * son obligatorios.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1">
-                  Nombre
+                <label htmlFor="student-firstName" className="block text-sm font-medium text-[#787774] mb-1">
+                  Nombre *
                 </label>
                 <input
+                  {...fieldA11y('student-firstName', fields.errors.firstName)}
                   type="text"
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setFirstName(e.target.value); fields.onChange('firstName', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('firstName', e.target.value)}
+                  autoComplete="off"
+                  maxLength={60}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.firstName ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: Valentina"
                   required
                 />
+                <FieldError id="student-firstName" error={fields.errors.firstName} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1">
-                  Apellido
+                <label htmlFor="student-lastName" className="block text-sm font-medium text-[#787774] mb-1">
+                  Apellido *
                 </label>
                 <input
+                  {...fieldA11y('student-lastName', fields.errors.lastName)}
                   type="text"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setLastName(e.target.value); fields.onChange('lastName', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('lastName', e.target.value)}
+                  autoComplete="off"
+                  maxLength={60}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.lastName ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: Torres"
                   required
                 />
+                <FieldError id="student-lastName" error={fields.errors.lastName} />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1">
-                  Tipo de documento
+                <label htmlFor="student-documentType" className="block text-sm font-medium text-[#787774] mb-1">
+                  Tipo de documento *
                 </label>
                 <select
+                  id="student-documentType"
                   value={documentType}
-                  onChange={(e) => setDocumentType(e.target.value)}
+                  onChange={(e) => {
+                    const type = isDocumentType(e.target.value) ? e.target.value : 'TI';
+                    setDocumentType(type);
+                    onDocumentInput(documentNumber, type);
+                    if (documentNumber) fields.setOne('documentNumber', validateDocumentNumber(filterDocumentInput(documentNumber, type).value, type));
+                  }}
                   className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm bg-white"
                   required
                 >
-                  <option value="TI">TI — Tarjeta de Identidad</option>
-                  <option value="CC">CC — Cédula de Ciudadanía</option>
-                  <option value="CE">CE — Cédula de Extranjería</option>
-                  <option value="PA">PA — Pasaporte</option>
+                  {['TI', 'CC', 'CE', 'PA'].map(code => {
+                    const d = DOCUMENT_TYPES.find(t => t.value === code)!;
+                    return <option key={d.value} value={d.value}>{d.label}</option>;
+                  })}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1">
-                  Número de documento
+                <label htmlFor="student-documentNumber" className="block text-sm font-medium text-[#787774] mb-1">
+                  Número de documento *
                 </label>
                 <input
+                  {...fieldA11y('student-documentNumber', fields.errors.documentNumber, docNotice || documentInputHint(documentType))}
                   type="text"
+                  inputMode={documentType === 'PA' ? 'text' : 'numeric'}
+                  autoComplete="off"
                   value={documentNumber}
-                  onChange={(e) => setDocumentNumber(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-mono"
+                  onChange={(e) => onDocumentInput(e.target.value)}
+                  onBlur={(e) => fields.onBlur('documentNumber', e.target.value)}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm font-mono ${fields.errors.documentNumber ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: 1234567890"
                   required
                 />
+                <FieldError id="student-documentNumber" error={fields.errors.documentNumber} hint={docNotice || documentInputHint(documentType)} />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1">
+                <label htmlFor="student-grade" className="block text-sm font-medium text-[#787774] mb-1">
                   Grado (opcional)
                 </label>
                 <input
+                  {...fieldA11y('student-grade', fields.errors.grade)}
                   type="text"
+                  maxLength={20}
                   value={grade}
-                  onChange={(e) => setGrade(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setGrade(e.target.value); fields.onChange('grade', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('grade', e.target.value)}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.grade ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                   placeholder="Ej: 10°"
                 />
+                <FieldError id="student-grade" error={fields.errors.grade} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#787774] mb-1">
+                <label htmlFor="student-birthDate" className="block text-sm font-medium text-[#787774] mb-1">
                   Fecha de nacimiento (opcional)
                 </label>
                 <input
+                  {...fieldA11y('student-birthDate', fields.errors.birthDate)}
                   type="date"
+                  min="1900-01-01"
+                  max={todayISO()}
                   value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
-                  className="w-full p-2 border border-[#E9E9E7] rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                  onChange={(e) => { setBirthDate(e.target.value); fields.onChange('birthDate', e.target.value); }}
+                  onBlur={(e) => fields.onBlur('birthDate', e.target.value)}
+                  className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.birthDate ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
                 />
+                <FieldError id="student-birthDate" error={fields.errors.birthDate} />
               </div>
             </div>
             
@@ -1470,7 +1649,7 @@ export function StudentsTab() {
                    </label>
                    <input
                      type="file"
-                     accept=".csv"
+                     accept=".csv,text/csv"
                      ref={previewFileInputRef}
                      onChange={() => { setMessage(''); setError(''); }}
                      className="block w-full text-sm text-[#787774]
@@ -1559,7 +1738,7 @@ export function StudentsTab() {
                     await loadStudents();
                     setMessage('Estudiantes seleccionados eliminados correctamente.');
                   } catch (err: any) {
-                    setError(err.response?.data?.detail || 'No se pudieron eliminar los estudiantes seleccionados.');
+                    setError(apiErrorMessage(err, 'No se pudieron eliminar los estudiantes seleccionados.'));
                   }
                 }}
                 disabled={selectedStudentIds.length === 0}
@@ -1652,8 +1831,9 @@ export function StudentsTab() {
         <EditUserModal
           title={`Editar Estudiante — ${editingStudent.full_name || editingStudent.username}`}
           saving={savingStudent}
+          serverErrors={editStudentErrors}
           onSave={updateStudent}
-          onCancel={() => setEditingStudent(null)}
+          onCancel={() => { setEditingStudent(null); setEditStudentErrors({}); }}
           initial={{
             full_name: editingStudent.full_name || '',
             email: editingStudent.email || '',
@@ -1665,18 +1845,16 @@ export function StudentsTab() {
             guardian_authorized: Boolean(editingStudent.guardian_authorized),
           }}
           fields={[
-            { key: 'full_name', label: 'Nombre completo', required: true },
-            { key: 'email', label: 'Correo electrónico', type: 'email' },
-            { key: 'grade', label: 'Grado' },
-            { key: 'birth_date', label: 'Fecha de nacimiento', type: 'date' },
+            { key: 'full_name', label: 'Nombre completo', required: true, maxLength: 100,
+              validate: v => validatePersonName(v, { label: 'El nombre completo' }) },
+            { key: 'email', label: 'Correo electrónico (opcional)', type: 'email', maxLength: 100,
+              validate: v => validateEmail(v, { required: false }) },
+            { key: 'grade', label: 'Grado', maxLength: 20, validate: v => validateGrade(v) },
+            { key: 'birth_date', label: 'Fecha de nacimiento', type: 'date', max: todayISO(),
+              validate: v => validateBirthDate(v) },
             {
               key: 'document_type', label: 'Tipo de documento', type: 'select',
-              options: [
-                { value: 'TI', label: 'TI — Tarjeta de Identidad' },
-                { value: 'CC', label: 'CC — Cédula de Ciudadanía' },
-                { value: 'CE', label: 'CE — Cédula de Extranjería' },
-                { value: 'PA', label: 'PA — Pasaporte' },
-              ],
+              options: DOCUMENT_TYPES,
             },
             {
               key: 'is_active', label: 'Estado', type: 'select',
@@ -1687,7 +1865,8 @@ export function StudentsTab() {
             },
             // Ley 1581: los menores necesitan la autorización de su acudiente
             // para usar cámara y micrófono en el chat.
-            { key: 'guardian_name', label: 'Acudiente que autorizó (madre, padre o acudiente)' },
+            { key: 'guardian_name', label: 'Acudiente que autorizó (madre, padre o acudiente)', maxLength: 150,
+              validate: v => validatePersonName(v, { label: 'El nombre del acudiente', max: 150, required: false }) },
             {
               key: 'guardian_authorized', label: 'Autorización firmada para cámara y micrófono', type: 'select',
               options: [

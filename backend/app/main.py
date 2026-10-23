@@ -60,6 +60,10 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+# Errores 422 en español y por campo, sin devolver el valor recibido.
+from app.core import validation_errors  # noqa: E402
+validation_errors.install(app)
+
 
 # ============================================================
 # CORS
@@ -93,55 +97,25 @@ app.add_middleware(
 # ============================================================
 
 def _apply_schema_and_migrations():
+    """Crea lo que falte del esquema.
+
+    PostgreSQL: lee el catálogo (3 consultas de solo lectura) y solo ejecuta
+    DDL para tablas, columnas o índices que de verdad falten, con lock_timeout
+    corto (ver app/db/migrate.py). Antes se ejecutaban create_all, ALTER TABLE
+    y un UPDATE en cada arranque en frío, lo que bloqueaba tablas en uso.
+    SQLite (desarrollo): create_all + columnas nuevas de tablas existentes.
     """
-    Inicializa las tablas necesarias.
-
-    En producción, las migraciones reales deberían ejecutarse
-    mediante el sistema de migraciones del proyecto.
-
-    create_all() solamente crea tablas que no existen;
-    no modifica columnas existentes.
-    """
-
     try:
-        print("[DB] Iniciando inicialización del schema...")
-
-        Base.metadata.create_all(
-            bind=engine
-        )
-
-        print("[DB] Schema inicializado correctamente.")
-
-    except Exception as exc:
-
-        print(
-            "[DB] ERROR inicializando schema:",
-            repr(exc),
-        )
-
-    # Las columnas nuevas se agregan aunque create_all haya fallado: sin ellas
-    # cualquier consulta a aulas, evaluaciones o quizzes responde 500.
-    try:
-        # SQLite local: create_all no agrega columnas nuevas a tablas que ya
-        # existen; se completan aquí para que la base de desarrollo no quede
-        # desincronizada. En PostgreSQL las columnas se agregan con las
-        # migraciones de backend/migrations/ (Supabase).
         if engine.dialect.name == "sqlite":
+            Base.metadata.create_all(bind=engine)
             from app.db.migrate import _add_missing_sqlite_columns
             _add_missing_sqlite_columns(engine)
         else:
-            # Columnas e índices de la migración 014 (reportes institucionales).
-            # Las columnas de RUNTIME_COLUMNS ya se agregaron de forma síncrona
-            # antes de iniciar este proceso (ver INICIALIZACIÓN).
-            from app.db.migrate import ensure_reporting_schema
-            ensure_reporting_schema(engine)
-
-    except Exception as exc:
-
-        print(
-            "[DB] ERROR aplicando columnas nuevas:",
-            repr(exc),
-        )
+            from app.db.migrate import prepare_postgres_schema
+            prepare_postgres_schema(engine)
+        print("[DB] Esquema verificado.")
+    except Exception as exc:  # noqa: BLE001
+        print("[DB] ERROR verificando el esquema:", repr(exc))
 
 
 # ============================================================
@@ -168,37 +142,10 @@ elif _secret_len < 32:
 # INICIALIZACIÓN
 # ============================================================
 
-# Columnas que el código consulta en cada petición (retiro de estudiantes,
-# borrado de mensajes, grupo del quiz): se garantizan ANTES de atender
-# peticiones, también en Vercel. Es rápido: una consulta a information_schema
-# y ALTER solo si falta algo.
-try:
-    from app.db.migrate import ensure_runtime_columns
-    ensure_runtime_columns(engine)
-except Exception as exc:  # noqa: BLE001
-    print("[DB] ERROR verificando columnas nuevas:", repr(exc))
-
-
-if IS_SERVERLESS:
-
-    print("[DB] Entorno serverless detectado.")
-
-    # No bloqueamos el import de FastAPI.
-    # Vercel puede continuar cargando la aplicación.
-    import threading
-
-    _thread = threading.Thread(
-        target=_apply_schema_and_migrations,
-        name="schema-init",
-        daemon=True,
-    )
-
-    _thread.start()
-
-else:
-
-    print("[DB] Entorno local detectado.")
-
+# Síncrono también en Vercel: es barato cuando no falta nada, y un hilo de
+# fondo quedaba congelado a mitad de una transacción con la tabla bloqueada.
+if engine is not None:
+    print("[DB] Entorno serverless detectado." if IS_SERVERLESS else "[DB] Entorno local detectado.")
     _apply_schema_and_migrations()
 
 

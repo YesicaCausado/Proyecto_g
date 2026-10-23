@@ -3,7 +3,8 @@ import { KeyRound, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { PASSWORD_RULES as RULES } from '../../data/passwordRules';
+import { PASSWORD_MAX, PASSWORD_RULES as RULES } from '../../data/passwordRules';
+import { apiErrorMessage } from '../../utils/validation';
 
 export default function ForceChangePassword() {
   const navigate  = useNavigate();
@@ -20,7 +21,8 @@ export default function ForceChangePassword() {
 
   const rulesPassed = RULES.every(r => r.test(newPwd));
   const matches     = newPwd === confirm && confirm.length > 0;
-  const canSubmit   = rulesPassed && matches && current.length > 0;
+  const sameAsCurrent = newPwd.length > 0 && newPwd === current;
+  const canSubmit   = rulesPassed && matches && current.length > 0 && !sameAsCurrent;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +41,7 @@ export default function ForceChangePassword() {
       logout();
       setTimeout(() => navigate('/login', { replace: true }), 1800);
     } catch (err: any) {
-      setError(err?.response?.data?.detail ?? 'Error al cambiar la contraseña');
+      setError(apiErrorMessage(err, 'Error al cambiar la contraseña'));
     } finally { setLoading(false); }
   };
 
@@ -83,6 +85,11 @@ export default function ForceChangePassword() {
                 value={current}
                 onChange={e => setCurrent(e.target.value)}
                 placeholder="Ingresa la contraseña temporal"
+                aria-label="Contraseña temporal actual"
+                autoComplete="current-password"
+                maxLength={256}
+                spellCheck={false}
+                autoCapitalize="none"
                 className="w-full pr-10 pl-3 py-2.5 text-sm border border-[#E9E9E7] rounded-md focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99]"
               />
               <button type="button" onClick={() => setShowC(p => !p)}
@@ -101,6 +108,11 @@ export default function ForceChangePassword() {
                 value={newPwd}
                 onChange={e => setNewPwd(e.target.value)}
                 placeholder="Crea una contraseña segura"
+                aria-label="Nueva contraseña"
+                maxLength={PASSWORD_MAX}
+                autoComplete="new-password"
+                spellCheck={false}
+                autoCapitalize="none"
                 className="w-full pr-10 pl-3 py-2.5 text-sm border border-[#E9E9E7] rounded-md focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99]"
               />
               <button type="button" onClick={() => setShowN(p => !p)}
@@ -135,6 +147,12 @@ export default function ForceChangePassword() {
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               placeholder="Repite la nueva contraseña"
+              aria-label="Confirmar nueva contraseña"
+              aria-invalid={confirm.length > 0 && !matches ? true : undefined}
+              maxLength={PASSWORD_MAX}
+              autoComplete="new-password"
+              spellCheck={false}
+              autoCapitalize="none"
               className={`w-full px-3 py-2.5 text-sm border rounded-md focus:outline-none focus:ring-2 transition-colors ${
                 confirm.length > 0 && !matches
                   ? 'border-[#E03E3E] focus:ring-[#FDEEEE]'
@@ -142,7 +160,10 @@ export default function ForceChangePassword() {
               }`}
             />
             {confirm.length > 0 && !matches && (
-              <p className="text-xs text-[#E03E3E] mt-1">Las contraseñas no coinciden</p>
+              <p role="alert" className="text-xs text-[#E03E3E] mt-1">Las contraseñas no coinciden</p>
+            )}
+            {sameAsCurrent && (
+              <p role="alert" className="text-xs text-[#E03E3E] mt-1">La nueva contraseña debe ser diferente de la temporal.</p>
             )}
           </div>
 

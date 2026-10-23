@@ -17,7 +17,7 @@ from sqlalchemy import (
     ForeignKey,
     Text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 
 from app.db.database import Base
 
@@ -89,11 +89,13 @@ class User(Base):
         nullable=False,
     )
 
-    # Avatar / foto del usuario
-    photo = Column(
+    # Avatar / foto del usuario: data URL de hasta ~3 MB. Diferida: no se lee
+    # en cada consulta de usuarios (p. ej. la autenticación de CADA petición),
+    # solo cuando se accede a `user.photo`.
+    photo = deferred(Column(
         Text,
         nullable=True,
-    )
+    ))
 
     # =========================================================
     # DOCUMENTO

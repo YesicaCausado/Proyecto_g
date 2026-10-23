@@ -4,16 +4,17 @@
  * la enlazan la landing, la interfaz del estudiante y el consentimiento de
  * cámara/micrófono.
  *
- * El texto describe lo que hace el código actual (verificado en backend y
- * frontend). Lo que aún no está definido —responsable, contacto, plazos de
- * conservación, contratos con proveedores— se marca como «Pendiente» en lugar
- * de inventarse. Si cambia el tratamiento, actualizar el texto y LAST_UPDATED.
+ * Política adaptada al proyecto NeuroLearn IA. Los contactos del proyecto se
+ * identifican en la sección de responsable; los compromisos que requieren cambios
+ * operativos deben implementarse antes de tratar datos bajo esas condiciones.
+ * Si cambia el tratamiento, actualizar el texto y LAST_UPDATED.
  */
 import { useEffect, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShieldCheck, AlertTriangle, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, ChevronDown } from 'lucide-react';
 
 const LAST_UPDATED = '23 de octubre de 2026';
+const EFFECTIVE_DATE = '23 de octubre de 2026';
 
 const SECTIONS = [
   { id: 'alcance', title: 'Introducción y alcance' },
@@ -36,15 +37,6 @@ const SECTIONS = [
 ] as const;
 
 // ── Piezas de presentación ──────────────────────────────────────────────────
-
-function Pending({ children }: { children: ReactNode }) {
-  return (
-    <div className="my-3 flex gap-2 rounded-md border border-[#F1D9A6] bg-[#FCF6E5] px-3 py-2.5 text-[13px] text-[#7A5200]">
-      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
-      <div><strong className="font-semibold">Pendiente:</strong> {children}</div>
-    </div>
-  );
-}
 
 function Section({ n, id, title, children }: { n: number; id: string; title: string; children: ReactNode }) {
   return (
@@ -167,16 +159,17 @@ export default function PrivacyPolicyPage() {
           </h1>
           <dl className="mt-4 grid gap-x-6 gap-y-1 text-sm text-[#787774] sm:grid-cols-2">
             <div><dt className="inline font-medium text-[#37352F]">Última actualización: </dt><dd className="inline">{LAST_UPDATED}</dd></div>
-            <div><dt className="inline font-medium text-[#37352F]">Entrada en vigor: </dt><dd className="inline">pendiente de definir por el responsable</dd></div>
+            <div><dt className="inline font-medium text-[#37352F]">Entrada en vigor: </dt><dd className="inline">{EFFECTIVE_DATE}</dd></div>
           </dl>
 
           <div className="mt-6 rounded-md border border-[#E9E9E7] bg-[#F7F6F3] p-4 text-sm leading-relaxed">
             <p className="font-semibold text-[#191919]">Sobre este documento</p>
             <p className="mt-1">
-              Describe cómo funciona hoy NeuroLearn IA con tus datos, según lo que hace la plataforma.
-              Algunos datos legales y procedimientos aún no se han definido; aparecen marcados como
-              <strong> «Pendiente»</strong> y se completarán antes de presentar esta política como definitiva.
-              Este texto no es una certificación de cumplimiento legal.
+              Esta política informa sobre el tratamiento de datos personales asociado a NeuroLearn IA y establece
+              los criterios de privacidad que deben seguirse en su operación. Las medidas descritas como compromisos
+              deben aplicarse efectivamente y revisarse cuando cambie la plataforma o sus proveedores. La publicación
+              de esta política no sustituye las autorizaciones exigibles, los contratos con instituciones ni la
+              revisión jurídica de los tratamientos de datos sensibles y de menores de edad.
             </p>
           </div>
 
@@ -216,16 +209,31 @@ export default function PrivacyPolicyPage() {
               <p>
                 El responsable del tratamiento es quien decide sobre la finalidad y el uso de los datos.
               </p>
-              <Pending>
-                nombre o razón social, NIT, domicilio, correo electrónico y teléfono del responsable del
-                tratamiento de NeuroLearn IA. Estos datos no se publican hasta que estén verificados.
-              </Pending>
+              <p>
+                Contactos designados para asuntos de privacidad del proyecto: <strong>Yesica Causado</strong>,
+                <a href="mailto:yesica.causadoa@uniagustiniana.edu.co" className="font-medium text-[#0B6E99] underline underline-offset-2"> yesica.causadoa@uniagustiniana.edu.co</a>, y <strong>Matias Ramirez</strong>,
+                <a href="mailto:matias.ramirezt@uniagustiniana.edu.co" className="font-medium text-[#0B6E99] underline underline-offset-2"> matias.ramirezt@uniagustiniana.edu.co</a>.
+                Domicilio de contacto del proyecto: Bogotá D. C., Colombia. No se publica NIT ni teléfono porque
+                no se ha identificado una persona jurídica ni se han proporcionado esos datos.
+              </p>
+              <p>
+                Estos contactos reciben y canalizan las solicitudes de privacidad del proyecto. La calidad legal
+                de responsable del tratamiento corresponde a la persona natural o jurídica que determine las
+                finalidades y los medios del tratamiento. Antes de operar con instituciones, los acuerdos deben
+                identificar expresamente al responsable y, cuando corresponda, a NeuroLearn IA como encargado.
+              </p>
               <p>
                 NeuroLearn IA se ofrece a instituciones educativas, que crean las cuentas de su comunidad
                 (profesores y estudiantes). Según los acuerdos con cada institución, ella puede actuar como
                 responsable y NeuroLearn IA como encargado del tratamiento, o ambos como responsables.
               </p>
-              <Pending>definir por contrato el papel de cada institución y de NeuroLearn IA.</Pending>
+              <p>
+                En cada implementación institucional, el convenio de uso deberá especificar las obligaciones de
+                la institución y del operador de NeuroLearn IA, las instrucciones de tratamiento, los accesos
+                permitidos, los canales de atención y el procedimiento de devolución o eliminación de datos al
+                finalizar el servicio. Hasta que exista ese acuerdo, no debe presumirse que una parte actúa como
+                encargada de la otra.
+              </p>
             </Section>
 
             <Section {...sec('datos')}>
@@ -312,10 +320,14 @@ export default function PrivacyPolicyPage() {
                 'Las mediciones dependen de la luz, la cámara, el micrófono, el ruido y el dispositivo. Los indicadores faciales y de voz no están validados frente a un criterio clínico o externo: son aproximaciones con fines educativos.',
                 'Si apagas la cámara o el micrófono, o retiras el consentimiento, el tutor sigue funcionando igual.',
               ]} />
-              <Pending>
-                evaluar si los patrones de teclado e interacción, activos durante el uso del chat, requieren
-                una autorización o un aviso específico adicional.
-              </Pending>
+              <p>
+                Antes de activar el registro de teclado e interacción, se informará al usuario de los eventos
+                recogidos, su finalidad, su asociación con la cuenta y el tiempo de conservación. Se limitará
+                la captura a métricas necesarias para la función educativa, sin registrar el contenido de lo
+                que se escribe y borra. La base jurídica y la necesidad de una autorización específica deberán
+                determinarse según el tratamiento concreto; si se requiere autorización, la función no se
+                activará hasta obtenerla. El aviso debe mostrarse también a los representantes cuando proceda.
+              </p>
             </Section>
 
             <Section {...sec('menores')}>
@@ -336,12 +348,14 @@ export default function PrivacyPolicyPage() {
                 La autorización de la institución educativa no reemplaza por sí sola las autorizaciones que
                 deban dar los titulares o sus representantes.
               </p>
-              <Pending>
-                establecer el procedimiento para obtener, archivar y verificar la autorización de los
-                representantes para el tratamiento general de datos de los menores (cuenta, chat, información
-                académica), no solo para cámara y micrófono. El formato físico de la autorización y su archivo
-                dependen hoy de cada institución.
-              </Pending>
+              <p>
+                Para el tratamiento general de datos de estudiantes menores de edad, la institución y el
+                responsable deberán informar previamente las finalidades y categorías de datos, determinar la
+                base jurídica aplicable y conservar evidencia verificable de las autorizaciones que sean exigibles.
+                La evidencia debe identificar al representante, al estudiante, el alcance y la fecha de la
+                autorización, y permitir registrar su retiro. La autorización para cámara o micrófono no se
+                entenderá como autorización automática para finalidades distintas.
+              </p>
             </Section>
 
             <Section {...sec('sensibles')}>
@@ -361,7 +375,14 @@ export default function PrivacyPolicyPage() {
                 'se pueden retirar en cualquier momento;',
                 'en menores de edad, exigen además la autorización del acudiente.',
               ]} />
-              <Pending>confirmar con asesoría jurídica la calificación de estos datos y las salvaguardas exigibles.</Pending>
+              <p>
+                Por tratarse de estimaciones derivadas de rostro y voz y de una población que puede incluir
+                menores, antes de habilitar estas funciones en un entorno real debe realizarse una evaluación
+                jurídica y de impacto en privacidad. Hasta entonces, las funciones deben ser opcionales, limitarse
+                a finalidades educativas explícitas y no utilizarse para diagnósticos ni decisiones adversas
+                automatizadas. Si el análisis jurídico determina que se tratan datos sensibles, se aplicarán las
+                condiciones legales específicas, incluida la autorización explícita cuando corresponda.
+              </p>
             </Section>
 
             <Section {...sec('autorizaciones')}>
@@ -375,11 +396,16 @@ export default function PrivacyPolicyPage() {
                 Algunos tratamientos pueden apoyarse en la prestación del servicio educativo contratado por la
                 institución o en obligaciones legales de conservación de registros académicos.
               </p>
-              <Pending>
-                (1) una autorización general de tratamiento de datos al crear la cuenta o en el primer ingreso,
-                hoy inexistente en la plataforma; (2) un aviso de privacidad visible en el inicio de sesión;
-                (3) determinar las bases jurídicas aplicables a cada tratamiento con asesoría jurídica.
-              </Pending>
+              <p>
+                Antes de crear cuentas o iniciar tratamientos que requieran autorización, debe mostrarse un aviso
+                de privacidad accesible y obtenerse la autorización correspondiente por un mecanismo afirmativo,
+                separado de la aceptación de términos generales cuando la ley así lo exija. El sistema deberá
+                conservar evidencia consultable de la versión del aviso, la finalidad autorizada, la fecha y la
+                persona que autorizó. No se tratará la ausencia de respuesta como consentimiento. Cada finalidad
+                se vinculará con su base jurídica y, para datos sensibles o menores, se aplicarán las salvaguardas
+                adicionales correspondientes. Este procedimiento debe estar implementado antes de afirmar que la
+                autorización general se recoge digitalmente.
+              </p>
             </Section>
 
             <Section {...sec('acceso')}>
@@ -412,11 +438,14 @@ export default function PrivacyPolicyPage() {
               <p>
                 La configuración de despliegue documentada usa HTTPS y conexión cifrada (SSL) con la base de datos.
               </p>
-              <Pending>
-                confirmar en producción el cifrado en tránsito y en reposo del proveedor de base de datos, las
-                copias de seguridad y su conservación, y adoptar un procedimiento de respuesta a incidentes y
-                de auditorías periódicas. Hasta entonces no se presentan como garantías.
-              </Pending>
+              <p>
+                Como medidas de operación, se mantendrán revisiones periódicas de permisos y dependencias,
+                acceso restringido a secretos y credenciales, y un procedimiento de respuesta a incidentes que
+                incluya contención, evaluación del impacto, documentación, recuperación y notificaciones cuando
+                sean legalmente exigibles. El responsable deberá verificar en la configuración efectiva del
+                proveedor el cifrado en tránsito y en reposo, las copias de seguridad y su ciclo de retención;
+                esta política no afirma que esas características estén habilitadas hasta que se comprueben.
+              </p>
             </Section>
 
             <Section {...sec('conservacion')}>
@@ -430,12 +459,24 @@ export default function PrivacyPolicyPage() {
                 <><strong>Eliminación definitiva</strong> por el Administrador: borra la cuenta y la mayor parte de la información asociada (conversaciones, eventos cognitivos, quizzes, mensajes, grupos e integraciones); la auditoría se conserva sin el vínculo al usuario.</>,
                 'No existen eliminación ni anonimización automáticas.',
               ]} />
-              <Pending>
-                definir plazos de conservación por categoría y los criterios para eliminar o anonimizar;
-                verificar que la eliminación definitiva cubra también consentimientos, evaluaciones y
-                notificaciones; definir qué ocurre con las copias de seguridad y al terminar la relación con
-                una institución. Algunos datos podrían tener que conservarse por obligaciones legales.
-              </Pending>
+              <H3>Criterios y plazos de conservación</H3>
+              <p>
+                Los datos se conservarán únicamente durante el tiempo necesario para la finalidad informada y
+                para cumplir obligaciones legales o contractuales aplicables. Como regla operativa propuesta,
+                al finalizar la relación con una institución se revisarán los datos asociados y se eliminarán o
+                anonimizarán los que ya no sean necesarios dentro de un plazo máximo de 90 días, salvo los que
+                deban conservarse por obligación legal, reclamación pendiente o defensa de derechos. Las cuentas
+                desactivadas no se considerarán eliminadas. Los consentimientos y registros de auditoría se
+                conservarán durante el plazo necesario para acreditar el cumplimiento y atender reclamaciones.
+              </p>
+              <p>
+                Las copias de seguridad deberán contar con un ciclo documentado de rotación y expiración que no
+                supere 90 días, salvo una necesidad legal o técnica documentada. Las solicitudes de supresión se
+                evaluarán según la ley y las obligaciones de conservación; cuando proceda, la eliminación debe
+                cubrir las tablas relacionadas, integraciones y sistemas activos. Estos plazos son el estándar
+                que el operador debe configurar y verificar antes de afirmar que la eliminación se realiza
+                automáticamente.
+              </p>
             </Section>
 
             <Section {...sec('derechos')}>
@@ -461,7 +502,12 @@ export default function PrivacyPolicyPage() {
                 Desde la plataforma ya puedes retirar los consentimientos de cámara y micrófono
                 (<em>Configuración → Privacidad</em>) y actualizar algunos datos de tu perfil.
               </p>
-              <Pending>publicar el canal oficial para recibir consultas y reclamos (sección 17).</Pending>
+              <p>
+                Las consultas y reclamos pueden dirigirse a los contactos de privacidad identificados en la
+                sección 2, usando los correos electrónicos allí publicados. La solicitud debe incluir nombre,
+                información suficiente para verificar la identidad, descripción clara de la petición y medio de
+                respuesta. No se debe enviar por correo la contraseña ni información sensible innecesaria.
+              </p>
             </Section>
 
             <Section {...sec('almacenamiento')}>
@@ -500,11 +546,16 @@ export default function PrivacyPolicyPage() {
                 El modelo de detección facial se descarga desde la propia NeuroLearn IA y se ejecuta en el
                 dispositivo: no se envían imágenes a terceros.
               </p>
-              <Pending>
-                verificar los países donde estos proveedores procesan los datos, suscribir los contratos de
-                transmisión de datos con los encargados y revisar los requisitos de la Ley 1581 de 2012 para
-                transferencias internacionales.
-              </Pending>
+              <p>
+                Los proveedores se utilizarán solo en la medida necesaria para prestar las funciones indicadas.
+                Antes de enviar datos personales, el operador deberá revisar los términos de cada servicio, los
+                países de procesamiento, las condiciones de conservación y eliminación, las opciones de uso de
+                datos para entrenamiento y las medidas de seguridad disponibles. Cuando exista transmisión a un
+                proveedor que actúe como encargado, deberán formalizarse las obligaciones contractuales aplicables.
+                Si se presenta transferencia o transmisión internacional, se verificará previamente el mecanismo
+                jurídico exigido por la normativa colombiana. No se presume que todos los proveedores reciban
+                todos los datos descritos en esta política.
+              </p>
             </Section>
 
             <Section {...sec('cambios')}>
@@ -517,17 +568,24 @@ export default function PrivacyPolicyPage() {
                 plataforma con esos datos, se publica una versión nueva, la aceptación anterior deja de valer y
                 se pide de nuevo.
               </p>
-              <Pending>implementar el aviso de cambios de esta política general y, cuando un cambio lo requiera, la solicitud de una nueva autorización.</Pending>
+              <p>
+                El operador mantendrá un historial de versiones con fecha, descripción de los cambios y fecha de
+                aplicación. Los cambios relevantes se comunicarán por los canales disponibles de la plataforma
+                y a las instituciones. Si el cambio modifica una finalidad o incorpora un tratamiento que exige
+                nueva autorización, se solicitará antes de iniciarlo y se mantendrá deshabilitado ese tratamiento
+                hasta que se obtenga la autorización válida.
+              </p>
             </Section>
 
             <Section {...sec('contacto')}>
-              <Pending>
-                correo electrónico y demás canales oficiales para consultas, reclamos y solicitudes de
-                privacidad, y la persona o área encargada de atenderlas.
-              </Pending>
               <p>
-                Mientras se publica el canal oficial, los estudiantes y profesores pueden dirigirse a su
-                institución educativa, que administra sus cuentas en NeuroLearn IA.
+                Para consultas, reclamos o solicitudes sobre datos personales, contacta a los responsables de
+                contacto del proyecto: <strong>Yesica Causado</strong> en
+                <a href="mailto:yesica.causadoa@uniagustiniana.edu.co" className="font-medium text-[#0B6E99] underline underline-offset-2"> yesica.causadoa@uniagustiniana.edu.co</a> o <strong>Matias Ramirez</strong> en
+                <a href="mailto:matias.ramirezt@uniagustiniana.edu.co" className="font-medium text-[#0B6E99] underline underline-offset-2"> matias.ramirezt@uniagustiniana.edu.co</a>.
+                Domicilio de contacto: Bogotá D. C., Colombia. Si la cuenta pertenece a una institución educativa,
+                también puedes presentar la solicitud ante el canal de privacidad de esa institución para que se
+                determine quién debe resolverla según su papel en el tratamiento.
               </p>
               <p>
                 También puedes acudir a la Superintendencia de Industria y Comercio, autoridad de protección

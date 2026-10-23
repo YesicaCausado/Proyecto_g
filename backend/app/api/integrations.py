@@ -22,11 +22,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import logging
+import math
 import re
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+from app.core import validators as v
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_permission
 from app.core.permissions import Permission
@@ -47,31 +49,103 @@ router = APIRouter(tags=["Integraciones y Automatizaciones"])
 # Schemas
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _automation_config(value: Optional[dict]) -> Optional[dict]:
+    """Configuración de una automatización: claves cortas, valores simples y
+    `threshold` (umbral de rendimiento) entre 0 y 100."""
+    if value is None:
+        return None
+    if len(value) > 20:
+        raise ValueError("La configuración tiene demasiados campos.")
+    for key, item in value.items():
+        if not isinstance(key, str) or len(key) > 50:
+            raise ValueError("La configuración tiene un campo no válido.")
+        if isinstance(item, str) and len(item) > 500:
+            raise ValueError(f"El valor de «{key}» es demasiado largo.")
+        if isinstance(item, (dict, list)):
+            raise ValueError(f"El valor de «{key}» no es válido.")
+    if "threshold" in value:
+        threshold = value["threshold"]
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) \
+                or not math.isfinite(threshold) or not 0 <= threshold <= 100:
+            raise ValueError("El umbral debe ser un número entre 0 y 100.")
+    return value
+
+
 class WebhookConfig(BaseModel):
-    url: str
+    url: str = Field(..., max_length=500)
     enabled: bool = True
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, value: str) -> str:
+        return v.http_url(value, label="La URL del webhook")
 
 class AutomationCreate(BaseModel):
-    name: str
-    trigger: str
-    action: str
-    configuration: dict = {}
+    name: str = Field(..., max_length=200)
+    trigger: str = Field(..., max_length=40)
+    action: str = Field(..., max_length=40)
+    configuration: dict = Field(default_factory=dict)
     enabled: bool = True
 
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        return v.clean_text(value, label="El nombre", max_len=200)
+
+    @field_validator("configuration")
+    @classmethod
+    def _configuration(cls, value: dict) -> dict:
+        return _automation_config(value)
+
 class AutomationUpdate(BaseModel):
-    name: Optional[str] = None
-    trigger: Optional[str] = None
-    action: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=200)
+    trigger: Optional[str] = Field(None, max_length=40)
+    action: Optional[str] = Field(None, max_length=40)
     configuration: Optional[dict] = None
     enabled: Optional[bool] = None
 
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else v.clean_text(value, label="El nombre", max_len=200)
+
+    @field_validator("configuration")
+    @classmethod
+    def _configuration(cls, value: Optional[dict]) -> Optional[dict]:
+        return _automation_config(value)
+
 class CalendarEventCreate(BaseModel):
-    title: str
-    calendar_id: str
+    title: str = Field(..., max_length=200)
+    calendar_id: str = Field(..., max_length=300)
     event_date: str
     event_time: Optional[str] = None
-    description: str = ""
-    event_type: str = "clase"
+    description: str = Field(default="", max_length=2000)
+    event_type: str = Field(default="clase", max_length=30)
+
+    @field_validator("title")
+    @classmethod
+    def _title(cls, value: str) -> str:
+        return v.clean_text(value, label="El título", max_len=200)
+
+    # event_date / event_time los valida isvc.build_event_body (responde 400).
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, value: str) -> str:
+        return v.clean_text(value, label="La descripción", max_len=2000, required=False, multiline=True)
+
+
+def _public_webhook_url(raw) -> str:
+    """URL de webhook válida y pública: el servidor hace un POST real a esa
+    dirección, así que no puede apuntar a la red interna (SSRF)."""
+    url = v.or_400(v.http_url, raw if isinstance(raw, str) else None, label="La URL del webhook")
+    if not v.is_public_host(url):
+        raise HTTPException(
+            status_code=400,
+            detail="La URL del webhook debe ser una dirección pública de internet "
+                   "(no se permiten localhost ni redes internas).",
+        )
+    return url
 
 
 def _require_institution(user: User) -> int:
@@ -660,9 +734,7 @@ async def save_webhook(
 ):
     """Guarda o crea la configuración de webhook de la institución."""
     inst_id = _require_webhook_manager(current_user)
-    url = (body.url or "").strip()
-    if not url.startswith(("https://", "http://")):
-        raise HTTPException(status_code=400, detail="La URL del webhook debe empezar por http(s)://")
+    url = _public_webhook_url(body.url)
 
     # Validar que el webhook responde antes de guardar (conexión real).
     test = isvc.test_webhook(url)
@@ -716,6 +788,7 @@ async def test_webhook_endpoint(
     url = (body.get("url") or (((integ.config or {}).get("url")) if integ else None)) or ""
     if not url:
         raise HTTPException(status_code=400, detail="URL de webhook no configurada.")
+    url = _public_webhook_url(url)
     result = isvc.test_webhook(url)
     if integ:
         cfg = dict(integ.config or {})
@@ -920,6 +993,8 @@ async def check_low_performance(
     try:
         default_threshold = float(body.get("threshold", 60.0))
     except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="El umbral debe ser un número entre 0 y 100.")
+    if not math.isfinite(default_threshold) or not 0 <= default_threshold <= 100:
         raise HTTPException(status_code=400, detail="El umbral debe ser un número entre 0 y 100.")
 
     # Grupos del profesor.

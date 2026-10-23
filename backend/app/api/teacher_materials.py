@@ -29,7 +29,7 @@ router = APIRouter(prefix="/teacher", tags=["Teacher Materials"])
 class TeacherFolder(Base):
     __tablename__ = "teacher_folders"
     id         = Column(Integer, primary_key=True, index=True)
-    teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     name       = Column(String(120), nullable=False)
     color      = Column(String(20), default="#787774")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -40,8 +40,8 @@ class TeacherFolder(Base):
 class TeacherMaterial(Base):
     __tablename__ = "teacher_materials"
     id           = Column(Integer, primary_key=True, index=True)
-    folder_id    = Column(Integer, ForeignKey("teacher_folders.id"), nullable=False)
-    teacher_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
+    folder_id    = Column(Integer, ForeignKey("teacher_folders.id"), index=True, nullable=False)
+    teacher_id   = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     name         = Column(String(200), nullable=False)
     file_type    = Column(String(20), default="doc")   # pdf | doc | ppt | link | img
     size         = Column(String(30), default="—")
@@ -187,6 +187,58 @@ def _guess_mime(filename: str) -> str:
     return MIME_BY_EXT.get(ext, "application/octet-stream")
 
 
+# Formatos que se pueden subir como material. SVG queda fuera: puede llevar
+# scripts que se ejecutarían al abrirlo. Igual que MATERIAL_EXTENSIONS en
+# frontend/src/utils/validation.ts.
+UPLOAD_EXTENSIONS = tuple(ext for ext in MIME_BY_EXT if ext != ".svg")
+_OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"   # .doc / .ppt / .xls (Office 97-2003)
+
+
+def _content_matches(ext: str, raw: bytes) -> bool:
+    """¿El contenido es realmente del formato que indica la extensión?"""
+    from app.core.validators import image_matches
+    if ext == ".pdf":
+        return b"%PDF-" in raw[:1024]
+    if ext in (".docx", ".pptx", ".xlsx", ".zip"):
+        return raw.startswith(b"PK")
+    if ext in (".doc", ".ppt", ".xls"):
+        return raw.startswith(_OLE)
+    if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+        return image_matches(raw, MIME_BY_EXT[ext])
+    if ext in (".txt", ".csv"):
+        return b"\x00" not in raw[:8192]
+    if ext == ".mp4":
+        return raw[4:8] == b"ftyp"
+    if ext == ".mp3":
+        return raw.startswith(b"ID3") or (len(raw) > 1 and raw[0] == 0xFF and raw[1] & 0xE0 == 0xE0)
+    return False
+
+
+async def _read_upload(file: UploadFile, default_name: str) -> tuple:
+    """Lee y valida un material subido: extensión permitida, tamaño, contenido
+    real y nombre sin rutas. Devuelve (nombre_limpio, extensión, bytes)."""
+    from app.core.validators import safe_filename
+    name = safe_filename(file.filename, default=default_name)
+    ext = ("." + name.rsplit(".", 1)[-1].lower()) if "." in name else ""
+    if ext not in UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail="Formato no permitido. Sube PDF, Word, PowerPoint, Excel, TXT, CSV, "
+                   "imágenes (PNG, JPG, GIF, WebP), ZIP, MP4 o MP3.",
+        )
+    raw = await file.read(MAX_FILE_BYTES + 1)
+    if not raw:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+    if len(raw) > MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera el máximo de 4 MB.")
+    if not _content_matches(ext, raw):
+        raise HTTPException(
+            status_code=415,
+            detail=f"El contenido de «{name}» no corresponde a un archivo {ext[1:].upper()} válido.",
+        )
+    return name, ext, raw
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.get("/materials")
@@ -217,13 +269,16 @@ async def create_folder(
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_MATERIALES)),
 ):
     """Crea una nueva carpeta de materiales."""
-    name = (data.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="El nombre es obligatorio.")
+    from app.core.validators import clean_text, hex_color, or_400
+    raw_name = data.get("name")
+    name = or_400(clean_text, raw_name if isinstance(raw_name, str) else None,
+                  label="El nombre de la carpeta", max_len=120)
+    raw_color = data.get("color")
+    color = or_400(hex_color, raw_color if isinstance(raw_color, str) else None, default="#787774")
     folder = TeacherFolder(
         teacher_id=current_user.id,
         name=name,
-        color=data.get("color", "#787774"),
+        color=color,
     )
     db.add(folder)
     db.commit()
@@ -269,38 +324,32 @@ async def upload_file(
     ).first()
     if not folder:
         raise HTTPException(status_code=404, detail="Carpeta no encontrada.")
+    from app.core.validators import clean_text, http_url, or_400
     share = _clean_share(db, current_user, _parse_shared(shared_with))
+    name = or_400(clean_text, name, label="El nombre del material", max_len=200, required=False)
 
     if file is None:
-        # Enlace externo (sin binario): exige una URL válida.
-        link = (url or "").strip()
-        if not link.startswith(("https://", "http://")) or len(link) > 255:
-            raise HTTPException(status_code=400, detail="Escribe un enlace válido que empiece por https://.")
+        # Enlace externo (sin binario): exige una URL http(s) válida.
+        link = or_400(http_url, url, label="El enlace", max_len=255)
         mat = TeacherMaterial(
             folder_id=folder_id, teacher_id=current_user.id,
-            name=((name or "").strip() or link)[:200], file_type="link", size="—",
+            name=(name or link)[:200], file_type="link", size="—",
             shared_with=share, original_name=link, mime_type=LINK_MIME, has_file=False,
         )
     else:
-        raw = await file.read()
-        if not raw:
-            raise HTTPException(status_code=400, detail="El archivo está vacío.")
-        if len(raw) > MAX_FILE_BYTES:
-            raise HTTPException(status_code=413, detail="El archivo supera el máximo de 4 MB.")
-        original_name = file.filename or "archivo"
-        ext = ("." + original_name.rsplit(".", 1)[-1].lower()) if "." in original_name else ""
+        original_name, ext, raw = await _read_upload(file, "archivo")
         if ext == ".pdf":
             ftype = "pdf"
         elif ext in (".ppt", ".pptx"):
             ftype = "ppt"
-        elif ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
+        elif ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
             ftype = "img"
         else:
             ftype = "doc"
         size_mb = len(raw) / (1024 * 1024)
         mat = TeacherMaterial(
             folder_id=folder_id, teacher_id=current_user.id,
-            name=((name or "").strip() or original_name)[:200], file_type=ftype,
+            name=(name or original_name)[:200], file_type=ftype,
             size=f"{size_mb:.1f} MB" if size_mb >= 1 else f"{max(1, int(len(raw) / 1024))} KB",
             shared_with=share, mime_type=_guess_mime(original_name),
             original_name=original_name[:255], has_file=True, content=raw,
@@ -326,11 +375,7 @@ async def upload_post_attachment(
     Antes el Tablero solo guardaba el nombre del archivo."""
     if classroom_id not in own_classrooms(db, current_user):
         raise HTTPException(status_code=404, detail="Grupo no encontrado.")
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="El archivo está vacío.")
-    if len(raw) > MAX_FILE_BYTES:
-        raise HTTPException(status_code=413, detail="El archivo supera el máximo de 4 MB.")
+    original_name, _ext, raw = await _read_upload(file, "adjunto")
     folder = db.query(TeacherFolder).filter(
         TeacherFolder.teacher_id == current_user.id, TeacherFolder.name == "Adjuntos del Tablero",
     ).first()
@@ -338,7 +383,6 @@ async def upload_post_attachment(
         folder = TeacherFolder(teacher_id=current_user.id, name="Adjuntos del Tablero", color="#6940A5")
         db.add(folder)
         db.flush()
-    original_name = (file.filename or "adjunto")[:255]
     size_mb = len(raw) / (1024 * 1024)
     mat = TeacherMaterial(
         folder_id=folder.id, teacher_id=current_user.id, name=original_name[:200],

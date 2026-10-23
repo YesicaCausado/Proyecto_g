@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { KeyRound, Eye, EyeOff, CheckCircle, XCircle, Loader2, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
-import { PASSWORD_RULES as RULES } from '../../data/passwordRules';
+import { PASSWORD_MAX, PASSWORD_RULES as RULES } from '../../data/passwordRules';
 
 type PageState = 'validating' | 'valid' | 'invalid' | 'success';
 
@@ -183,6 +183,12 @@ export default function ResetPasswordPage() {
                 onChange={e => setNewPwd(e.target.value)}
                 placeholder="Crea una contraseña segura"
                 autoFocus
+                aria-label="Nueva contraseña"
+                aria-describedby="reset-pwd-rules"
+                maxLength={PASSWORD_MAX}
+                autoComplete="new-password"
+                spellCheck={false}
+                autoCapitalize="none"
                 className="w-full pr-10 pl-3 py-2.5 text-sm border border-[#E9E9E7] rounded-md focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99]"
               />
               <button
@@ -196,7 +202,7 @@ export default function ResetPasswordPage() {
 
             {/* Indicador de fortaleza */}
             {newPwd.length > 0 && (
-              <div className="mt-3 space-y-1.5 bg-[#F7F6F3] rounded-md p-3">
+              <div id="reset-pwd-rules" className="mt-3 space-y-1.5 bg-[#F7F6F3] rounded-md p-3">
                 {RULES.map(r => {
                   const ok = r.test(newPwd);
                   return (
@@ -226,6 +232,12 @@ export default function ResetPasswordPage() {
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
                 placeholder="Repite la nueva contraseña"
+                aria-label="Confirmar nueva contraseña"
+                aria-invalid={confirm.length > 0 && !matches ? true : undefined}
+                maxLength={PASSWORD_MAX}
+                autoComplete="new-password"
+                spellCheck={false}
+                autoCapitalize="none"
                 className={`w-full pr-10 pl-3 py-2.5 text-sm border rounded-md focus:outline-none focus:ring-2 transition-colors ${
                   confirm.length > 0 && !matches
                     ? 'border-[#E03E3E] focus:ring-[#FDEEEE]'

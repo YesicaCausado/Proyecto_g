@@ -32,7 +32,7 @@ class StudentBotAssignment(Base):
     id                = Column(Integer, primary_key=True, index=True)
     bot_id            = Column(Integer, ForeignKey("expert_bots.id"), nullable=False, index=True)
     student_id        = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    teacher_id        = Column(Integer, ForeignKey("users.id"), nullable=False)
+    teacher_id        = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     goal_interactions = Column(Integer, nullable=False)
     assigned_at       = Column(DateTime, nullable=False, default=datetime.utcnow)
 

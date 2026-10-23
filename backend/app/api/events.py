@@ -10,9 +10,10 @@ Endpoints:
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime, timezone
 
+from app.core import validators as v
 from app.db.database import get_db
 from app.api.auth import get_current_user
 from app.core.permissions import FORBIDDEN_MESSAGE, Permission, has_permission
@@ -25,7 +26,48 @@ router = APIRouter(prefix="/events", tags=["Calendario - Eventos"])
 
 # ── Schemas internos ─────────────────────────────────────────────────────────
 
-class EventCreate(BaseModel):
+# Tipos que ofrecen los calendarios del profesor, del Súper Profesor y del estudiante.
+EVENT_TYPES = ("examen", "tarea", "clase", "anuncio", "evento", "feriado",
+               "reunion", "capacitacion", "importante")
+
+
+class _EventFields(BaseModel):
+    """Reglas de los campos del evento (app/core/validators.py)."""
+
+    @field_validator("title", check_fields=False)
+    @classmethod
+    def _title(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else v.clean_text(value, label="El título", max_len=200)
+
+    @field_validator("event_type", check_fields=False)
+    @classmethod
+    def _type(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip().lower()
+        if value not in EVENT_TYPES:
+            raise ValueError("Tipo de evento no válido.")
+        return value
+
+    @field_validator("event_date", check_fields=False)
+    @classmethod
+    def _date(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else v.iso_date(value, label="La fecha del evento", min_year=2000)
+
+    @field_validator("event_time", check_fields=False)
+    @classmethod
+    def _time(cls, value: Optional[str]) -> Optional[str]:
+        return v.clock_time(value, label="La hora del evento")
+
+    @field_validator("description", check_fields=False)
+    @classmethod
+    def _description(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return v.clean_text(value, label="La descripción", max_len=2000, required=False, multiline=True)
+
+
+class EventCreate(_EventFields):
     classroom_id: Optional[int] = None   # None = evento global/institucional
     title: str
     event_type: str = "clase"             # examen|tarea|clase|anuncio|evento|feriado
@@ -33,7 +75,7 @@ class EventCreate(BaseModel):
     event_time: Optional[str] = None
     description: str = ""
 
-class EventUpdate(BaseModel):
+class EventUpdate(_EventFields):
     title: Optional[str] = None
     event_type: Optional[str] = None
     event_date: Optional[str] = None
@@ -41,26 +83,42 @@ class EventUpdate(BaseModel):
     description: Optional[str] = None
 
 
+def _events_to_dicts(events, db: Session, user: User | None = None) -> list[dict]:
+    """Serializa eventos con 2 consultas en total (docentes y aulas). Antes
+    eran 2-3 por evento (docente, aula y dueño para `can_delete`)."""
+    if not events:
+        return []
+    users = {u.id: u for u in db.query(User).filter(User.id.in_({e.teacher_id for e in events}))}
+    class_ids = {e.classroom_id for e in events if e.classroom_id}
+    classrooms = (
+        {c.id: c for c in db.query(Classroom).filter(Classroom.id.in_(class_ids))} if class_ids else {}
+    )
+    out = []
+    for ev in events:
+        teacher = users.get(ev.teacher_id)
+        classroom = classrooms.get(ev.classroom_id) if ev.classroom_id else None
+        out.append({
+            "id": ev.id,
+            "classroom_id": ev.classroom_id,
+            "classroom_name": classroom.name if classroom else "Institucional",
+            "institution_id": ev.institution_id,
+            "teacher_id": ev.teacher_id,
+            "teacher_name": teacher.full_name or teacher.username if teacher else "Institución",
+            "title": ev.title,
+            "event_type": ev.event_type,
+            "event_date": ev.event_date,
+            "event_time": ev.event_time,
+            "description": ev.description,
+            "created_at": ev.created_at.isoformat(),
+            "is_personal": ev.classroom_id is None and ev.institution_id is None,
+            "can_edit": user is not None and _can_edit_event(user, ev),
+            "can_delete": user is not None and _can_delete_event(user, ev, db, owner=teacher),
+        })
+    return out
+
+
 def _event_to_dict(ev: ClassroomEvent, db: Session, user: User | None = None) -> dict:
-    teacher = db.query(User).filter(User.id == ev.teacher_id).first()
-    classroom = db.query(Classroom).filter(Classroom.id == ev.classroom_id).first() if ev.classroom_id else None
-    return {
-        "id": ev.id,
-        "classroom_id": ev.classroom_id,
-        "classroom_name": classroom.name if classroom else "Institucional",
-        "institution_id": ev.institution_id,
-        "teacher_id": ev.teacher_id,
-        "teacher_name": teacher.full_name or teacher.username if teacher else "Institución",
-        "title": ev.title,
-        "event_type": ev.event_type,
-        "event_date": ev.event_date,
-        "event_time": ev.event_time,
-        "description": ev.description,
-        "created_at": ev.created_at.isoformat(),
-        "is_personal": ev.classroom_id is None and ev.institution_id is None,
-        "can_edit": user is not None and _can_edit_event(user, ev),
-        "can_delete": user is not None and _can_delete_event(user, ev, db),
-    }
+    return _events_to_dicts([ev], db, user)[0]
 
 
 def _can_edit_event(user: User, ev: ClassroomEvent) -> bool:
@@ -73,14 +131,18 @@ def _can_edit_event(user: User, ev: ClassroomEvent) -> bool:
     ) or (user.role == UserRole.ESTUDIANTE.value and ev.classroom_id is None)
 
 
-def _can_delete_event(user: User, ev: ClassroomEvent, db: Session) -> bool:
+_UNSET = object()
+
+
+def _can_delete_event(user: User, ev: ClassroomEvent, db: Session, owner=_UNSET) -> bool:
     """El creador elimina lo suyo; el super puede eliminar eventos de profesores
     de su institución, pero no eventos personales de estudiantes."""
     if _can_edit_event(user, ev):
         return True
     if user.role != UserRole.SUPER_PROFESOR.value:
         return False
-    owner = db.query(User).filter(User.id == ev.teacher_id).first()
+    if owner is _UNSET:
+        owner = db.query(User).filter(User.id == ev.teacher_id).first()
     return (
         owner is not None
         and owner.role == UserRole.PROFESOR.value
@@ -174,7 +236,7 @@ async def list_events(
             q = q.filter(ClassroomEvent.event_date.startswith(month))
         events = q.order_by(ClassroomEvent.event_date).all()
         return {
-            "events": [_event_to_dict(e, db, current_user) for e in events],
+            "events": _events_to_dicts(events, db, current_user),
             "total": len(events),
         }
 
@@ -277,7 +339,7 @@ async def list_events(
 
     events = q.order_by(ClassroomEvent.event_date).all()
     return {
-        "events": [_event_to_dict(e, db, current_user) for e in events],
+        "events": _events_to_dicts(events, db, current_user),
         "total": len(events),
     }
 

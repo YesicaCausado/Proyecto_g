@@ -96,7 +96,7 @@ class ClassroomBot(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=False)
-    bot_id = Column(Integer, ForeignKey("expert_bots.id"), nullable=False)
+    bot_id = Column(Integer, ForeignKey("expert_bots.id"), index=True, nullable=False)
 
     assigned_at = Column(DateTime, default=datetime.utcnow)
     is_required = Column(Boolean, default=False)  # Obligatorio o complementario

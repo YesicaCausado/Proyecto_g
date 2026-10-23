@@ -16,8 +16,8 @@ class Post(Base):
     __tablename__ = "posts"
 
     id          = Column(Integer, primary_key=True, index=True)
-    classroom_id= Column(Integer, ForeignKey("classrooms.id"), nullable=False)
-    teacher_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
+    classroom_id= Column(Integer, ForeignKey("classrooms.id"), index=True, nullable=False)
+    teacher_id  = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
 
     post_type   = Column(String(30), default="anuncio")   # anuncio|tarea|recordatorio|material|enlace
     title       = Column(String(200), nullable=False)
@@ -41,7 +41,7 @@ class PostReaction(Base):
     __tablename__ = "post_reactions"
 
     id        = Column(Integer, primary_key=True, index=True)
-    post_id   = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    post_id   = Column(Integer, ForeignKey("posts.id"), index=True, nullable=False)
     user_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
     emoji     = Column(String(10), default="👍")
     created_at= Column(DateTime, default=datetime.utcnow)
@@ -55,7 +55,7 @@ class PostComment(Base):
     __tablename__ = "post_comments"
 
     id         = Column(Integer, primary_key=True, index=True)
-    post_id    = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    post_id    = Column(Integer, ForeignKey("posts.id"), index=True, nullable=False)
     author_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
     content    = Column(Text, nullable=False)
     is_active  = Column(Boolean, default=True)

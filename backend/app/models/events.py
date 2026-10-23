@@ -15,8 +15,8 @@ class ClassroomEvent(Base):
     __tablename__ = "classroom_events"
 
     id           = Column(Integer, primary_key=True, index=True)
-    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)   # NULL = institucional/global
-    teacher_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
+    classroom_id = Column(Integer, ForeignKey("classrooms.id"), index=True, nullable=True)   # NULL = institucional/global
+    teacher_id   = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True, index=True)  # scope multi-tenant
 
     title        = Column(String(200), nullable=False)

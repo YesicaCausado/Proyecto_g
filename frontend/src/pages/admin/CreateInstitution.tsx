@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useRef, useState } from 'react';
 import {
   School, User, Mail, Hash, ShieldCheck, Copy, CheckCircle,
   ArrowLeft, Eye, EyeOff, Building2, FileText, BadgeCheck,
@@ -6,8 +6,24 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { FieldError } from '../../components/FieldError';
+import { fieldA11y, focusFirstInvalid } from '../../utils/formFields';
+import {
+  DOCUMENT_TYPES, apiErrorMessage, apiFieldErrors, documentInputHint, filterDigits,
+  filterDocumentInput, normalizeEmail, normalizePersonName, validateDaneCode,
+  validateDocumentNumber, validateEmail, validatePersonName, validateText,
+  type DocumentType,
+} from '../../utils/validation';
 
-type DocType = 'CC' | 'TI' | 'CE' | 'PA';
+type DocType = DocumentType;
+
+const RULES: Record<Exclude<keyof FormState, 'sp_document_type'>, (f: FormState) => string | null> = {
+  name: f => validateText(f.name, { label: 'El nombre del colegio', min: 2, max: 200 }),
+  dane_code: f => validateDaneCode(f.dane_code),
+  sp_full_name: f => validatePersonName(f.sp_full_name, { label: 'El nombre completo' }),
+  sp_document_number: f => validateDocumentNumber(f.sp_document_number, f.sp_document_type),
+  sp_email: f => validateEmail(f.sp_email),
+};
 
 interface FormState {
   name: string; dane_code: string;
@@ -31,18 +47,50 @@ export default function CreateInstitution() {
   const [showPass, setShowPass]       = useState(false);
   const [copied, setCopied]           = useState<'user' | 'pass' | 'all' | null>(null);
 
+  const [notice, setNotice]           = useState<Partial<Record<keyof FormState, string>>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const recheck = (field: keyof FormState, next: FormState, always = false) => {
+    if (field === 'sp_document_type') field = 'sp_document_number';
+    const rule = RULES[field as keyof typeof RULES];
+    if (!rule || (!always && !errors[field])) return;
+    setErrors(e => ({ ...e, [field]: rule(next) ?? undefined }));
+  };
+
   const set = (field: keyof FormState) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(f => ({ ...f, [field]: e.target.value }));
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      let value = e.target.value;
+      let hint = '';
+      // Campos estrictos: se descartan al escribir/pegar los caracteres que no admiten.
+      if (field === 'dane_code') {
+        const r = filterDigits(value, 12);
+        value = r.value;
+        if (r.removed) hint = 'El código DANE solo admite números (máx. 12).';
+      } else if (field === 'sp_document_number') {
+        const r = filterDocumentInput(value, form.sp_document_type);
+        value = r.value;
+        if (r.removed) hint = `Se quitaron caracteres no permitidos. ${documentInputHint(form.sp_document_type)}`;
+      }
+      let next = { ...form, [field]: value } as FormState;
+      if (field === 'sp_document_type') {
+        const r = filterDocumentInput(form.sp_document_number, value as DocType);
+        next = { ...next, sp_document_number: r.value };
+      }
+      setNotice(n => ({ ...n, [field]: hint }));
+      setForm(next);
+      recheck(field, next, field === 'sp_document_type' && Boolean(next.sp_document_number));
+    };
+
+  const blur = (field: keyof FormState) => () => {
+    if (String(form[field]).trim()) recheck(field, form, true);
+  };
 
   const validate = (): boolean => {
     const e: typeof errors = {};
-    if (!form.name.trim())               e.name               = 'Requerido';
-    if (!form.dane_code.trim())          e.dane_code          = 'Requerido';
-    if (!form.sp_full_name.trim())       e.sp_full_name       = 'Requerido';
-    if (!form.sp_document_number.trim()) e.sp_document_number = 'Requerido';
-    if (!form.sp_email.trim())           e.sp_email           = 'Requerido';
-    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.sp_email)) e.sp_email = 'Correo inválido';
+    (Object.keys(RULES) as (keyof typeof RULES)[]).forEach(field => {
+      const message = RULES[field](form);
+      if (message) e[field] = message;
+    });
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -50,13 +98,22 @@ export default function CreateInstitution() {
   const handleSubmit = async (evt: React.FormEvent) => {
     evt.preventDefault();
     setServerError(null);
-    if (!validate()) return;
+    if (!validate()) { focusFirstInvalid(formRef.current); return; }
     setLoading(true);
     try {
-      const { data } = await api.post<CreatedInstitution>('/admin/institutions', form);
+      const { data } = await api.post<CreatedInstitution>('/admin/institutions', {
+        ...form,
+        name: form.name.trim(),
+        dane_code: form.dane_code.trim(),
+        sp_full_name: normalizePersonName(form.sp_full_name),
+        sp_document_number: form.sp_document_number.trim(),
+        sp_email: normalizeEmail(form.sp_email),
+      });
       setCreated(data);
     } catch (err: any) {
-      setServerError(err?.response?.data?.detail ?? 'Error al crear la institución');
+      const byField = apiFieldErrors(err) as typeof errors;
+      if (Object.keys(byField).length) { setErrors(byField); focusFirstInvalid(formRef.current); }
+      setServerError(apiErrorMessage(err, 'Error al crear la institución'));
     } finally { setLoading(false); }
   };
 
@@ -143,7 +200,7 @@ export default function CreateInstitution() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
 
         {/* Datos institución */}
         <section className="bg-white border border-[#E9E9E7] rounded-md p-6">
@@ -151,10 +208,11 @@ export default function CreateInstitution() {
             <Building2 className="w-4 h-4 text-[#787774]" /> Datos de la institución
           </h2>
           <div className="space-y-4">
-            <InputField label="Nombre del colegio *" icon={School} value={form.name}
-              onChange={set('name')} placeholder="Ej: Colegio Nacional San Francisco" error={errors.name} />
-            <InputField label="Código DANE *" icon={Hash} value={form.dane_code}
-              onChange={set('dane_code')} placeholder="Ej: 154001000149" error={errors.dane_code} />
+            <InputField id="inst-name" label="Nombre del colegio *" icon={School} value={form.name} maxLength={200}
+              onChange={set('name')} onBlur={blur('name')} placeholder="Ej: Colegio Nacional San Francisco" error={errors.name} />
+            <InputField id="inst-dane" label="Código DANE *" icon={Hash} value={form.dane_code} inputMode="numeric" maxLength={12}
+              onChange={set('dane_code')} onBlur={blur('dane_code')} placeholder="Ej: 154001000149" error={errors.dane_code}
+              hint={notice.dane_code || 'Solo números, entre 5 y 12 dígitos.'} />
           </div>
         </section>
 
@@ -164,24 +222,27 @@ export default function CreateInstitution() {
             <ShieldCheck className="w-4 h-4 text-[#787774]" /> Datos del Super Profesor (Rector)
           </h2>
           <div className="space-y-4">
-            <InputField label="Nombre completo *" icon={User} value={form.sp_full_name}
-              onChange={set('sp_full_name')} placeholder="Ej: Carlos Andrés Mendoza" error={errors.sp_full_name} />
+            <InputField id="inst-sp-name" label="Nombre completo *" icon={User} value={form.sp_full_name} maxLength={100}
+              onChange={set('sp_full_name')} onBlur={blur('sp_full_name')} placeholder="Ej: Carlos Andrés Mendoza" error={errors.sp_full_name} />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-[#37352F] mb-1">Tipo de documento</label>
+                <label htmlFor="inst-sp-doctype" className="block text-xs font-medium text-[#37352F] mb-1">Tipo de documento</label>
                 <div className="relative">
                   <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B9A97]" />
-                  <select value={form.sp_document_type} onChange={set('sp_document_type')}
+                  <select id="inst-sp-doctype" value={form.sp_document_type} onChange={set('sp_document_type')}
                     className="w-full pl-9 pr-3 py-2.5 text-sm border border-[#E9E9E7] rounded-md bg-white text-[#191919] focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99] appearance-none">
-                    {(['CC','TI','CE','PA'] as DocType[]).map(d => <option key={d}>{d}</option>)}
+                    {DOCUMENT_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                   </select>
                 </div>
               </div>
-              <InputField label="Número de documento *" icon={Hash} value={form.sp_document_number}
-                onChange={set('sp_document_number')} placeholder="Ej: 1023456789" error={errors.sp_document_number} />
+              <InputField id="inst-sp-doc" label="Número de documento *" icon={Hash} value={form.sp_document_number}
+                inputMode={form.sp_document_type === 'PA' ? 'text' : 'numeric'}
+                onChange={set('sp_document_number')} onBlur={blur('sp_document_number')} placeholder="Ej: 1023456789"
+                error={errors.sp_document_number}
+                hint={notice.sp_document_number || documentInputHint(form.sp_document_type)} />
             </div>
-            <InputField label="Correo electrónico *" icon={Mail} type="email" value={form.sp_email}
-              onChange={set('sp_email')} placeholder="rector@colegio.edu.co" error={errors.sp_email} />
+            <InputField id="inst-sp-email" label="Correo electrónico *" icon={Mail} type="email" inputMode="email" value={form.sp_email}
+              maxLength={100} onChange={set('sp_email')} onBlur={blur('sp_email')} placeholder="rector@colegio.edu.co" error={errors.sp_email} />
           </div>
         </section>
 
@@ -198,22 +259,25 @@ export default function CreateInstitution() {
   );
 }
 
-function InputField({ label, icon: Icon, value, onChange, placeholder, type = 'text', error }: {
-  label: string; icon: LucideIcon; value: string;
+function InputField({ id, label, icon: Icon, value, onChange, onBlur, placeholder, type = 'text', error, hint, inputMode, maxLength }: {
+  id: string; label: string; icon: LucideIcon; value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder?: string; type?: string; error?: string;
+  onBlur?: () => void;
+  placeholder?: string; type?: string; error?: string; hint?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']; maxLength?: number;
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-[#37352F] mb-1">{label}</label>
+      <label htmlFor={id} className="block text-xs font-medium text-[#37352F] mb-1">{label}</label>
       <div className="relative">
-        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B9A97]" />
-        <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9B9A97]" aria-hidden="true" />
+        <input {...fieldA11y(id, error, hint)} type={type} value={value} onChange={onChange} onBlur={onBlur}
+          placeholder={placeholder} inputMode={inputMode} maxLength={maxLength} autoComplete="off"
           className={`w-full pl-9 pr-3 py-2.5 text-sm border rounded-md bg-white text-[#191919] placeholder-[#9B9A97]
             focus:outline-none focus:ring-2 transition-all
             ${error ? 'border-[#E03E3E] focus:ring-[#FDEEEE]' : 'border-[#E9E9E7] focus:ring-[#E5F3FF] focus:border-[#0B6E99]'}`} />
       </div>
-      {error && <p className="text-xs text-[#E03E3E] mt-1">{error}</p>}
+      <FieldError id={id} error={error} hint={hint} />
     </div>
   );
 }

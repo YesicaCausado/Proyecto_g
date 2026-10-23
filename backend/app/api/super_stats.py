@@ -20,8 +20,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from datetime import datetime, timedelta
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from app.core import validators as v
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_permission
 from app.core.permissions import Permission
@@ -72,13 +73,50 @@ async def get_institution(
 
 
 class InstitutionUpdate(BaseModel):
-    name: Optional[str] = None
-    dane_code: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    website: Optional[str] = None
+    """Datos de la institución que edita el Súper Profesor. Los campos
+    opcionales se pueden vaciar enviando ""."""
+    name: Optional[str] = Field(None, max_length=200)
+    dane_code: Optional[str] = Field(None, max_length=20)
+    email: Optional[str] = Field(None, max_length=200)
+    phone: Optional[str] = Field(None, max_length=50)
+    address: Optional[str] = Field(None, max_length=255)
+    website: Optional[str] = Field(None, max_length=255)
     logo_url: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: Optional[str]) -> Optional[str]:
+        # El vacío se responde con un 400 propio en el endpoint.
+        if value is None or not value.strip():
+            return value
+        return v.clean_text(value, label="El nombre de la institución", min_len=2, max_len=200)
+
+    @field_validator("dane_code")
+    @classmethod
+    def _dane(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return value
+        return v.dane_code(value)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else (v.email(value, label="El correo institucional", max_len=200, required=False) or "")
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else (v.phone(value) or "")
+
+    @field_validator("address")
+    @classmethod
+    def _address(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else (v.clean_text(value, label="La dirección", max_len=255, required=False) or "")
+
+    @field_validator("website")
+    @classmethod
+    def _website(cls, value: Optional[str]) -> Optional[str]:
+        return None if value is None else (v.http_url(value, label="El sitio web", max_len=255, required=False) or "")
 
 
 LOGO_MAX_BYTES = 2 * 1024 * 1024
@@ -101,6 +139,8 @@ def _validate_logo(logo: str) -> None:
         raise HTTPException(400, "El archivo del logo está vacío.")
     if len(raw) > LOGO_MAX_BYTES:
         raise HTTPException(400, "El logo supera el límite de 2 MB.")
+    if not v.image_matches(raw, prefix[len("data:"):].split(";", 1)[0]):
+        raise HTTPException(400, "El archivo del logo no es una imagen PNG, JPG o WebP válida.")
 
 
 # ── PATCH /super/institution ──────────────────────────────────────────────────
@@ -536,13 +576,15 @@ async def get_security_stats(
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
 
-    # Usuarios activos de la institución
+    day_ago = datetime.utcnow() - timedelta(hours=24)
+
+    # Usuarios activos de la institución con login en las últimas 24 h
+    # (antes se cargaban TODOS y se filtraba en Python).
     users = db.query(User).filter(
         User.institution_id == inst_id,
         User.is_active == True,
+        User.last_login > day_ago,
     ).all()
-
-    day_ago = datetime.utcnow() - timedelta(hours=24)
 
     # Usuarios que iniciaron sesión en las últimas 24 h (no se inventa la
     # ubicación: antes se mostraba «Colombia» para todos).
@@ -573,8 +615,10 @@ async def get_security_stats(
         AuditLog.created_at >= thirty_days_ago,
     ).order_by(AuditLog.created_at.desc()).limit(20).all()
 
+    authors = {u.id: u for u in db.query(User).filter(
+        User.id.in_({lg.performed_by_id for lg in audit_logins if lg.performed_by_id}))}
     for lg in audit_logins:
-        by = db.query(User).filter(User.id == lg.performed_by_id).first()
+        by = authors.get(lg.performed_by_id)
         login_history.append({
             "user":      by.full_name or by.username if by else "?",
             "action":    lg.action,
@@ -753,17 +797,37 @@ class SuperClassroomUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=150)
     subject: Optional[str] = Field(default=None, max_length=100)
     grade: Optional[str] = Field(default=None, max_length=20)
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+    @field_validator("grade")
+    @classmethod
+    def _grade(cls, value: Optional[str]) -> Optional[str]:
+        return v.grade(value)
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, value: Optional[str]) -> Optional[str]:
+        return v.clean_text(value, label="La descripción", max_len=2000, required=False, multiline=True)
 
 
 class SuperClassroomCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=150)
     subject: str = Field(..., min_length=1, max_length=100)
     grade: str = Field(default="", max_length=20)
-    description: str = ""
+    description: str = Field(default="", max_length=2000)
     teacher_id: int
-    competency: Optional[str] = None
+    competency: Optional[str] = Field(default=None, max_length=30)
     max_students: int = Field(default=40, ge=1, le=100)
+
+    @field_validator("grade")
+    @classmethod
+    def _grade(cls, value: str) -> str:
+        return v.grade(value) or ""
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, value: str) -> str:
+        return v.clean_text(value, label="La descripción", max_len=2000, required=False, multiline=True)
 
 
 def _active_institution_teacher(db: Session, current_user: User, teacher_id: int) -> User:
@@ -1058,10 +1122,9 @@ async def send_broadcast(
 ):
     _require_super(current_user)
     inst_id = _get_institution_id(current_user, db)
-    subject, body = subject.strip(), body.strip()
-    grade = (grade or "").strip() or None
-    if not subject or not body:
-        raise HTTPException(400, "El asunto y el mensaje son obligatorios.")
+    subject = v.or_400(v.clean_text, subject, label="El asunto", max_len=200)
+    body = v.or_400(v.clean_text, body, label="El mensaje", max_len=5000, multiline=True)
+    grade = v.or_400(v.grade, grade) or None
     if recipient_type not in ("institucional", "profesores", "estudiantes", "grado"):
         raise HTTPException(400, "Tipo de destinatario inválido.")
     if recipient_type == "grado" and not grade:
