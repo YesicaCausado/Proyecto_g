@@ -1,5 +1,5 @@
 """
-NeuroLearn IA — Caso de uso CU-03 «Recuperar contraseña» (RF-ES-005 / RF-29).
+NeuroLearn IA — Caso de uso CU-03 «Recuperar contraseña» (RF-ES-005 / RF-03).
 
 Actores: Usuario (cualquier rol con correo real; principalmente Estudiante)
 y Servicio de correo (Brevo).

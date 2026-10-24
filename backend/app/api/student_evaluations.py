@@ -158,7 +158,7 @@ def _get_own_in_progress(db: Session, ev: TeacherEvaluation, user: User,
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.get("/evaluations")
-async def list_my_evaluations(
+def list_my_evaluations(
     classroom_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -187,7 +187,7 @@ async def list_my_evaluations(
 
 
 @router.get("/evaluations/{eval_id}")
-async def my_evaluation_detail(
+def my_evaluation_detail(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -205,7 +205,7 @@ async def my_evaluation_detail(
 
 
 @router.post("/evaluations/{eval_id}/start")
-async def start_attempt(
+def start_attempt(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -258,7 +258,7 @@ async def start_attempt(
 
 
 @router.put("/evaluations/{eval_id}/progress")
-async def save_progress(
+def save_progress(
     eval_id: int,
     payload: AnswersPayload,
     db: Session = Depends(get_db),
@@ -276,7 +276,7 @@ async def save_progress(
 
 
 @router.post("/evaluations/{eval_id}/submit")
-async def submit_attempt(
+def submit_attempt(
     eval_id: int,
     payload: AnswersPayload,
     db: Session = Depends(get_db),

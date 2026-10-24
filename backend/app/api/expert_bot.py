@@ -113,7 +113,7 @@ class BotPatchPayload(_BotFields):
 
 # ─── GET /bots (montado en main.py con prefix="/api/v1/bots") ─────────────────
 @router.get("/")
-async def list_bots(
+def list_bots(
     creator_id: Optional[int] = Query(None, description="Filtrar por creador"),
     is_public: Optional[bool] = Query(None, description="Solo bots públicos"),
     search: Optional[str] = Query(None, description="Buscar por nombre o descripción"),
@@ -188,7 +188,7 @@ async def list_bots(
 
 # ─── GET /shared-with-me (bots compartidos con el estudiante) ─────────────────
 @router.get("/shared-with-me")
-async def list_shared_bots(
+def list_shared_bots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -270,7 +270,7 @@ async def list_shared_bots(
 
 # ─── GET /my-bots (bots del usuario actual) ────────────────────────────────────
 @router.get("/my-bots")
-async def list_my_bots(
+def list_my_bots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -289,7 +289,7 @@ async def list_my_bots(
 
 # ─── GET /bots/{bot_id} ────────────────────────────────────────────────────────
 @router.get("/{bot_id}")
-async def get_bot(
+def get_bot(
     bot_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -356,7 +356,7 @@ def _build_bot_response(bot: ExpertBot, db: Optional[Session] = None) -> dict:
 
 @router.post("/")
 @router.post("/create")
-async def create_bot(
+def create_bot(
     payload: BotCreatePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -405,7 +405,7 @@ async def create_bot(
 
 # ─── PUT /bots/{bot_id} ────────────────────────────────────────────────────────
 @router.put("/{bot_id}")
-async def update_bot(
+def update_bot(
     bot_id: int,
     payload: BotCreatePayload,
     db: Session = Depends(get_db),
@@ -448,7 +448,7 @@ async def update_bot(
 
 # ─── PATCH /{bot_id} (actualización parcial — toggle is_active/is_public) ─────
 @router.patch("/{bot_id}")
-async def patch_bot(
+def patch_bot(
     bot_id: int,
     payload: BotPatchPayload,
     db: Session = Depends(get_db),
@@ -494,7 +494,7 @@ async def patch_bot(
 
 # ─── DELETE /bots/{bot_id} ─────────────────────────────────────────────────────
 @router.delete("/{bot_id}")
-async def delete_bot(
+def delete_bot(
     bot_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

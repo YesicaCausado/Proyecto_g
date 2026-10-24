@@ -38,7 +38,7 @@ router = APIRouter(prefix="/teacher", tags=["Teacher - Reports"])
 
 
 @router.get("/reports/export")
-async def export_reports(
+def export_reports(
     report: Literal["resumen", "quizzes", "evaluaciones"] = Query("resumen"),
     format: Literal["csv", "pdf"] = Query("csv"),
     classroom_id: Optional[int] = Query(None, description="ID del grupo"),

@@ -62,7 +62,7 @@ def _state(db: Session, user: User) -> dict:
 
 
 @router.get("/me")
-async def my_consents(
+def my_consents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -71,7 +71,7 @@ async def my_consents(
 
 
 @router.post("", status_code=201)
-async def accept_consent(
+def accept_consent(
     payload: ConsentAccept,
     request: Request,
     db: Session = Depends(get_db),
@@ -97,7 +97,7 @@ async def accept_consent(
 
 
 @router.post("/request-authorization")
-async def request_guardian_authorization(
+def request_guardian_authorization(
     payload: ConsentRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -142,7 +142,7 @@ async def request_guardian_authorization(
 
 
 @router.delete("/{consent_type}")
-async def revoke_consent(
+def revoke_consent(
     consent_type: ConsentType,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

@@ -40,6 +40,8 @@ migrations/
 | 012 | `012_auditoria_sesiones_acudiente.sql` | **Pendiente de ejecutar — ANTES de desplegar el parche 14.** Columnas en `users` para cerrar sesiones (`sessions_valid_after`) y registrar la autorización del acudiente (`guardian_name`, `guardian_authorized_at`, `guardian_authorized_by_id`). Idempotente. | Oct 2026 |
 | 015 | `015_alertas_resueltas.sql` | **Pendiente de ejecutar** (antes o después del despliegue; el backend crea la tabla al arrancar). Tabla `alert_acknowledgements` para que «Marcar resuelta» en NeuroAlertas persista (con RLS). Idempotente. | Oct 2026 |
 | 017 | `017_indices_rendimiento.sql` | **Opcional** (el backend crea los índices al arrancar si faltan). Índices sobre claves foráneas muy consultadas (mensajes, tablero, calendario, NeuroBots, materiales). Usa `CREATE INDEX CONCURRENTLY`: ejecutar fuera de una transacción. Idempotente. | Oct 2026 |
+| 018 | `018_diagnostico_inicial.sql` | **Aplicada el 23 oct 2026.** Tabla `diagnostic_results` (con RLS): diagnóstico inicial por competencia (RF-13), un resultado por estudiante y competencia. Idempotente. | Oct 2026 |
+| 019 | `019_tutor_diagnostico_bloqueo.sql` | **Aplicada el 23 oct 2026.** Columnas `tutor_feedback` y `feedback_provider` en `diagnostic_results` (evaluación del tutor de IA, RF-13) e índice `idx_audit_logs_actor_action_created` para el bloqueo persistente de cuentas (RNF-04). Idempotente; el índice va fuera de una transacción. | Oct 2026 |
 
 ## RLS multi-tenant (005)
 

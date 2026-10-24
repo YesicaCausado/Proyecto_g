@@ -150,7 +150,7 @@ la entrega. El detalle está en [PLAN.md](PLAN.md).
 ## Documentación
 
 - [Plan y estado del proyecto](PLAN.md)
-- [Requisitos funcionales y no funcionales](<docs/Requisitos funcionales y no funcionales version3 (1).md>)
+- [Requisitos funcionales y no funcionales](<docs/Requisitos funcionales y no funcionales version4.md>)
 - [Idea del proyecto](docs/IDEA_DEFINITIVA.md)
 - [Diagramas UML](docs/DIAGRAMAS_UML.md)
 - [EDT del proyecto](docs/diccionario_edt_neurolearn.md)

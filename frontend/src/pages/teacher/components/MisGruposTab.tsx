@@ -360,7 +360,7 @@ export default function MisGruposTab() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // RF-21: el código anterior deja de servir para unirse al grupo.
+  // RF-39: el código anterior deja de servir para unirse al grupo.
   const regenerateCode = async (group: Group) => {
     if (!window.confirm(`¿Generar un código nuevo para «${group.name}»? El código ${group.code} dejará de funcionar.`)) return;
     setBusyId(group.id);

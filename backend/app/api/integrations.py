@@ -227,7 +227,7 @@ _GOOGLE = (IntegrationProvider.GOOGLE_DRIVE, IntegrationProvider.GOOGLE_CALENDAR
 
 
 @router.get("/integrations")
-async def list_integrations(
+def list_integrations(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
@@ -265,7 +265,7 @@ async def list_integrations(
 
 
 @router.get("/automation-options")
-async def automation_options(
+def automation_options(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
@@ -326,7 +326,7 @@ def _google_provider(provider: str) -> str:
 
 
 @router.post("/integrations/google/{provider}/connect")
-async def connect_google(
+def connect_google(
     provider: str,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -345,7 +345,7 @@ async def connect_google(
 
 
 @router.get("/integrations/google/callback")
-async def google_callback(
+def google_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -376,7 +376,7 @@ class GoogleComplete(BaseModel):
 
 
 @router.post("/integrations/google/complete")
-async def complete_google(
+def complete_google(
     body: GoogleComplete,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -437,7 +437,7 @@ async def complete_google(
 
 
 @router.delete("/integrations/{provider}")
-async def disconnect_integration(
+def disconnect_integration(
     provider: str,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -506,7 +506,7 @@ def _google_http_error(e: Exception, default: str) -> HTTPException:
 
 
 @router.get("/integrations/google/drive/folders")
-async def drive_folders(
+def drive_folders(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
@@ -519,7 +519,7 @@ async def drive_folders(
 
 
 @router.get("/integrations/google/drive/folders/{folder_id}/files")
-async def drive_files(
+def drive_files(
     folder_id: str,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -533,7 +533,7 @@ async def drive_files(
 
 
 @router.post("/integrations/google/drive/folder")
-async def drive_select_folder(
+def drive_select_folder(
     body: dict,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -554,7 +554,7 @@ async def drive_select_folder(
 
 
 @router.post("/integrations/google/drive/import")
-async def drive_import_files(
+def drive_import_files(
     body: dict,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -634,7 +634,7 @@ async def drive_import_files(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/integrations/google/calendar/calendars")
-async def calendar_calendars(
+def calendar_calendars(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
@@ -647,7 +647,7 @@ async def calendar_calendars(
 
 
 @router.post("/integrations/google/calendar/select")
-async def calendar_select(
+def calendar_select(
     body: dict,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -668,7 +668,7 @@ async def calendar_select(
 
 
 @router.post("/integrations/google/calendar/events")
-async def calendar_create_event(
+def calendar_create_event(
     body: CalendarEventCreate,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -697,7 +697,7 @@ async def calendar_create_event(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/integrations/webhook")
-async def get_webhook(
+def get_webhook(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
     db: Session = Depends(get_db),
@@ -726,7 +726,7 @@ async def get_webhook(
 
 
 @router.post("/integrations/webhook")
-async def save_webhook(
+def save_webhook(
     body: WebhookConfig,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -772,7 +772,7 @@ async def save_webhook(
 
 
 @router.post("/integrations/webhook/test")
-async def test_webhook_endpoint(
+def test_webhook_endpoint(
     body: dict,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -800,7 +800,7 @@ async def test_webhook_endpoint(
 
 
 @router.post("/integrations/webhook/toggle")
-async def toggle_webhook(
+def toggle_webhook(
     body: dict,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_INTEGRACIONES)),
@@ -825,7 +825,7 @@ async def toggle_webhook(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/automations")
-async def list_automations(
+def list_automations(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
     db: Session = Depends(get_db),
@@ -841,7 +841,7 @@ async def list_automations(
 
 
 @router.post("/automations", status_code=status.HTTP_201_CREATED)
-async def create_automation(
+def create_automation(
     body: AutomationCreate,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
@@ -873,7 +873,7 @@ async def create_automation(
 
 
 @router.put("/automations/{automation_id}")
-async def update_automation(
+def update_automation(
     automation_id: int,
     body: AutomationUpdate,
     current_user: User = Depends(get_current_user),
@@ -903,7 +903,7 @@ async def update_automation(
 
 
 @router.delete("/automations/{automation_id}")
-async def delete_automation(
+def delete_automation(
     automation_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
@@ -916,7 +916,7 @@ async def delete_automation(
 
 
 @router.post("/automations/{automation_id}/toggle")
-async def toggle_automation(
+def toggle_automation(
     automation_id: int,
     body: dict,
     current_user: User = Depends(get_current_user),
@@ -931,7 +931,7 @@ async def toggle_automation(
 
 
 @router.get("/automations/{automation_id}/executions")
-async def automation_history(
+def automation_history(
     automation_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
@@ -963,7 +963,7 @@ async def automation_history(
 
 
 @router.post("/automations/{automation_id}/run")
-async def run_automation_manual(
+def run_automation_manual(
     automation_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),
@@ -977,7 +977,7 @@ async def run_automation_manual(
 
 
 @router.post("/automations/check-low-performance")
-async def check_low_performance(
+def check_low_performance(
     body: dict,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AUTOMATIZACIONES)),

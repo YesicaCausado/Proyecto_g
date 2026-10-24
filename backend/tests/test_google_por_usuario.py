@@ -1,7 +1,7 @@
 """
 Google Drive y Google Calendar: auditoría del rol Profesor.
 
-  * La conexión de Google es de cada usuario (RF-32): otro profesor de la
+  * La conexión de Google es de cada usuario (RF-53): otro profesor de la
     misma institución no ve la cuenta, no navega su Drive, no crea eventos en
     su Calendar ni puede desconectarla.
   * El state OAuth ya no lleva el JWT de la sesión y cada proveedor pide solo

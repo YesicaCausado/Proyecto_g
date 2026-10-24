@@ -9,7 +9,7 @@ function apiError(err: any, fallback: string): string {
 }
 
 // GET /super/bots (backend/app/api/super_stats.py). El Súper Profesor no crea
-// NeuroBots aquí: supervisa los de los profesores de su institución (RF-08).
+// NeuroBots aquí: supervisa los de los profesores de su institución (RF-63).
 interface BotItem {
   id: number; name: string; teacher: string; teacherActive: boolean; subject: string;
   groups: string[]; individualAssignments: number;

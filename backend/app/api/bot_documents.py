@@ -65,7 +65,7 @@ def _get_document(db: Session, bot: ExpertBot, document_id: int) -> BotDocument:
 
 
 @router.get("/{bot_id}/documents", response_model=BotDocumentListResponse)
-async def list_bot_documents(
+def list_bot_documents(
     bot_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_DOCUMENTOS_NEUROBOT)),
@@ -132,7 +132,7 @@ async def upload_bot_document(
 
 
 @router.get("/{bot_id}/documents/{document_id}/download")
-async def download_bot_document(
+def download_bot_document(
     bot_id: int,
     document_id: int,
     current_user: User = Depends(get_current_user),
@@ -151,7 +151,7 @@ async def download_bot_document(
 
 
 @router.delete("/{bot_id}/documents/{document_id}")
-async def delete_bot_document(
+def delete_bot_document(
     bot_id: int,
     document_id: int,
     current_user: User = Depends(get_current_user),

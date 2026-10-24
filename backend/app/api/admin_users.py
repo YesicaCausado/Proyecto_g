@@ -99,7 +99,7 @@ def _temporary_password() -> str:
 
 
 @router.get("/users")
-async def list_users_admin(
+def list_users_admin(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = Query(None, max_length=100),
@@ -134,7 +134,7 @@ async def list_users_admin(
 
 
 @router.patch("/users/{user_id}")
-async def update_user_admin(
+def update_user_admin(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
@@ -166,7 +166,7 @@ async def update_user_admin(
 
 
 @router.post("/users/{user_id}/reset-password")
-async def reset_user_password_admin(
+def reset_user_password_admin(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -185,7 +185,7 @@ async def reset_user_password_admin(
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user_admin(
+def delete_user_admin(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -217,7 +217,7 @@ async def delete_user_admin(
     "/stats",
     response_model=AdminStats,
 )
-async def get_admin_stats(
+def get_admin_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -296,7 +296,7 @@ async def get_admin_stats(
 @router.get(
     "/institutions",
 )
-async def list_institutions_admin(
+def list_institutions_admin(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     is_active: Optional[bool] = Query(
@@ -354,16 +354,23 @@ async def list_institutions_admin(
     # Respuesta
     # ------------------------------------------------------------------------
 
+    # Conteos de toda la página en una consulta (antes 2 por institución).
+    counts = {}
+    ids = [i.id for i in institutions]
+    if ids:
+        for inst_id, role, n in (
+            db.query(User.institution_id, User.role, func.count(User.id))
+            .filter(User.institution_id.in_(ids),
+                    User.role.in_([UserRole.PROFESOR.value, UserRole.ESTUDIANTE.value]))
+            .group_by(User.institution_id, User.role)
+            .all()
+        ):
+            counts[(inst_id, role)] = n
+
     results = []
     for institution in institutions:
-        teachers_count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.PROFESOR.value,
-        ).count()
-        students_count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.ESTUDIANTE.value,
-        ).count()
+        teachers_count = counts.get((institution.id, UserRole.PROFESOR.value), 0)
+        students_count = counts.get((institution.id, UserRole.ESTUDIANTE.value), 0)
         results.append({
             "id": institution.id,
             "name": institution.name,
@@ -383,7 +390,7 @@ async def list_institutions_admin(
 
 
 @router.get("/audit-logs")
-async def list_audit_logs_admin(
+def list_audit_logs_admin(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     action: Optional[str] = Query(None, max_length=100),
@@ -446,7 +453,7 @@ async def list_audit_logs_admin(
     response_model=InstitutionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_institution_admin(
+def create_institution_admin(
     payload: InstitutionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -568,7 +575,7 @@ async def create_institution_admin(
     "/institutions/{institution_id}",
     response_model=InstitutionResponse,
 )
-async def update_institution_admin(
+def update_institution_admin(
     institution_id: int,
     payload: InstitutionCreate,
     db: Session = Depends(get_db),
@@ -662,7 +669,7 @@ class InstitutionPatchPayload(BaseModel):
 @router.patch(
     "/institutions/{institution_id}",
 )
-async def patch_institution_admin(
+def patch_institution_admin(
     institution_id: int,
     payload: InstitutionPatchPayload,
     db: Session = Depends(get_db),
@@ -713,7 +720,7 @@ async def patch_institution_admin(
 # ============================================================================
 
 @router.get("/config")
-async def admin_get_config(
+def admin_get_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -845,7 +852,7 @@ async def admin_get_config(
     "/institutions/{institution_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_institution_admin(
+def delete_institution_admin(
     institution_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

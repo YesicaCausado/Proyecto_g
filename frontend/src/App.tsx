@@ -5,6 +5,7 @@ import { NotificationsProvider } from './context/NotificationsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import ConnectionStatus from './components/ConnectionStatus';
 import { PRIVACY_POLICY_PATH } from './data/legal';
 
 // ── Carga diferida (code splitting) por ruta ───────────────────
@@ -25,6 +26,7 @@ const MyClassesPage        = lazy(() => import('./pages/student/MyClassesPage'))
 const ClassroomPage        = lazy(() => import('./pages/student/ClassroomPage'));
 const QuizzesPage          = lazy(() => import('./pages/student/QuizzesPage'));
 const EvaluationsPage      = lazy(() => import('./pages/student/EvaluationsPage'));
+const DiagnosticPage       = lazy(() => import('./pages/student/DiagnosticPage'));
 const DesempenoPage        = lazy(() => import('./pages/student/DesempenoPage'));
 const MaterialPage         = lazy(() => import('./pages/student/MaterialPage'));
 const TableroPage          = lazy(() => import('./pages/student/TableroPage'));
@@ -108,6 +110,13 @@ function AppRoutes() {
         <Route path="/evaluations" element={
           <ProtectedRoute role="estudiante"><Layout><EvaluationsPage /></Layout></ProtectedRoute>
         } />
+        {/* Diagnóstico inicial por competencia (RF-13) */}
+        <Route path="/diagnostic" element={
+          <ProtectedRoute role="estudiante"><Layout><DiagnosticPage /></Layout></ProtectedRoute>
+        } />
+        <Route path="/diagnostic/:slug" element={
+          <ProtectedRoute role="estudiante"><Layout><DiagnosticPage /></Layout></ProtectedRoute>
+        } />
         {/* Historial de quizzes dentro de la sección Desafíos */}
         <Route path="/quizzes/history" element={
           <ProtectedRoute role="estudiante"><Layout><QuizzesPage /></Layout></ProtectedRoute>
@@ -179,6 +188,7 @@ export default function App() {
         <NotificationsProvider>
           <AppRoutes />
           <PWAInstallPrompt />
+          <ConnectionStatus />
         </NotificationsProvider>
       </AuthProvider>
     </HashRouter>

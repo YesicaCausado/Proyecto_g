@@ -21,6 +21,7 @@ import {
   Play,
   Target,
   ClipboardCheck,
+  ClipboardList,
   Bot,
 } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
@@ -73,6 +74,7 @@ const iconMap: Record<string, ReactNode> = {
   meta: <Target className="w-4 h-4" />,
   evaluaciones: <ClipboardCheck className="w-4 h-4" />,
   neurobots: <Bot className="w-4 h-4" />,
+  diagnostico: <ClipboardList className="w-4 h-4" />,
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -110,6 +112,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {
           label: 'APRENDIZAJE',
           items: [
+            { id: 'diagnostico', type: 'link', to: '/diagnostic', label: 'Diagnóstico inicial', icon: 'diagnostico' },
             {
               id: 'competencias',
               type: 'group',
@@ -162,7 +165,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       ].filter((sec) => sec.items.length > 0)) as NavSection[];
 
   // ── Estado activo de una opción ──────────────────────────────────────
-  const linkActive = (item: NavLinkItem): boolean => exact(item.to);
+  const linkActive = (item: NavLinkItem): boolean =>
+    exact(item.to) || (item.to === '/diagnostic' && location.pathname.startsWith('/diagnostic/'));
   const groupActive = (group: NavGroupItem): boolean =>
     group.children.some((c) => linkActive(c));
 
