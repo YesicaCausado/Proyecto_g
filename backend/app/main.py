@@ -35,6 +35,7 @@ from app.api import teacher_materials
 from app.api import student_materials
 from app.api import teacher_evaluations
 from app.api import student_evaluations
+from app.api import student_diagnostic
 from app.api import consents
 from app.api import teacher_reports
 from app.api import teacher_ai
@@ -425,6 +426,21 @@ app.include_router(
 
 app.include_router(
     voice.router,
+    prefix="/api/v1",
+)
+
+
+# ------------------------------------------------------------
+# DIAGNÓSTICO INICIAL (estudiante y vista del profesor)
+# ------------------------------------------------------------
+
+app.include_router(
+    student_diagnostic.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    student_diagnostic.teacher_router,
     prefix="/api/v1",
 )
 

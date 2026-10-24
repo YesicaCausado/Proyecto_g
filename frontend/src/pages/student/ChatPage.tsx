@@ -17,6 +17,7 @@ import type { VRMTutorHandle, CognitiveEmotion } from "../../components/VRMTutor
 import QuizPanel, { parseQuizFromMessage, type QuizData } from "../../components/QuizPanel";
 import BotMessageWithActions from "../../components/BotMessageWithActions";
 import NeuronAvatar from "../../components/NeuronAvatar";
+import { useOnlineStatus } from "../../hooks/useOnlineStatus";
 
 interface ConversationSummary {
   id: number;
@@ -358,6 +359,8 @@ const mapFacialEmotion = (s: FacialSnapshotLike): string => {
 };
 
 export default function ChatPage() {
+  // El tutor de IA siempre necesita conexión (RNF-11).
+  const online = useOnlineStatus();
   const [searchParams] = useSearchParams();
   const { slug } = useParams<{ slug: string }>();
   const skillParam    = searchParams.get("skill");
@@ -675,7 +678,7 @@ export default function ChatPage() {
   };
 
   const sendMessageWithText = async (msgContent: string, skillKeyOverride?: string, modeOverride?: InputMode | "selection") => {
-    if (!msgContent.trim() || sending) return;
+    if (!msgContent.trim() || sending || !online) return;
 
     // Resúmenes del turno, tomados en el instante del envío.
     const behavioralMetrics = metrics.getMetrics(msgContent);
@@ -1136,13 +1139,13 @@ export default function ChatPage() {
                     handleFreeSubmit();
                   }
                 }}
-                placeholder="Escribe tu pregunta aquí..."
-                disabled={sending}
+                placeholder={online ? "Escribe tu pregunta aquí..." : "Sin conexión: el tutor de IA necesita internet"}
+                disabled={sending || !online}
                 className="flex-1 px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99] text-sm disabled:opacity-50 bg-[#F7F6F3] transition-all"
               />
               <button
                 onClick={handleFreeSubmit}
-                disabled={!freeInput.trim() || sending}
+                disabled={!freeInput.trim() || sending || !online}
                 className="p-2.5 bg-[#37352F] text-white rounded-md hover:bg-[#2F2D2B] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
@@ -1532,13 +1535,13 @@ export default function ChatPage() {
               onChange={(e) => handleInputChange(e.target.value)}
               onPaste={(e) => metrics.onPaste(e.clipboardData.getData("text").length)}
               onKeyDown={handleSendKeyDown}
-              placeholder="Escribe tu respuesta..."
-              disabled={sending}
+              placeholder={online ? "Escribe tu respuesta..." : "Sin conexión: el tutor de IA necesita internet"}
+              disabled={sending || !online}
               className="min-w-0 flex-1 px-3 sm:px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-[#F7F6F3]"
             />
             <button
               onClick={sendMessage}
-              disabled={!input.trim() || sending}
+              disabled={!input.trim() || sending || !online}
               className="p-2.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}

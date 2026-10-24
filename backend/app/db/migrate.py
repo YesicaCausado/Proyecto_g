@@ -97,6 +97,9 @@ RUNTIME_COLUMNS = [
     ("classrooms", "competency", "VARCHAR(30)"),
     ("teacher_evaluations", "competency", "VARCHAR(30)"),
     ("quiz_history", "competency", "VARCHAR(30)"),
+    # Evaluación del tutor de IA en el diagnóstico inicial (019)
+    ("diagnostic_results", "tutor_feedback", "TEXT"),
+    ("diagnostic_results", "feedback_provider", "VARCHAR(20)"),
 ]
 
 # Índices que deben existir. (nombre, tabla, columnas). Los ix_* coinciden con
@@ -126,6 +129,8 @@ REQUIRED_INDEXES = [
     ("ix_teacher_folders_teacher_id", "teacher_folders", "teacher_id"),
     ("ix_quiz_history_classroom_id", "quiz_history", "classroom_id"),
     ("ix_student_bot_assignments_teacher_id", "student_bot_assignments", "teacher_id"),
+    # Bloqueo persistente de cuentas (019): fallos recientes de un usuario.
+    ("idx_audit_logs_actor_action_created", "audit_logs", "performed_by_id, action, created_at"),
 ]
 
 _DDL_LOCK_TIMEOUT = "3s"
@@ -184,6 +189,11 @@ def prepare_postgres_schema(engine) -> None:
         try:
             Base.metadata.create_all(bind=engine, tables=missing_tables)
             logger.info("Tablas creadas al arrancar: %s", ", ".join(t.name for t in missing_tables))
+            # Sin RLS, Supabase expondría la tabla nueva por su API REST. El
+            # backend entra como dueño de las tablas y no se ve afectado.
+            with engine.begin() as conn:
+                for t in missing_tables:
+                    conn.execute(text(f'ALTER TABLE "{t.name}" ENABLE ROW LEVEL SECURITY'))
         except Exception as e:  # noqa: BLE001
             logger.error(f"Esquema: no se pudieron crear tablas: {str(e)[:200]}")
     created = {t.name for t in missing_tables}

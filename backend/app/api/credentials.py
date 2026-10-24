@@ -218,7 +218,7 @@ def _client_ip(request: Request) -> str:
 # ─── Admin: Instituciones ─────────────────────────────────────────────────────
 
 @router.post("/admin/institutions", response_model=InstitutionResponse, status_code=201)
-async def create_institution(
+def create_institution(
     payload: InstitutionCreate,
     request: Request,
     db: Session = Depends(get_db),
@@ -288,7 +288,7 @@ async def create_institution(
     }
 
 @router.get("/admin/stats", response_model=AdminStats)
-async def get_admin_stats(
+def get_admin_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -344,7 +344,7 @@ def _get_my_institution(db: Session, user: User) -> Institution:
 
 
 @router.get("/super/teachers", response_model=List[TeacherListItem])
-async def list_teachers(
+def list_teachers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -370,7 +370,7 @@ async def list_teachers(
 
 
 @router.delete("/super/teachers/{user_id}")
-async def delete_teacher(
+def delete_teacher(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -398,7 +398,7 @@ async def delete_teacher(
 
 
 @router.post("/super/teachers/bulk-delete")
-async def bulk_delete_teachers(
+def bulk_delete_teachers(
     payload: dict,
     request: Request,
     db: Session = Depends(get_db),
@@ -428,7 +428,7 @@ async def bulk_delete_teachers(
 
 
 @router.post("/super/teachers", response_model=CredentialItem, status_code=201)
-async def create_teacher(
+def create_teacher(
     payload: TeacherCreate,
     request: Request,
     db: Session = Depends(get_db),
@@ -478,7 +478,7 @@ async def create_teacher(
 
 
 @router.put("/super/teachers/{user_id}", response_model=TeacherListItem)
-async def update_teacher(
+def update_teacher(
     user_id: int,
     payload: TeacherUpdate,
     request: Request,
@@ -745,7 +745,7 @@ def _institution_classroom_for_enrollment(db: Session, institution: Institution,
     return classroom
 
 @router.get("/super/students")
-async def list_students(
+def list_students(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -773,7 +773,7 @@ async def list_students(
 
 
 @router.delete("/super/students/{user_id}")
-async def delete_student(
+def delete_student(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -801,7 +801,7 @@ async def delete_student(
 
 
 @router.post("/super/students/bulk-delete")
-async def bulk_delete_students(
+def bulk_delete_students(
     payload: dict,
     request: Request,
     db: Session = Depends(get_db),
@@ -831,7 +831,7 @@ async def bulk_delete_students(
 
 
 @router.post("/super/students", response_model=CredentialItem, status_code=201)
-async def create_student(
+def create_student(
     payload: StudentCreate,
     request: Request,
     db: Session = Depends(get_db),
@@ -883,7 +883,7 @@ async def create_student(
 
 
 @router.put("/super/students/{user_id}", response_model=StudentListItem)
-async def update_student(
+def update_student(
     user_id: int,
     payload: StudentUpdate,
     request: Request,

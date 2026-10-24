@@ -49,7 +49,7 @@ def _to_meta(conv: Conversation) -> ConversationMeta:
 
 
 @router.get("", response_model=ConversationListResponse)
-async def list_conversations(
+def list_conversations(
     bot_id: Optional[int] = Query(None, description="Solo las conversaciones con este NeuroBot"),
     scope: Optional[str] = Query(None, description="competencias = solo chats sin NeuroBot; neurobots = solo con NeuroBot"),
     current_user: User = Depends(get_current_user),
@@ -78,7 +78,7 @@ async def list_conversations(
 
 
 @router.post("", response_model=ConversationMeta)
-async def create_conversation(
+def create_conversation(
     body: ConversationCreate,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
@@ -108,7 +108,7 @@ async def create_conversation(
 
 
 @router.get("/{conversation_id}")
-async def get_conversation(
+def get_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
@@ -143,7 +143,7 @@ async def get_conversation(
 
 
 @router.post("/{conversation_id}/rename", response_model=ConversationMeta)
-async def rename_conversation(
+def rename_conversation(
     conversation_id: int,
     body: ConversationRename,
     current_user: User = Depends(get_current_user),
@@ -165,7 +165,7 @@ async def rename_conversation(
 
 
 @router.delete("/{conversation_id}")
-async def delete_conversation(
+def delete_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),

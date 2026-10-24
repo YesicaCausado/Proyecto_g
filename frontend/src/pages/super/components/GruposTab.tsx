@@ -41,7 +41,7 @@ export default function GruposTab() {
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [newTeacherId, setNewTeacherId] = useState<number | ''>('');
   const [transferError, setTransferError] = useState('');
-  // Crear (id null) o editar un grupo (RF-10): POST/PATCH /super/classrooms.
+  // Crear (id null) o editar un grupo (RF-62): POST/PATCH /super/classrooms.
   const [form, setForm] = useState<{ id: number | null; name: string; subject: string; grade: string; description: string; teacherId: number | '' } | null>(null);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
