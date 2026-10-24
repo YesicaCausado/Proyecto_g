@@ -28,6 +28,10 @@ interface ConversationSummary {
   last_interaction?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
+  bot_id?: number | null;
+  /** false si el NeuroBot se desactivó o ya no hay acceso: se lee, no se continúa. */
+  bot_available?: boolean | null;
+  bot_unavailable_reason?: string | null;
 }
 
 interface ConversationMessage {
@@ -42,6 +46,8 @@ interface ConversationResponse {
     skill?: string | null;
     subject?: string | null;
     topic?: string | null;
+    bot_available?: boolean | null;
+    bot_unavailable_reason?: string | null;
   };
   messages?: ConversationMessage[];
 }
@@ -295,6 +301,11 @@ function ChatHistorySidebar({
                     <p className="text-[11px] text-[#787774] truncate mt-0.5">
                       {c.subject || c.skill || c.topic || "Neuro-Chat"}
                     </p>
+                    {c.bot_available === false && (
+                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#F1F1EF] text-[#787774]">
+                        NeuroBot no disponible
+                      </span>
+                    )}
                   </div>
                   <span
                     onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}
@@ -361,6 +372,10 @@ const mapFacialEmotion = (s: FacialSnapshotLike): string => {
 export default function ChatPage() {
   // El tutor de IA siempre necesita conexión (RNF-11).
   const online = useOnlineStatus();
+  // Motivo si el NeuroBot de esta conversación se desactivó o ya no hay acceso:
+  // el historial se puede leer, pero no se puede seguir conversando.
+  const [botUnavailable, setBotUnavailable] = useState<string | null>(null);
+  const canSend = online && !botUnavailable;
   const [searchParams] = useSearchParams();
   const { slug } = useParams<{ slug: string }>();
   const skillParam    = searchParams.get("skill");
@@ -540,6 +555,7 @@ export default function ChatPage() {
     const topicForBot = botTopic;
     const topic = topicForBot ?? skill?.topic;
     if (!topic) return;
+    setBotUnavailable(null);
     setSending(true);
     // Mostrar el espacio de chat inmediatamente; la bienvenida de la IA llega
     // después sin bloquear la navegación ni el input.
@@ -588,6 +604,7 @@ export default function ChatPage() {
       if (apiError.response?.status && apiError.response.status < 500) {
         const detail = apiError.response.data?.detail || `Error ${apiError.response.status}`;
         console.error("Error starting session (HTTP 4xx):", detail);
+        if (apiError.response.status === 403 && botIdParam) setBotUnavailable(detail);
         setSessionActive(true);
         setMessages([{
           id: Date.now().toString(),
@@ -678,7 +695,7 @@ export default function ChatPage() {
   };
 
   const sendMessageWithText = async (msgContent: string, skillKeyOverride?: string, modeOverride?: InputMode | "selection") => {
-    if (!msgContent.trim() || sending || !online) return;
+    if (!msgContent.trim() || sending || !canSend) return;
 
     // Resúmenes del turno, tomados en el instante del envío.
     const behavioralMetrics = metrics.getMetrics(msgContent);
@@ -750,6 +767,7 @@ export default function ChatPage() {
         // Error de cliente (4xx) — sí mostrar al usuario
         const detail = apiError.response.data?.detail || `Error ${apiError.response.status}`;
         console.error("Error sending message (HTTP 4xx):", detail);
+        if (apiError.response.status === 403 && (botIdParam || conversationId)) setBotUnavailable(detail);
         setMessages((prev) => [
           ...prev,
           {
@@ -886,6 +904,9 @@ export default function ChatPage() {
       setConversationId(id);
       setMessages(msgs);
       setSessionActive(true);
+      setBotUnavailable(conv?.bot_available === false
+        ? (conv.bot_unavailable_reason || "Este NeuroBot ya no está disponible.")
+        : null);
       if (conv?.skill || conv?.subject || conv?.topic) {
         // El backend guarda el nombre de la competencia como 'skill';
         // lo resolvemos a su clave estable para que el chat continúe en la
@@ -903,6 +924,7 @@ export default function ChatPage() {
   // Reinicia el estado del chat sin abrir el selector (tras eliminar, p. ej.).
   const resetChatState = () => {
     setConversationId(null);
+    setBotUnavailable(null);
     setSessionActive(false);
     setMessages([]);
     setLastResponse(null);
@@ -1139,13 +1161,13 @@ export default function ChatPage() {
                     handleFreeSubmit();
                   }
                 }}
-                placeholder={online ? "Escribe tu pregunta aquí..." : "Sin conexión: el tutor de IA necesita internet"}
-                disabled={sending || !online}
+                placeholder={botUnavailable ? "Este NeuroBot ya no está disponible" : online ? "Escribe tu pregunta aquí..." : "Sin conexión: el tutor de IA necesita internet"}
+                disabled={sending || !canSend}
                 className="flex-1 px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-[#E5F3FF] focus:border-[#0B6E99] text-sm disabled:opacity-50 bg-[#F7F6F3] transition-all"
               />
               <button
                 onClick={handleFreeSubmit}
-                disabled={!freeInput.trim() || sending || !online}
+                disabled={!freeInput.trim() || sending || !canSend}
                 className="p-2.5 bg-[#37352F] text-white rounded-md hover:bg-[#2F2D2B] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
@@ -1535,13 +1557,13 @@ export default function ChatPage() {
               onChange={(e) => handleInputChange(e.target.value)}
               onPaste={(e) => metrics.onPaste(e.clipboardData.getData("text").length)}
               onKeyDown={handleSendKeyDown}
-              placeholder={online ? "Escribe tu respuesta..." : "Sin conexión: el tutor de IA necesita internet"}
-              disabled={sending || !online}
+              placeholder={botUnavailable ? "Este NeuroBot ya no está disponible" : online ? "Escribe tu respuesta..." : "Sin conexión: el tutor de IA necesita internet"}
+              disabled={sending || !canSend}
               className="min-w-0 flex-1 px-3 sm:px-4 py-2.5 rounded-md border border-[#E9E9E7] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 text-sm disabled:opacity-50 bg-[#F7F6F3]"
             />
             <button
               onClick={sendMessage}
-              disabled={!input.trim() || sending || !online}
+              disabled={!input.trim() || sending || !canSend}
               className="p-2.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}

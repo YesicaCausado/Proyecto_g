@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import and_, or_, func
 
 from app.core import validators as v
 from app.db.database import get_db
@@ -137,10 +137,11 @@ def list_bots(
         if creator_id is not None:
             query = query.filter(ExpertBot.creator_id == creator_id)
     elif current_user.role != UserRole.SUPER_PROFESOR.value:
-        # Profesores y estudiantes: solo ven bots públicos de su institución O los que ellos mismos crearon.
+        # Profesores y estudiantes: solo ven bots públicos y activos de su institución O los que ellos mismos crearon.
         # Se ignora el parámetro is_public del cliente para evitar enumeración de bots privados ajenos.
         query = _same_institution_creators(query, current_user).filter(
-            or_(ExpertBot.is_public == True, ExpertBot.creator_id == current_user.id)
+            or_(and_(ExpertBot.is_public == True, ExpertBot.is_active == True),
+                ExpertBot.creator_id == current_user.id)
         )
         if creator_id is not None:
             query = query.filter(ExpertBot.creator_id == creator_id)

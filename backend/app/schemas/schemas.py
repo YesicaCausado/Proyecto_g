@@ -199,6 +199,11 @@ class ConversationMeta(BaseModel):
     updated_at: datetime
     last_interaction: datetime
     bot_id: Optional[int] = None    # NeuroBot de la conversación (None = competencia)
+    bot_name: Optional[str] = None
+    # Con NeuroBot: False si se desactivó o el estudiante ya no tiene acceso;
+    # el historial se puede leer, pero no continuar (bot_unavailable_reason).
+    bot_available: Optional[bool] = None
+    bot_unavailable_reason: Optional[str] = None
 
 
 class ConversationListResponse(BaseModel):
