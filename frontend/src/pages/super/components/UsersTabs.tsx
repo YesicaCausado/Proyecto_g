@@ -59,7 +59,7 @@ function printCredentials(credentials: any[], title: string) {
 const TEACHER_TEMPLATE = {
   filename: 'plantilla_profesores.csv',
   headers: 'nombre_completo,tipo_documento,numero_documento,correo,area',
-  example: 'Carlos Martínez,CC,1234567890,carlos@colegio.edu.co,Matemáticas',
+  example: 'Carlos Alvarez,CC,1234567890,carlos@colegio.edu.co,Matemáticas',
 };
 const STUDENT_TEMPLATE = {
   filename: 'plantilla_estudiantes.csv',

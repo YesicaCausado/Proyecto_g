@@ -35,7 +35,7 @@ API = "/api/v1"
 
 # Idénticas a TEACHER_TEMPLATE / STUDENT_TEMPLATE del frontend.
 TEACHER_HEADERS = "nombre_completo,tipo_documento,numero_documento,correo,area"
-TEACHER_EXAMPLE = "Carlos Martínez,CC,1234567890,carlos@colegio.edu.co,Matemáticas"
+TEACHER_EXAMPLE = "Carlos Alvarez,CC,1234567890,carlos@colegio.edu.co,Matemáticas"
 STUDENT_HEADERS = "nombre_completo,tipo_documento,numero_documento,correo,grado,fecha_nacimiento"
 STUDENT_EXAMPLE = "Ana Gómez,TI,1098765432,ana.gomez@colegio.edu.co,10°,2009-05-14"
 
@@ -101,7 +101,7 @@ class CargaMasivaTests(unittest.TestCase):
         self.assertEqual(r.json()["total_created"], 1)
         u = self.user("1234567890")
         self.assertEqual((u.full_name, u.role, u.document_type, u.subject_area, u.email),
-                         ("Carlos Martínez", "profesor", "CC", "Matemáticas", "carlos@colegio.edu.co"))
+                         ("Carlos Alvarez", "profesor", "CC", "Matemáticas", "carlos@colegio.edu.co"))
         # Volver a subir el mismo archivo no duplica.
         again = self.send("teachers", "bulk", content).json()
         self.assertEqual((again["total_created"], again["errors"][0]["error"]), (0, "Documento duplicado en el sistema"))
