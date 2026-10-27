@@ -38,7 +38,10 @@ export default function ProtectedRoute({ children, role, roles }: Props) {
     return <Navigate to="/change-password" replace />;
   }
 
+  // El cambio obligatorio de contraseña tiene prioridad; el aviso se presenta
+  // después de que el estudiante vuelva a iniciar sesión.
   if (
+    !user?.must_change_password &&
     user?.role === 'estudiante' &&
     user.privacy_notice_required_version &&
     user.privacy_notice_acknowledged_version !== user.privacy_notice_required_version &&
