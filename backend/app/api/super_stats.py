@@ -34,6 +34,12 @@ from app.models.expert_bot import ExpertBot
 from app.models.messages import DirectMessage
 from app.services.competencies import COMP_NAMES, classroom_competency, valid_key
 from app.services import neuroalert_service
+from app.services.capacity import (
+    MAX_CLASSROOMS_PER_INSTITUTION,
+    effective_classroom_limit,
+    institution_classroom_count,
+    lock_capacity,
+)
 
 router = APIRouter(prefix="/super", tags=["Super Profesor - Stats"])
 
@@ -731,6 +737,7 @@ def get_super_classrooms(
             "competency":  classroom_competency(c),
             "grade":       c.grade or "—",
             "students":    student_count,
+            "max_students": effective_classroom_limit(c),
             "code":        c.invite_code,
             "status":      "activo" if c.is_active else "inactivo",
             "avg":         avg,
@@ -817,7 +824,7 @@ class SuperClassroomCreate(BaseModel):
     description: str = Field(default="", max_length=2000)
     teacher_id: int
     competency: Optional[str] = Field(default=None, max_length=30)
-    max_students: int = Field(default=40, ge=1, le=100)
+    max_students: int = Field(default=40, ge=1, le=200)
 
     @field_validator("grade")
     @classmethod
@@ -852,6 +859,12 @@ def create_super_classroom(
     _require_super(current_user)
     if not current_user.institution_id:
         raise HTTPException(400, "No tienes una institución asignada")
+    lock_capacity(db, "institution", current_user.institution_id)
+    if institution_classroom_count(db, current_user.institution_id) >= MAX_CLASSROOMS_PER_INSTITUTION:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La institución admite como máximo {MAX_CLASSROOMS_PER_INSTITUTION} aulas.",
+        )
     teacher = _active_institution_teacher(db, current_user, data.teacher_id)
     name, subject = data.name.strip(), data.subject.strip()
     if not name or not subject:

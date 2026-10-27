@@ -48,6 +48,21 @@ depende solo de su rol.
 
 Detalle de permisos: [docs/MATRIZ_PERMISOS.md](docs/MATRIZ_PERMISOS.md).
 
+## Capacidad por institución
+
+La API aplica límites compartidos por toda la plataforma: 40 instituciones
+activas, hasta 8 aulas por institución y hasta 200 estudiantes por aula. Cada
+institución admite como máximo 1.600 cuentas activas de estudiante y la
+plataforma, 64.000. Estos topes también se validan en altas individuales,
+importaciones CSV, inscripciones y reactivaciones; la interfaz solo informa y
+anticipa los límites, mientras que la API es la autoridad.
+
+Las aulas existentes se conservan. Las aulas configuradas por debajo de 200
+mantienen su cupo menor; los valores históricos superiores se limitan a 200 en
+la aplicación, sin reescribir los datos. Las aulas inactivas también cuentan
+para el máximo de ocho. No se requiere una migración de esquema para estas
+reglas.
+
 ---
 
 ## Funciones principales

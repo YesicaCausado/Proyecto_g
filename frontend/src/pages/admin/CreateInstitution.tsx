@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   School, User, Mail, Hash, ShieldCheck, Copy, CheckCircle,
   ArrowLeft, Eye, EyeOff, Building2, FileText, BadgeCheck,
@@ -32,6 +32,10 @@ interface FormState {
 }
 interface Credential { full_name: string; username: string; temp_password: string; role: string; }
 interface CreatedInstitution { id: number; name: string; dane_code: string; credential: Credential; }
+interface InstitutionCapacity {
+  institutions_used: number; institutions_limit: number; institutions_available: number;
+  students_used: number; students_limit: number; students_available: number;
+}
 
 const EMPTY: FormState = {
   name: '', dane_code: '',
@@ -46,9 +50,17 @@ export default function CreateInstitution() {
   const [created, setCreated]         = useState<CreatedInstitution | null>(null);
   const [showPass, setShowPass]       = useState(false);
   const [copied, setCopied]           = useState<'user' | 'pass' | 'all' | null>(null);
+  const [capacity, setCapacity]       = useState<InstitutionCapacity | null>(null);
+  const [capacityError, setCapacityError] = useState('');
 
   const [notice, setNotice]           = useState<Partial<Record<keyof FormState, string>>>({});
   const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    api.get<InstitutionCapacity>('/admin/capacity')
+      .then(({ data }) => setCapacity(data))
+      .catch(() => setCapacityError('No se pudo consultar la capacidad actual. El servidor validará el límite al guardar.'));
+  }, []);
 
   const recheck = (field: keyof FormState, next: FormState, always = false) => {
     if (field === 'sp_document_type') field = 'sp_document_number';
@@ -110,6 +122,11 @@ export default function CreateInstitution() {
         sp_email: normalizeEmail(form.sp_email),
       });
       setCreated(data);
+      setCapacity(current => current ? {
+        ...current,
+        institutions_used: current.institutions_used + 1,
+        institutions_available: Math.max(0, current.institutions_available - 1),
+      } : current);
     } catch (err: any) {
       const byField = apiFieldErrors(err) as typeof errors;
       if (Object.keys(byField).length) { setErrors(byField); focusFirstInvalid(formRef.current); }
@@ -200,6 +217,15 @@ export default function CreateInstitution() {
         </div>
       </div>
 
+      <div className="mb-5 rounded-md border border-[#E5F3FF] bg-[#F4FAFF] px-4 py-3 text-sm text-[#0B6E99]" aria-live="polite">
+        {capacity ? (
+          <>Instituciones activas: <strong>{capacity.institutions_used}/{capacity.institutions_limit}</strong>.
+            Disponibles: <strong>{capacity.institutions_available}</strong>.
+            {' · '}Estudiantes activos: <strong>{capacity.students_used}/{capacity.students_limit}</strong>
+            {' · '}cupos globales: <strong>{capacity.students_available}</strong>.</>
+        ) : capacityError ? capacityError : 'Consultando capacidad de instituciones…'}
+      </div>
+
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
 
         {/* Datos institución */}
@@ -250,9 +276,9 @@ export default function CreateInstitution() {
           <div className="bg-[#FDEEEE] border border-[#F4BDBD] rounded-md p-4 text-sm text-[#E03E3E]">{serverError}</div>
         )}
 
-        <button type="submit" disabled={loading}
+        <button type="submit" disabled={loading || capacity?.institutions_available === 0}
           className="w-full py-3 bg-[#37352F] text-white rounded-md font-medium text-sm hover:bg-[#2F2D2B] disabled:opacity-50 flex items-center justify-center gap-2">
-          {loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creando institución…</> : <><School className="w-4 h-4" />Crear institución y generar credenciales</>}
+          {loading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creando institución…</> : capacity?.institutions_available === 0 ? 'Límite de instituciones alcanzado' : <><School className="w-4 h-4" />Crear institución y generar credenciales</>}
         </button>
       </form>
     </div>

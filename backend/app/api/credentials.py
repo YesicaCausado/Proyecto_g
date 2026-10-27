@@ -37,6 +37,20 @@ from app.services.consent_service import _parse_birth_date
 from app.services.consent_service import ADULT_AGE, age_on
 from app.services.email_service import send_credentials_email
 from app.services.mail.addresses import placeholder_email_for
+from app.services.capacity import (
+    MAX_ACTIVE_INSTITUTIONS,
+    MAX_STUDENTS_PLATFORM,
+    MAX_STUDENTS_PER_INSTITUTION,
+    active_institution_count,
+    classroom_student_count,
+    effective_classroom_limit,
+    institution_capacity_snapshot,
+    lock_capacity,
+    require_classroom_slots,
+    require_student_capacity,
+    platform_student_count,
+    require_existing_enrollment_capacity,
+)
 
 router = APIRouter(tags=["Credenciales B2B"])
 
@@ -238,6 +252,13 @@ def create_institution(
 ):
     _require_role(current_user, UserRole.ADMIN.value)
 
+    lock_capacity(db, "platform")
+    if active_institution_count(db) >= MAX_ACTIVE_INSTITUTIONS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La plataforma admite como máximo {MAX_ACTIVE_INSTITUTIONS} instituciones activas.",
+        )
+
     # Validar unicidad
     if db.query(Institution).filter(Institution.dane_code == payload.dane_code).first():
         raise HTTPException(400, "Ya existe una institución con ese Código DANE")
@@ -298,6 +319,36 @@ def create_institution(
             role=sp.role,
         ),
     }
+
+
+@router.get("/admin/capacity")
+def get_platform_capacity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.ADMIN.value)
+    used = active_institution_count(db)
+    students = platform_student_count(db)
+    return {
+        "institutions_used": used,
+        "institutions_limit": MAX_ACTIVE_INSTITUTIONS,
+        "institutions_available": max(0, MAX_ACTIVE_INSTITUTIONS - used),
+        "students_used": students,
+        "students_limit": MAX_STUDENTS_PLATFORM,
+        "students_available": max(0, MAX_STUDENTS_PLATFORM - students),
+    }
+
+
+@router.get("/institution/capacity")
+def get_institution_capacity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in (UserRole.SUPER_PROFESOR.value, UserRole.PROFESOR.value):
+        raise HTTPException(status_code=403, detail="Acceso restringido a usuarios de una institución.")
+    if not current_user.institution_id:
+        raise HTTPException(status_code=400, detail="Tu cuenta no tiene una institución asignada.")
+    return institution_capacity_snapshot(db, current_user.institution_id)
 
 @router.get("/admin/stats", response_model=AdminStats)
 def get_admin_stats(
@@ -877,6 +928,9 @@ def create_student(
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     institution = _get_my_institution(db, current_user)
 
+    lock_capacity(db, "institution", institution.id)
+    require_student_capacity(db, institution.id)
+
     if _document_taken(db, payload.document_number):
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
     if payload.email and _email_taken(db, payload.email):
@@ -991,6 +1045,10 @@ def update_student(
     if updates.get("email"):
         student.email = updates["email"]
     if "is_active" in updates:
+        if updates["is_active"] and not student.is_active:
+            lock_capacity(db, "institution", institution.id)
+            require_student_capacity(db, institution.id)
+            require_existing_enrollment_capacity(db, student.id)
         student.is_active = updates["is_active"]
     guardian_note = ""
     if "guardian_name" in updates:
@@ -1069,25 +1127,22 @@ async def bulk_create_students(
             "Confirma que cada autorización aplicable está respaldada y verificada antes de crear el lote.",
         )
     institution = _get_my_institution(db, current_user)
+    lock_capacity(db, "institution", institution.id)
+    lock_capacity(db, "platform")
     classroom = _institution_classroom_for_enrollment(db, institution, classroom_id)
     free_seats = None
     if classroom is not None:
-        taken = db.query(Enrollment).filter(
-            Enrollment.classroom_id == classroom.id, Enrollment.is_active == True,  # noqa: E712
-        ).count()
-        free_seats = max((classroom.max_students or 0) - taken, 0)
+        used = classroom_student_count(db, classroom.id)
+        free_seats = max(effective_classroom_limit(classroom) - used, 0)
     content = await _read_csv_upload(file)
 
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
     reader = _csv_reader(content, required_cols, STUDENT_CSV_COLUMNS)
 
-    created: List[CredentialItem] = []
     errors = []
     seen_docs_s: set = set()
     seen_emails_s: set = set()
-    pending_emails: list = []
-    enrolled = 0
-
+    rows_to_create = []
     for i, raw_row in _csv_rows(reader):
         row = _normalize_csv_row(raw_row)
         if not row or not any((value or "").strip() for value in row.values()):
@@ -1096,14 +1151,58 @@ async def bulk_create_students(
         if missing:
             errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
             continue
-
         err = _student_row_error(db, row, seen_docs_s, seen_emails_s)
-        if err is None and free_seats is not None and enrolled >= free_seats:
-            err = f"El grupo «{classroom.name}» no tiene cupos disponibles"
         if err:
             errors.append({"row": i, "error": err, "data": row})
             continue
+        seen_docs_s.add(row["numero_documento"])
+        if row.get("correo"):
+            seen_emails_s.add(row["correo"].lower())
+        rows_to_create.append((i, row))
 
+    institution_available_students = max(
+        0,
+        MAX_STUDENTS_PER_INSTITUTION - int(
+            db.query(User.id).filter(
+                User.institution_id == institution.id,
+                User.role == UserRole.ESTUDIANTE.value,
+                User.is_active.is_(True),
+            ).count()
+        ),
+    )
+    available_platform_students = max(0, MAX_STUDENTS_PLATFORM - platform_student_count(db))
+    if len(rows_to_create) > institution_available_students:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El archivo contiene {len(rows_to_create)} estudiantes válidos, pero la "
+                f"institución solo dispone de {institution_available_students} cupos de "
+                f"{MAX_STUDENTS_PER_INSTITUTION}. No se creó ningún registro."
+            ),
+        )
+    if len(rows_to_create) > available_platform_students:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El archivo contiene {len(rows_to_create)} estudiantes válidos, pero la "
+                f"plataforma solo dispone de {available_platform_students} cupos de "
+                f"{MAX_STUDENTS_PLATFORM}. No se creó ningún registro."
+            ),
+        )
+    if free_seats is not None and len(rows_to_create) > free_seats:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"El archivo contiene {len(rows_to_create)} estudiantes válidos, pero el grupo "
+                f"«{classroom.name}» solo dispone de {free_seats} cupos. No se creó ningún registro."
+            ),
+        )
+
+    created: List[CredentialItem] = []
+    pending_emails: list = []
+    enrolled = 0
+
+    for _i, row in rows_to_create:
         email = row.get("correo") or placeholder_email_for(row["numero_documento"])
         temp_pwd = _gen_temp_password()
         guardian_required = _guardian_authorization_required(row.get("fecha_nacimiento"))
@@ -1130,9 +1229,6 @@ async def bulk_create_students(
         )
         db.add(student)
         db.flush()
-        seen_docs_s.add(row["numero_documento"])
-        if row.get("correo"):
-            seen_emails_s.add(row["correo"].lower())
         notes = ""
         if classroom is not None:
             db.add(Enrollment(student_id=student.id, classroom_id=classroom.id))

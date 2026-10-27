@@ -33,8 +33,13 @@ from app.schemas.schemas import (
     InstitutionResponse,
     UserUpdate,
 )
-
-
+from app.services.capacity import (
+    MAX_ACTIVE_INSTITUTIONS,
+    active_institution_count,
+    lock_capacity,
+    require_existing_enrollment_capacity,
+    require_student_capacity,
+)
 router = APIRouter(
     prefix="/admin",
     tags=["Administración"],
@@ -153,6 +158,22 @@ def update_user_admin(
     for required in ("role", "is_active"):
         if required in changes and changes[required] is None:
             changes.pop(required)
+    next_role = changes.get("role", user.role)
+    next_active = changes.get("is_active", user.is_active)
+    becomes_active_student = (
+        next_role == UserRole.ESTUDIANTE.value
+        and next_active
+        and not (user.role == UserRole.ESTUDIANTE.value and user.is_active)
+    )
+    if becomes_active_student:
+        if not user.institution_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede activar un estudiante sin institución asignada.",
+            )
+        lock_capacity(db, "institution", user.institution_id)
+        require_student_capacity(db, user.institution_id)
+        require_existing_enrollment_capacity(db, user.id)
     if changes.get("email") and changes["email"] != (user.email or "").lower():
         duplicate = db.query(User).filter(func.lower(User.email) == changes["email"], User.id != user.id).first()
         if duplicate:
@@ -464,6 +485,13 @@ def create_institution_admin(
 
     _require_admin(current_user)
 
+    lock_capacity(db, "platform")
+    if active_institution_count(db) >= MAX_ACTIVE_INSTITUTIONS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La plataforma admite como máximo {MAX_ACTIVE_INSTITUTIONS} instituciones activas.",
+        )
+
     # ------------------------------------------------------------------------
     # Verificar código DANE
     # ------------------------------------------------------------------------
@@ -686,6 +714,13 @@ def patch_institution_admin(
         )
 
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("is_active") is True and not institution.is_active:
+        lock_capacity(db, "platform")
+        if active_institution_count(db) >= MAX_ACTIVE_INSTITUTIONS:
+            raise HTTPException(
+                status_code=409,
+                detail=f"No se puede activar la institución: la plataforma ya alcanzó el límite de {MAX_ACTIVE_INSTITUTIONS}.",
+            )
     if "dane_code" in changes:
         duplicate = (
             db.query(Institution)

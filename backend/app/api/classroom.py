@@ -70,6 +70,13 @@ def require_teacher(user: User):
 
 
 from app.services.enrollment_tracking_service import EnrollmentTrackingService  # noqa: E402
+from app.services.capacity import (
+    MAX_CLASSROOMS_PER_INSTITUTION,
+    effective_classroom_limit,
+    institution_classroom_count,
+    lock_capacity,
+    require_classroom_slots,
+)
 
 
 def _managed_classroom_or_404(db: Session, user: User, classroom_id: int) -> Classroom:
@@ -144,7 +151,7 @@ def classroom_response(
         grade=classroom.grade,
         invite_code=classroom.invite_code,
         is_active=classroom.is_active,
-        max_students=classroom.max_students,
+        max_students=effective_classroom_limit(classroom),
         color=getattr(
             classroom,
             "color",
@@ -174,6 +181,19 @@ def create_classroom(
     """Crear una nueva clase."""
 
     require_teacher(current_user)
+
+    institution_id = current_user.institution_id
+    if not institution_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tu cuenta no tiene una institución asignada.",
+        )
+    lock_capacity(db, "institution", institution_id)
+    if institution_classroom_count(db, institution_id) >= MAX_CLASSROOMS_PER_INSTITUTION:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"La institución admite como máximo {MAX_CLASSROOMS_PER_INSTITUTION} aulas.",
+        )
 
     # --------------------------------------------------------
     # Crear clase
@@ -671,7 +691,7 @@ def get_student_classroom_detail(
         subject=classroom.subject,
         grade=classroom.grade,
         color=classroom.color or "#2E6FDB",
-        max_students=classroom.max_students,
+        max_students=effective_classroom_limit(classroom),
         student_count=student_count,
         created_at=classroom.created_at,
         teacher_name=teacher_name,
@@ -785,7 +805,11 @@ def join_classroom(
     # colegio responde igual que un código inexistente.
     if classroom is not None:
         teacher = db.query(User).filter(User.id == classroom.teacher_id).first()
-        if teacher is None or teacher.institution_id != current_user.institution_id:
+        if (
+            teacher is None
+            or not current_user.institution_id
+            or teacher.institution_id != current_user.institution_id
+        ):
             classroom = None
 
     if not classroom:
@@ -794,14 +818,7 @@ def join_classroom(
             detail="Código de invitación no válido",
         )
 
-    current_count = (
-        db.query(Enrollment)
-        .filter(
-            Enrollment.classroom_id == classroom.id,
-            Enrollment.is_active == True,
-        )
-        .count()
-    )
+    lock_capacity(db, "institution", current_user.institution_id)
 
     # --------------------------------------------------------
     # Verificar inscripción existente
@@ -834,11 +851,7 @@ def join_classroom(
                         "que te reincorpore desde su lista de estudiantes."),
             )
 
-        if current_count >= classroom.max_students:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La clase está llena",
-            )
+        require_classroom_slots(db, classroom)
 
         from app.services import neurobot_service
         bots_before = neurobot_service.bot_ids_of_student(db, current_user.id)
@@ -871,11 +884,7 @@ def join_classroom(
     # Verificar cupo
     # --------------------------------------------------------
 
-    if current_count >= classroom.max_students:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La clase está llena",
-        )
+    require_classroom_slots(db, classroom)
 
     # --------------------------------------------------------
     # Crear inscripción
@@ -1154,6 +1163,11 @@ def reinstate_student(
 
     require_teacher(current_user)
     classroom = _managed_classroom_or_404(db, current_user, classroom_id)
+    institution_id = current_user.institution_id
+    if not institution_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Tu cuenta no tiene una institución asignada.")
+    lock_capacity(db, "institution", institution_id)
     if not classroom.is_active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="El grupo está desactivado")
@@ -1172,18 +1186,17 @@ def reinstate_student(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="El estudiante no está retirado de este grupo")
 
-    student = db.query(User).filter(User.id == student_id, User.is_active == True).first()  # noqa: E712
+    student = db.query(User).filter(
+        User.id == student_id,
+        User.institution_id == institution_id,
+        User.role == UserRole.ESTUDIANTE.value,
+        User.is_active == True,  # noqa: E712
+    ).first()
     if student is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="La cuenta del estudiante está desactivada")
 
-    active_count = (
-        db.query(Enrollment)
-        .filter(Enrollment.classroom_id == classroom.id, Enrollment.is_active == True)  # noqa: E712
-        .count()
-    )
-    if active_count >= classroom.max_students:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La clase está llena")
+    require_classroom_slots(db, classroom)
 
     from app.services import neurobot_service
     bots_before = neurobot_service.bot_ids_of_student(db, student.id)

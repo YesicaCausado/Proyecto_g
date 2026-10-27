@@ -458,7 +458,7 @@ class ClassroomCreate(BaseModel):
     description: str = Field(default="", max_length=2000)
     subject: str = Field(..., max_length=100)
     grade: str = Field(default="", max_length=20)
-    max_students: int = Field(default=40, ge=1, le=100)
+    max_students: int = Field(default=40, ge=1, le=200)
     color: str = Field(default="#2E6FDB", max_length=20)
     # Competencia Saber 11 del aula; vacía = la que corresponde a la materia.
     competency: Optional[str] = Field(default=None, max_length=30)

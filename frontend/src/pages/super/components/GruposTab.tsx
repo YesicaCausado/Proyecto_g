@@ -8,7 +8,11 @@ import api from '../../../services/api';
 // avg = promedio 0-10 de los estudiantes con sesiones; null = sin datos.
 interface Group {
   id: number; name: string; teacher: string; teacherId: number; teacherActive: boolean; subject: string; grade: string;
-  students: number; code: string; status: string; avg: number | null; lastActivity: string;
+  students: number; max_students: number; code: string; status: string; avg: number | null; lastActivity: string;
+}
+interface InstitutionCapacity {
+  classrooms_used: number; classrooms_limit: number; classrooms_available: number;
+  students_used: number; students_limit: number; students_available: number;
 }
 
 interface GroupDetail {
@@ -27,6 +31,7 @@ export default function GruposTab() {
   const [filterStatus, setFilterStatus] = useState<'todos' | 'activo' | 'inactivo'>('todos');
   const [groups, setGroups] = useState<Group[]>([]);
   const [uniqueStudents, setUniqueStudents] = useState<number | null>(null);
+  const [capacity, setCapacity] = useState<InstitutionCapacity | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
 
@@ -42,7 +47,7 @@ export default function GruposTab() {
   const [newTeacherId, setNewTeacherId] = useState<number | ''>('');
   const [transferError, setTransferError] = useState('');
   // Crear (id null) o editar un grupo (RF-62): POST/PATCH /super/classrooms.
-  const [form, setForm] = useState<{ id: number | null; name: string; subject: string; grade: string; description: string; teacherId: number | '' } | null>(null);
+  const [form, setForm] = useState<{ id: number | null; name: string; subject: string; grade: string; description: string; teacherId: number | ''; maxStudents: number } | null>(null);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -52,7 +57,11 @@ export default function GruposTab() {
   };
 
   const openCreate = async () => {
-    setForm({ id: null, name: '', subject: '', grade: '', description: '', teacherId: '' });
+    if (capacity?.classrooms_available === 0) {
+      setFormError('La institución ya alcanzó el máximo de 8 aulas.');
+      return;
+    }
+    setForm({ id: null, name: '', subject: '', grade: '', description: '', teacherId: '', maxStudents: 40 });
     setFormError('');
     try { setTeachers(await loadActiveTeachers()); }
     catch (err) { setFormError(errorText(err, 'No se pudo cargar la lista de profesores.')); }
@@ -60,7 +69,7 @@ export default function GruposTab() {
 
   const openEdit = async (group: Group) => {
     setFormError('');
-    setForm({ id: group.id, name: group.name, subject: group.subject, grade: group.grade === '—' ? '' : group.grade, description: '', teacherId: group.teacherId });
+    setForm({ id: group.id, name: group.name, subject: group.subject, grade: group.grade === '—' ? '' : group.grade, description: '', teacherId: group.teacherId, maxStudents: group.max_students });
     try {
       const { data } = await api.get(`/super/classrooms/${group.id}`);
       setForm(f => (f && f.id === group.id ? { ...f, description: data.description ?? '' } : f));
@@ -78,7 +87,7 @@ export default function GruposTab() {
     try {
       const payload = { name: form.name, subject: form.subject, grade: form.grade, description: form.description };
       if (form.id === null) {
-        await api.post('/super/classrooms', { ...payload, teacher_id: form.teacherId });
+        await api.post('/super/classrooms', { ...payload, max_students: form.maxStudents, teacher_id: form.teacherId });
         showToast(`Grupo «${form.name.trim()}» creado.`);
       } else {
         await api.patch(`/super/classrooms/${form.id}`, payload);
@@ -96,6 +105,9 @@ export default function GruposTab() {
   const loadGroups = (notify = false) => {
     setLoading(true);
     setLoadError('');
+    api.get<InstitutionCapacity>('/institution/capacity')
+      .then(({ data }) => setCapacity(data))
+      .catch(err => setLoadError(errorText(err, 'No se pudo consultar la capacidad institucional.')));
     return api.get('/super/classrooms')
       .then(r => {
         setGroups(r.data.classrooms ?? []);
@@ -223,6 +235,15 @@ export default function GruposTab() {
         ))}
       </div>
 
+      {capacity && (
+        <div className="rounded-md border border-[#E5F3FF] bg-[#F4FAFF] px-4 py-3 text-sm text-[#0B6E99]" aria-live="polite">
+          Aulas de la institución: <strong>{capacity.classrooms_used}/{capacity.classrooms_limit}</strong>
+          {' · '}disponibles: <strong>{capacity.classrooms_available}</strong>.
+          {' · '}Estudiantes: <strong>{capacity.students_used}/{capacity.students_limit}</strong>
+          {' · '}cupos institucionales: <strong>{capacity.students_available}</strong>.
+        </div>
+      )}
+
       {/* Barra de búsqueda + filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -235,8 +256,9 @@ export default function GruposTab() {
             className="w-full pl-9 pr-4 py-2 border border-[#E9E9E7] rounded-md text-sm focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F] outline-none bg-white"
           />
         </div>
-        <button onClick={openCreate}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-md bg-[#37352F] text-white font-medium hover:bg-[#191919]">
+        <button onClick={openCreate} disabled={capacity?.classrooms_available === 0}
+          title={capacity?.classrooms_available === 0 ? 'La institución ya tiene 8 aulas' : undefined}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-md bg-[#37352F] text-white font-medium hover:bg-[#191919] disabled:opacity-40">
           <Plus className="w-3.5 h-3.5" /> Crear grupo
         </button>
         <div className="flex gap-2">
@@ -301,8 +323,9 @@ export default function GruposTab() {
                 <td className="px-4 py-3.5 text-sm text-[#787774]">{group.grade}</td>
                 <td className="px-4 py-3.5 text-center">
                   <span className="inline-flex items-center gap-1 text-sm font-medium text-[#191919]">
-                    <Users className="w-3.5 h-3.5 text-[#787774]" /> {group.students}
+                    <Users className="w-3.5 h-3.5 text-[#787774]" /> {group.students}/{group.max_students}
                   </span>
+                  <span className="block text-[11px] text-[#AEADAB]">{Math.max(0, group.max_students - group.students)} cupos disponibles</span>
                 </td>
                 <td className="px-4 py-3.5 text-center">
                   <span className={`text-sm font-bold ${
@@ -471,13 +494,22 @@ export default function GruposTab() {
                 )}
               </label>
             )}
+            {form.id === null && (
+              <label className="block text-xs font-semibold text-[#787774]">
+                Máximo de estudiantes del aula
+                <input type="number" min={1} max={200} value={form.maxStudents}
+                  onChange={e => setForm(f => (f ? { ...f, maxStudents: Math.max(1, Math.min(200, Number(e.target.value) || 1)) } : f))}
+                  className="mt-1 w-full px-3 py-2 border border-[#E9E9E7] rounded-md text-sm font-normal text-[#191919] outline-none focus:ring-1 focus:ring-[#37352F]" />
+                <span className="block mt-1 font-normal">Máximo permitido: 200 estudiantes por aula.</span>
+              </label>
+            )}
             {form.id !== null && (
               <p className="text-[11px] text-[#AEADAB]">Para cambiar el profesor usa «Transferir».</p>
             )}
             {formError && <p className="text-xs text-[#E03E3E]">{formError}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setForm(null)} className="px-3 py-2 text-sm rounded-md border border-[#E9E9E7] hover:bg-[#F7F6F3]">Cancelar</button>
-              <button onClick={saveForm} disabled={saving}
+              <button onClick={saveForm} disabled={saving || (form.id === null && capacity?.classrooms_available === 0)}
                 className="px-3 py-2 text-sm rounded-md bg-[#37352F] text-white hover:bg-[#191919] disabled:opacity-40">
                 {saving ? 'Guardando…' : form.id === null ? 'Crear' : 'Guardar'}
               </button>

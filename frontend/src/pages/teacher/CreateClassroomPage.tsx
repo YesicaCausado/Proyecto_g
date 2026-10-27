@@ -1,7 +1,16 @@
-﻿import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+
+interface InstitutionCapacity {
+  classrooms_used: number;
+  classrooms_limit: number;
+  classrooms_available: number;
+  students_used: number;
+  students_limit: number;
+  students_available: number;
+}
 
 export default function CreateClassroomPage() {
   const navigate = useNavigate();
@@ -14,6 +23,14 @@ export default function CreateClassroomPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [capacity, setCapacity] = useState<InstitutionCapacity | null>(null);
+  const [capacityError, setCapacityError] = useState('');
+
+  useEffect(() => {
+    api.get<InstitutionCapacity>('/institution/capacity')
+      .then(({ data }) => setCapacity(data))
+      .catch(() => setCapacityError('No se pudo consultar la capacidad institucional. El servidor validará el límite al guardar.'));
+  }, []);
 
   const subjects = [
     'Matemáticas',
@@ -55,6 +72,17 @@ export default function CreateClassroomPage() {
       </button>
 
       <h1 className="text-xl font-semibold text-[#37352F] mb-6">Crear Nueva Clase</h1>
+
+      <div className="mb-5 rounded-md border border-[#E5F3FF] bg-[#F4FAFF] px-4 py-3 text-sm text-[#0B6E99]" aria-live="polite">
+        {capacity ? (
+          <>
+            Aulas de la institución: <strong>{capacity.classrooms_used}/{capacity.classrooms_limit}</strong>
+            {' · '}disponibles: <strong>{capacity.classrooms_available}</strong>.
+            {' · '}Estudiantes: <strong>{capacity.students_used}/{capacity.students_limit}</strong>
+            {' · '}cupos institucionales: <strong>{capacity.students_available}</strong>.
+          </>
+        ) : capacityError ? capacityError : 'Consultando capacidad institucional…'}
+      </div>
 
       <div className="bg-white border border-[#E9E9E7] rounded-md p-6">
         {error && (
@@ -133,14 +161,14 @@ export default function CreateClassroomPage() {
               value={form.max_students}
               onChange={(e) => setForm({ ...form, max_students: parseInt(e.target.value) || 40 })}
               min={1}
-              max={100}
+              max={200}
               className="w-full px-4 py-2.5 border border-[#E9E9E7] rounded-md focus:ring-1 focus:ring-[#37352F] focus:border-[#37352F] outline-none text-sm text-[#37352F]"
             />
           </div>
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || capacity?.classrooms_available === 0}
             className="w-full bg-[#37352F] text-white py-2.5 rounded-md text-sm font-medium hover:bg-[#2F2D2B] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
           >
             {loading ? (
@@ -149,7 +177,7 @@ export default function CreateClassroomPage() {
                 Creando...
               </>
             ) : (
-              'Crear Clase'
+              capacity?.classrooms_available === 0 ? 'Límite de 8 aulas alcanzado' : 'Crear Clase'
             )}
           </button>
         </form>
