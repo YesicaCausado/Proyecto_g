@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Clock, BookOpen, ClipboardList, Megaphone, Calendar, Info, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 
-type EventType = 'examen' | 'tarea' | 'clase' | 'anuncio' | 'evento' | 'feriado';
+type EventType = 'examen' | 'tarea' | 'clase' | 'anuncio' | 'evento' | 'feriado' | 'reunion' | 'capacitacion' | 'importante';
 
 interface CalEvent {
   id: string;
@@ -24,7 +24,10 @@ const EVENT_COLORS: Record<EventType, { bg: string; dot: string; textBg: string;
   clase:    { bg: 'bg-[#EEF3FD] border-[#C5D9F7]', dot: 'bg-[#2E6FDB]', textBg: 'bg-[#EEF3FD] text-[#2E6FDB]',    label: 'Clase',         icon: Calendar      },
   anuncio:  { bg: 'bg-emerald-50 border-emerald-100',dot:'bg-[#0F7B6C]', textBg: 'bg-emerald-100 text-[#0F7B6C]',  label: 'Anuncio',       icon: Megaphone     },
   evento:   { bg: 'bg-purple-50 border-purple-100', dot: 'bg-[#6940A5]', textBg: 'bg-purple-100 text-[#6940A5]',    label: 'Evento',        icon: Calendar      },
-  feriado:  { bg: 'bg-[#F7F6F3] border-[#E9E9E7]', dot: 'bg-[#787774]', textBg: 'bg-[#F7F6F3] text-[#787774]',    label: 'Feriado',       icon: Info          },
+  feriado:      { bg: 'bg-[#F7F6F3] border-[#E9E9E7]', dot: 'bg-[#787774]', textBg: 'bg-[#F7F6F3] text-[#787774]',    label: 'Feriado',       icon: Info          },
+  reunion:      { bg: 'bg-purple-50 border-purple-100', dot: 'bg-[#6940A5]', textBg: 'bg-purple-100 text-[#6940A5]',  label: 'Reunión',       icon: Calendar      },
+  capacitacion: { bg: 'bg-sky-50 border-sky-100',       dot: 'bg-[#0B6E99]', textBg: 'bg-sky-100 text-[#0B6E99]',    label: 'Capacitación',  icon: BookOpen      },
+  importante:   { bg: 'bg-orange-50 border-orange-100', dot: 'bg-[#D9730D]', textBg: 'bg-orange-100 text-[#D9730D]', label: 'Fecha importante', icon: Info        },
 };
 
 const today = new Date();
@@ -34,23 +37,29 @@ const todayStr = fmt(today.getFullYear(), today.getMonth(), today.getDate());
 
 // El backend acepta cualquier string en event_type; normalizar para no romper el render
 function normalizeType(value: unknown): EventType {
-  const t = String(value ?? '').trim().toLowerCase();
-  return t in EVENT_COLORS ? (t as EventType) : (t ? 'evento' : 'clase');
+  const type = String(value ?? '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(EVENT_COLORS, type)
+    ? type as EventType
+    : (type ? 'evento' : 'clase');
+}
+
+function getEventConfig(type: unknown) {
+  return EVENT_COLORS[normalizeType(type)];
 }
 
 function mapEvent(raw: any): CalEvent {
   return {
-    id:          String(raw.id),
-    title:       raw.title,
-    date:        raw.event_date,
-    type:        normalizeType(raw.event_type),
-    group:       raw.classroom_name ?? undefined,
-    teacherName: raw.teacher_name ?? undefined,
-    description: raw.description ?? undefined,
-    time:        raw.event_time ?? undefined,
-    isPersonal:  raw.is_personal === true,
-    canEdit:     raw.can_edit === true,
-    canDelete:   raw.can_delete === true,
+    id: String(raw?.id ?? ''),
+    title: String(raw?.title ?? 'Evento sin título'),
+    date: String(raw?.event_date ?? raw?.date ?? '').slice(0, 10),
+    type: normalizeType(raw?.event_type ?? raw?.type),
+    group: raw?.classroom_name ?? raw?.group ?? undefined,
+    teacherName: raw?.teacher_name ?? undefined,
+    description: raw?.description ?? undefined,
+    time: raw?.event_time ?? raw?.time ?? undefined,
+    isPersonal: raw?.is_personal === true,
+    canEdit: raw?.can_edit === true,
+    canDelete: raw?.can_delete === true,
   };
 }
 
@@ -73,7 +82,7 @@ export default function CalendarPage() {
     setLoading(true);
     const monthStr = `${year}-${pad(month + 1)}`;
     api.get(`/events?month=${monthStr}`)
-      .then(res => setEvents((res.data.events ?? []).map(mapEvent)))
+      .then(res => { const data = res.data; const list = Array.isArray(data) ? data : Array.isArray(data?.events) ? data.events : []; setEvents(list.map(mapEvent)); })
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
   }, [year, month]);

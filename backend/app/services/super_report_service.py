@@ -902,7 +902,11 @@ def followup_cases(ctx: Context, db: Session) -> List[dict]:
                 continue
             if (ctx.since and limit < ctx.since) or (ctx.until and limit >= ctx.until):
                 continue
-            classroom = ctx.all_classrooms[ev.classroom_id]
+            # El grupo puede haber sido eliminado o no estar disponible en el
+            # contexto institucional. No acceder por índice: evita KeyError.
+            classroom = ctx.all_classrooms.get(ev.classroom_id)
+            if classroom is None:
+                continue
             comp = classify_competency(classroom.subject, ev.title)
             if f.competency and comp != f.competency:
                 continue
@@ -1133,7 +1137,10 @@ def student_list(db: Session, user: User, filters: Filters, q: str = "", page: i
 def student_detail(db: Session, user: User, filters: Filters, student_id: int) -> dict:
     filters.student_id = student_id
     ctx = build_context(db, user, filters)
-    st = ctx.students[student_id]
+    st = ctx.students.get(student_id)
+    if st is None:
+        # No revelar si el estudiante existe fuera de la institución autorizada.
+        raise ReportError("No se encontró el estudiante en el alcance institucional autorizado.", 404)
     rs = sorted(ctx.results, key=lambda r: r.at)
     history = []
     last_by_key: Dict[Tuple[Optional[str], str], Result] = {}
@@ -1204,7 +1211,10 @@ def group_detail(db: Session, user: User, filters: Filters, classroom_id: int) -
         by_student.setdefault(r.student_id, []).append(r)
     students = []
     for sid in members:
-        st = ctx.students[sid]
+        st = ctx.students.get(sid)
+        if st is None:
+            # El contexto puede cambiar entre consultas; omitir relaciones huérfanas.
+            continue
         rs = sorted(by_student.get(sid, []), key=lambda r: r.at)
         students.append({
             "id": sid, "name": _name(st), "username": st.username,
@@ -1278,7 +1288,10 @@ def competency_detail(db: Session, user: User, filters: Filters, key: str) -> di
     students = []
     for sid, rs in by_student.items():
         rs.sort(key=lambda r: r.at)
-        st = ctx.students[sid]
+        st = ctx.students.get(sid)
+        if st is None:
+            # No incluir resultados sin un estudiante válido en el alcance.
+            continue
         students.append({
             "id": sid, "name": _name(st), "username": st.username,
             "groups": [ctx.all_classrooms[c].name for c in ctx.groups_by_student.get(sid, []) if c in ctx.all_classrooms],
@@ -1298,10 +1311,17 @@ def competency_detail(db: Session, user: User, filters: Filters, key: str) -> di
 
 def evaluation_rows(ctx: Context, db: Session) -> List[dict]:
     f = ctx.filters
-    evs = [e for e in ctx.evaluations if e.classroom_id in ctx.classrooms
-           and _active_in_period(e, ctx.since, ctx.until)
-           and (f.eval_status is None or e.status == f.eval_status)]
-    comps = {e.id: classify_competency(ctx.all_classrooms[e.classroom_id].subject, e.title) for e in evs}
+    evs = [
+        e for e in ctx.evaluations
+        if e.classroom_id in ctx.classrooms
+        and e.classroom_id in ctx.all_classrooms
+        and _active_in_period(e, ctx.since, ctx.until)
+        and (f.eval_status is None or e.status == f.eval_status)
+    ]
+    comps = {
+        e.id: classify_competency(ctx.all_classrooms[e.classroom_id].subject, e.title)
+        for e in evs
+    }
     if f.competency:
         evs = [e for e in evs if comps[e.id] == f.competency]
     if not evs:
@@ -1430,7 +1450,10 @@ def _with_period_all(ctx: Context, ev: TeacherEvaluation) -> Context:
     clone.since = None
     clone.until = None
     clone.filters = Filters(**{**ctx.filters.__dict__, "eval_status": None, "competency": None})
-    clone.classrooms = {ev.classroom_id: ctx.all_classrooms[ev.classroom_id]}
+    classroom = ctx.all_classrooms.get(ev.classroom_id)
+    if classroom is None:
+        raise ReportError("No se encontró el grupo asociado a la evaluación.", 404)
+    clone.classrooms = {ev.classroom_id: classroom}
     return clone
 
 

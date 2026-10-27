@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../../services/api';
 
-type EventType = 'examen' | 'tarea' | 'clase' | 'anuncio' | 'evento';
+type EventType = 'examen' | 'tarea' | 'clase' | 'anuncio' | 'evento' | 'feriado' | 'reunion' | 'capacitacion' | 'importante';
 
 interface CalEvent {
   id: string;
@@ -19,7 +19,11 @@ const EVENT_COLORS: Record<EventType, { bg: string; dot: string; label: string }
   tarea:    { bg: 'bg-orange-100 text-[#D9730D]',    dot: 'bg-[#D9730D]',  label: 'Tarea'     },
   clase:    { bg: 'bg-[#EEF3FD] text-[#2E6FDB]',    dot: 'bg-[#2E6FDB]',  label: 'Clase'     },
   anuncio:  { bg: 'bg-emerald-100 text-[#0F7B6C]',  dot: 'bg-[#0F7B6C]',  label: 'Anuncio'   },
-  evento:   { bg: 'bg-purple-100 text-[#6940A5]',   dot: 'bg-[#6940A5]',  label: 'Evento'    },
+  evento:       { bg: 'bg-purple-100 text-[#6940A5]',   dot: 'bg-[#6940A5]',  label: 'Evento'        },
+  feriado:      { bg: 'bg-[#F7F6F3] text-[#787774]',     dot: 'bg-[#787774]',  label: 'Feriado'       },
+  reunion:      { bg: 'bg-purple-100 text-[#6940A5]',    dot: 'bg-[#6940A5]',  label: 'Reunión'       },
+  capacitacion: { bg: 'bg-sky-100 text-[#0B6E99]',      dot: 'bg-[#0B6E99]',  label: 'Capacitación'  },
+  importante:   { bg: 'bg-orange-100 text-[#D9730D]',   dot: 'bg-[#D9730D]',  label: 'Fecha importante' },
 };
 
 const today = new Date();
@@ -30,16 +34,27 @@ const todayStr = dateStr(today.getFullYear(), today.getMonth(), today.getDate())
 const DAYS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+function normalizeType(value: unknown): EventType {
+  const type = String(value ?? '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(EVENT_COLORS, type)
+    ? type as EventType
+    : (type ? 'evento' : 'clase');
+}
+
+function getEventConfig(type: unknown) {
+  return EVENT_COLORS[normalizeType(type)];
+}
+
 function mapEvent(raw: any): CalEvent {
   return {
-    id:    String(raw.id),
-    title: raw.title,
-    date:  raw.event_date ?? raw.date,
-    type:  (raw.event_type ?? raw.type ?? 'clase') as EventType,
-    group: raw.classroom_name ?? raw.group,
-    classroomId: raw.classroom_id ?? null,
-    canEdit: raw.can_edit === true,
-    canDelete: raw.can_delete === true,
+    id: String(raw?.id ?? ''),
+    title: String(raw?.title ?? 'Evento sin título'),
+    date: String(raw?.event_date ?? raw?.date ?? '').slice(0, 10),
+    type: normalizeType(raw?.event_type ?? raw?.type),
+    group: raw?.classroom_name ?? raw?.group ?? undefined,
+    classroomId: raw?.classroom_id ?? null,
+    canEdit: raw?.can_edit === true,
+    canDelete: raw?.can_delete === true,
   };
 }
 
@@ -57,7 +72,7 @@ export default function CalendarioTab() {
 
   useEffect(() => {
     api.get(`/events?month=${monthStr}`)
-      .then(r => setEvents((r.data.events ?? r.data ?? []).map(mapEvent)))
+      .then(r => { const data = r.data; const list = Array.isArray(data) ? data : Array.isArray(data?.events) ? data.events : []; setEvents(list.map(mapEvent)); })
       .catch(() => setEvents([]));
   }, [monthStr]);
 
