@@ -37,6 +37,7 @@ from app.api import teacher_evaluations
 from app.api import student_evaluations
 from app.api import student_diagnostic
 from app.api import consents
+from app.api import student_privacy
 from app.api import teacher_reports
 from app.api import teacher_ai
 from app.api import admin_users
@@ -160,6 +161,11 @@ if engine is not None:
 
 app.include_router(
     auth.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    student_privacy.router,
     prefix="/api/v1",
 )
 

@@ -387,6 +387,7 @@ def validate_profile_photo(
 # ============================================================
 
 def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ):
@@ -469,6 +470,34 @@ def get_current_user(
         )
 
     ensure_institution_active(user)
+
+    if user.role == UserRole.ESTUDIANTE.value:
+        # Estas rutas son necesarias para validar la sesión, cambiar la
+        # contraseña temporal y completar el aviso. El resto de la API queda
+        # bloqueado aunque el cliente navegue directamente o invoque endpoints.
+        allowed_paths = {
+            "/api/v1/auth/me",
+            "/api/v1/auth/change-password",
+            "/api/v1/privacy-notice/me",
+            "/api/v1/privacy-notice/acknowledge",
+            "/api/v1/events",
+        }
+        request_path = request.url.path
+        is_calendar_event_path = (
+            request_path == "/api/v1/events" or request_path.startswith("/api/v1/events/")
+        )
+        if request_path not in allowed_paths and not is_calendar_event_path:
+            if user.must_change_password:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "PASSWORD_CHANGE_REQUIRED", "message": "Debes cambiar tu contraseña antes de continuar."},
+                )
+            from app.services import student_privacy_service
+            if not student_privacy_service.has_acknowledged(db, user.id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "PRIVACY_NOTICE_REQUIRED", "message": "Debes consultar el aviso de privacidad antes de continuar."},
+                )
 
     return user
 
@@ -880,6 +909,12 @@ def login(
             "role": user.role,
         }
     )
+    from app.services import student_privacy_service
+    notice_record = (
+        student_privacy_service.current_notice(db, user.id)
+        if user.role == UserRole.ESTUDIANTE.value
+        else None
+    )
 
     # --------------------------------------------------------
     # 10. Respuesta
@@ -931,6 +966,16 @@ def login(
             None,
         ),
         created_at=user.created_at,
+        privacy_notice_acknowledged_version=(
+            notice_record.policy_version
+            if notice_record and notice_record.acknowledged_at
+            else None
+        ),
+        privacy_notice_required_version=(
+            student_privacy_service.POLICY_VERSION
+            if user.role == UserRole.ESTUDIANTE.value
+            else None
+        ),
     )
 
 
@@ -943,6 +988,7 @@ def login(
     response_model=UserResponse,
 )
 def get_me(
+    db: Session = Depends(get_db),
     current_user: UserModel = Depends(
         get_current_user
     ),
@@ -951,7 +997,23 @@ def get_me(
     Obtener información del usuario autenticado.
     """
 
-    return current_user
+    from app.services import student_privacy_service
+    record = (
+        student_privacy_service.current_notice(db, current_user.id)
+        if current_user.role == UserRole.ESTUDIANTE.value
+        else None
+    )
+    from app.schemas.schemas import UserResponse
+    response = UserResponse.model_validate(current_user).model_dump()
+    response["privacy_notice_acknowledged_version"] = (
+        record.policy_version if record and record.acknowledged_at else None
+    )
+    response["privacy_notice_required_version"] = (
+        student_privacy_service.POLICY_VERSION
+        if current_user.role == UserRole.ESTUDIANTE.value
+        else None
+    )
+    return response
 
 
 @router.get("/institution-branding")

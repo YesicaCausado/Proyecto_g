@@ -301,6 +301,35 @@ def institution_id_for(user: User) -> int:
     return user.institution_id
 
 
+def apply_academic_period(db: Session, institution_id: int, filters: Filters) -> None:
+    period = (
+        db.query(AcademicPeriod)
+        .filter(
+            AcademicPeriod.id == filters.period_id,
+            AcademicPeriod.institution_id == institution_id,
+        )
+        .first()
+    )
+    if period is None:
+        raise ReportError("El período académico no existe o no pertenece a tu institución.", 404)
+
+    filters.start = period.start_date
+    filters.end = period.end_date
+    filters.period_name = period.name
+
+    previous = (
+        db.query(AcademicPeriod)
+        .filter(
+            AcademicPeriod.institution_id == institution_id,
+            AcademicPeriod.end_date < period.start_date,
+        )
+        .order_by(AcademicPeriod.end_date.desc(), AcademicPeriod.id.desc())
+        .first()
+    )
+    if previous is not None:
+        filters.previous_override = (previous.start_date, previous.end_date, previous.name)
+
+
 def build_context(db: Session, user: User, filters: Filters) -> Context:
     filters.validate()
     inst_id = institution_id_for(user)

@@ -34,6 +34,7 @@ from app.schemas.schemas import (
 )
 
 from app.services.consent_service import _parse_birth_date
+from app.services.consent_service import ADULT_AGE, age_on
 from app.services.email_service import send_credentials_email
 from app.services.mail.addresses import placeholder_email_for
 
@@ -94,7 +95,16 @@ DOCUMENT_TYPES = tuple(v.DOCUMENT_RULES)
 CSV_MAX_BYTES = 1024 * 1024
 CSV_MAX_ROWS = 2000
 TEACHER_CSV_COLUMNS = ("nombre_completo", "tipo_documento", "numero_documento", "correo", "area")
-STUDENT_CSV_COLUMNS = ("nombre_completo", "tipo_documento", "numero_documento", "correo", "grado", "fecha_nacimiento")
+STUDENT_CSV_COLUMNS = (
+    "nombre_completo", "tipo_documento", "numero_documento", "correo", "grado",
+    "fecha_nacimiento", "nombre_acudiente", "fecha_autorizacion_acudiente",
+    "referencia_autorizacion",
+)
+
+
+def _guardian_authorization_required(birth_date) -> bool:
+    birth = _parse_birth_date(birth_date)
+    return birth is None or age_on(birth) < ADULT_AGE
 
 
 async def _read_csv_upload(file: UploadFile) -> bytes:
@@ -207,6 +217,8 @@ def _guardian_fields(student: User) -> dict:
         "guardian_required": st["required"],
         "guardian_authorized": st["authorized"],
         "guardian_name": student.guardian_name,
+        "guardian_consent_date": student.guardian_consent_date,
+        "guardian_authorization_reference": student.guardian_authorization_reference,
     }
 
 
@@ -716,6 +728,31 @@ def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set)
         row["grado"] = v.grade(row.get("grado")) or ""
     except ValueError as exc:
         return str(exc)
+    if _guardian_authorization_required(row["fecha_nacimiento"]):
+        guardian_name = (row.get("nombre_acudiente") or "").strip()
+        consent_date = (row.get("fecha_autorizacion_acudiente") or "").strip()
+        reference = (row.get("referencia_autorizacion") or "").strip()
+        if not guardian_name or not consent_date or not reference:
+            return (
+                "Para menores o fecha de nacimiento no informada se requiere nombre del acudiente, "
+                "fecha de autorización y referencia verificable del soporte institucional"
+            )
+        try:
+            row["nombre_acudiente"] = v.person_name(
+                guardian_name, label="nombre_acudiente", max_len=150
+            )
+            row["fecha_autorizacion_acudiente"] = v.birth_date(consent_date)
+            row["referencia_autorizacion"] = v.clean_text(
+                reference, label="referencia_autorizacion", max_len=100
+            )
+        except ValueError as exc:
+            return str(exc)
+        if _parse_birth_date(row["fecha_autorizacion_acudiente"]) > datetime.now().date():
+            return "La fecha de autorización del acudiente no puede estar en el futuro"
+    else:
+        row["nombre_acudiente"] = None
+        row["fecha_autorizacion_acudiente"] = None
+        row["referencia_autorizacion"] = None
     email = row["correo"]
     if doc in seen_docs:
         return "Documento duplicado en este archivo"
@@ -844,8 +881,29 @@ def create_student(
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
     if payload.email and _email_taken(db, payload.email):
         raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
+    if not payload.guardian_authorization_confirmed:
+        raise HTTPException(
+            400,
+            "Confirma que la autorización del acudiente está verificada o que no aplica por mayoría de edad.",
+        )
+    guardian_required = _guardian_authorization_required(payload.birth_date)
+    if guardian_required:
+        if not all((
+            payload.guardian_name,
+            payload.guardian_consent_date,
+            payload.guardian_authorization_reference,
+        )):
+            raise HTTPException(
+                400,
+                "Para menores o fecha de nacimiento no informada se requiere el nombre del acudiente, "
+                "la fecha de autorización y una referencia verificable del soporte institucional.",
+            )
+        consent_date = _parse_birth_date(payload.guardian_consent_date)
+        if consent_date is None or consent_date > datetime.now().date():
+            raise HTTPException(400, "La fecha de autorización del acudiente no es válida.")
 
     temp_pwd = _gen_temp_password()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     student = User(
         username=payload.document_number,
         email=payload.email or placeholder_email_for(payload.document_number),
@@ -858,6 +916,15 @@ def create_student(
         grade=payload.grade,
         institution_id=institution.id,
         must_change_password=True,
+        guardian_name=payload.guardian_name if guardian_required else None,
+        guardian_authorized_at=now if guardian_required else None,
+        guardian_authorized_by_id=current_user.id if guardian_required else None,
+        guardian_consent_date=payload.guardian_consent_date if guardian_required else None,
+        guardian_authorization_reference=(
+            payload.guardian_authorization_reference if guardian_required else None
+        ),
+        guardian_confirmation_recorded_at=now,
+        guardian_confirmation_by_id=current_user.id,
     )
     db.add(student)
     db.flush()
@@ -928,16 +995,42 @@ def update_student(
     guardian_note = ""
     if "guardian_name" in updates:
         student.guardian_name = updates["guardian_name"] or None
+    if "guardian_consent_date" in updates:
+        student.guardian_consent_date = updates["guardian_consent_date"] or None
+    if "guardian_authorization_reference" in updates:
+        student.guardian_authorization_reference = updates["guardian_authorization_reference"] or None
+    if any(key in updates for key in (
+        "guardian_authorized", "guardian_name", "guardian_consent_date",
+        "guardian_authorization_reference",
+    )) and updates.get("guardian_authorized", student.guardian_authorized_at is not None):
+        consent_date = _parse_birth_date(student.guardian_consent_date)
+        if not all((student.guardian_name, consent_date, student.guardian_authorization_reference)):
+            raise HTTPException(
+                400,
+                "Para registrar la autorización se requiere nombre del acudiente, fecha y referencia del soporte.",
+            )
+        if consent_date > datetime.now().date():
+            raise HTTPException(400, "La fecha de autorización del acudiente no puede estar en el futuro.")
     if "guardian_authorized" in updates:
         if updates["guardian_authorized"]:
-            if not student.guardian_name:
-                raise HTTPException(400, "Escribe el nombre del acudiente que firmó la autorización.")
+            if not all((student.guardian_name, student.guardian_consent_date,
+                        student.guardian_authorization_reference)):
+                raise HTTPException(
+                    400,
+                    "Registra el nombre del acudiente, la fecha de autorización y la referencia "
+                    "del soporte institucional antes de marcarla como recibida.",
+                )
+            consent_date = _parse_birth_date(student.guardian_consent_date)
+            if consent_date is None or consent_date > datetime.now().date():
+                raise HTTPException(400, "La fecha de autorización del acudiente no es válida.")
             student.guardian_authorized_at = datetime.now(timezone.utc).replace(tzinfo=None)
             student.guardian_authorized_by_id = current_user.id
             guardian_note = f" · autorización del acudiente registrada ({student.guardian_name})"
         else:
             student.guardian_authorized_at = None
             student.guardian_authorized_by_id = None
+            student.guardian_consent_date = None
+            student.guardian_authorization_reference = None
             guardian_note = " · autorización del acudiente retirada"
 
     _log(db, "update_student", current_user, institution.id,
@@ -965,10 +1058,16 @@ async def bulk_create_students(
     # Grupo opcional donde quedan inscritos los estudiantes creados (antes el
     # formulario enviaba un «profesor» que el backend ignoraba).
     classroom_id: Optional[int] = Form(None),
+    authorization_confirmed: bool = Form(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    if not authorization_confirmed:
+        raise HTTPException(
+            400,
+            "Confirma que cada autorización aplicable está respaldada y verificada antes de crear el lote.",
+        )
     institution = _get_my_institution(db, current_user)
     classroom = _institution_classroom_for_enrollment(db, institution, classroom_id)
     free_seats = None
@@ -1007,6 +1106,8 @@ async def bulk_create_students(
 
         email = row.get("correo") or placeholder_email_for(row["numero_documento"])
         temp_pwd = _gen_temp_password()
+        guardian_required = _guardian_authorization_required(row.get("fecha_nacimiento"))
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         student = User(
             username=row["numero_documento"],
             email=email,
@@ -1019,6 +1120,13 @@ async def bulk_create_students(
             grade=row.get("grado", ""),
             institution_id=institution.id,
             must_change_password=True,
+            guardian_name=row.get("nombre_acudiente") if guardian_required else None,
+            guardian_authorized_at=now if guardian_required else None,
+            guardian_authorized_by_id=current_user.id if guardian_required else None,
+            guardian_consent_date=row.get("fecha_autorizacion_acudiente") if guardian_required else None,
+            guardian_authorization_reference=row.get("referencia_autorizacion") if guardian_required else None,
+            guardian_confirmation_recorded_at=now,
+            guardian_confirmation_by_id=current_user.id,
         )
         db.add(student)
         db.flush()

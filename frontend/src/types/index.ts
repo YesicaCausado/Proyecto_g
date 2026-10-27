@@ -17,6 +17,8 @@ export interface User {
   /** Nombre real de la institución (null para el Administrador o si no tiene). */
   institution_name?: string | null;
   document_number?: string | null;
+  privacy_notice_acknowledged_version?: string | null;
+  privacy_notice_required_version?: string | null;
 }
 
 export interface Token {
@@ -37,6 +39,8 @@ export interface Token {
   document_number?: string | null;
   cognitive_profile?: Record<string, unknown> | null;
   created_at?: string;
+  privacy_notice_acknowledged_version?: string | null;
+  privacy_notice_required_version?: string | null;
 }
 
 export interface LoginRequest {

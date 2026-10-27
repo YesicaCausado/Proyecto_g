@@ -41,10 +41,6 @@ function normalizeType(value: unknown): EventType {
     : (type ? 'evento' : 'clase');
 }
 
-function getEventConfig(type: unknown) {
-  return EVENT_COLORS[normalizeType(type)];
-}
-
 function mapEvent(raw: any): CalEvent {
   return {
     id: String(raw?.id ?? ''),

@@ -83,6 +83,11 @@ def _add_missing_sqlite_columns(engine) -> None:
 # Columnas que el código usa aunque el SQL de migrations/ no se haya ejecutado
 # en Supabase. (tabla, columna, definición)
 RUNTIME_COLUMNS = [
+    # Registro verificable de autorización institucional del acudiente (021).
+    ("users", "guardian_consent_date", "VARCHAR(10)"),
+    ("users", "guardian_authorization_reference", "VARCHAR(100)"),
+    ("users", "guardian_confirmation_recorded_at", "TIMESTAMP"),
+    ("users", "guardian_confirmation_by_id", "INTEGER"),
     # Eliminación de mensajes (migrations/applied/delete_fields.sql)
     ("direct_messages", "deleted_for_sender", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("direct_messages", "deleted_for_receiver", "BOOLEAN NOT NULL DEFAULT FALSE"),

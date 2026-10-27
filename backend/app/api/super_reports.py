@@ -9,6 +9,9 @@ Filtros comunes (query string, todos opcionales):
     source                 todas | quiz | evaluacion
     eval_status            borrador | publicada | cerrada (solo evaluaciones)
     threshold, min_results criterios del seguimiento académico.
+    period_id               período académico de la institución; reemplaza el
+                            rango de fechas y compara con el período académico
+                            anterior cuando existe.
 
 Endpoints:
     GET /super/reports/filters
@@ -73,6 +76,7 @@ def report_filters(
     eval_status: Optional[str] = Query(None),
     threshold: float = Query(svc.REFERENCE_THRESHOLD),
     min_results: int = Query(svc.DEFAULT_MIN_RESULTS),
+    period_id: Optional[int] = Query(None, ge=1),
 ) -> svc.Filters:
     """
     Construye y valida los filtros de los reportes.
@@ -92,6 +96,7 @@ def report_filters(
             eval_status=eval_status or None,
             threshold=threshold,
             min_results=min_results,
+            period_id=period_id,
         )
 
         return filters.validate()

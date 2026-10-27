@@ -37,10 +37,6 @@ function normalizeType(value: unknown): EventType {
     : (type ? 'importante' : 'reunion');
 }
 
-function getTypeConfig(type: unknown) {
-  return TYPE_CONFIG[normalizeType(type)];
-}
-
 function mapEvent(raw: any): CalEvent {
   return {
     id: Number(raw?.id ?? 0),

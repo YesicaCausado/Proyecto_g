@@ -100,7 +100,7 @@ def _events_to_dicts(events, db: Session, user: User | None = None) -> list[dict
         out.append({
             "id": ev.id,
             "classroom_id": ev.classroom_id,
-            "classroom_name": classroom.name if classroom else "Institucional",
+            "classroom_name": classroom.name if classroom else ("Institucional" if ev.classroom_id is None else "Clase"),
             "institution_id": ev.institution_id,
             "teacher_id": ev.teacher_id,
             "teacher_name": teacher.full_name or teacher.username if teacher else "Institución",
