@@ -93,9 +93,8 @@ from app.ai.adaptive.student_model import StudentModel
 from app.services.student_model_service import StudentModelService
 from app.services.llm_context import build_adaptation_context
 from app.core.config import settings
-from app.core.permissions import FORBIDDEN_MESSAGE
 from app.models.expert_bot import ExpertBot
-from app.services.bot_documents import build_bot_context, can_use_bot
+from app.services.bot_documents import build_bot_context, bot_unavailable_reason
 from app.services.consent_service import has_consent
 import logging
 
@@ -127,14 +126,18 @@ def _resolve_chat_bot(db: Session, user: User, bot_id: Optional[int],
     """
     NeuroBot de la conversación: el `bot_id` explícito o, si no llega, el bot
     asociado a la conversación del propio usuario. Valida que el usuario pueda
-    usarlo (misma institución, aula asignada, público o creador).
+    usarlo (activo, misma institución, aula asignada, público o creador).
+
+    Una conversación de un NeuroBot desactivado (o al que ya no tiene acceso)
+    no sigue en silencio con el tutor general: responde 403 con el motivo.
     """
     if bot_id is not None:
         bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
         if bot is None:
             raise HTTPException(status_code=404, detail="NeuroBot no encontrado")
-        if not can_use_bot(db, user, bot):
-            raise HTTPException(status_code=403, detail=FORBIDDEN_MESSAGE)
+        reason = bot_unavailable_reason(db, user, bot)
+        if reason:
+            raise HTTPException(status_code=403, detail=reason)
         return bot
 
     if conversation_id is not None:
@@ -145,7 +148,10 @@ def _resolve_chat_bot(db: Session, user: User, bot_id: Optional[int],
         ).first()
         if conversation is not None and conversation.bot_id:
             bot = db.query(ExpertBot).filter(ExpertBot.id == conversation.bot_id).first()
-            if bot is not None and can_use_bot(db, user, bot):
+            if bot is not None:
+                reason = bot_unavailable_reason(db, user, bot)
+                if reason:
+                    raise HTTPException(status_code=403, detail=reason)
                 return bot
     return None
 
@@ -1094,7 +1100,7 @@ def _quiz_suggested(response_text: str) -> bool:
 
 
 @router.post("/patterns/save")
-async def save_pattern_data(
+def save_pattern_data(
     payload: ChatPatternPayload,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
@@ -1151,7 +1157,7 @@ async def save_pattern_data(
 
 
 @router.get("/patterns", response_model=ChatPatternHistoryResponse)
-async def get_pattern_history(
+def get_pattern_history(
     topic: Optional[str] = None,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
@@ -1198,6 +1204,35 @@ async def get_pattern_history(
     )
 
 
+def _diagnostic_context(db: Session, user_id: int, topic: str):
+    """(contexto, dificultad) del diagnóstico inicial de la competencia del tema (RF-13).
+
+    Sin diagnóstico de esa competencia devuelve (None, None) y el tutor hace su
+    propia pregunta de diagnóstico al empezar.
+    """
+    from app.models.diagnostic import DiagnosticResult
+    from app.services import diagnostic_service
+    from app.services.competencies import classify_competency, valid_key
+
+    key = valid_key(topic) or classify_competency(topic)
+    if key is None:
+        return None, None
+    result = (db.query(DiagnosticResult)
+              .filter(DiagnosticResult.user_id == user_id, DiagnosticResult.competency == key)
+              .first())
+    if result is None:
+        return None, None
+    level = diagnostic_service.level_info(result.level)
+    weak = diagnostic_service.weak_topics(result.topic_results or [])
+    context = (
+        f"\n\nDIAGNÓSTICO INICIAL DEL ESTUDIANTE: nivel {level['level']} ({level['label']}), "
+        f"puntaje {result.score}/100."
+        + (f" Temas a reforzar: {', '.join(weak)}." if weak else "")
+        + " Empieza desde ese nivel y prioriza los temas a reforzar."
+    )
+    return context, level["difficulty"]
+
+
 @router.post("/start", response_model=ChatMessageResponse)
 async def start_session(
     request: StartSessionRequest,
@@ -1212,8 +1247,16 @@ async def start_session(
     if bot is not None:
         bot_context, knowledge_meta = build_bot_context(db, bot, request.topic)
         system_prompt += bot_context
+    diagnostic_ctx, diagnostic_difficulty = _diagnostic_context(db, current_user.id, request.topic)
+    difficulty = diagnostic_difficulty or request.difficulty
+    if diagnostic_ctx:
+        system_prompt += diagnostic_ctx
+        opening = ("Luego propón una primera actividad acorde a su nivel del diagnóstico inicial, "
+                   "empezando por los temas a reforzar.")
+    else:
+        opening = "Luego haz la primera pregunta de diagnóstico."
     result = await ai_manager.generate(
-        prompt=f"El estudiante empieza a estudiar: {request.topic}. Preséntate brevemente y comienza con una introducción motivadora al tema. Luego haz la primera pregunta de diagnóstico.",
+        prompt=f"El estudiante empieza a estudiar: {request.topic}. Preséntate brevemente y comienza con una introducción motivadora al tema. {opening}",
         system_prompt=system_prompt,
         temperature=0.7,
         max_tokens=512,
@@ -1236,7 +1279,7 @@ async def start_session(
         role="assistant",
         content=result["response"],
         cognitive_state="normal",
-        difficulty=request.difficulty,
+        difficulty=difficulty,
         extra_data={"provider": result["provider"], "source": "start_session"},
     )
     _save_conversation_message(
@@ -1249,7 +1292,7 @@ async def start_session(
     return ChatMessageResponse(
         message=result["response"],
         action="teach",
-        difficulty=request.difficulty,
+        difficulty=difficulty,
         cognitive_state="normal",
         confidence=1.0,
         suggestions=[],
@@ -1812,7 +1855,7 @@ async def send_message(
 
 
 @router.get("/stats", response_model=SessionStatsResponse)
-async def get_session_stats(
+def get_session_stats(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
     db: Session = Depends(get_db),
@@ -2214,7 +2257,7 @@ def _is_quiz_answer_correct(user_answer, correct_answer, options=None):
 
 
 @router.post("/submit-quiz", response_model=QuizAnalysisResponse)
-async def submit_quiz_answers(
+def submit_quiz_answers(
     submission: QuizSubmission,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
@@ -2405,7 +2448,7 @@ async def submit_quiz_answers(
 
 
 @router.get("/quiz-history", response_model=QuizHistoryResponse)
-async def get_quiz_history(
+def get_quiz_history(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

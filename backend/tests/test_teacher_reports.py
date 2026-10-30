@@ -35,7 +35,7 @@ from app.main import app  # noqa: E402
 from app.models.classroom import Classroom, Enrollment  # noqa: E402
 from app.models.evaluation import EvaluationSubmission, TeacherEvaluation  # noqa: E402
 from app.models.institution import Institution  # noqa: E402
-from app.models.learning import QuizHistory  # noqa: E402
+from app.models.learning import CognitiveEvent, LearningSession, QuizHistory  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 
 URL = "/api/v1/teacher/reports/export"
@@ -121,8 +121,23 @@ class ReportExportTests(unittest.TestCase):
                                     status="calificada", score=3.0, max_score=4.0, percentage=75.0,
                                     started_at=now - timedelta(hours=2), expires_at=now - timedelta(hours=1),
                                     submitted_at=now - timedelta(hours=1)))
+        session = LearningSession(user_id=s1.id, topic="Razonamiento cuantitativo")
+        db.add(session)
+        db.flush()
+        db.add_all([
+            CognitiveEvent(user_id=s1.id, session_id=session.id, event_type="response",
+                           event_data={"sufficient_evidence": True, "cognitive_state": "fatigue"},
+                           inferred_state="fatigue", timestamp=now - timedelta(minutes=3)),
+            CognitiveEvent(user_id=s1.id, session_id=session.id, event_type="response",
+                           event_data={"sufficient_evidence": True, "cognitive_state": "flow"},
+                           inferred_state="flow", timestamp=now - timedelta(minutes=2)),
+            CognitiveEvent(user_id=s1.id, session_id=session.id, event_type="response",
+                           event_data={"sufficient_evidence": False, "cognitive_state": "overload"},
+                           inferred_state="overload", timestamp=now - timedelta(minutes=1)),
+        ])
         db.commit()
         cls.c9, cls.c10, cls.cb = c9.id, c10.id, cb.id
+        cls.s1, cls.s3 = s1.id, s3.id
         tokens = {"profe": profe, "super": sp, "s1": s1, "profe_b": profe_b}
         cls.h = {k: {"Authorization": "Bearer " + create_access_token({"sub": u.username})} for k, u in tokens.items()}
         db.close()
@@ -216,6 +231,70 @@ class ReportExportTests(unittest.TestCase):
         _, _, rows = parse_csv(self.get(who="profe_b").content)
         self.assertEqual({r[0] for r in rows}, {"Daniel Bravo"})
         self.assertEqual(self.get(who="profe_b", classroom_id=self.c9).status_code, 404)
+
+    def test_04_individual_report_data_and_neurodigital_evidence(self):
+        students = self.client.get("/api/v1/teacher/reports/students", headers=self.h["profe"])
+        self.assertEqual(students.status_code, 200, students.text)
+        self.assertEqual({row["username"] for row in students.json()["items"]},
+                         {"ana_rep", "beto_rep", "caro_rep"})
+
+        detail = self.client.get(f"/api/v1/teacher/reports/students/{self.s1}", headers=self.h["profe"])
+        self.assertEqual(detail.status_code, 200, detail.text)
+        data = detail.json()
+        self.assertEqual(data["student"]["name"], "Ana Muñoz")
+        self.assertEqual(data["student"]["groups"], ["Matemáticas 9A"])
+        self.assertEqual(data["summary"]["results"], 3)
+        self.assertEqual(data["summary"]["average"], 71.7)
+        self.assertEqual(set(data["summary"]["competencies_evaluated"]),
+                         {"Pensamiento Lógico-Matemático", "Lectura Crítica y Pensamiento Crítico"})
+        self.assertEqual(data["neurodigital"]["evidence_count"], 2)
+        self.assertEqual(data["neurodigital"]["fatigue"], 50)
+        self.assertEqual(data["neurodigital"]["mastery"], 50)
+        self.assertEqual(data["neurodigital"]["overload"], 0)
+
+        exported = self.get(report="estudiante", student_id=self.s1, format="csv")
+        self.assertEqual(exported.status_code, 200, exported.text)
+        self.assertIn("Ana Muñoz", exported.content.decode("utf-8"))
+        self.assertIn("Fatiga: 50%", exported.content.decode("utf-8"))
+        pdf = self.get(report="estudiante", student_id=self.s1, format="pdf")
+        self.assertEqual(pdf.status_code, 200, pdf.text)
+        self.assertTrue(pdf.content.startswith(b"%PDF-1.4"))
+        from pypdf import PdfReader
+        pdf_text = "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf.content)).pages)
+        self.assertIn("Ana Muñoz", pdf_text)
+        self.assertIn("Fatiga: 50%", pdf_text)
+        self.assertIn("Lectura Crítica", pdf_text)
+        filtered = self.client.get("/api/v1/teacher/reports/students", headers=self.h["profe"],
+                                  params={"classroom_id": self.c10})
+        self.assertEqual([row["username"] for row in filtered.json()["items"]], ["caro_rep"])
+        self.assertEqual(self.get(report="estudiante").status_code, 400)
+
+    def test_04_no_data_and_scope_for_individual_report(self):
+        detail = self.client.get(f"/api/v1/teacher/reports/students/{self.s3}", headers=self.h["profe"])
+        self.assertEqual(detail.status_code, 200, detail.text)
+        data = detail.json()
+        self.assertEqual(data["summary"]["results"], 0)
+        self.assertIsNone(data["summary"]["average"])
+        self.assertEqual(data["neurodigital"]["evidence_count"], 0)
+        self.assertIsNone(data["neurodigital"]["fatigue"])
+
+        exported = self.get(report="estudiante", student_id=self.s3)
+        self.assertEqual(exported.status_code, 200, exported.text)
+        self.assertIn("Sin evaluaciones registradas", exported.content.decode("utf-8"))
+        self.assertIn("Fatiga: sin datos suficientes", exported.content.decode("utf-8"))
+        self.assertEqual(
+            self.client.get(f"/api/v1/teacher/reports/students/{self.s3}", headers=self.h["profe_b"]).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(f"/api/v1/teacher/reports/students/{self.s1}", headers=self.h["s1"]).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(f"/api/v1/teacher/reports/students/{self.s1}", headers=self.h["profe"],
+                            params={"classroom_id": self.c10}).status_code,
+            404,
+        )
 
 
 if __name__ == "__main__":

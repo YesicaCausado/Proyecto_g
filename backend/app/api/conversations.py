@@ -16,10 +16,10 @@ from typing import List
 
 from app.db.database import get_db
 from app.api.auth import get_current_user, require_permission
-from app.core.permissions import FORBIDDEN_MESSAGE, Permission
+from app.core.permissions import Permission
 from app.models.expert_bot import ExpertBot
 from app.models.user import User
-from app.services.bot_documents import can_use_bot
+from app.services.bot_documents import bot_unavailable_reason
 from app.schemas.schemas import (
     ConversationCreate,
     ConversationRename,
@@ -32,7 +32,17 @@ from app.models.adaptive import Conversation, ConversationMessage
 router = APIRouter(prefix="/chat/conversations", tags=["Chat Adaptativo - Conversaciones"])
 
 
-def _to_meta(conv: Conversation) -> ConversationMeta:
+def _bot_status(db: Session, user: User, bot_ids) -> dict:
+    """{bot_id: (nombre, motivo o None)} de los NeuroBots de las conversaciones."""
+    ids = {i for i in bot_ids if i}
+    if not ids:
+        return {}
+    bots = db.query(ExpertBot).filter(ExpertBot.id.in_(ids)).all()
+    return {b.id: (b.name, bot_unavailable_reason(db, user, b)) for b in bots}
+
+
+def _to_meta(conv: Conversation, status: Optional[dict] = None) -> ConversationMeta:
+    name, reason = (status or {}).get(conv.bot_id, (None, None))
     return ConversationMeta(
         id=conv.id,
         student_id=conv.student_id,
@@ -45,11 +55,14 @@ def _to_meta(conv: Conversation) -> ConversationMeta:
         updated_at=conv.updated_at or datetime.utcnow(),
         last_interaction=conv.last_interaction or datetime.utcnow(),
         bot_id=conv.bot_id,
+        bot_name=name,
+        bot_available=(reason is None) if conv.bot_id else None,
+        bot_unavailable_reason=reason,
     )
 
 
 @router.get("", response_model=ConversationListResponse)
-async def list_conversations(
+def list_conversations(
     bot_id: Optional[int] = Query(None, description="Solo las conversaciones con este NeuroBot"),
     scope: Optional[str] = Query(None, description="competencias = solo chats sin NeuroBot; neurobots = solo con NeuroBot"),
     current_user: User = Depends(get_current_user),
@@ -71,14 +84,15 @@ async def list_conversations(
     elif scope == "neurobots":
         q = q.filter(Conversation.bot_id.isnot(None))
     rows = q.order_by(Conversation.last_interaction.desc()).all()
+    status = _bot_status(db, current_user, [r.bot_id for r in rows])
     return ConversationListResponse(
-        conversations=[_to_meta(r) for r in rows],
+        conversations=[_to_meta(r, status) for r in rows],
         total=len(rows),
     )
 
 
 @router.post("", response_model=ConversationMeta)
-async def create_conversation(
+def create_conversation(
     body: ConversationCreate,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
@@ -91,8 +105,9 @@ async def create_conversation(
         bot = db.query(ExpertBot).filter(ExpertBot.id == body.bot_id).first()
         if bot is None:
             raise HTTPException(status_code=404, detail="NeuroBot no encontrado")
-        if not can_use_bot(db, current_user, bot):
-            raise HTTPException(status_code=403, detail=FORBIDDEN_MESSAGE)
+        reason = bot_unavailable_reason(db, current_user, bot)
+        if reason:
+            raise HTTPException(status_code=403, detail=reason)
     conv = Conversation(
         student_id=current_user.id,
         bot_id=body.bot_id,
@@ -108,7 +123,7 @@ async def create_conversation(
 
 
 @router.get("/{conversation_id}")
-async def get_conversation(
+def get_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),
@@ -128,7 +143,7 @@ async def get_conversation(
     ).order_by(ConversationMessage.timestamp.asc()).all()
 
     return {
-        "conversation": _to_meta(conv).model_dump(),
+        "conversation": _to_meta(conv, _bot_status(db, current_user, [conv.bot_id])).model_dump(),
         "messages": [
             {
                 "id": m.id,
@@ -143,7 +158,7 @@ async def get_conversation(
 
 
 @router.post("/{conversation_id}/rename", response_model=ConversationMeta)
-async def rename_conversation(
+def rename_conversation(
     conversation_id: int,
     body: ConversationRename,
     current_user: User = Depends(get_current_user),
@@ -165,7 +180,7 @@ async def rename_conversation(
 
 
 @router.delete("/{conversation_id}")
-async def delete_conversation(
+def delete_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.USAR_CHAT_IA)),

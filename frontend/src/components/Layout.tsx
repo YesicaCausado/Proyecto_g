@@ -21,6 +21,7 @@ import {
   Play,
   Target,
   ClipboardCheck,
+  ClipboardList,
   Bot,
 } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
@@ -29,6 +30,22 @@ import { institutionLabel } from '../utils/institution';
 import InstitutionLogo from './InstitutionLogo';
 import NotificationBell from './NotificationBell';
 import { PRIVACY_POLICY_PATH } from '../data/legal';
+import { TutorialMenuButton } from './GuidedTour';
+
+const STUDENT_TOUR_TARGETS: Record<string, string> = {
+  inicio: 'student-dashboard',
+  diagnostico: 'student-diagnostico',
+  competencias: 'student-competencias',
+  desafios: 'student-desafios',
+  'mis-neurobots': 'student-mis-neurobots',
+  material: 'student-material',
+  'mis-clases': 'student-mis-clases',
+  evaluaciones: 'student-evaluaciones',
+  tablero: 'student-tablero',
+  calendario: 'student-calendario',
+  mensajes: 'student-mensajes',
+  perfil: 'student-perfil',
+};
 
 interface NavLinkItem {
   id: string;
@@ -73,6 +90,7 @@ const iconMap: Record<string, ReactNode> = {
   meta: <Target className="w-4 h-4" />,
   evaluaciones: <ClipboardCheck className="w-4 h-4" />,
   neurobots: <Bot className="w-4 h-4" />,
+  diagnostico: <ClipboardList className="w-4 h-4" />,
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -110,6 +128,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {
           label: 'APRENDIZAJE',
           items: [
+            { id: 'diagnostico', type: 'link', to: '/diagnostic', label: 'Diagnóstico inicial', icon: 'diagnostico' },
             {
               id: 'competencias',
               type: 'group',
@@ -162,7 +181,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       ].filter((sec) => sec.items.length > 0)) as NavSection[];
 
   // ── Estado activo de una opción ──────────────────────────────────────
-  const linkActive = (item: NavLinkItem): boolean => exact(item.to);
+  const linkActive = (item: NavLinkItem): boolean =>
+    exact(item.to) || (item.to === '/diagnostic' && location.pathname.startsWith('/diagnostic/'));
   const groupActive = (group: NavGroupItem): boolean =>
     group.children.some((c) => linkActive(c));
 
@@ -245,6 +265,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <Link
                       key={item.id}
                       to={item.to}
+                      data-tour={STUDENT_TOUR_TARGETS[item.id]}
                       onClick={() => mobile && setSidebarOpen(false)}
                       className={linkClass(active)}
                       style={st.style}
@@ -268,6 +289,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <div key={item.id}>
                     <button
                       type="button"
+                      data-tour={STUDENT_TOUR_TARGETS[item.id]}
                       onClick={() => toggleGroup(item.id)}
                       className={`group w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-md text-[13.5px] font-medium transition-all duration-150 ${navItemStyle('light', groupIsActive).stateClass}`}
                       style={navItemStyle('light', groupIsActive).style}
@@ -324,6 +346,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* User footer */}
       <div className="border-t border-[#E9E9E7] p-3">
+        <TutorialMenuButton className="mb-2" />
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-[#F1F1EF] flex items-center justify-center text-[#37352F] text-[11px] font-bold flex-shrink-0 select-none overflow-hidden">
             {user?.photo

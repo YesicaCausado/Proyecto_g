@@ -33,8 +33,13 @@ from app.schemas.schemas import (
     InstitutionResponse,
     UserUpdate,
 )
-
-
+from app.services.capacity import (
+    MAX_ACTIVE_INSTITUTIONS,
+    active_institution_count,
+    lock_capacity,
+    require_existing_enrollment_capacity,
+    require_student_capacity,
+)
 router = APIRouter(
     prefix="/admin",
     tags=["Administración"],
@@ -99,7 +104,7 @@ def _temporary_password() -> str:
 
 
 @router.get("/users")
-async def list_users_admin(
+def list_users_admin(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = Query(None, max_length=100),
@@ -134,7 +139,7 @@ async def list_users_admin(
 
 
 @router.patch("/users/{user_id}")
-async def update_user_admin(
+def update_user_admin(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
@@ -153,6 +158,22 @@ async def update_user_admin(
     for required in ("role", "is_active"):
         if required in changes and changes[required] is None:
             changes.pop(required)
+    next_role = changes.get("role", user.role)
+    next_active = changes.get("is_active", user.is_active)
+    becomes_active_student = (
+        next_role == UserRole.ESTUDIANTE.value
+        and next_active
+        and not (user.role == UserRole.ESTUDIANTE.value and user.is_active)
+    )
+    if becomes_active_student:
+        if not user.institution_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede activar un estudiante sin institución asignada.",
+            )
+        lock_capacity(db, "institution", user.institution_id)
+        require_student_capacity(db, user.institution_id)
+        require_existing_enrollment_capacity(db, user.id)
     if changes.get("email") and changes["email"] != (user.email or "").lower():
         duplicate = db.query(User).filter(func.lower(User.email) == changes["email"], User.id != user.id).first()
         if duplicate:
@@ -166,7 +187,7 @@ async def update_user_admin(
 
 
 @router.post("/users/{user_id}/reset-password")
-async def reset_user_password_admin(
+def reset_user_password_admin(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -185,7 +206,7 @@ async def reset_user_password_admin(
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user_admin(
+def delete_user_admin(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -217,7 +238,7 @@ async def delete_user_admin(
     "/stats",
     response_model=AdminStats,
 )
-async def get_admin_stats(
+def get_admin_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -296,7 +317,7 @@ async def get_admin_stats(
 @router.get(
     "/institutions",
 )
-async def list_institutions_admin(
+def list_institutions_admin(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     is_active: Optional[bool] = Query(
@@ -354,16 +375,23 @@ async def list_institutions_admin(
     # Respuesta
     # ------------------------------------------------------------------------
 
+    # Conteos de toda la página en una consulta (antes 2 por institución).
+    counts = {}
+    ids = [i.id for i in institutions]
+    if ids:
+        for inst_id, role, n in (
+            db.query(User.institution_id, User.role, func.count(User.id))
+            .filter(User.institution_id.in_(ids),
+                    User.role.in_([UserRole.PROFESOR.value, UserRole.ESTUDIANTE.value]))
+            .group_by(User.institution_id, User.role)
+            .all()
+        ):
+            counts[(inst_id, role)] = n
+
     results = []
     for institution in institutions:
-        teachers_count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.PROFESOR.value,
-        ).count()
-        students_count = db.query(User).filter(
-            User.institution_id == institution.id,
-            User.role == UserRole.ESTUDIANTE.value,
-        ).count()
+        teachers_count = counts.get((institution.id, UserRole.PROFESOR.value), 0)
+        students_count = counts.get((institution.id, UserRole.ESTUDIANTE.value), 0)
         results.append({
             "id": institution.id,
             "name": institution.name,
@@ -383,7 +411,7 @@ async def list_institutions_admin(
 
 
 @router.get("/audit-logs")
-async def list_audit_logs_admin(
+def list_audit_logs_admin(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     action: Optional[str] = Query(None, max_length=100),
@@ -446,7 +474,7 @@ async def list_audit_logs_admin(
     response_model=InstitutionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_institution_admin(
+def create_institution_admin(
     payload: InstitutionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -456,6 +484,13 @@ async def create_institution_admin(
     """
 
     _require_admin(current_user)
+
+    lock_capacity(db, "platform")
+    if active_institution_count(db) >= MAX_ACTIVE_INSTITUTIONS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La plataforma admite como máximo {MAX_ACTIVE_INSTITUTIONS} instituciones activas.",
+        )
 
     # ------------------------------------------------------------------------
     # Verificar código DANE
@@ -568,7 +603,7 @@ async def create_institution_admin(
     "/institutions/{institution_id}",
     response_model=InstitutionResponse,
 )
-async def update_institution_admin(
+def update_institution_admin(
     institution_id: int,
     payload: InstitutionCreate,
     db: Session = Depends(get_db),
@@ -662,7 +697,7 @@ class InstitutionPatchPayload(BaseModel):
 @router.patch(
     "/institutions/{institution_id}",
 )
-async def patch_institution_admin(
+def patch_institution_admin(
     institution_id: int,
     payload: InstitutionPatchPayload,
     db: Session = Depends(get_db),
@@ -679,6 +714,13 @@ async def patch_institution_admin(
         )
 
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("is_active") is True and not institution.is_active:
+        lock_capacity(db, "platform")
+        if active_institution_count(db) >= MAX_ACTIVE_INSTITUTIONS:
+            raise HTTPException(
+                status_code=409,
+                detail=f"No se puede activar la institución: la plataforma ya alcanzó el límite de {MAX_ACTIVE_INSTITUTIONS}.",
+            )
     if "dane_code" in changes:
         duplicate = (
             db.query(Institution)
@@ -713,7 +755,7 @@ async def patch_institution_admin(
 # ============================================================================
 
 @router.get("/config")
-async def admin_get_config(
+def admin_get_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -845,7 +887,7 @@ async def admin_get_config(
     "/institutions/{institution_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def delete_institution_admin(
+def delete_institution_admin(
     institution_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

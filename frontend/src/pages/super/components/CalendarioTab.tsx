@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, Plus, X, ChevronLeft, ChevronRight, Clock, Tag, Loader2 } from 'lucide-react';
 import api from '../../../services/api';
 
-type EventType = 'examen' | 'reunion' | 'feriado' | 'capacitacion' | 'importante';
+type EventType = 'examen' | 'tarea' | 'clase' | 'anuncio' | 'evento' | 'reunion' | 'feriado' | 'capacitacion' | 'importante';
 
 interface CalEvent {
   id: number;
@@ -21,21 +21,32 @@ const TYPE_CONFIG: Record<EventType, { label: string; color: string; bg: string;
   feriado:       { label: 'Feriado',        color: 'text-[#0F7B6C]', bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-[#0F7B6C]' },
   capacitacion:  { label: 'Capacitación',   color: 'text-[#0B6E99]', bg: 'bg-blue-50 border-blue-200',   dot: 'bg-[#0B6E99]' },
   importante:    { label: 'Fecha importante', color: 'text-[#D9730D]', bg: 'bg-orange-50 border-orange-200', dot: 'bg-[#D9730D]' },
+  tarea:         { label: 'Tarea',            color: 'text-[#D9730D]', bg: 'bg-orange-50 border-orange-200', dot: 'bg-[#D9730D]' },
+  clase:         { label: 'Clase',            color: 'text-[#2E6FDB]', bg: 'bg-blue-50 border-blue-200',     dot: 'bg-[#2E6FDB]' },
+  anuncio:       { label: 'Anuncio',           color: 'text-[#0F7B6C]', bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-[#0F7B6C]' },
+  evento:        { label: 'Evento',            color: 'text-[#6940A5]', bg: 'bg-purple-50 border-purple-200', dot: 'bg-[#6940A5]' },
 };
 
 const DAYS_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+function normalizeType(value: unknown): EventType {
+  const type = String(value ?? '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(TYPE_CONFIG, type)
+    ? type as EventType
+    : (type ? 'importante' : 'reunion');
+}
+
 function mapEvent(raw: any): CalEvent {
   return {
-    id:          raw.id,
-    date:        raw.event_date ?? raw.date,
-    title:       raw.title,
-    type:        (raw.event_type ?? raw.type) as EventType,
-    time:        raw.event_time ?? raw.time,
-    description: raw.description,
-    canEdit: raw.can_edit === true,
-    canDelete: raw.can_delete === true,
+    id: Number(raw?.id ?? 0),
+    date: String(raw?.event_date ?? raw?.date ?? '').slice(0, 10),
+    title: String(raw?.title ?? 'Evento sin título'),
+    type: normalizeType(raw?.event_type ?? raw?.type),
+    time: raw?.event_time ?? raw?.time ?? undefined,
+    description: raw?.description ?? undefined,
+    canEdit: raw?.can_edit === true,
+    canDelete: raw?.can_delete === true,
   };
 }
 
@@ -55,7 +66,7 @@ export default function CalendarioTab() {
   useEffect(() => {
     setLoading(true);
     api.get(`/events?month=${monthStr}`)
-      .then(r => setEvents((r.data.events ?? r.data ?? []).map(mapEvent)))
+      .then(r => { const data = r.data; const list = Array.isArray(data) ? data : Array.isArray(data?.events) ? data.events : []; setEvents(list.map(mapEvent)); })
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
   }, [monthStr]);

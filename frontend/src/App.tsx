@@ -4,7 +4,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import { GuidedTourProvider } from './components/GuidedTour';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import ConnectionStatus from './components/ConnectionStatus';
 import { PRIVACY_POLICY_PATH } from './data/legal';
 
 // ── Carga diferida (code splitting) por ruta ───────────────────
@@ -17,6 +19,7 @@ const ForceChangePassword  = lazy(() => import('./pages/auth/ForceChangePassword
 const ForgotPasswordPage   = lazy(() => import('./pages/auth/ForgotPasswordPage'));
 const ResetPasswordPage    = lazy(() => import('./pages/auth/ResetPasswordPage'));
 const PrivacyPolicyPage    = lazy(() => import('./pages/legal/PrivacyPolicyPage'));
+const StudentPrivacyNoticePage = lazy(() => import('./pages/legal/StudentPrivacyNoticePage'));
 const StudentDashboard     = lazy(() => import('./pages/student/StudentDashboard'));
 const ChatPage             = lazy(() => import('./pages/student/ChatPage'));
 const BotsPage             = lazy(() => import('./pages/student/BotsPage'));
@@ -25,6 +28,7 @@ const MyClassesPage        = lazy(() => import('./pages/student/MyClassesPage'))
 const ClassroomPage        = lazy(() => import('./pages/student/ClassroomPage'));
 const QuizzesPage          = lazy(() => import('./pages/student/QuizzesPage'));
 const EvaluationsPage      = lazy(() => import('./pages/student/EvaluationsPage'));
+const DiagnosticPage       = lazy(() => import('./pages/student/DiagnosticPage'));
 const DesempenoPage        = lazy(() => import('./pages/student/DesempenoPage'));
 const MaterialPage         = lazy(() => import('./pages/student/MaterialPage'));
 const TableroPage          = lazy(() => import('./pages/student/TableroPage'));
@@ -75,6 +79,9 @@ function AppRoutes() {
         <Route path="/reset-password"  element={<ResetPasswordPage />} />
         {/* Política de privacidad: pública (la enlazan la landing y el estudiante) */}
         <Route path={PRIVACY_POLICY_PATH} element={<PrivacyPolicyPage />} />
+        <Route path="/privacy-notice" element={
+          <ProtectedRoute role="estudiante"><StudentPrivacyNoticePage /></ProtectedRoute>
+        } />
         {/* Dashboard universal — redirige por rol */}
         <Route path="/dashboard" element={
           <ProtectedRoute><Layout><DashboardRouter /></Layout></ProtectedRoute>
@@ -107,6 +114,13 @@ function AppRoutes() {
         {/* Evaluaciones publicadas por los profesores (lista, responder, resultado) */}
         <Route path="/evaluations" element={
           <ProtectedRoute role="estudiante"><Layout><EvaluationsPage /></Layout></ProtectedRoute>
+        } />
+        {/* Diagnóstico inicial por competencia (RF-13) */}
+        <Route path="/diagnostic" element={
+          <ProtectedRoute role="estudiante"><Layout><DiagnosticPage /></Layout></ProtectedRoute>
+        } />
+        <Route path="/diagnostic/:slug" element={
+          <ProtectedRoute role="estudiante"><Layout><DiagnosticPage /></Layout></ProtectedRoute>
         } />
         {/* Historial de quizzes dentro de la sección Desafíos */}
         <Route path="/quizzes/history" element={
@@ -176,10 +190,13 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
-        <NotificationsProvider>
-          <AppRoutes />
-          <PWAInstallPrompt />
-        </NotificationsProvider>
+        <GuidedTourProvider>
+          <NotificationsProvider>
+            <AppRoutes />
+            <PWAInstallPrompt />
+            <ConnectionStatus />
+          </NotificationsProvider>
+        </GuidedTourProvider>
       </AuthProvider>
     </HashRouter>
   );

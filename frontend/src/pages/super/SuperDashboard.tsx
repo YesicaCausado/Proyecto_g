@@ -18,6 +18,7 @@ import ProfileSettings from '../../components/ProfileSettings';
 import NeuronWelcome from '../../components/NeuronWelcome';
 import NotificationBell from '../../components/NotificationBell';
 import InstitutionLogo from '../../components/InstitutionLogo';
+import { TutorialMenuButton } from '../../components/GuidedTour';
 import {
   ShieldCheck, LogOut, Users, GraduationCap, LayoutDashboard,
   BrainCircuit, Settings, BookOpen, Bot, FileText,
@@ -108,6 +109,7 @@ export default function SuperDashboard() {
       <button
         key={id}
         title={label}
+        data-tour={`super-${id}`}
         onClick={() => handleNav(id)}
         className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors group ${tokens.stateClass}`}
         style={tokens.style}
@@ -159,6 +161,10 @@ export default function SuperDashboard() {
           </div>
         ))}
       </nav>
+
+      <div className="px-2 pb-2">
+        <TutorialMenuButton />
+      </div>
 
       {/* Pie del sidebar */}
       <div className="px-2 pb-3 pt-2 border-t border-[#E9E9E7] space-y-0.5">

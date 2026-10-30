@@ -75,6 +75,8 @@ class UserResponse(BaseModel):
     institution_id: Optional[int] = None
     institution_name: Optional[str] = None
     document_number: Optional[str] = None
+    privacy_notice_acknowledged_version: Optional[str] = None
+    privacy_notice_required_version: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -98,6 +100,8 @@ class Token(BaseModel):
     document_number: Optional[str] = None
     cognitive_profile: Optional[Dict] = None
     created_at: Optional[datetime] = None
+    privacy_notice_acknowledged_version: Optional[str] = None
+    privacy_notice_required_version: Optional[str] = None
 
 
 # ===== CHAT / APRENDIZAJE =====
@@ -199,6 +203,11 @@ class ConversationMeta(BaseModel):
     updated_at: datetime
     last_interaction: datetime
     bot_id: Optional[int] = None    # NeuroBot de la conversación (None = competencia)
+    bot_name: Optional[str] = None
+    # Con NeuroBot: False si se desactivó o el estudiante ya no tiene acceso;
+    # el historial se puede leer, pero no continuar (bot_unavailable_reason).
+    bot_available: Optional[bool] = None
+    bot_unavailable_reason: Optional[str] = None
 
 
 class ConversationListResponse(BaseModel):
@@ -449,7 +458,7 @@ class ClassroomCreate(BaseModel):
     description: str = Field(default="", max_length=2000)
     subject: str = Field(..., max_length=100)
     grade: str = Field(default="", max_length=20)
-    max_students: int = Field(default=40, ge=1, le=100)
+    max_students: int = Field(default=40, ge=1, le=200)
     color: str = Field(default="#2E6FDB", max_length=20)
     # Competencia Saber 11 del aula; vacía = la que corresponde a la materia.
     competency: Optional[str] = Field(default=None, max_length=30)
@@ -788,6 +797,31 @@ class StudentCreate(_PersonFields):
     email: Optional[str] = Field(None, max_length=100)
     grade: Optional[str] = Field(None, max_length=20)
     birth_date: Optional[str] = Field(None, max_length=20)
+    guardian_authorization_confirmed: bool
+    guardian_name: Optional[str] = Field(None, max_length=150)
+    guardian_consent_date: Optional[str] = Field(None, max_length=10)
+    guardian_authorization_reference: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("guardian_name")
+    @classmethod
+    def _guardian_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return v.person_name(value, label="El nombre del acudiente", max_len=150, required=False) or None
+
+    @field_validator("guardian_consent_date")
+    @classmethod
+    def _guardian_consent_date(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or value == "":
+            return None
+        return v.birth_date(value)
+
+    @field_validator("guardian_authorization_reference")
+    @classmethod
+    def _guardian_reference(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return v.clean_text(value, label="La referencia de autorización", max_len=100, required=False) or None
 
     @field_validator("email")
     @classmethod
@@ -823,6 +857,8 @@ class StudentUpdate(_PersonFields):
     # Autorización del acudiente para cámara y micrófono (menores de edad)
     guardian_authorized: Optional[bool] = None
     guardian_name: Optional[str] = Field(None, max_length=150)
+    guardian_consent_date: Optional[str] = Field(None, max_length=10)
+    guardian_authorization_reference: Optional[str] = Field(None, max_length=100)
 
     @field_validator("email")
     @classmethod
@@ -838,6 +874,21 @@ class StudentUpdate(_PersonFields):
             return None
         return v.person_name(value, label="El nombre del acudiente", max_len=150, required=False) or ""
 
+    @field_validator("guardian_consent_date")
+    @classmethod
+    def _guardian_consent_date(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or value == "":
+            return None
+        return v.birth_date(value)
+
+    @field_validator("guardian_authorization_reference")
+    @classmethod
+    def _guardian_reference(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = v.clean_text(value, label="La referencia de autorización", max_len=100, required=False)
+        return cleaned or ""
+
 
 class StudentListItem(BaseModel):
     id: int
@@ -852,6 +903,8 @@ class StudentListItem(BaseModel):
     guardian_required: bool = False
     guardian_authorized: bool = False
     guardian_name: Optional[str] = None
+    guardian_consent_date: Optional[str] = None
+    guardian_authorization_reference: Optional[str] = None
 
     class Config:
         from_attributes = True

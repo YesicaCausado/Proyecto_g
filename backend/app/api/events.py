@@ -100,7 +100,7 @@ def _events_to_dicts(events, db: Session, user: User | None = None) -> list[dict
         out.append({
             "id": ev.id,
             "classroom_id": ev.classroom_id,
-            "classroom_name": classroom.name if classroom else "Institucional",
+            "classroom_name": classroom.name if classroom else ("Institucional" if ev.classroom_id is None else "Clase"),
             "institution_id": ev.institution_id,
             "teacher_id": ev.teacher_id,
             "teacher_name": teacher.full_name or teacher.username if teacher else "Institución",
@@ -159,7 +159,7 @@ def _require_calendar_manager(user: User) -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("")
-async def list_events(
+def list_events(
     classroom_id: Optional[int] = Query(None),
     month: Optional[str]        = Query(None, description="YYYY-MM para filtrar por mes"),
     current_user: User = Depends(get_current_user),
@@ -345,7 +345,7 @@ async def list_events(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_event(
+def create_event(
     body: EventCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -396,7 +396,7 @@ async def create_event(
 
 
 @router.put("/{event_id}")
-async def update_event(
+def update_event(
     event_id: int,
     body: EventUpdate,
     current_user: User = Depends(get_current_user),
@@ -434,7 +434,7 @@ async def update_event(
 
 
 @router.delete("/{event_id}")
-async def delete_event(
+def delete_event(
     event_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

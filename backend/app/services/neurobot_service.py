@@ -335,10 +335,12 @@ def student_bots(db: Session, student: User) -> List[dict]:
 
 
 def student_bot_detail(db: Session, student: User, bot_id: int) -> dict:
-    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id, ExpertBot.is_active == True).first()  # noqa: E712
+    bot = db.query(ExpertBot).filter(ExpertBot.id == bot_id).first()
     assignment = assignment_for(db, student.id, bot_id) if bot else None
     if bot is None or assignment is None:
         raise NeuroBotError("Este NeuroBot no está asignado a ti.", 404)
+    if not bot.is_active:
+        raise NeuroBotError("Este NeuroBot fue desactivado y ya no está disponible.", 404)
     card = _bot_card(db, bot, assignment, _get_progress(db, student.id, bot_id))
     from app.models.adaptive import Conversation
     last = db.query(Conversation).filter(

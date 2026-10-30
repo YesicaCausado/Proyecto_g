@@ -83,6 +83,15 @@ def _add_missing_sqlite_columns(engine) -> None:
 # Columnas que el código usa aunque el SQL de migrations/ no se haya ejecutado
 # en Supabase. (tabla, columna, definición)
 RUNTIME_COLUMNS = [
+    # Tutorial guiado: avance y finalización independientes de los datos académicos.
+    ("users", "tutorial_completed", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("users", "tutorial_role", "VARCHAR(20)"),
+    ("users", "tutorial_step", "INTEGER NOT NULL DEFAULT 0"),
+    # Registro verificable de autorización institucional del acudiente (021).
+    ("users", "guardian_consent_date", "VARCHAR(10)"),
+    ("users", "guardian_authorization_reference", "VARCHAR(100)"),
+    ("users", "guardian_confirmation_recorded_at", "TIMESTAMP"),
+    ("users", "guardian_confirmation_by_id", "INTEGER"),
     # Eliminación de mensajes (migrations/applied/delete_fields.sql)
     ("direct_messages", "deleted_for_sender", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("direct_messages", "deleted_for_receiver", "BOOLEAN NOT NULL DEFAULT FALSE"),
@@ -97,6 +106,9 @@ RUNTIME_COLUMNS = [
     ("classrooms", "competency", "VARCHAR(30)"),
     ("teacher_evaluations", "competency", "VARCHAR(30)"),
     ("quiz_history", "competency", "VARCHAR(30)"),
+    # Evaluación del tutor de IA en el diagnóstico inicial (019)
+    ("diagnostic_results", "tutor_feedback", "TEXT"),
+    ("diagnostic_results", "feedback_provider", "VARCHAR(20)"),
 ]
 
 # Índices que deben existir. (nombre, tabla, columnas). Los ix_* coinciden con
@@ -126,6 +138,8 @@ REQUIRED_INDEXES = [
     ("ix_teacher_folders_teacher_id", "teacher_folders", "teacher_id"),
     ("ix_quiz_history_classroom_id", "quiz_history", "classroom_id"),
     ("ix_student_bot_assignments_teacher_id", "student_bot_assignments", "teacher_id"),
+    # Bloqueo persistente de cuentas (019): fallos recientes de un usuario.
+    ("idx_audit_logs_actor_action_created", "audit_logs", "performed_by_id, action, created_at"),
 ]
 
 _DDL_LOCK_TIMEOUT = "3s"
@@ -184,6 +198,11 @@ def prepare_postgres_schema(engine) -> None:
         try:
             Base.metadata.create_all(bind=engine, tables=missing_tables)
             logger.info("Tablas creadas al arrancar: %s", ", ".join(t.name for t in missing_tables))
+            # Sin RLS, Supabase expondría la tabla nueva por su API REST. El
+            # backend entra como dueño de las tablas y no se ve afectado.
+            with engine.begin() as conn:
+                for t in missing_tables:
+                    conn.execute(text(f'ALTER TABLE "{t.name}" ENABLE ROW LEVEL SECURITY'))
         except Exception as e:  # noqa: BLE001
             logger.error(f"Esquema: no se pudieron crear tablas: {str(e)[:200]}")
     created = {t.name for t in missing_tables}
@@ -271,6 +290,9 @@ def run_migrations(engine) -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS document_type        VARCHAR(20)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS institution_id       INTEGER",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_completed BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_role VARCHAR(20)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_step INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS subject_area         VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS grade                VARCHAR(20)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date           VARCHAR(20)",

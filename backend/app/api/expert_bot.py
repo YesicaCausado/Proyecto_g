@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import and_, or_, func
 
 from app.core import validators as v
 from app.db.database import get_db
@@ -113,7 +113,7 @@ class BotPatchPayload(_BotFields):
 
 # ─── GET /bots (montado en main.py con prefix="/api/v1/bots") ─────────────────
 @router.get("/")
-async def list_bots(
+def list_bots(
     creator_id: Optional[int] = Query(None, description="Filtrar por creador"),
     is_public: Optional[bool] = Query(None, description="Solo bots públicos"),
     search: Optional[str] = Query(None, description="Buscar por nombre o descripción"),
@@ -137,10 +137,11 @@ async def list_bots(
         if creator_id is not None:
             query = query.filter(ExpertBot.creator_id == creator_id)
     elif current_user.role != UserRole.SUPER_PROFESOR.value:
-        # Profesores y estudiantes: solo ven bots públicos de su institución O los que ellos mismos crearon.
+        # Profesores y estudiantes: solo ven bots públicos y activos de su institución O los que ellos mismos crearon.
         # Se ignora el parámetro is_public del cliente para evitar enumeración de bots privados ajenos.
         query = _same_institution_creators(query, current_user).filter(
-            or_(ExpertBot.is_public == True, ExpertBot.creator_id == current_user.id)
+            or_(and_(ExpertBot.is_public == True, ExpertBot.is_active == True),
+                ExpertBot.creator_id == current_user.id)
         )
         if creator_id is not None:
             query = query.filter(ExpertBot.creator_id == creator_id)
@@ -188,7 +189,7 @@ async def list_bots(
 
 # ─── GET /shared-with-me (bots compartidos con el estudiante) ─────────────────
 @router.get("/shared-with-me")
-async def list_shared_bots(
+def list_shared_bots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -270,7 +271,7 @@ async def list_shared_bots(
 
 # ─── GET /my-bots (bots del usuario actual) ────────────────────────────────────
 @router.get("/my-bots")
-async def list_my_bots(
+def list_my_bots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -289,7 +290,7 @@ async def list_my_bots(
 
 # ─── GET /bots/{bot_id} ────────────────────────────────────────────────────────
 @router.get("/{bot_id}")
-async def get_bot(
+def get_bot(
     bot_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -356,7 +357,7 @@ def _build_bot_response(bot: ExpertBot, db: Optional[Session] = None) -> dict:
 
 @router.post("/")
 @router.post("/create")
-async def create_bot(
+def create_bot(
     payload: BotCreatePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -405,7 +406,7 @@ async def create_bot(
 
 # ─── PUT /bots/{bot_id} ────────────────────────────────────────────────────────
 @router.put("/{bot_id}")
-async def update_bot(
+def update_bot(
     bot_id: int,
     payload: BotCreatePayload,
     db: Session = Depends(get_db),
@@ -448,7 +449,7 @@ async def update_bot(
 
 # ─── PATCH /{bot_id} (actualización parcial — toggle is_active/is_public) ─────
 @router.patch("/{bot_id}")
-async def patch_bot(
+def patch_bot(
     bot_id: int,
     payload: BotPatchPayload,
     db: Session = Depends(get_db),
@@ -494,7 +495,7 @@ async def patch_bot(
 
 # ─── DELETE /bots/{bot_id} ─────────────────────────────────────────────────────
 @router.delete("/{bot_id}")
-async def delete_bot(
+def delete_bot(
     bot_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

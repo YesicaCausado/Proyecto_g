@@ -13,7 +13,6 @@ type ReportKind = 'resumen' | 'quizzes' | 'evaluaciones';
 type ReportFormat = 'csv' | 'pdf';
 
 const KINDS: { id: ReportKind; label: string; desc: string }[] = [
-  { id: 'resumen', label: 'Resumen por estudiante', desc: 'Quizzes, evaluaciones, progreso y riesgo de cada estudiante' },
   { id: 'quizzes', label: 'Quizzes adaptativos', desc: 'Cada quiz completado: competencia, puntaje y tiempo' },
   { id: 'evaluaciones', label: 'Evaluaciones', desc: 'Nota oficial (mejor intento) de cada estudiante por evaluación' },
 ];

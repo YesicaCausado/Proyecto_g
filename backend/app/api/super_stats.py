@@ -34,6 +34,12 @@ from app.models.expert_bot import ExpertBot
 from app.models.messages import DirectMessage
 from app.services.competencies import COMP_NAMES, classroom_competency, valid_key
 from app.services import neuroalert_service
+from app.services.capacity import (
+    MAX_CLASSROOMS_PER_INSTITUTION,
+    effective_classroom_limit,
+    institution_classroom_count,
+    lock_capacity,
+)
 
 router = APIRouter(prefix="/super", tags=["Super Profesor - Stats"])
 
@@ -50,7 +56,7 @@ def _get_institution_id(user: User, db: Session) -> Optional[int]:
 # ── GET /super/institution ────────────────────────────────────────────────────
 
 @router.get("/institution")
-async def get_institution(
+def get_institution(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -146,7 +152,7 @@ def _validate_logo(logo: str) -> None:
 # ── PATCH /super/institution ──────────────────────────────────────────────────
 
 @router.patch("/institution")
-async def update_institution(
+def update_institution(
     payload: InstitutionUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -203,7 +209,7 @@ async def update_institution(
 # ── GET /super/stats/dashboard ────────────────────────────────────────────────
 
 @router.get("/stats/dashboard")
-async def get_super_dashboard(
+def get_super_dashboard(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -358,7 +364,7 @@ def _compute_super_dashboard(current_user: User, db: Session):
 # ── GET /super/stats/alerts ───────────────────────────────────────────────────
 
 @router.get("/stats/alerts")
-async def get_super_alerts(
+def get_super_alerts(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.VER_NEUROALERTAS)),
     db: Session = Depends(get_db),
@@ -456,7 +462,7 @@ def _institution_alerts(current_user: User, db: Session) -> list[dict]:
 
 
 @router.post("/stats/alerts/{alert_id}/resolve")
-async def resolve_super_alert(
+def resolve_super_alert(
     alert_id: str,
     resolved: bool = Query(True),
     current_user: User = Depends(get_current_user),
@@ -502,7 +508,7 @@ def _audit_description(lg: AuditLog, target_name: Optional[str]) -> str:
 
 
 @router.get("/audit")
-async def get_audit_logs(
+def get_audit_logs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     action: Optional[str] = Query(None),
@@ -569,7 +575,7 @@ async def get_audit_logs(
 # ── GET /super/stats/security ─────────────────────────────────────────────────
 
 @router.get("/stats/security")
-async def get_security_stats(
+def get_security_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -636,7 +642,7 @@ async def get_security_stats(
 # ── POST /super/users/{id}/revoke-sessions ────────────────────────────────────
 
 @router.post("/users/{user_id}/revoke-sessions")
-async def revoke_institution_user_sessions(
+def revoke_institution_user_sessions(
     user_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -667,7 +673,7 @@ async def revoke_institution_user_sessions(
 # ── GET /super/classrooms ─────────────────────────────────────────────────────
 
 @router.get("/classrooms")
-async def get_super_classrooms(
+def get_super_classrooms(
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -731,6 +737,7 @@ async def get_super_classrooms(
             "competency":  classroom_competency(c),
             "grade":       c.grade or "—",
             "students":    student_count,
+            "max_students": effective_classroom_limit(c),
             "code":        c.invite_code,
             "status":      "activo" if c.is_active else "inactivo",
             "avg":         avg,
@@ -750,7 +757,7 @@ def _institution_classroom(db: Session, current_user: User, classroom_id: int) -
 
 
 @router.get("/classrooms/{classroom_id}")
-async def get_super_classroom_detail(
+def get_super_classroom_detail(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -793,7 +800,7 @@ class SuperClassroomUpdate(BaseModel):
     teacher_id: Optional[int] = None
     # Competencia Saber 11 del grupo; "general" = aula sin competencia única.
     competency: Optional[str] = None
-    # Datos del grupo (RF-10: el Súper Profesor también los edita).
+    # Datos del grupo (RF-62: el Súper Profesor también los edita).
     name: Optional[str] = Field(default=None, max_length=150)
     subject: Optional[str] = Field(default=None, max_length=100)
     grade: Optional[str] = Field(default=None, max_length=20)
@@ -817,7 +824,7 @@ class SuperClassroomCreate(BaseModel):
     description: str = Field(default="", max_length=2000)
     teacher_id: int
     competency: Optional[str] = Field(default=None, max_length=30)
-    max_students: int = Field(default=40, ge=1, le=100)
+    max_students: int = Field(default=40, ge=1, le=200)
 
     @field_validator("grade")
     @classmethod
@@ -843,15 +850,21 @@ def _active_institution_teacher(db: Session, current_user: User, teacher_id: int
 
 
 @router.post("/classrooms", status_code=201)
-async def create_super_classroom(
+def create_super_classroom(
     data: SuperClassroomCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Crea un grupo de la institución a cargo de un profesor activo (RF-10)."""
+    """Crea un grupo de la institución a cargo de un profesor activo (RF-62)."""
     _require_super(current_user)
     if not current_user.institution_id:
         raise HTTPException(400, "No tienes una institución asignada")
+    lock_capacity(db, "institution", current_user.institution_id)
+    if institution_classroom_count(db, current_user.institution_id) >= MAX_CLASSROOMS_PER_INSTITUTION:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La institución admite como máximo {MAX_CLASSROOMS_PER_INSTITUTION} aulas.",
+        )
     teacher = _active_institution_teacher(db, current_user, data.teacher_id)
     name, subject = data.name.strip(), data.subject.strip()
     if not name or not subject:
@@ -894,7 +907,7 @@ async def create_super_classroom(
 
 
 @router.patch("/classrooms/{classroom_id}")
-async def update_super_classroom(
+def update_super_classroom(
     classroom_id: int,
     data: SuperClassroomUpdate,
     current_user: User = Depends(get_current_user),
@@ -950,7 +963,7 @@ async def update_super_classroom(
 # ── GET /super/bots ───────────────────────────────────────────────────────────
 
 @router.get("/bots")
-async def get_super_bots(
+def get_super_bots(
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1054,7 +1067,7 @@ def _broadcast_recipients(body: "BroadcastSend", sender: "User", db: Session):
 
 
 @router.get("/broadcasts")
-async def list_broadcasts(
+def list_broadcasts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1112,7 +1125,7 @@ def _broadcast_content(subject: str, body: str) -> str:
 
 
 @router.post("/broadcasts", status_code=201)
-async def send_broadcast(
+def send_broadcast(
     subject: str = Form(...),
     body: str = Form(...),
     recipient_type: str = Form("institucional"),

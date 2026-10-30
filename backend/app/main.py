@@ -35,11 +35,14 @@ from app.api import teacher_materials
 from app.api import student_materials
 from app.api import teacher_evaluations
 from app.api import student_evaluations
+from app.api import student_diagnostic
 from app.api import consents
+from app.api import student_privacy
 from app.api import teacher_reports
 from app.api import teacher_ai
 from app.api import admin_users
 from app.api import notifications
+from app.api import tutorial
 from app.api import admin_bots
 from app.api import integrations
 from app.api import voice
@@ -159,6 +162,11 @@ if engine is not None:
 
 app.include_router(
     auth.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    student_privacy.router,
     prefix="/api/v1",
 )
 
@@ -398,6 +406,11 @@ app.include_router(
     prefix="/api/v1",
 )
 
+app.include_router(
+    tutorial.router,
+    prefix="/api/v1",
+)
+
 
 # ------------------------------------------------------------
 # ADMIN BOTS
@@ -425,6 +438,21 @@ app.include_router(
 
 app.include_router(
     voice.router,
+    prefix="/api/v1",
+)
+
+
+# ------------------------------------------------------------
+# DIAGNÓSTICO INICIAL (estudiante y vista del profesor)
+# ------------------------------------------------------------
+
+app.include_router(
+    student_diagnostic.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    student_diagnostic.teacher_router,
     prefix="/api/v1",
 )
 

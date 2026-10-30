@@ -70,6 +70,13 @@ def require_teacher(user: User):
 
 
 from app.services.enrollment_tracking_service import EnrollmentTrackingService  # noqa: E402
+from app.services.capacity import (
+    MAX_CLASSROOMS_PER_INSTITUTION,
+    effective_classroom_limit,
+    institution_classroom_count,
+    lock_capacity,
+    require_classroom_slots,
+)
 
 
 def _managed_classroom_or_404(db: Session, user: User, classroom_id: int) -> Classroom:
@@ -144,7 +151,7 @@ def classroom_response(
         grade=classroom.grade,
         invite_code=classroom.invite_code,
         is_active=classroom.is_active,
-        max_students=classroom.max_students,
+        max_students=effective_classroom_limit(classroom),
         color=getattr(
             classroom,
             "color",
@@ -165,7 +172,7 @@ def classroom_response(
     response_model=ClassroomResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_classroom(
+def create_classroom(
     request: ClassroomCreate,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
@@ -174,6 +181,19 @@ async def create_classroom(
     """Crear una nueva clase."""
 
     require_teacher(current_user)
+
+    institution_id = current_user.institution_id
+    if not institution_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tu cuenta no tiene una institución asignada.",
+        )
+    lock_capacity(db, "institution", institution_id)
+    if institution_classroom_count(db, institution_id) >= MAX_CLASSROOMS_PER_INSTITUTION:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"La institución admite como máximo {MAX_CLASSROOMS_PER_INSTITUTION} aulas.",
+        )
 
     # --------------------------------------------------------
     # Crear clase
@@ -239,7 +259,7 @@ async def create_classroom(
     "/my-classes",
     response_model=ClassroomListResponse,
 )
-async def list_my_classrooms(
+def list_my_classrooms(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
@@ -346,7 +366,7 @@ async def list_my_classrooms(
     "/my-enrolled",
     response_model=ClassroomListResponse,
 )
-async def list_enrolled_classrooms(
+def list_enrolled_classrooms(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),
     db: Session = Depends(get_db),
@@ -452,7 +472,7 @@ async def list_enrolled_classrooms(
     "/{classroom_id}",
     response_model=ClassroomResponse,
 )
-async def get_classroom(
+def get_classroom(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -544,7 +564,7 @@ async def get_classroom(
     "/{classroom_id}/student-detail",
     response_model=ClassroomStudentDetailResponse,
 )
-async def get_student_classroom_detail(
+def get_student_classroom_detail(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -671,7 +691,7 @@ async def get_student_classroom_detail(
         subject=classroom.subject,
         grade=classroom.grade,
         color=classroom.color or "#2E6FDB",
-        max_students=classroom.max_students,
+        max_students=effective_classroom_limit(classroom),
         student_count=student_count,
         created_at=classroom.created_at,
         teacher_name=teacher_name,
@@ -693,7 +713,7 @@ async def get_student_classroom_detail(
 @router.delete(
     "/{classroom_id}"
 )
-async def delete_classroom(
+def delete_classroom(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
@@ -752,7 +772,7 @@ async def delete_classroom(
     "/join",
     response_model=EnrollmentResponse,
 )
-async def join_classroom(
+def join_classroom(
     request: EnrollByCodeRequest,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),
@@ -785,7 +805,11 @@ async def join_classroom(
     # colegio responde igual que un código inexistente.
     if classroom is not None:
         teacher = db.query(User).filter(User.id == classroom.teacher_id).first()
-        if teacher is None or teacher.institution_id != current_user.institution_id:
+        if (
+            teacher is None
+            or not current_user.institution_id
+            or teacher.institution_id != current_user.institution_id
+        ):
             classroom = None
 
     if not classroom:
@@ -794,14 +818,7 @@ async def join_classroom(
             detail="Código de invitación no válido",
         )
 
-    current_count = (
-        db.query(Enrollment)
-        .filter(
-            Enrollment.classroom_id == classroom.id,
-            Enrollment.is_active == True,
-        )
-        .count()
-    )
+    lock_capacity(db, "institution", current_user.institution_id)
 
     # --------------------------------------------------------
     # Verificar inscripción existente
@@ -834,11 +851,7 @@ async def join_classroom(
                         "que te reincorpore desde su lista de estudiantes."),
             )
 
-        if current_count >= classroom.max_students:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La clase está llena",
-            )
+        require_classroom_slots(db, classroom)
 
         from app.services import neurobot_service
         bots_before = neurobot_service.bot_ids_of_student(db, current_user.id)
@@ -871,11 +884,7 @@ async def join_classroom(
     # Verificar cupo
     # --------------------------------------------------------
 
-    if current_count >= classroom.max_students:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La clase está llena",
-        )
+    require_classroom_slots(db, classroom)
 
     # --------------------------------------------------------
     # Crear inscripción
@@ -951,7 +960,7 @@ async def join_classroom(
     "/{classroom_id}/students",
     response_model=List[EnrollmentResponse],
 )
-async def list_students(
+def list_students(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
@@ -1030,7 +1039,7 @@ async def list_students(
 @router.delete(
     "/{classroom_id}/students/{student_id}"
 )
-async def remove_student(
+def remove_student(
     classroom_id: int,
     student_id: int,
     current_user: User = Depends(get_current_user),
@@ -1107,7 +1116,7 @@ async def remove_student(
 @router.get(
     "/{classroom_id}/removed-students"
 )
-async def list_removed_students(
+def list_removed_students(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
@@ -1143,7 +1152,7 @@ async def list_removed_students(
 @router.post(
     "/{classroom_id}/students/{student_id}/reinstate"
 )
-async def reinstate_student(
+def reinstate_student(
     classroom_id: int,
     student_id: int,
     current_user: User = Depends(get_current_user),
@@ -1154,6 +1163,11 @@ async def reinstate_student(
 
     require_teacher(current_user)
     classroom = _managed_classroom_or_404(db, current_user, classroom_id)
+    institution_id = current_user.institution_id
+    if not institution_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Tu cuenta no tiene una institución asignada.")
+    lock_capacity(db, "institution", institution_id)
     if not classroom.is_active:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="El grupo está desactivado")
@@ -1172,18 +1186,17 @@ async def reinstate_student(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="El estudiante no está retirado de este grupo")
 
-    student = db.query(User).filter(User.id == student_id, User.is_active == True).first()  # noqa: E712
+    student = db.query(User).filter(
+        User.id == student_id,
+        User.institution_id == institution_id,
+        User.role == UserRole.ESTUDIANTE.value,
+        User.is_active == True,  # noqa: E712
+    ).first()
     if student is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="La cuenta del estudiante está desactivada")
 
-    active_count = (
-        db.query(Enrollment)
-        .filter(Enrollment.classroom_id == classroom.id, Enrollment.is_active == True)  # noqa: E712
-        .count()
-    )
-    if active_count >= classroom.max_students:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La clase está llena")
+    require_classroom_slots(db, classroom)
 
     from app.services import neurobot_service
     bots_before = neurobot_service.bot_ids_of_student(db, student.id)
@@ -1211,7 +1224,7 @@ async def reinstate_student(
 @router.post(
     "/{classroom_id}/bots"
 )
-async def assign_bot_to_classroom(
+def assign_bot_to_classroom(
     classroom_id: int,
     request: AssignBotRequest,
     current_user: User = Depends(get_current_user),
@@ -1343,7 +1356,7 @@ async def assign_bot_to_classroom(
 @router.get(
     "/{classroom_id}/available-bots"
 )
-async def list_available_bots(
+def list_available_bots(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.ASIGNAR_BOTS_AULA)),
@@ -1432,7 +1445,7 @@ async def list_available_bots(
 @router.get(
     "/{classroom_id}/bots"
 )
-async def list_classroom_bots(
+def list_classroom_bots(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.ASIGNAR_BOTS_AULA)),
@@ -1527,7 +1540,7 @@ async def list_classroom_bots(
 @router.delete(
     "/{classroom_id}/bots/{bot_id}"
 )
-async def remove_bot_from_classroom(
+def remove_bot_from_classroom(
     classroom_id: int,
     bot_id: int,
     current_user: User = Depends(get_current_user),
@@ -1601,7 +1614,7 @@ async def remove_bot_from_classroom(
     "/{classroom_id}/stats",
     response_model=ClassroomStatsResponse,
 )
-async def get_classroom_stats(
+def get_classroom_stats(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
@@ -1829,7 +1842,7 @@ async def get_classroom_stats(
     "/{classroom_id}/students/{student_id}/progress",
     response_model=StudentProgressResponse,
 )
-async def get_student_progress(
+def get_student_progress(
     classroom_id: int,
     student_id: int,
     current_user: User = Depends(get_current_user),
@@ -1925,7 +1938,7 @@ async def get_student_progress(
 @router.get(
     "/{classroom_id}/alerts"
 )
-async def get_classroom_alerts(
+def get_classroom_alerts(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
@@ -2053,7 +2066,7 @@ def _managed_classroom(db: Session, current_user: User, classroom_id: int) -> Cl
 
 
 @router.post("/{classroom_id}/alerts/{alert_id}/resolve")
-async def resolve_classroom_alert(
+def resolve_classroom_alert(
     classroom_id: int,
     alert_id: str,
     resolved: bool = True,
@@ -2081,13 +2094,13 @@ async def resolve_classroom_alert(
 
 
 @router.post("/{classroom_id}/regenerate-code")
-async def regenerate_invite_code(
+def regenerate_invite_code(
     classroom_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_AULAS)),
     db: Session = Depends(get_db),
 ):
-    """Nuevo código de invitación (RF-21); el anterior deja de servir para unirse."""
+    """Nuevo código de invitación (RF-39); el anterior deja de servir para unirse."""
     require_teacher(current_user)
     classroom = _managed_classroom(db, current_user, classroom_id)
     if not classroom.is_active:
