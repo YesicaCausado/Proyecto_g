@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import { GuidedTourProvider } from './components/GuidedTour';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import ConnectionStatus from './components/ConnectionStatus';
 import { PRIVACY_POLICY_PATH } from './data/legal';
@@ -189,11 +190,13 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
-        <NotificationsProvider>
-          <AppRoutes />
-          <PWAInstallPrompt />
-          <ConnectionStatus />
-        </NotificationsProvider>
+        <GuidedTourProvider>
+          <NotificationsProvider>
+            <AppRoutes />
+            <PWAInstallPrompt />
+            <ConnectionStatus />
+          </NotificationsProvider>
+        </GuidedTourProvider>
       </AuthProvider>
     </HashRouter>
   );

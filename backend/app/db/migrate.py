@@ -83,6 +83,10 @@ def _add_missing_sqlite_columns(engine) -> None:
 # Columnas que el código usa aunque el SQL de migrations/ no se haya ejecutado
 # en Supabase. (tabla, columna, definición)
 RUNTIME_COLUMNS = [
+    # Tutorial guiado: avance y finalización independientes de los datos académicos.
+    ("users", "tutorial_completed", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("users", "tutorial_role", "VARCHAR(20)"),
+    ("users", "tutorial_step", "INTEGER NOT NULL DEFAULT 0"),
     # Registro verificable de autorización institucional del acudiente (021).
     ("users", "guardian_consent_date", "VARCHAR(10)"),
     ("users", "guardian_authorization_reference", "VARCHAR(100)"),
@@ -286,6 +290,9 @@ def run_migrations(engine) -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS document_type        VARCHAR(20)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS institution_id       INTEGER",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_completed BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_role VARCHAR(20)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS tutorial_step INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS subject_area         VARCHAR(100)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS grade                VARCHAR(20)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date           VARCHAR(20)",

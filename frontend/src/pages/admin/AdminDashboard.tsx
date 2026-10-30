@@ -24,6 +24,7 @@ import UserManagement from './UserManagement';
 import AuditLogs from './AuditLogs';
 import SystemConfig from './SystemConfig';
 import BotManagement from './BotManagement';
+import { TutorialMenuButton } from '../../components/GuidedTour';
 
 // Ítems del menú lateral
 const NAV_ITEMS = [
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
     icon: LayoutDashboard,
     label: 'Inicio',
     description: 'Resumen general',
+    tourId: 'admin-dashboard',
   },
   {
     to: '/admin/instituciones',
@@ -40,6 +42,7 @@ const NAV_ITEMS = [
     icon: School,
     label: 'Instituciones',
     description: 'Colegios y super profesores',
+    tourId: 'admin-instituciones',
   },
   {
     to: '/admin/usuarios',
@@ -47,6 +50,7 @@ const NAV_ITEMS = [
     icon: Users,
     label: 'Usuarios',
     description: 'Gestión de cuentas',
+    tourId: 'admin-usuarios',
   },
   {
     to: '/admin/auditoria',
@@ -54,6 +58,7 @@ const NAV_ITEMS = [
     icon: ClipboardList,
     label: 'Auditoría',
     description: 'Logs del sistema',
+    tourId: 'admin-auditoria',
   },
   {
     to: '/admin/bots',
@@ -61,6 +66,7 @@ const NAV_ITEMS = [
     icon: Brain,
     label: 'Bots',
     description: 'Moderación de bots',
+    tourId: 'admin-bots',
   },
   {
     to: '/admin/configuracion',
@@ -68,6 +74,7 @@ const NAV_ITEMS = [
     icon: Settings,
     label: 'Configuración',
     description: 'Ajustes del sistema',
+    tourId: 'admin-configuracion',
   },
 ];
 
@@ -111,6 +118,7 @@ export default function AdminDashboard() {
             key={item.to}
             to={item.to}
             end={item.end}
+            data-tour={item.tourId}
             onClick={() => setSidebarOpen(false)}
             style={({ isActive }) => navItemStyle('dark', isActive).style}
             className={({ isActive }) => {
@@ -131,6 +139,9 @@ export default function AdminDashboard() {
           </NavLink>
         ))}
       </nav>
+      <div className="px-3 pb-3">
+        <TutorialMenuButton className="text-[#BFDFF0] hover:bg-white/10 hover:text-white" />
+      </div>
 
       {/* Perfil y logout */}
       <div className="px-3 py-4 border-t border-[#37352F]/60 space-y-2">

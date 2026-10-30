@@ -46,6 +46,7 @@ import {
 
 import { navItemStyle } from '../../styles/sidebar';
 import { THEME } from '../../styles/theme';
+import { TutorialMenuButton } from '../../components/GuidedTour';
 
 // ============================================================
 // TIPOS
@@ -501,6 +502,7 @@ export default function TeacherPanel() {
     return (
       <button
         type="button"
+        data-tour={`teacher-${id}`}
         onClick={() =>
           handleNav(id)
         }
@@ -782,6 +784,10 @@ export default function TeacherPanel() {
           )
         )}
       </nav>
+
+      <div className="px-2 pb-2">
+        <TutorialMenuButton />
+      </div>
 
       {/* ====================================================
           PIE DEL SIDEBAR

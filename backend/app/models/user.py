@@ -137,6 +137,23 @@ class User(Base):
         nullable=False,
     )
 
+    tutorial_completed = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    tutorial_role = Column(
+        String(20),
+        nullable=True,
+    )
+
+    tutorial_step = Column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
     # =========================================================
     # INFORMACIÓN ACADÉMICA
     # =========================================================

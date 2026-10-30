@@ -44,6 +44,7 @@ migrations/
 | 019 | `019_tutor_diagnostico_bloqueo.sql` | **Aplicada el 23 oct 2026.** Columnas `tutor_feedback` y `feedback_provider` en `diagnostic_results` (evaluación del tutor de IA, RF-13) e índice `idx_audit_logs_actor_action_created` para el bloqueo persistente de cuentas (RNF-04). Idempotente; el índice va fuera de una transacción. | Oct 2026 |
 | 020 | `020_rls_tablas_restantes.sql` | **Aplicada el 23 oct 2026.** Activa RLS en las 13 tablas públicas que no lo tenían (mensajes, conversaciones, integraciones, tablero, quizzes, memoria y estado del estudiante, automatizaciones, alertas resueltas), para que la API REST de Supabase no las exponga (RNF-05). El backend entra como dueño y no se ve afectado. Idempotente. | Oct 2026 |
 | 021 | `021_autorizacion_y_aviso_privacidad_estudiantes.sql` | Pendiente de ejecutar. Registra metadatos de verificación de autorización del acudiente y el historial versionado de presentación/acuse del aviso de privacidad del estudiante. | Oct 2026 |
+| 022 | `022_tutorial_guiado.sql` | Añade a `users` el estado de finalización, rol y paso guardado del tutorial guiado. El backend también agrega estas columnas de forma idempotente al verificar el esquema. | Oct 2026 |
 
 ## RLS multi-tenant (005)
 

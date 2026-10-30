@@ -42,6 +42,7 @@ from app.api import teacher_reports
 from app.api import teacher_ai
 from app.api import admin_users
 from app.api import notifications
+from app.api import tutorial
 from app.api import admin_bots
 from app.api import integrations
 from app.api import voice
@@ -402,6 +403,11 @@ app.include_router(
 
 app.include_router(
     notifications.router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    tutorial.router,
     prefix="/api/v1",
 )
 

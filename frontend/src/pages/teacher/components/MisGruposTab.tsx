@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Copy, Share2, RefreshCw, Users, BookOpen, MoreVertical,
+  Plus, Copy, RefreshCw, Users, BookOpen, MoreVertical,
   Check, ChevronLeft, Megaphone, ClipboardList, UserCheck,
   Eye, EyeOff, Loader2, UserMinus, UserPlus,
 } from 'lucide-react';
@@ -523,12 +523,7 @@ export default function MisGruposTab() {
                         className="w-6 h-6 flex items-center justify-center rounded hover:bg-white text-[#787774] hover:text-[#2E6FDB] transition-colors">
                         {copiedId === g.id ? <Check className="w-3.5 h-3.5 text-[#0F7B6C]" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
-                      <button
-                        onClick={() => navigator.share?.({ title: g.name, text: `Únete a ${g.name} con el código: ${g.code}`, url: window.location.href })}
-                        title="Compartir"
-                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-white text-[#787774] hover:text-[#2E6FDB] transition-colors">
-                        <Share2 className="w-3.5 h-3.5" />
-                      </button>
+              
                       <button onClick={() => regenerateCode(g)} title="Generar un código nuevo" disabled={busyId === g.id}
                         className="w-6 h-6 flex items-center justify-center rounded hover:bg-white text-[#787774] hover:text-[#D9730D] transition-colors disabled:opacity-50">
                         {busyId === g.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
