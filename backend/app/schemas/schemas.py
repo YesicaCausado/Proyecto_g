@@ -794,7 +794,7 @@ class StudentCreate(_PersonFields):
     full_name: str = Field(..., max_length=100)
     document_type: str = Field(..., max_length=2)
     document_number: str = Field(..., max_length=30)
-    email: Optional[str] = Field(None, max_length=100)
+    email: str = Field(..., max_length=100)
     grade: Optional[str] = Field(None, max_length=20)
     birth_date: Optional[str] = Field(None, max_length=20)
     guardian_authorization_confirmed: bool
@@ -825,9 +825,8 @@ class StudentCreate(_PersonFields):
 
     @field_validator("email")
     @classmethod
-    def _email(cls, value: Optional[str]) -> Optional[str]:
-        # Opcional: sin correo se le asigna una dirección interna no entregable.
-        return v.email(value, required=False)
+    def _email(cls, value: str) -> str:
+        return v.email(value)
 
 
 class TeacherUpdate(_PersonFields):
@@ -841,15 +840,15 @@ class TeacherUpdate(_PersonFields):
     @field_validator("email")
     @classmethod
     def _email(cls, value: Optional[str]) -> Optional[str]:
-        # El correo del docente es obligatorio: si se envía, no puede quedar vacío.
-        return None if value is None else v.email(value)
+        if value is None:
+            raise ValueError("El correo electrónico es obligatorio.")
+        return v.email(value)
 
 
 class StudentUpdate(_PersonFields):
     """Edición parcial de un estudiante (solo envía los campos que cambian)."""
     full_name: Optional[str] = Field(None, max_length=100)
     document_type: Optional[str] = Field(None, max_length=2)
-    # "" = quitar el correo (se vuelve a la dirección interna no entregable).
     email: Optional[str] = Field(None, max_length=100)
     grade: Optional[str] = Field(None, max_length=20)
     birth_date: Optional[str] = Field(None, max_length=20)
@@ -864,8 +863,8 @@ class StudentUpdate(_PersonFields):
     @classmethod
     def _email(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
-            return None
-        return v.email(value, required=False) or ""
+            raise ValueError("El correo electrónico es obligatorio.")
+        return v.email(value)
 
     @field_validator("guardian_name")
     @classmethod

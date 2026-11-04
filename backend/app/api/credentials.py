@@ -36,7 +36,6 @@ from app.schemas.schemas import (
 from app.services.consent_service import _parse_birth_date
 from app.services.consent_service import ADULT_AGE, age_on
 from app.services.email_service import send_credentials_email
-from app.services.mail.addresses import placeholder_email_for
 from app.services.capacity import (
     MAX_ACTIVE_INSTITUTIONS,
     MAX_STUDENTS_PLATFORM,
@@ -111,8 +110,7 @@ CSV_MAX_ROWS = 2000
 TEACHER_CSV_COLUMNS = ("nombre_completo", "tipo_documento", "numero_documento", "correo", "area")
 STUDENT_CSV_COLUMNS = (
     "nombre_completo", "tipo_documento", "numero_documento", "correo", "grado",
-    "fecha_nacimiento", "nombre_acudiente", "fecha_autorizacion_acudiente",
-    "referencia_autorizacion",
+    "fecha_nacimiento", "nombre_acudiente",
 )
 
 
@@ -201,7 +199,7 @@ def _bad_email(value: Optional[str]) -> str:
     shown = (value or "").strip()
     shown = shown if len(shown) <= 60 else shown[:57] + "…"
     if not shown:
-        return "Correo vacío (es obligatorio para profesores)"
+        return "Correo vacío (es obligatorio para profesores y estudiantes)"
     return f"Correo inválido «{shown}» (usa el formato nombre@colegio.edu.co)"
 
 
@@ -770,7 +768,7 @@ def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set)
     if row.get("fecha_nacimiento") and _parse_birth_date(row["fecha_nacimiento"]) is None:
         return f"fecha_nacimiento inválida «{row['fecha_nacimiento']}» (usa AAAA-MM-DD, p. ej. 2009-05-14)"
     try:
-        row["correo"] = v.email(row.get("correo"), label="correo", required=False) or ""
+        row["correo"] = v.email(row.get("correo"), label="correo")
     except ValueError:
         return _bad_email(row.get("correo"))
     try:
@@ -781,37 +779,24 @@ def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set)
         return str(exc)
     if _guardian_authorization_required(row["fecha_nacimiento"]):
         guardian_name = (row.get("nombre_acudiente") or "").strip()
-        consent_date = (row.get("fecha_autorizacion_acudiente") or "").strip()
-        reference = (row.get("referencia_autorizacion") or "").strip()
-        if not guardian_name or not consent_date or not reference:
-            return (
-                "Para menores o fecha de nacimiento no informada se requiere nombre del acudiente, "
-                "fecha de autorización y referencia verificable del soporte institucional"
-            )
+        if not guardian_name:
+            return "Para menores o fecha de nacimiento no informada se requiere el nombre del acudiente"
         try:
             row["nombre_acudiente"] = v.person_name(
                 guardian_name, label="nombre_acudiente", max_len=150
             )
-            row["fecha_autorizacion_acudiente"] = v.birth_date(consent_date)
-            row["referencia_autorizacion"] = v.clean_text(
-                reference, label="referencia_autorizacion", max_len=100
-            )
         except ValueError as exc:
             return str(exc)
-        if _parse_birth_date(row["fecha_autorizacion_acudiente"]) > datetime.now().date():
-            return "La fecha de autorización del acudiente no puede estar en el futuro"
     else:
         row["nombre_acudiente"] = None
-        row["fecha_autorizacion_acudiente"] = None
-        row["referencia_autorizacion"] = None
     email = row["correo"]
     if doc in seen_docs:
         return "Documento duplicado en este archivo"
-    if email and email in seen_emails:
+    if email in seen_emails:
         return "Correo duplicado en este archivo"
     if _document_taken(db, doc):
         return "Documento duplicado en el sistema"
-    if email and _email_taken(db, email):
+    if _email_taken(db, email):
         return "Correo duplicado en el sistema"
     return None
 
@@ -933,7 +918,7 @@ def create_student(
 
     if _document_taken(db, payload.document_number):
         raise HTTPException(400, "Ya existe un usuario con ese número de documento")
-    if payload.email and _email_taken(db, payload.email):
+    if _email_taken(db, payload.email):
         raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
     if not payload.guardian_authorization_confirmed:
         raise HTTPException(
@@ -942,25 +927,17 @@ def create_student(
         )
     guardian_required = _guardian_authorization_required(payload.birth_date)
     if guardian_required:
-        if not all((
-            payload.guardian_name,
-            payload.guardian_consent_date,
-            payload.guardian_authorization_reference,
-        )):
+        if not payload.guardian_name:
             raise HTTPException(
                 400,
-                "Para menores o fecha de nacimiento no informada se requiere el nombre del acudiente, "
-                "la fecha de autorización y una referencia verificable del soporte institucional.",
+                "Para menores o fecha de nacimiento no informada se requiere el nombre del acudiente.",
             )
-        consent_date = _parse_birth_date(payload.guardian_consent_date)
-        if consent_date is None or consent_date > datetime.now().date():
-            raise HTTPException(400, "La fecha de autorización del acudiente no es válida.")
 
     temp_pwd = _gen_temp_password()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     student = User(
         username=payload.document_number,
-        email=payload.email or placeholder_email_for(payload.document_number),
+        email=payload.email,
         full_name=payload.full_name,
         hashed_password=get_password_hash(temp_pwd),
         role=UserRole.ESTUDIANTE.value,
@@ -973,10 +950,6 @@ def create_student(
         guardian_name=payload.guardian_name if guardian_required else None,
         guardian_authorized_at=now if guardian_required else None,
         guardian_authorized_by_id=current_user.id if guardian_required else None,
-        guardian_consent_date=payload.guardian_consent_date if guardian_required else None,
-        guardian_authorization_reference=(
-            payload.guardian_authorization_reference if guardian_required else None
-        ),
         guardian_confirmation_recorded_at=now,
         guardian_confirmation_by_id=current_user.id,
     )
@@ -986,14 +959,13 @@ def create_student(
          student.id, "estudiante", _client_ip(request))
     db.commit()
 
-    if payload.email:
-        send_credentials_email(
-            to_email=student.email,
-            to_name=student.full_name or student.username,
-            username=student.username,
-            temp_password=temp_pwd,
-            role=student.role,
-        )
+    send_credentials_email(
+        to_email=student.email,
+        to_name=student.full_name or student.username,
+        username=student.username,
+        temp_password=temp_pwd,
+        role=student.role,
+    )
 
     return CredentialItem(
         full_name=student.full_name,
@@ -1029,9 +1001,6 @@ def update_student(
         raise HTTPException(400, "No hay campos para actualizar")
 
     new_email = updates.get("email")
-    if new_email == "":
-        # Sin correo: vuelve a la dirección interna (la columna es única).
-        updates["email"] = new_email = placeholder_email_for(student.document_number or student.username)
     if new_email is not None and _email_taken(db, new_email, exclude_id=user_id):
         raise HTTPException(400, "Ya existe un usuario con ese correo electrónico")
     if updates.get("full_name"):
@@ -1062,25 +1031,23 @@ def update_student(
         "guardian_authorization_reference",
     )) and updates.get("guardian_authorized", student.guardian_authorized_at is not None):
         consent_date = _parse_birth_date(student.guardian_consent_date)
-        if not all((student.guardian_name, consent_date, student.guardian_authorization_reference)):
+        if not student.guardian_name:
             raise HTTPException(
                 400,
-                "Para registrar la autorización se requiere nombre del acudiente, fecha y referencia del soporte.",
+                "Para registrar la autorización se requiere el nombre del acudiente.",
             )
-        if consent_date > datetime.now().date():
+        if consent_date and consent_date > datetime.now().date():
             raise HTTPException(400, "La fecha de autorización del acudiente no puede estar en el futuro.")
     if "guardian_authorized" in updates:
         if updates["guardian_authorized"]:
-            if not all((student.guardian_name, student.guardian_consent_date,
-                        student.guardian_authorization_reference)):
+            if not student.guardian_name:
                 raise HTTPException(
                     400,
-                    "Registra el nombre del acudiente, la fecha de autorización y la referencia "
-                    "del soporte institucional antes de marcarla como recibida.",
+                    "Registra el nombre del acudiente antes de marcar la autorización como recibida.",
                 )
             consent_date = _parse_birth_date(student.guardian_consent_date)
-            if consent_date is None or consent_date > datetime.now().date():
-                raise HTTPException(400, "La fecha de autorización del acudiente no es válida.")
+            if consent_date and consent_date > datetime.now().date():
+                raise HTTPException(400, "La fecha de autorización del acudiente no puede estar en el futuro.")
             student.guardian_authorized_at = datetime.now(timezone.utc).replace(tzinfo=None)
             student.guardian_authorized_by_id = current_user.id
             guardian_note = f" · autorización del acudiente registrada ({student.guardian_name})"
@@ -1136,7 +1103,7 @@ async def bulk_create_students(
         free_seats = max(effective_classroom_limit(classroom) - used, 0)
     content = await _read_csv_upload(file)
 
-    required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
+    required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
     reader = _csv_reader(content, required_cols, STUDENT_CSV_COLUMNS)
 
     errors = []
@@ -1156,8 +1123,7 @@ async def bulk_create_students(
             errors.append({"row": i, "error": err, "data": row})
             continue
         seen_docs_s.add(row["numero_documento"])
-        if row.get("correo"):
-            seen_emails_s.add(row["correo"].lower())
+        seen_emails_s.add(row["correo"].lower())
         rows_to_create.append((i, row))
 
     institution_available_students = max(
@@ -1203,7 +1169,7 @@ async def bulk_create_students(
     enrolled = 0
 
     for _i, row in rows_to_create:
-        email = row.get("correo") or placeholder_email_for(row["numero_documento"])
+        email = row["correo"]
         temp_pwd = _gen_temp_password()
         guardian_required = _guardian_authorization_required(row.get("fecha_nacimiento"))
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -1222,8 +1188,6 @@ async def bulk_create_students(
             guardian_name=row.get("nombre_acudiente") if guardian_required else None,
             guardian_authorized_at=now if guardian_required else None,
             guardian_authorized_by_id=current_user.id if guardian_required else None,
-            guardian_consent_date=row.get("fecha_autorizacion_acudiente") if guardian_required else None,
-            guardian_authorization_reference=row.get("referencia_autorizacion") if guardian_required else None,
             guardian_confirmation_recorded_at=now,
             guardian_confirmation_by_id=current_user.id,
         )
@@ -1242,10 +1206,8 @@ async def bulk_create_students(
             temp_password=temp_pwd,
             role=student.role,
         ))
-        # Solo enviar si tiene email real (no el @neurolearn.local generado)
-        if row.get("correo"):
-            pending_emails.append((row["correo"], student.full_name or student.username,
-                                   student.username, temp_pwd, student.role))
+        pending_emails.append((row["correo"], student.full_name or student.username,
+                               student.username, temp_pwd, student.role))
     db.commit()
     # Los correos salen solo cuando las cuentas ya quedaron guardadas.
     _send_pending_credentials(pending_emails)
@@ -1275,7 +1237,7 @@ async def preview_bulk_create_students(
     _require_role(current_user, UserRole.SUPER_PROFESOR.value)
     content = await _read_csv_upload(file)
 
-    required_cols = {"nombre_completo", "tipo_documento", "numero_documento"}
+    required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
     reader = _csv_reader(content, required_cols, STUDENT_CSV_COLUMNS)
 
     errors = []
@@ -1298,8 +1260,7 @@ async def preview_bulk_create_students(
         else:
             valid_count += 1
             seen_docs.add(row["numero_documento"])
-            if row.get("correo"):
-                seen_emails.add(row["correo"].lower())
+            seen_emails.add(row["correo"].lower())
 
     return {
         "preview": True,

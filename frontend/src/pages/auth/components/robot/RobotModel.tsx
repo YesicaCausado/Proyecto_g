@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
+import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 import type { Group, AnimationClip } from "three";
 import { ROBOT_GLB_PATH } from "./RobotConfig";
 import type { Vector3Tuple, EulerTuple } from "./RobotAnimations";
@@ -47,7 +48,8 @@ export default function RobotModel({
   // desconectaba/reconectaba el motor de animación (el robot "desaparecía").
   const initializedRef = useRef(false);
 
-  const { scene, animations }      = useGLTF(glbPath, true);
+  const { scene: cachedScene, animations } = useGLTF(glbPath, true);
+  const scene = useMemo(() => cloneSkinned(cachedScene), [cachedScene]);
 
   useEffect(() => {
     if (!scene || initializedRef.current) return;

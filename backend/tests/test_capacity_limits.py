@@ -135,8 +135,8 @@ class CapacityLimitTests(unittest.TestCase):
         }
 
     def _student_csv(self, *numbers):
-        rows = ["nombre_completo,tipo_documento,numero_documento,fecha_nacimiento"]
-        rows.extend(f"Estudiante de prueba,TI,{n},2000-01-01" for n in numbers)
+        rows = ["nombre_completo,tipo_documento,numero_documento,correo,fecha_nacimiento"]
+        rows.extend(f"Estudiante de prueba,TI,{n},student-{n}@capacity.test,2000-01-01" for n in numbers)
         return "\n".join(rows)
 
     def test_institution_40th_creation_and_41st_rejection(self):
@@ -233,6 +233,7 @@ class CapacityLimitTests(unittest.TestCase):
             "full_name": "Estudiante de prueba",
             "document_type": "TI",
             "document_number": "9001600",
+            "email": "student-9001600@capacity.test",
             "birth_date": "2000-01-01",
             "guardian_authorization_confirmed": True,
         }
@@ -265,6 +266,7 @@ class CapacityLimitTests(unittest.TestCase):
             "full_name": "Estudiante fuera de capacidad",
             "document_type": "TI",
             "document_number": "90064001",
+            "email": "student-90064001@capacity.test",
             "birth_date": "2000-01-01",
             "guardian_authorization_confirmed": True,
         }

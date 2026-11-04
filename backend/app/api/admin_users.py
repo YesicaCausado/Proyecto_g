@@ -26,6 +26,7 @@ from app.db.database import get_db
 from app.models.institution import AuditLog, Institution
 from app.models.user import User, UserRole
 from app.services.account_purge import purge
+from app.services.mail.addresses import is_deliverable_email
 from app.schemas.schemas import (
     AdminStats,
     CredentialItem,
@@ -160,6 +161,19 @@ def update_user_admin(
             changes.pop(required)
     next_role = changes.get("role", user.role)
     next_active = changes.get("is_active", user.is_active)
+    if next_role in (UserRole.PROFESOR.value, UserRole.ESTUDIANTE.value):
+        if "email" in changes and not is_deliverable_email(changes["email"]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El correo electrónico es obligatorio para profesores y estudiantes.",
+            )
+        if "role" in changes and next_role != user.role and not is_deliverable_email(
+            changes.get("email", user.email)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Asigna un correo electrónico válido antes de cambiar el rol.",
+            )
     becomes_active_student = (
         next_role == UserRole.ESTUDIANTE.value
         and next_active

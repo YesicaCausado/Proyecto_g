@@ -50,7 +50,7 @@ export class RobotErrorBoundary extends Component<Props, State> {
 
 // ── Fallback visual por defecto ───────────────────────────────
 
-function RobotCanvasFallbackUI({ error }: { error: Error | null }) {
+export function RobotCanvasFallbackUI({ error }: { error: Error | null }) {
   const isGlbMissing = error?.message?.includes('robot.glb') ||
                        error?.message?.includes('Could not load') ||
                        error?.message?.includes('valid JSON');
@@ -99,15 +99,15 @@ function RobotCanvasFallbackUI({ error }: { error: Error | null }) {
 
       {isGlbMissing ? (
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>
+          <p style={{ fontSize: '11px', color: 'rgba(44,42,39,0.65)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>
             Robot no disponible
           </p>
-          <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.18)', fontFamily: 'monospace' }}>
+          <p style={{ fontSize: '10px', color: 'rgba(44,42,39,0.45)', fontFamily: 'monospace' }}>
             Coloca robot.glb en /public
           </p>
         </div>
       ) : (
-        <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        <p style={{ fontSize: '11px', color: 'rgba(44,42,39,0.55)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
           Escena no disponible
         </p>
       )}

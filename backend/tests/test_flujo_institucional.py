@@ -126,6 +126,8 @@ class InstitutionalFlowTest(unittest.TestCase):
         t_cred = r.json()
         r = c.post(f"{API}/super/students", headers=sp, json={
             "full_name": "Estudiante Flujo", "document_type": "TI", "document_number": "7100001",
+            "email": "estudiante@flujo.edu.co",
+            "birth_date": "2000-01-01", "guardian_authorization_confirmed": True,
         })
         self.assertIn(r.status_code, (200, 201), r.text)
         s_cred = r.json()

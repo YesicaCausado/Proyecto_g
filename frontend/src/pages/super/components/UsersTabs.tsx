@@ -53,18 +53,15 @@ function printCredentials(credentials: any[], title: string) {
 }
 
 // ── Plantillas de carga masiva ───────────────────────────────────────────────
-// Encabezados iguales a los que exige el importador (api/credentials.py:
-// TEACHER_CSV_COLUMNS / STUDENT_CSV_COLUMNS). La fila de ejemplo cumple sus
-// validaciones; hay que reemplazarla por los datos reales.
+// Solo se descargan encabezados para evitar que una fila ficticia se cargue
+// accidentalmente como una cuenta real.
 const TEACHER_TEMPLATE = {
   filename: 'plantilla_profesores.csv',
   headers: 'nombre_completo,tipo_documento,numero_documento,correo,area',
-  example: 'Carlos Alvarez,CC,1234567890,carlos@colegio.edu.co,Matemáticas',
 };
 const STUDENT_TEMPLATE = {
   filename: 'plantilla_estudiantes.csv',
-  headers: 'nombre_completo,tipo_documento,numero_documento,correo,grado,fecha_nacimiento,nombre_acudiente,fecha_autorizacion_acudiente,referencia_autorizacion',
-  example: 'Ana Gómez,TI,1098765432,ana.gomez@colegio.edu.co,10°,2009-05-14,Nombre real del acudiente,2026-10-20,REF-ARCHIVO-REAL',
+  headers: 'nombre_completo,tipo_documento,numero_documento,correo,grado,fecha_nacimiento,nombre_acudiente',
 };
 
 // ── Utilidad: genera y descarga un archivo CSV de plantilla ─────────────────
@@ -73,8 +70,8 @@ const STUDENT_TEMPLATE = {
 // - La URL del blob se libera después: liberarla en el mismo instante del
 //   clic cancelaba la descarga en algunos navegadores (Firefox, Safari), por
 //   eso a veces «no aparecía» la plantilla.
-function downloadCsvTemplate(template: { filename: string; headers: string; example: string }) {
-  const content = `\uFEFF${template.headers}\r\n${template.example}\r\n`;
+function downloadCsvTemplate(template: { filename: string; headers: string }) {
+  const content = `\uFEFF${template.headers}\r\n`;
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -86,7 +83,7 @@ function downloadCsvTemplate(template: { filename: string; headers: string; exam
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function TemplateButton({ template }: { template: { filename: string; headers: string; example: string } }) {
+function TemplateButton({ template }: { template: { filename: string; headers: string } }) {
   return (
     <button
       type="button"
@@ -831,7 +828,7 @@ export function TeachersTab() {
                  <p><span className="font-semibold text-[#37352F]">area</span> — opcional (ej: Matemáticas)</p>
                </div>
                <p className="text-xs text-[#787774] mt-2 mb-2">
-                 Separador coma o punto y coma (Excel en español). Reemplaza la fila de ejemplo por tus datos antes de subirla.
+                 Separador coma o punto y coma (Excel en español). Agrega una fila por usuario y usa un correo real.
                </p>
                <TemplateButton template={TEACHER_TEMPLATE} />
              </div>
@@ -1123,7 +1120,7 @@ export function StudentsTab() {
       if (fullName && fullName !== editingStudent.full_name) {
         payload.full_name = fullName;
       }
-      // Correo vacío = sin correo (el servidor le asigna una dirección interna).
+      // Toda cuenta estudiantil debe conservar un correo recuperable.
       if (normalizeEmail(values.email ?? '') !== (editingStudent.email || '').toLowerCase()) {
         payload.email = normalizeEmail(values.email ?? '');
       }
@@ -1222,18 +1219,17 @@ export function StudentsTab() {
   const [firstName, setFirstName]           = useState('');
   const [lastName, setLastName]             = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
+  const [email, setEmail]                   = useState('');
   const [documentType, setDocumentType]     = useState<DocumentType>('TI');
   const [grade, setGrade]                   = useState('');
   const [birthDate, setBirthDate]           = useState('');
   const [guardianAuthorizationConfirmed, setGuardianAuthorizationConfirmed] = useState(false);
   const [guardianName, setGuardianName] = useState('');
-  const [guardianConsentDate, setGuardianConsentDate] = useState('');
-  const [guardianAuthorizationReference, setGuardianAuthorizationReference] = useState('');
   const [batchAuthorizationConfirmed, setBatchAuthorizationConfirmed] = useState(false);
   const [assignedClassroomId, setAssignedClassroomId] = useState('');
   const [docNotice, setDocNotice]           = useState('');
   const studentFormRef = useRef<HTMLFormElement>(null);
-  const studentForm = { firstName, lastName, documentNumber, grade, birthDate };
+  const studentForm = { firstName, lastName, documentNumber, email, grade, birthDate };
   const birth = birthDate ? new Date(`${birthDate}T00:00:00`) : null;
   const today = new Date();
   const studentAge = birth
@@ -1247,6 +1243,7 @@ export function StudentsTab() {
     lastName: v => validatePersonName(v, { label: 'El apellido', max: 60 })
       ?? (normalizePersonName(`${firstName} ${v}`).length > 100 ? 'El nombre completo no puede superar 100 caracteres.' : null),
     documentNumber: v => validateDocumentNumber(v, documentType),
+    email: v => validateEmail(v),
     grade: v => validateGrade(v),
     birthDate: v => validateBirthDate(v),
   });
@@ -1268,8 +1265,8 @@ export function StudentsTab() {
       setError('Confirma que la autorización del acudiente está verificada o que no aplica por mayoría de edad.');
       return;
     }
-    if (guardianRequired && (!guardianName.trim() || !guardianConsentDate || !guardianAuthorizationReference.trim())) {
-      setError('Para menores o sin fecha de nacimiento registra nombre, fecha y referencia del soporte real de autorización.');
+    if (guardianRequired && !guardianName.trim()) {
+      setError('Para menores o sin fecha de nacimiento registra el nombre del acudiente.');
       return;
     }
 
@@ -1282,12 +1279,11 @@ export function StudentsTab() {
         full_name: normalizePersonName(`${firstName} ${lastName}`),
         document_type: documentType,
         document_number: documentNumber.trim(),
+        email: normalizeEmail(email),
         grade: grade.trim(),
         birth_date: birthDate || null,
         guardian_authorization_confirmed: guardianAuthorizationConfirmed,
         guardian_name: guardianRequired ? guardianName.trim() : null,
-        guardian_consent_date: guardianRequired ? guardianConsentDate : null,
-        guardian_authorization_reference: guardianRequired ? guardianAuthorizationReference.trim() : null,
       });
 
       setMessage('¡Estudiante creado exitosamente!');
@@ -1298,13 +1294,12 @@ export function StudentsTab() {
       setFirstName('');
       setLastName('');
       setDocumentNumber('');
+      setEmail('');
       setDocumentType('TI');
       setGrade('');
       setBirthDate('');
       setGuardianAuthorizationConfirmed(false);
       setGuardianName('');
-      setGuardianConsentDate('');
-      setGuardianAuthorizationReference('');
       setDocNotice('');
       fields.reset();
     } catch (err: any) {
@@ -1490,6 +1485,25 @@ export function StudentsTab() {
                 <FieldError id="student-lastName" error={fields.errors.lastName} />
               </div>
             </div>
+            <div>
+              <label htmlFor="student-email" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                <Mail className="w-3 h-3" /> Correo electrónico *
+              </label>
+              <input
+                {...fieldA11y('student-email', fields.errors.email)}
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                maxLength={100}
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); fields.onChange('email', e.target.value); }}
+                onBlur={(e) => fields.onBlur('email', e.target.value)}
+                className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.email ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
+                placeholder="estudiante@colegio.edu.co"
+                required
+              />
+              <FieldError id="student-email" error={fields.errors.email} />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="student-documentType" className="block text-sm font-medium text-[#787774] mb-1">
@@ -1579,24 +1593,12 @@ export function StudentsTab() {
                 </span>
               </label>
               {guardianRequired && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   <label className="text-xs font-medium text-[#787774]">
                     Nombre del acudiente *
                     <input value={guardianName} onChange={e => setGuardianName(e.target.value)}
                       maxLength={150} required className="mt-1 w-full rounded border border-[#E9E9E7] p-2 text-sm"
                       autoComplete="off" />
-                  </label>
-                  <label className="text-xs font-medium text-[#787774]">
-                    Fecha de autorización *
-                    <input type="date" value={guardianConsentDate} onChange={e => setGuardianConsentDate(e.target.value)}
-                      max={todayISO()} required className="mt-1 w-full rounded border border-[#E9E9E7] p-2 text-sm" />
-                  </label>
-                  <label className="text-xs font-medium text-[#787774]">
-                    Referencia del soporte institucional *
-                    <input value={guardianAuthorizationReference}
-                      onChange={e => setGuardianAuthorizationReference(e.target.value)}
-                      maxLength={100} required placeholder="Código real del expediente"
-                      className="mt-1 w-full rounded border border-[#E9E9E7] p-2 text-sm" autoComplete="off" />
                   </label>
                 </div>
               )}
@@ -1626,13 +1628,13 @@ export function StudentsTab() {
                </code>
                <div className="text-xs text-[#787774] space-y-1 mt-2">
                  <p><span className="font-semibold text-[#37352F]">tipo_documento</span> — CC, TI, CE o PA</p>
-                 <p><span className="font-semibold text-[#37352F]">correo</span> — opcional</p>
+                 <p><span className="font-semibold text-[#37352F]">correo</span> — obligatorio para recuperar la contraseña y recibir credenciales</p>
                  <p><span className="font-semibold text-[#37352F]">grado</span> — opcional (ej: 10°)</p>
                  <p><span className="font-semibold text-[#37352F]">fecha_nacimiento</span> — opcional, formato AAAA-MM-DD (también DD/MM/AAAA)</p>
-                  <p><span className="font-semibold text-[#37352F]">nombre_acudiente, fecha_autorizacion_acudiente, referencia_autorizacion</span> — requeridos para menores o sin fecha de nacimiento; usa datos reales del soporte institucional.</p>
+                  <p><span className="font-semibold text-[#37352F]">nombre_acudiente</span> — requerido para menores o sin fecha de nacimiento.</p>
                </div>
                <p className="text-xs text-[#787774] mt-2 mb-2">
-                 Separador coma o punto y coma (Excel en español). Reemplaza la fila de ejemplo por tus datos antes de subirla.
+                 Separador coma o punto y coma (Excel en español). Agrega una fila por usuario y usa un correo real.
                </p>
                <TemplateButton template={STUDENT_TEMPLATE} />
              </div>
@@ -1732,7 +1734,7 @@ export function StudentsTab() {
                    <input type="checkbox" required checked={batchAuthorizationConfirmed}
                      onChange={e => setBatchAuthorizationConfirmed(e.target.checked)}
                      className="mt-0.5 h-4 w-4 accent-[#0B6E99]" />
-                   <span>Confirmo que revisé cada fila y que las autorizaciones de acudiente aplicables existen y están respaldadas por la referencia registrada. Esta confirmación es mía y no sustituye la autorización real.</span>
+                   <span>Confirmo que revisé cada fila y que las autorizaciones de acudiente aplicables existen y fueron verificadas. Esta confirmación es mía y no sustituye la autorización real.</span>
                  </label>
 
                  <div>
@@ -1916,14 +1918,12 @@ export function StudentsTab() {
             is_active: editingStudent.is_active,
             guardian_name: editingStudent.guardian_name || '',
             guardian_authorized: Boolean(editingStudent.guardian_authorized),
-            guardian_consent_date: editingStudent.guardian_consent_date || '',
-            guardian_authorization_reference: editingStudent.guardian_authorization_reference || '',
           }}
           fields={[
             { key: 'full_name', label: 'Nombre completo', required: true, maxLength: 100,
               validate: v => validatePersonName(v, { label: 'El nombre completo' }) },
-            { key: 'email', label: 'Correo electrónico (opcional)', type: 'email', maxLength: 100,
-              validate: v => validateEmail(v, { required: false }) },
+            { key: 'email', label: 'Correo electrónico *', type: 'email', required: true, maxLength: 100,
+              validate: v => validateEmail(v) },
             { key: 'grade', label: 'Grado', maxLength: 20, validate: v => validateGrade(v) },
             { key: 'birth_date', label: 'Fecha de nacimiento', type: 'date', max: todayISO(),
               validate: v => validateBirthDate(v) },
@@ -1942,8 +1942,6 @@ export function StudentsTab() {
             // para usar cámara y micrófono en el chat.
             { key: 'guardian_name', label: 'Acudiente que autorizó (madre, padre o acudiente)', maxLength: 150,
               validate: v => validatePersonName(v, { label: 'El nombre del acudiente', max: 150, required: false }) },
-            { key: 'guardian_consent_date', label: 'Fecha de autorización del acudiente', type: 'date', max: todayISO() },
-            { key: 'guardian_authorization_reference', label: 'Referencia del soporte institucional', maxLength: 100 },
             {
               key: 'guardian_authorized', label: 'Autorización firmada para cámara y micrófono', type: 'select',
               options: [
