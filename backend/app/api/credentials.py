@@ -21,7 +21,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.api.auth import get_current_user, get_password_hash
+from app.api.auth import get_current_user, get_password_hash, revoke_user_sessions
 from app.models.user import User, UserRole
 from app.models.institution import Institution, AuditLog
 from app.models.classroom import Classroom, Enrollment
@@ -137,10 +137,23 @@ async def _read_csv_upload(file: UploadFile) -> bytes:
 
 def _csv_rows(reader: csv.DictReader):
     """Filas del CSV numeradas como en la hoja de cálculo (la 1 es el encabezado)."""
-    for i, raw_row in enumerate(reader, 2):
-        if i - 1 > CSV_MAX_ROWS:
-            raise HTTPException(400, f"El archivo supera el máximo de {CSV_MAX_ROWS} filas. Divídelo en varios lotes.")
-        yield i, raw_row
+    try:
+        for i, raw_row in enumerate(reader, 2):
+            if i - 1 > CSV_MAX_ROWS:
+                raise HTTPException(
+                    400,
+                    f"El archivo supera el máximo de {CSV_MAX_ROWS} filas. Divídelo en varios lotes.",
+                )
+            if raw_row is None:
+                continue
+            first_cell = str(raw_row.get(reader.fieldnames[0]) or "").strip()
+            if first_cell.startswith("#"):
+                continue
+            if not any(str(value or "").strip() for value in raw_row.values()):
+                continue
+            yield i, raw_row
+    except csv.Error as exc:
+        raise HTTPException(400, f"El CSV contiene una fila mal formada: {exc}") from exc
 
 
 def _csv_reader(content: bytes, required: set, expected: tuple) -> csv.DictReader:
@@ -161,37 +174,77 @@ def _csv_reader(content: bytes, required: set, expected: tuple) -> csv.DictReade
         delimiter = lines.pop(0).strip()[4]
     elif lines:
         delimiter = max((",", ";", "\t"), key=lines[0].count)
-    reader = csv.DictReader(io.StringIO("\n".join(lines)), delimiter=delimiter)
-    if not reader.fieldnames:
+    reader = csv.DictReader(io.StringIO("\n".join(lines)), delimiter=delimiter, strict=True)
+    try:
+        fieldnames = reader.fieldnames
+    except csv.Error as exc:
+        raise HTTPException(400, f"El encabezado CSV está mal formado: {exc}") from exc
+    if not fieldnames:
         raise HTTPException(400, "El archivo CSV no tiene cabeceras válidas")
-    found = {str(f).strip().lower() for f in reader.fieldnames if f is not None}
-    missing = [c for c in expected if c in required and c not in found]
-    if missing:
+    headers = [str(field or "").strip().lower() for field in fieldnames]
+    duplicates = set()
+    found = set()
+    for header in headers:
+        if header in found:
+            duplicates.add(header)
+        found.add(header)
+    expected_set = set(expected)
+    missing = [column for column in expected if column in required and column not in found]
+    extra = [column or "(vacía)" for column in headers if column not in expected_set]
+    if duplicates or missing or extra:
+        header_errors = [
+            {"row": 1, "column": column or "encabezados", "error": "Encabezado duplicado"}
+            for column in sorted(duplicates)
+        ]
+        header_errors.extend(
+            {"row": 1, "column": column, "error": "Falta esta columna obligatoria"}
+            for column in missing
+        )
+        header_errors.extend(
+            {"row": 1, "column": column, "error": "Columna no reconocida"}
+            for column in extra
+        )
         raise HTTPException(
             400,
-            f"Faltan columnas en la primera fila: {', '.join(missing)}. "
-            f"Usa la plantilla; los encabezados esperados son: {','.join(expected)}.",
+            detail={
+                "message": f"Los encabezados deben corresponder a la plantilla: {', '.join(expected)}.",
+                "errors": header_errors,
+            },
         )
+    reader.fieldnames = headers
     return reader
 
 
-def _common_row_error(row: dict) -> Optional[str]:
+def _csv_row_structure_error(raw_row: dict) -> Optional[tuple[str, str]]:
+    extra_values = raw_row.get(None)
+    if extra_values and any(str(value or "").strip() for value in extra_values):
+        return "columnas_adicionales", "La fila contiene datos después de la última columna de la plantilla"
+    for column, value in raw_row.items():
+        if column is not None and value is None:
+            return column, "Falta una celda; completa la fila respetando todas las columnas de la plantilla"
+    return None
+
+
+def _common_row_error(row: dict) -> Optional[tuple[str, str]]:
     """Reglas de la fila que comparten profesores y estudiantes (las mismas
     del formulario individual, app/core/validators.py). Deja la fila
     normalizada."""
     if not row.get("nombre_completo"):
-        return "Nombre vacío"
+        return "nombre_completo", "Nombre vacío"
     if not row.get("numero_documento"):
-        return "Documento vacío"
+        return "numero_documento", "Documento vacío"
     doc_type = (row.get("tipo_documento") or "").upper()
     if doc_type not in DOCUMENT_TYPES:
-        return f"tipo_documento inválido «{row.get('tipo_documento') or ''}» (usa CC, TI, CE o PA)"
+        return "tipo_documento", f"Tipo de documento inválido «{row.get('tipo_documento') or ''}» (usa CC, TI, CE o PA)"
     row["tipo_documento"] = doc_type
     try:
         row["nombre_completo"] = v.person_name(row["nombre_completo"], label="nombre_completo")
+    except ValueError as exc:
+        return "nombre_completo", str(exc)
+    try:
         row["numero_documento"] = v.document_number(row["numero_documento"], doc_type)
     except ValueError as exc:
-        return str(exc)
+        return "numero_documento", str(exc)
     return None
 
 
@@ -538,6 +591,68 @@ def create_teacher(
     )
 
 
+def _regenerate_user_credentials(
+    user: User,
+    current_user: User,
+    institution: Institution,
+    request: Request,
+    db: Session,
+) -> CredentialItem:
+    if not user.is_active:
+        raise HTTPException(400, "Activa la cuenta antes de generar credenciales nuevas.")
+    if user.id == current_user.id:
+        raise HTTPException(400, "No puedes restablecer las credenciales de tu propia cuenta desde este panel.")
+
+    temp_pwd = _gen_temp_password()
+    user.hashed_password = get_password_hash(temp_pwd)
+    user.must_change_password = True
+    revoke_user_sessions(user)
+    _log(
+        db,
+        "regenerate_credentials",
+        current_user,
+        institution.id,
+        user.id,
+        user.role,
+        _client_ip(request),
+        notes="Credenciales temporales regeneradas; sesiones anteriores revocadas",
+    )
+    db.commit()
+    email_sent = send_credentials_email(
+        to_email=user.email or "",
+        to_name=user.full_name or user.username,
+        username=user.username,
+        temp_password=temp_pwd,
+        role=user.role,
+    )
+    return CredentialItem(
+        full_name=user.full_name or "",
+        username=user.username,
+        temp_password=temp_pwd,
+        role=user.role,
+        email_sent=email_sent,
+    )
+
+
+@router.post("/super/teachers/{user_id}/credentials/regenerate", response_model=CredentialItem)
+def regenerate_teacher_credentials(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    teacher = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.PROFESOR.value,
+    ).first()
+    if not teacher:
+        raise HTTPException(404, "Profesor no encontrado en tu institución")
+    return _regenerate_user_credentials(teacher, current_user, institution, request, db)
+
+
 @router.put("/super/teachers/{user_id}", response_model=TeacherListItem)
 def update_teacher(
     user_id: int,
@@ -591,7 +706,9 @@ def update_teacher(
     )
 
 
-def _teacher_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set) -> Optional[str]:
+def _teacher_row_error(
+    db: Session, row: dict, seen_docs: set, seen_emails: set
+) -> Optional[tuple[str, str]]:
     """Validación de una fila del CSV de profesores (vista previa y creación)."""
     err = _common_row_error(row)
     if err:
@@ -599,19 +716,19 @@ def _teacher_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set)
     try:
         row["correo"] = v.email(row.get("correo"), label="correo")
     except ValueError:
-        return _bad_email(row.get("correo"))
+        return "correo", _bad_email(row.get("correo"))
     try:
         row["area"] = v.clean_text(row.get("area"), label="area", max_len=100, required=False) or ""
     except ValueError as exc:
-        return str(exc)
+        return "area", str(exc)
     if row["numero_documento"] in seen_docs:
-        return "Documento duplicado en este archivo"
+        return "numero_documento", "Documento duplicado en este archivo"
     if row["correo"] in seen_emails:
-        return "Correo duplicado en este archivo"
+        return "correo", "Correo duplicado en este archivo"
     if _document_taken(db, row["numero_documento"]):
-        return "Documento duplicado en el sistema"
+        return "numero_documento", "Documento duplicado en el sistema"
     if _email_taken(db, row["correo"]):
-        return "Correo duplicado en el sistema"
+        return "correo", "Correo duplicado en el sistema"
     return None
 
 
@@ -630,26 +747,46 @@ async def bulk_create_teachers(
     required_cols = {"nombre_completo", "tipo_documento", "numero_documento", "correo"}
     reader = _csv_reader(content, required_cols, TEACHER_CSV_COLUMNS)
 
-    created: List[CredentialItem] = []
     errors = []
     seen_docs: set = set()   # duplicados dentro del mismo batch
     seen_emails: set = set()
-    pending_emails: list = []
+    rows_to_create = []
 
     for i, raw_row in _csv_rows(reader):
+        structure_error = _csv_row_structure_error(raw_row)
+        if structure_error:
+            column, error = structure_error
+            errors.append({"row": i, "column": column, "error": error})
+            continue
         row = _normalize_csv_row(raw_row)
-        if not row or not any((value or "").strip() for value in row.values()):
-            continue
-        missing = required_cols - set(row.keys())
-        if missing:
-            errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
-            continue
-
         err = _teacher_row_error(db, row, seen_docs, seen_emails)
         if err:
-            errors.append({"row": i, "error": err, "data": row})
+            column, error = err
+            errors.append({"row": i, "column": column, "error": error})
+            if row.get("numero_documento"):
+                seen_docs.add(row["numero_documento"])
+            if row.get("correo"):
+                seen_emails.add(row["correo"].strip().lower())
             continue
+        seen_docs.add(row["numero_documento"])
+        seen_emails.add(row["correo"])
+        rows_to_create.append(row)
 
+    if errors:
+        raise HTTPException(
+            422,
+            detail={
+                "message": "No se creó ningún usuario. Corrige todos los errores del archivo y vuelve a revisarlo.",
+                "errors": errors,
+            },
+        )
+    if not rows_to_create:
+        raise HTTPException(400, "El archivo no contiene registros para importar.")
+
+    created: List[CredentialItem] = []
+    pending_emails: list = []
+
+    for row in rows_to_create:
         temp_pwd = _gen_temp_password()
         teacher = User(
             username=row["numero_documento"],
@@ -665,8 +802,6 @@ async def bulk_create_teachers(
         )
         db.add(teacher)
         db.flush()
-        seen_docs.add(row["numero_documento"])
-        seen_emails.add(row["correo"])
         _log(db, "bulk_create_teacher", current_user, institution.id,
              teacher.id, "profesor", _client_ip(request))
         created.append(CredentialItem(
@@ -682,9 +817,9 @@ async def bulk_create_teachers(
     # Los correos salen solo cuando las cuentas ya quedaron guardadas.
     _send_pending_credentials(pending_emails)
     return BulkCreateResponse(
-        credentials=created, errors=errors,
-        total_processed=len(created) + len(errors),
-        total_created=len(created), total_errors=len(errors),
+        credentials=created, errors=[],
+        total_processed=len(created),
+        total_created=len(created), total_errors=0,
     )
 
 
@@ -721,21 +856,24 @@ async def preview_bulk_create_teachers(
     seen_emails: set = set()
 
     for i, raw_row in _csv_rows(reader):
+        structure_error = _csv_row_structure_error(raw_row)
+        if structure_error:
+            column, error = structure_error
+            errors.append({"row": i, "column": column, "error": error})
+            continue
         row = _normalize_csv_row(raw_row)
-        if not row or not any((value or "").strip() for value in row.values()):
-            continue
-        missing = required_cols - set(row.keys())
-        if missing:
-            errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
-            continue
-
         err = _teacher_row_error(db, row, seen_docs, seen_emails)
         if err:
-            errors.append({"row": i, "error": err, "data": row})
+            column, error = err
+            errors.append({"row": i, "column": column, "error": error})
+            if row.get("numero_documento"):
+                seen_docs.add(row["numero_documento"])
+            if row.get("correo"):
+                seen_emails.add(row["correo"].strip().lower())
         else:
             valid_count += 1
             seen_docs.add(row["numero_documento"])
-            seen_emails.add(row["correo"])
+            seen_emails.add(row["correo"].lower())
 
     return {
         "preview": True,
@@ -743,9 +881,11 @@ async def preview_bulk_create_teachers(
         "total_errors": len(errors),
         "errors": errors,
         "message": (
-            f"{valid_count} profesor(es) listos para crear, {len(errors)} con errores. "
-            "Confirma para proceder." if valid_count > 0 else
-            "Ningún registro válido. Corrige el archivo antes de continuar."
+            f"{valid_count} profesor(es) válidos y {len(errors)} fila(s) con errores. "
+            "Corrige todos los errores; el lote completo se rechazará mientras exista alguno."
+            if errors else
+            f"{valid_count} profesor(es) listos para crear." if valid_count > 0 else
+            "El archivo no contiene registros. Agrega al menos una fila antes de continuar."
         ),
     }
 
@@ -758,7 +898,9 @@ def _send_pending_credentials(pending: list) -> None:
                                temp_password=temp_pwd, role=role)
 
 
-def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set) -> Optional[str]:
+def _student_row_error(
+    db: Session, row: dict, seen_docs: set, seen_emails: set
+) -> Optional[tuple[str, str]]:
     """Validación de una fila del CSV de estudiantes. La usan la vista previa y
     la creación, para que una fila «válida» en la vista previa no falle al crear."""
     err = _common_row_error(row)
@@ -766,38 +908,39 @@ def _student_row_error(db: Session, row: dict, seen_docs: set, seen_emails: set)
         return err
     doc = row["numero_documento"]
     if row.get("fecha_nacimiento") and _parse_birth_date(row["fecha_nacimiento"]) is None:
-        return f"fecha_nacimiento inválida «{row['fecha_nacimiento']}» (usa AAAA-MM-DD, p. ej. 2009-05-14)"
+        return "fecha_nacimiento", f"fecha_nacimiento inválida «{row['fecha_nacimiento']}» (usa AAAA-MM-DD, p. ej. 2009-05-14)"
     try:
         row["correo"] = v.email(row.get("correo"), label="correo")
     except ValueError:
-        return _bad_email(row.get("correo"))
+        return "correo", _bad_email(row.get("correo"))
     try:
         # Se guarda en un único formato (Excel la reescribe como 14/05/2009).
         row["fecha_nacimiento"] = v.birth_date(row.get("fecha_nacimiento"))
         row["grado"] = v.grade(row.get("grado")) or ""
     except ValueError as exc:
-        return str(exc)
-    if _guardian_authorization_required(row["fecha_nacimiento"]):
-        guardian_name = (row.get("nombre_acudiente") or "").strip()
-        if not guardian_name:
-            return "Para menores o fecha de nacimiento no informada se requiere el nombre del acudiente"
+        column = "fecha_nacimiento" if "fecha de nacimiento" in str(exc).lower() else "grado"
+        return column, f"{column}: {exc}"
+    guardian_name = (row.get("nombre_acudiente") or "").strip()
+    if guardian_name:
         try:
             row["nombre_acudiente"] = v.person_name(
                 guardian_name, label="nombre_acudiente", max_len=150
             )
         except ValueError as exc:
-            return str(exc)
-    else:
+            return "nombre_acudiente", str(exc)
+    elif _guardian_authorization_required(row["fecha_nacimiento"]):
+        return "nombre_acudiente", "Para menores o fecha de nacimiento no informada se requiere el nombre del acudiente"
+    if not _guardian_authorization_required(row["fecha_nacimiento"]):
         row["nombre_acudiente"] = None
     email = row["correo"]
     if doc in seen_docs:
-        return "Documento duplicado en este archivo"
+        return "numero_documento", "Documento duplicado en este archivo"
     if email in seen_emails:
-        return "Correo duplicado en este archivo"
+        return "correo", "Correo duplicado en este archivo"
     if _document_taken(db, doc):
-        return "Documento duplicado en el sistema"
+        return "numero_documento", "Documento duplicado en el sistema"
     if _email_taken(db, email):
-        return "Correo duplicado en el sistema"
+        return "correo", "Correo duplicado en el sistema"
     return None
 
 
@@ -975,6 +1118,25 @@ def create_student(
     )
 
 
+@router.post("/super/students/{user_id}/credentials/regenerate", response_model=CredentialItem)
+def regenerate_student_credentials(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_role(current_user, UserRole.SUPER_PROFESOR.value)
+    institution = _get_my_institution(db, current_user)
+    student = db.query(User).filter(
+        User.id == user_id,
+        User.institution_id == institution.id,
+        User.role == UserRole.ESTUDIANTE.value,
+    ).first()
+    if not student:
+        raise HTTPException(404, "Estudiante no encontrado en tu institución")
+    return _regenerate_user_credentials(student, current_user, institution, request, db)
+
+
 @router.put("/super/students/{user_id}", response_model=StudentListItem)
 def update_student(
     user_id: int,
@@ -1111,20 +1273,35 @@ async def bulk_create_students(
     seen_emails_s: set = set()
     rows_to_create = []
     for i, raw_row in _csv_rows(reader):
+        structure_error = _csv_row_structure_error(raw_row)
+        if structure_error:
+            column, error = structure_error
+            errors.append({"row": i, "column": column, "error": error})
+            continue
         row = _normalize_csv_row(raw_row)
-        if not row or not any((value or "").strip() for value in row.values()):
-            continue
-        missing = required_cols - set(row.keys())
-        if missing:
-            errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
-            continue
         err = _student_row_error(db, row, seen_docs_s, seen_emails_s)
         if err:
-            errors.append({"row": i, "error": err, "data": row})
+            column, error = err
+            errors.append({"row": i, "column": column, "error": error})
+            if row.get("numero_documento"):
+                seen_docs_s.add(row["numero_documento"])
+            if row.get("correo"):
+                seen_emails_s.add(row["correo"].strip().lower())
             continue
         seen_docs_s.add(row["numero_documento"])
         seen_emails_s.add(row["correo"].lower())
         rows_to_create.append((i, row))
+
+    if errors:
+        raise HTTPException(
+            422,
+            detail={
+                "message": "No se creó ningún usuario. Corrige todos los errores del archivo y vuelve a revisarlo.",
+                "errors": errors,
+            },
+        )
+    if not rows_to_create:
+        raise HTTPException(400, "El archivo no contiene registros para importar.")
 
     institution_available_students = max(
         0,
@@ -1212,9 +1389,9 @@ async def bulk_create_students(
     # Los correos salen solo cuando las cuentas ya quedaron guardadas.
     _send_pending_credentials(pending_emails)
     return BulkCreateResponse(
-        credentials=created, errors=errors,
-        total_processed=len(created) + len(errors),
-        total_created=len(created), total_errors=len(errors),
+        credentials=created, errors=[],
+        total_processed=len(created),
+        total_created=len(created), total_errors=0,
         enrolled=enrolled,
         classroom=classroom.name if classroom is not None else None,
     )
@@ -1246,17 +1423,20 @@ async def preview_bulk_create_students(
     seen_emails: set = set()
 
     for i, raw_row in _csv_rows(reader):
+        structure_error = _csv_row_structure_error(raw_row)
+        if structure_error:
+            column, error = structure_error
+            errors.append({"row": i, "column": column, "error": error})
+            continue
         row = _normalize_csv_row(raw_row)
-        if not row or not any((value or "").strip() for value in row.values()):
-            continue
-        missing = required_cols - set(row.keys())
-        if missing:
-            errors.append({"row": i, "error": f"Columnas faltantes: {missing}", "data": row})
-            continue
-
         err = _student_row_error(db, row, seen_docs, seen_emails)
         if err:
-            errors.append({"row": i, "error": err, "data": row})
+            column, error = err
+            errors.append({"row": i, "column": column, "error": error})
+            if row.get("numero_documento"):
+                seen_docs.add(row["numero_documento"])
+            if row.get("correo"):
+                seen_emails.add(row["correo"].strip().lower())
         else:
             valid_count += 1
             seen_docs.add(row["numero_documento"])
@@ -1268,9 +1448,11 @@ async def preview_bulk_create_students(
         "total_errors": len(errors),
         "errors": errors,
         "message": (
-            f"{valid_count} estudiante(s) listos para crear, {len(errors)} con errores. "
-            "Confirma para proceder." if valid_count > 0 else
-            "Ningún registro válido. Corrige el archivo antes de continuar."
+            f"{valid_count} estudiante(s) válidos y {len(errors)} fila(s) con errores. "
+            "Corrige todos los errores; el lote completo se rechazará mientras exista alguno."
+            if errors else
+            f"{valid_count} estudiante(s) listos para crear." if valid_count > 0 else
+            "El archivo no contiene registros. Agrega al menos una fila antes de continuar."
         ),
     }
 

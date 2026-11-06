@@ -658,6 +658,7 @@ class CredentialItem(BaseModel):
     username: str        # = document_number
     temp_password: str
     role: str
+    email_sent: Optional[bool] = None
 
 
 class InstitutionResponse(BaseModel):

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User, Trash2, Pencil, X } from 'lucide-react';
+import { Users, GraduationCap, Upload, Plus, Download, Copy, CheckCircle, AlertCircle, FileText, Hash, Mail, User, Trash2, Pencil, X, KeyRound } from 'lucide-react';
 import api from '../../../services/api';
 import { FieldError } from '../../../components/FieldError';
 import { useFieldErrors } from '../../../hooks/useFieldErrors';
@@ -225,6 +225,54 @@ function csvFileError(file: File | undefined): string | null {
   return validateFile(file, { extensions: ['.csv', '.txt'], maxBytes: CSV_MAX_BYTES, label: 'El archivo' });
 }
 
+interface CsvValidationIssue {
+  row: number;
+  column?: string;
+  error: string;
+}
+
+interface CredentialResetTarget {
+  id: number;
+  username: string;
+  full_name?: string | null;
+}
+
+interface TemporaryCredential {
+  full_name: string;
+  username: string;
+  temp_password: string;
+  role: string;
+  email_sent?: boolean | null;
+}
+
+function isCsvValidationIssue(value: unknown): value is CsvValidationIssue {
+  return typeof value === 'object' && value !== null
+    && 'row' in value && typeof value.row === 'number'
+    && 'error' in value && typeof value.error === 'string';
+}
+
+function csvImportErrors(err: unknown): { message: string; errors: CsvValidationIssue[] } | null {
+  const response = err as { response?: { data?: { detail?: unknown } } } | null;
+  const detail = response?.response?.data?.detail;
+  if (typeof detail !== 'object' || detail === null || !('errors' in detail) || !Array.isArray(detail.errors)) {
+    return null;
+  }
+  const message = 'message' in detail && typeof detail.message === 'string'
+    ? detail.message
+    : 'El archivo tiene errores.';
+  return { message, errors: detail.errors.filter(isCsvValidationIssue) };
+}
+
+function csvApiErrorMessage(err: unknown, fallback: string): string {
+  const details = csvImportErrors(err);
+  if (!details) return apiErrorMessage(err, fallback);
+  const examples = details.errors.slice(0, 10).map(item =>
+    `Fila ${item.row}, columna ${item.column || 'sin identificar'}: ${item.error}`,
+  );
+  const remaining = details.errors.length - examples.length;
+  return `${details.message}${examples.length ? ` ${examples.join(' · ')}` : ''}${remaining > 0 ? ` · y ${remaining} error(es) más` : ''}`;
+}
+
 // Nombres de los campos del backend → campos de los formularios individuales.
 const PERSON_FIELD_MAP = {
   full_name: 'lastName', document_number: 'documentNumber', document_type: 'documentNumber',
@@ -377,6 +425,7 @@ export function TeachersTab() {
   const [editingTeacher, setEditingTeacher] = useState<any | null>(null);
   const [savingTeacher, setSavingTeacher] = useState(false);
   const [editTeacherErrors, setEditTeacherErrors] = useState<Record<string, string>>({});
+  const [regeneratingTeacherId, setRegeneratingTeacherId] = useState<number | null>(null);
 
   const updateTeacher = async (values: Record<string, any>) => {
     if (!editingTeacher) return;
@@ -455,6 +504,25 @@ export function TeachersTab() {
       setTimeout(() => setCopiedTeacherId(null), 1200);
     } catch {
       setError('No se pudo copiar la credencial. Inténtalo de nuevo.');
+    }
+  };
+
+  const regenerateTeacherCredentials = async (teacher: CredentialResetTarget) => {
+    if (!window.confirm(`Se invalidarán las sesiones y la contraseña actual de ${teacher.full_name || teacher.username}. ¿Generar una contraseña temporal nueva?`)) return;
+    setRegeneratingTeacherId(teacher.id);
+    setError('');
+    setMessage('');
+    try {
+      const response = await api.post<TemporaryCredential>(`/super/teachers/${teacher.id}/credentials/regenerate`);
+      setNewCredentials(prev => [response.data, ...prev.filter(item => item.username !== response.data.username)]);
+      const delivery = response.data.email_sent
+        ? 'También se envió al correo registrado.'
+        : 'No se pudo enviar al correo; entrega de forma segura la contraseña temporal que aparece abajo.';
+      setMessage(`Credenciales regeneradas para ${teacher.full_name || teacher.username}. ${delivery}`);
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'No se pudieron regenerar las credenciales.'));
+    } finally {
+      setRegeneratingTeacherId(null);
     }
   };
 
@@ -571,14 +639,14 @@ export function TeachersTab() {
       setPreviewPendingFile(file);
       setMessage(response.data.message || 'Archivo revisado. Confirma para crear las cuentas.');
     } catch (err: any) {
-      setError(apiErrorMessage(err, 'Error al revisar el archivo CSV'));
+      setError(csvApiErrorMessage(err, 'Error al revisar el archivo CSV'));
       setPreviewPendingFile(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Paso 2 de la carga masiva: confirmar y crear (solo los registros válidos).
+  // El backend vuelve a validar el archivo y solo crea el lote si todas las filas son válidas.
   const handleConfirmBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     const file = previewPendingFile;
@@ -600,7 +668,7 @@ export function TeachersTab() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const d = response.data;
-      setMessage(`Se han creado ${d.total_created || 0} profesor(es). ${d.total_errors || 0} registro(s) con errores fueron omitidos.`);
+      setMessage(`Se han creado ${d.total_created || 0} profesor(es).`);
       setNewCredentials(d.credentials || []);
       setPreviewResult(null);
       setPreviewPendingFile(null);
@@ -608,7 +676,17 @@ export function TeachersTab() {
       if (previewFileInputRef.current) previewFileInputRef.current.value = '';
       loadTeachers();
     } catch (err: any) {
-      setError(apiErrorMessage(err, 'Error al procesar el archivo CSV'));
+      const importErrors = csvImportErrors(err);
+      if (importErrors) {
+        setPreviewPendingFile(file);
+        setPreviewResult({
+          total_valid: 0,
+          total_errors: importErrors.errors.length,
+          errors: importErrors.errors,
+          message: importErrors.message,
+        });
+      }
+      setError(csvApiErrorMessage(err, 'Error al procesar el archivo CSV'));
     } finally {
       setIsLoading(false);
     }
@@ -831,12 +909,12 @@ export function TeachersTab() {
              {previewResult ? (
                <form onSubmit={handleConfirmBatch} className="space-y-4">
                  {/* Resumen de validación */}
-                 <div className={`${previewResult.total_valid > 0 ? 'bg-[#EEF7F4] border-[#0F7B6C]/30' : 'bg-[#FDEEEE] border-[#F4BDBD]'} border rounded-md p-4 text-sm`}>
+                 <div className={`${previewResult.total_valid > 0 && previewResult.total_errors === 0 ? 'bg-[#EEF7F4] border-[#0F7B6C]/30' : 'bg-[#FDEEEE] border-[#F4BDBD]'} border rounded-md p-4 text-sm`}>
                    <div className="flex items-center gap-2 mb-1">
-                     {previewResult.total_valid > 0
+                     {previewResult.total_valid > 0 && previewResult.total_errors === 0
                        ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" />
                        : <AlertCircle className="w-4 h-4 text-[#E03E3E]" />}
-                     <span className={`font-semibold ${previewResult.total_valid > 0 ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>
+                     <span className={`font-semibold ${previewResult.total_valid > 0 && previewResult.total_errors === 0 ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>
                        Revisión del archivo
                      </span>
                    </div>
@@ -845,6 +923,9 @@ export function TeachersTab() {
                      &nbsp;·&nbsp;
                      <span className="font-semibold text-[#D9730D]">{previewResult.total_errors}</span> con errores
                    </p>
+                   {previewResult.total_errors > 0 && (
+                     <p className="mt-1 text-[#B42318]">No se importará ninguna fila hasta corregir todos los errores.</p>
+                   )}
                  </div>
 
                  {previewResult.errors && previewResult.errors.length > 0 && (
@@ -852,7 +933,7 @@ export function TeachersTab() {
                      <p className="text-xs font-semibold text-[#787774] uppercase tracking-wider mb-2">Errores a corregir</p>
                      <ul className="space-y-1 text-xs text-[#E03E3E]">
                        {previewResult.errors.slice(0, 20).map((e: any, idx: number) => (
-                         <li key={idx}>Fila {e.row}: {e.error}</li>
+                         <li key={idx}>Fila {e.row}, columna {e.column || 'sin identificar'}: {e.error}</li>
                        ))}
                        {previewResult.errors.length > 20 && (
                          <li className="text-[#9B9A97]">… y {previewResult.errors.length - 20} más</li>
@@ -872,7 +953,7 @@ export function TeachersTab() {
                    </button>
                    <button
                      type="submit"
-                     disabled={isLoading || previewResult.total_valid === 0}
+                     disabled={isLoading || previewResult.total_valid === 0 || previewResult.total_errors > 0}
                      className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
                    >
                      {isLoading ? 'Creando...' : `Confirmar y crear (${previewResult.total_valid})`}
@@ -1008,6 +1089,15 @@ export function TeachersTab() {
                           <button onClick={() => copyTeacherCredentials(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title={copiedTeacherId === t.id ? "Credenciales copiadas" : "Copiar credencial"} aria-label={copiedTeacherId === t.id ? "Credenciales copiadas" : "Copiar credencial"}>
                             {copiedTeacherId === t.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
                           </button>
+                          <button
+                            onClick={() => regenerateTeacherCredentials(t)}
+                            disabled={!t.is_active || regeneratingTeacherId === t.id}
+                            className="p-2 hover:bg-[#EEF6FB] rounded text-[#787774] hover:text-primary disabled:opacity-40"
+                            title="Regenerar y restablecer contraseña"
+                            aria-label="Regenerar y restablecer contraseña"
+                          >
+                            {regeneratingTeacherId === t.id ? <span className="block w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                          </button>
                           <button onClick={() => setEditingTeacher(t)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Editar profesor">
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -1102,6 +1192,7 @@ export function StudentsTab() {
   const [editingStudent, setEditingStudent] = useState<any | null>(null);
   const [savingStudent, setSavingStudent] = useState(false);
   const [editStudentErrors, setEditStudentErrors] = useState<Record<string, string>>({});
+  const [regeneratingStudentId, setRegeneratingStudentId] = useState<number | null>(null);
 
   const updateStudent = async (values: Record<string, any>) => {
     if (!editingStudent) return;
@@ -1191,6 +1282,25 @@ export function StudentsTab() {
       setTimeout(() => setCopiedStudentId(null), 1200);
     } catch {
       setError('No se pudo copiar la credencial. Inténtalo de nuevo.');
+    }
+  };
+
+  const regenerateStudentCredentials = async (student: CredentialResetTarget) => {
+    if (!window.confirm(`Se invalidarán las sesiones y la contraseña actual de ${student.full_name || student.username}. ¿Generar una contraseña temporal nueva?`)) return;
+    setRegeneratingStudentId(student.id);
+    setError('');
+    setMessage('');
+    try {
+      const response = await api.post<TemporaryCredential>(`/super/students/${student.id}/credentials/regenerate`);
+      setNewCredentials(prev => [response.data, ...prev.filter(item => item.username !== response.data.username)]);
+      const delivery = response.data.email_sent
+        ? 'También se envió al correo registrado.'
+        : 'No se pudo enviar al correo; entrega de forma segura la contraseña temporal que aparece abajo.';
+      setMessage(`Credenciales regeneradas para ${student.full_name || student.username}. ${delivery}`);
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'No se pudieron regenerar las credenciales.'));
+    } finally {
+      setRegeneratingStudentId(null);
     }
   };
 
@@ -1335,14 +1445,14 @@ export function StudentsTab() {
       setPreviewPendingFile(file);
       setMessage(response.data.message || 'Archivo revisado. Confirma para crear las cuentas.');
     } catch (err: any) {
-      setError(apiErrorMessage(err, 'Error al revisar el archivo CSV'));
+      setError(csvApiErrorMessage(err, 'Error al revisar el archivo CSV'));
       setPreviewPendingFile(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Paso 2 de la carga masiva: confirmar y crear (solo los registros válidos).
+  // El backend vuelve a validar el archivo y solo crea el lote si todas las filas son válidas.
   const handleConfirmBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     const file = previewPendingFile;
@@ -1369,7 +1479,7 @@ export function StudentsTab() {
       });
       const d = response.data;
       const enrolledText = d.classroom ? ` ${d.enrolled} inscrito(s) en «${d.classroom}».` : '';
-      setMessage(`Se han creado ${d.total_created || 0} estudiante(s).${enrolledText} ${d.total_errors || 0} registro(s) con errores fueron omitidos.`);
+      setMessage(`Se han creado ${d.total_created || 0} estudiante(s).${enrolledText}`);
       setNewCredentials(d.credentials || []);
       setPreviewResult(null);
       setPreviewPendingFile(null);
@@ -1378,7 +1488,17 @@ export function StudentsTab() {
       if (previewFileInputRef.current) previewFileInputRef.current.value = '';
       loadStudents();
     } catch (err: any) {
-      setError(apiErrorMessage(err, 'Error al procesar el archivo CSV'));
+      const importErrors = csvImportErrors(err);
+      if (importErrors) {
+        setPreviewPendingFile(file);
+        setPreviewResult({
+          total_valid: 0,
+          total_errors: importErrors.errors.length,
+          errors: importErrors.errors,
+          message: importErrors.message,
+        });
+      }
+      setError(csvApiErrorMessage(err, 'Error al procesar el archivo CSV'));
     } finally {
       setIsLoading(false);
     }
@@ -1640,12 +1760,12 @@ export function StudentsTab() {
              {previewResult ? (
                <form onSubmit={handleConfirmBatch} className="space-y-4">
                  {/* Resumen de validación */}
-                 <div className={`${previewResult.total_valid > 0 ? 'bg-[#EEF7F4] border-[#0F7B6C]/30' : 'bg-[#FDEEEE] border-[#F4BDBD]'} border rounded-md p-4 text-sm`}>
+                 <div className={`${previewResult.total_valid > 0 && previewResult.total_errors === 0 ? 'bg-[#EEF7F4] border-[#0F7B6C]/30' : 'bg-[#FDEEEE] border-[#F4BDBD]'} border rounded-md p-4 text-sm`}>
                    <div className="flex items-center gap-2 mb-1">
-                     {previewResult.total_valid > 0
+                     {previewResult.total_valid > 0 && previewResult.total_errors === 0
                        ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" />
                        : <AlertCircle className="w-4 h-4 text-[#E03E3E]" />}
-                     <span className={`font-semibold ${previewResult.total_valid > 0 ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>
+                     <span className={`font-semibold ${previewResult.total_valid > 0 && previewResult.total_errors === 0 ? 'text-[#0F7B6C]' : 'text-[#E03E3E]'}`}>
                        Revisión del archivo
                      </span>
                    </div>
@@ -1654,6 +1774,9 @@ export function StudentsTab() {
                      &nbsp;·&nbsp;
                      <span className="font-semibold text-[#D9730D]">{previewResult.total_errors}</span> con errores
                    </p>
+                   {previewResult.total_errors > 0 && (
+                     <p className="mt-1 text-[#B42318]">No se importará ninguna fila hasta corregir todos los errores.</p>
+                   )}
                  </div>
 
                  {previewResult.errors && previewResult.errors.length > 0 && (
@@ -1661,7 +1784,7 @@ export function StudentsTab() {
                      <p className="text-xs font-semibold text-[#787774] uppercase tracking-wider mb-2">Errores a corregir</p>
                      <ul className="space-y-1 text-xs text-[#E03E3E]">
                        {previewResult.errors.slice(0, 20).map((e: any, idx: number) => (
-                         <li key={idx}>Fila {e.row}: {e.error}</li>
+                         <li key={idx}>Fila {e.row}, columna {e.column || 'sin identificar'}: {e.error}</li>
                        ))}
                        {previewResult.errors.length > 20 && (
                          <li className="text-[#9B9A97]">… y {previewResult.errors.length - 20} más</li>
@@ -1700,7 +1823,7 @@ export function StudentsTab() {
                    </button>
                    <button
                      type="submit"
-                     disabled={isLoading || previewResult.total_valid === 0}
+                     disabled={isLoading || previewResult.total_valid === 0 || previewResult.total_errors > 0}
                      className="flex items-center gap-2 px-6 py-2.5 bg-primary text-white text-sm font-medium rounded hover:bg-primary/90 transition-all shadow-md disabled:bg-[#E9E9E7] disabled:text-[#787774]"
                    >
                      {isLoading ? 'Creando...' : `Confirmar y crear (${previewResult.total_valid})`}
@@ -1867,6 +1990,15 @@ export function StudentsTab() {
                         <div className="flex justify-end items-center gap-2">
                           <button onClick={() => copyStudentCredentials(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title={copiedStudentId === s.id ? "Credenciales copiadas" : "Copiar credencial"} aria-label={copiedStudentId === s.id ? "Credenciales copiadas" : "Copiar credencial"}>
                             {copiedStudentId === s.id ? <CheckCircle className="w-4 h-4 text-[#0F7B6C]" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          <button
+                            onClick={() => regenerateStudentCredentials(s)}
+                            disabled={!s.is_active || regeneratingStudentId === s.id}
+                            className="p-2 hover:bg-[#EEF6FB] rounded text-[#787774] hover:text-primary disabled:opacity-40"
+                            title="Regenerar y restablecer contraseña"
+                            aria-label="Regenerar y restablecer contraseña"
+                          >
+                            {regeneratingStudentId === s.id ? <span className="block w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <KeyRound className="w-4 h-4" />}
                           </button>
                           <button onClick={() => setEditingStudent(s)} className="p-2 hover:bg-[#F7F6F3] rounded text-[#787774] hover:text-[#37352F]" title="Editar estudiante">
                             <Pencil className="w-4 h-4" />

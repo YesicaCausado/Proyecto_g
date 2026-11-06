@@ -460,21 +460,17 @@ class SuperProfesorAuditTests(unittest.TestCase):
     def test_bulk_students_enroll_in_group_and_validate_like_preview(self):
         rows = [
             "Ana Uno,TI,9000001,9,2000-01-01,ana1@test.edu.co",
-            "Beto Dos,TI,9000002,9,2000-01-01,est1@test.edu.co",     # correo ya existe
-            "Caro Tres,TI,9000003,9,2000-01-01,ana1@test.edu.co",    # correo repetido en el archivo
-            "Dani Cuatro,TI,9000001,9,2000-01-01,dani@test.edu.co",   # documento repetido en el archivo
             "Eva Cinco,TI,9000005,9,2000-01-01,eva5@test.edu.co",
         ]
         h = self.h("super_a")
         preview = self.client.post(f"{API}/super/students/preview", headers=h, files=self._csv(rows)).json()
-        self.assertEqual((preview["total_valid"], preview["total_errors"]), (2, 3))
+        self.assertEqual((preview["total_valid"], preview["total_errors"]), (2, 0))
         with unittest.mock.patch("app.api.credentials.send_credentials_email") as sent:
             r = self.client.post(f"{API}/super/students/bulk", headers=h, files=self._csv(rows),
                                  data={"classroom_id": str(self.c_mat), "authorization_confirmed": "true"})
         self.assertEqual(r.status_code, 201, r.text)
         d = r.json()
-        # Lo que la vista previa marcó como válido es exactamente lo que se crea
-        self.assertEqual((d["total_created"], d["total_errors"]), (preview["total_valid"], preview["total_errors"]))
+        self.assertEqual((d["total_created"], d["total_errors"]), (preview["total_valid"], 0))
         self.assertEqual((d["enrolled"], d["classroom"]), (2, "Matemáticas 9A"))
         self.assertEqual(sent.call_count, 2)
         db = self.Session()
@@ -485,6 +481,30 @@ class SuperProfesorAuditTests(unittest.TestCase):
         names = {s["student_name"] for s in self.client.get(f"{API}/classrooms/{self.c_mat}/students",
                                                              headers=self.h("profe_a")).json()}
         self.assertTrue({"Ana Uno", "Eva Cinco"} <= names)
+
+    def test_bulk_students_rechaza_todo_el_lote_si_una_fila_es_invalida(self):
+        rows = [
+            "Eva Cinco,TI,9000005,9,2000-01-01,eva5@test.edu.co",
+            "Beto Dos,TI,9000002,9,2000-01-01,est1@test.edu.co",
+        ]
+        h = self.h("super_a")
+        db = self.Session()
+        enrollments_before = db.query(Enrollment).filter_by(classroom_id=self.c_mat).count()
+        db.close()
+        preview = self.client.post(f"{API}/super/students/preview", headers=h, files=self._csv(rows)).json()
+        self.assertEqual((preview["total_valid"], preview["total_errors"]), (1, 1))
+        response = self.client.post(
+            f"{API}/super/students/bulk",
+            headers=h,
+            files=self._csv(rows),
+            data={"classroom_id": str(self.c_mat), "authorization_confirmed": "true"},
+        )
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(response.json()["detail"]["errors"][0]["column"], "correo")
+        db = self.Session()
+        self.assertIsNone(db.query(User).filter_by(document_number="9000005").first())
+        self.assertEqual(db.query(Enrollment).filter_by(classroom_id=self.c_mat).count(), enrollments_before)
+        db.close()
 
     def test_bulk_students_rejects_foreign_or_inactive_group_and_full_group(self):
         h = self.h("super_a")

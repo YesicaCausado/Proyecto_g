@@ -206,10 +206,10 @@ def account_locked_until(db: Session, user, now: Optional[datetime] = None) -> O
     return locked_until if locked_until and now < locked_until else None
 
 
-def _epoch(dt: datetime) -> int:
+def _epoch(dt: datetime) -> float:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return int(dt.timestamp())
+    return dt.timestamp()
 
 
 def token_still_valid(user, payload: dict) -> bool:
@@ -220,12 +220,12 @@ def token_still_valid(user, payload: dict) -> bool:
     iat = payload.get("iat")
     if not isinstance(iat, (int, float)):
         return False  # token antiguo sin fecha de emisión
-    return int(iat) >= _epoch(cutoff)
+    return float(iat) >= _epoch(cutoff)
 
 
 def revoke_user_sessions(user) -> None:
     """Invalida todos los tokens emitidos hasta ahora para este usuario."""
-    user.sessions_valid_after = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+    user.sessions_valid_after = datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def create_access_token(
@@ -250,7 +250,7 @@ def create_access_token(
             "exp": expire,
             # Fecha de emisión: permite invalidar tokens anteriores a un
             # cierre de sesión global (users.sessions_valid_after).
-            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "iat": datetime.now(timezone.utc).timestamp(),
         }
     )
 

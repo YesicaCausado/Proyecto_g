@@ -14,9 +14,20 @@ describe('plantillas CSV de usuarios', () => {
     assert.equal(rows[1].split(';').length, rows[0].split(';').length);
   });
 
-  it('mantiene la plantilla docente sin registros de ejemplo', () => {
+  it('incluye un ejemplo completo e instrucciones sin romper las columnas del importador', () => {
     const [, ...rows] = csvTemplateContent(TEACHER_TEMPLATE).slice(1).trimEnd().split('\r\n');
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].split(';').length, TEACHER_TEMPLATE.headers.length);
+    assert.deepEqual(rows[0].split(';'), TEACHER_TEMPLATE.headers.map(value => `"${value}"`));
+    assert.deepEqual(rows[1].split(';'), TEACHER_TEMPLATE.exampleRows[0].map(value => `"${value}"`));
+    assert.equal(rows[1].split(';').length, TEACHER_TEMPLATE.headers.length);
+    assert.ok(rows.slice(2).every(row => row.startsWith('"# ')));
+    assert.equal(TEACHER_TEMPLATE.exampleRows[0][0], 'Carlos Alvarez');
+  });
+
+  it('incluye instrucciones para sustituir el ejemplo de estudiantes y conserva sus columnas', () => {
+    const [, ...rows] = csvTemplateContent(STUDENT_TEMPLATE).slice(1).trimEnd().split('\r\n');
+    assert.equal(rows[1].split(';').length, STUDENT_TEMPLATE.headers.length);
+    assert.ok(rows.slice(2).every(row => row.startsWith('"# ')));
+    assert.equal(STUDENT_TEMPLATE.exampleRows[0][0], 'Carlos Alvarez');
+    assert.equal(STUDENT_TEMPLATE.exampleRows[0][6], 'Maria Alvarez');
   });
 });
