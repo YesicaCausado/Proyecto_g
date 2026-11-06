@@ -109,8 +109,7 @@ export default function RobotCanvas({
   );
 
   // ── Recuperación de pérdida de contexto WebGL ────────────────
-  // El canvas se remonta si WebGL se restaura y muestra un fallback si no.
-  const [webglEpoch, setWebglEpoch] = useState(0);
+  // Three.js restaura los recursos del renderer en el mismo canvas.
   const [webglFailed, setWebglFailed] = useState(false);
   // Guardamos el renderer en ESTADO (no en ref) para que el useEffect
   // de abajo se re-ejecute justo cuando R3F lo instancia vía onCreated
@@ -164,8 +163,11 @@ export default function RobotCanvas({
 
     const onRestored = () => {
       if (import.meta.env.DEV) {
-        console.info('[RobotCanvas] WebGL context restored — re-render.');
+        console.info('[RobotCanvas] WebGL context restored.');
       }
+      if (restoreTimer) clearTimeout(restoreTimer);
+      restoreTimer = null;
+      lostHandled = false;
       // Re-sincroniza el viewport con el tamaño real del DOM (el canvas pudo
       // quedar en 0×0 o con el tamaño viejo tras la pérdida).
       if (gl && typeof gl.setSize === 'function') {
@@ -174,8 +176,6 @@ export default function RobotCanvas({
         gl.setSize(w, h, false);
       }
       setWebglFailed(false);
-      // Remontamos para reconstruir la escena con un contexto limpio.
-      setWebglEpoch((e) => e + 1);
     };
 
     dom.addEventListener('webglcontextlost', onLost, false);
@@ -187,7 +187,7 @@ export default function RobotCanvas({
       if (restoreTimer) clearTimeout(restoreTimer);
       setGl(null);
     };
-  }, [gl, webglEpoch]);
+  }, [gl]);
 
   if (!enabled) return null;
 
@@ -199,9 +199,9 @@ export default function RobotCanvas({
       {webglFailed ? (
         <RobotCanvasFallbackUI error={new Error('WebGL no disponible')} />
       ) : (
-        <RobotErrorBoundary key={webglEpoch}>
+        <RobotErrorBoundary>
           <Canvas
-            key={webglEpoch}
+            className="robot-canvas-surface"
             shadows={lowPower ? false : CANVAS_CONFIG.shadows}
             dpr={lowPower ? LOW_POWER_DPR : CANVAS_CONFIG.dpr}
             onCreated={handleCreated}

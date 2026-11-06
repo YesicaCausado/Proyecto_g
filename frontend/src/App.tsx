@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import AppLoader from './components/AppLoader';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import { GuidedTourProvider } from './components/GuidedTour';
@@ -182,9 +183,11 @@ function AppContent() {
 
   return (
     <>
-      <Suspense fallback={<AppLoader message="Abriendo el módulo que elegiste" />}>
-        <AppRoutes />
-      </Suspense>
+      <RouteErrorBoundary>
+        <Suspense fallback={<AppLoader message="Abriendo el módulo que elegiste" />}>
+          <AppRoutes />
+        </Suspense>
+      </RouteErrorBoundary>
       <PWAInstallPrompt />
       <ConnectionStatus />
     </>

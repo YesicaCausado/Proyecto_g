@@ -29,7 +29,7 @@
       .app-loader__progress:after{position:absolute;inset:0 auto 0 0;width:42%;border-radius:inherit;background:linear-gradient(90deg,#0b6e99,#5aafd8);content:"";animation:app-loader-progress 1.5s ease-in-out infinite}
       @keyframes app-loader-spin{to{transform:rotate(360deg)}}
       @keyframes app-loader-progress{0%{transform:translateX(-110%)}55%{transform:translateX(150%)}100%{transform:translateX(280%)}}
-      @media(prefers-reduced-motion:reduce){.app-loader__orbit,.app-loader__progress:after{animation-duration:3s}}
+      @media(prefers-reduced-motion:reduce){.app-loader__orbit,.app-loader__progress:after{animation:none}}
     </style>
     <script>
       // Rescate (parche 14A): si una versión anterior de la app quedó

@@ -1,11 +1,8 @@
-import type { ReactNode } from 'react';
-
 interface AppLoaderProps {
   message?: string;
   error?: string;
   onRetry?: () => void;
   onSignOut?: () => void;
-  children?: ReactNode;
 }
 
 export default function AppLoader({
@@ -13,7 +10,6 @@ export default function AppLoader({
   error,
   onRetry,
   onSignOut,
-  children,
 }: AppLoaderProps) {
   const logo = `${import.meta.env.BASE_URL}2d.png`;
 
@@ -30,7 +26,7 @@ export default function AppLoader({
           <img className="app-loader__logo" src={logo} alt="NeuroLearn IA" />
         </div>
         <p className="app-loader__brand">NeuroLearn <span>IA</span></p>
-        <p className="app-loader__message">{error ? message : children ?? message}</p>
+        <p className="app-loader__message">{message}</p>
         {error && (
           <section className="app-loader__error" role="alert">
             <p>{error}</p>

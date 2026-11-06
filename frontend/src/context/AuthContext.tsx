@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
 import axios from 'axios';
@@ -135,6 +136,7 @@ export function AuthProvider({
 
   const [loading, setLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const initializationStarted = useRef(false);
 
 
   // ==========================================================================
@@ -183,6 +185,8 @@ export function AuthProvider({
   }, []);
 
   useEffect(() => {
+    if (initializationStarted.current) return;
+    initializationStarted.current = true;
     void initializeSession();
   }, [initializeSession]);
 
