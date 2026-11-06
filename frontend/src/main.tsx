@@ -1,4 +1,3 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
@@ -36,11 +35,9 @@ if (import.meta.env.DEV) {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// StrictMode's development-only simulated remount disposes R3F canvases and
+// force-loses their WebGL contexts before the replacement renderer is ready.
+createRoot(document.getElementById('root')!).render(<App />)
 
 // ── Registro del Service Worker (PWA: instalable + offline) ─────
 import { registerSW } from 'virtual:pwa-register'

@@ -49,6 +49,8 @@ const CSS = `
     justify-content: center;
     min-height: 300px;
     overflow: hidden;
+    isolation: isolate;
+    transform: translateZ(0);
   }
   .auth-card-panel {
     background: #F4F2EF;
@@ -91,7 +93,7 @@ export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
                 boxShadow: 'inset 0 0 32px rgba(55,53,47,0.04)',
               }}
             />
-            <RobotCanvas enabled lowPower className="absolute inset-0" />
+            <RobotCanvas enabled transparent className="absolute inset-0" />
             <p
               style={{
                 position: 'absolute', bottom: '16px', left: '20px',

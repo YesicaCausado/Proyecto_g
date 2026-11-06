@@ -60,6 +60,8 @@ const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
           height: '72vh',
           transform: `translate(-50%, -50%) scale(${scale})`,
           willChange: 'transform, opacity',
+          isolation: 'isolate',
+          zIndex: 4,
         }}
       >
         {/* Capa interna de flotación — la única que recibe el bob */}
@@ -71,7 +73,6 @@ const HeroRobot = forwardRef<HeroRobotHandle, HeroRobotProps>(
           <RobotCanvas
             robotState="idle"
             transparent
-            lowPower
             paused={paused}
             className="w-full h-full"
           />

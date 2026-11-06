@@ -11,7 +11,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { KeyRound, Eye, EyeOff, CheckCircle, XCircle, Loader2, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
 import { PASSWORD_MAX, PASSWORD_RULES as RULES } from '../../data/passwordRules';
-import AppLoader from '../../components/AppLoader';
+import AuthPageLayout from './components/AuthPageLayout';
 
 type PageState = 'validating' | 'valid' | 'invalid' | 'success';
 
@@ -92,13 +92,21 @@ export default function ResetPasswordPage() {
 
   // ── Validando token ───────────────────────────────────────────
   if (pageState === 'validating') {
-    return <AppLoader message="Verificando tu enlace de recuperación" />;
+    return (
+      <AuthPageLayout>
+        <div role="status" className="flex flex-col items-center text-center">
+          <Loader2 className="w-8 h-8 text-[#0B6E99] animate-spin mb-4" />
+          <p className="text-sm text-[#787774]">Verificando tu enlace de recuperación…</p>
+        </div>
+      </AuthPageLayout>
+    );
   }
+
 
   // ── Token inválido o expirado ─────────────────────────────────
   if (pageState === 'invalid') {
     return (
-      <div className="min-h-screen bg-[#F7F6F3] flex items-center justify-center px-4">
+      <AuthPageLayout>
         <div className="bg-white border border-[#E9E9E7] rounded-md p-8 max-w-sm w-full text-center">
           <div className="w-14 h-14 bg-[#FDEEEE] rounded-full flex items-center justify-center mx-auto mb-4">
             <XCircle className="w-7 h-7 text-[#E03E3E]" />
@@ -121,14 +129,14 @@ export default function ResetPasswordPage() {
             Volver al inicio de sesión
           </Link>
         </div>
-      </div>
+      </AuthPageLayout>
     );
   }
 
   // ── Contraseña restablecida con éxito ─────────────────────────
   if (pageState === 'success') {
     return (
-      <div className="min-h-screen bg-[#F7F6F3] flex items-center justify-center px-4">
+      <AuthPageLayout>
         <div className="bg-white border border-[#E9E9E7] rounded-md p-8 max-w-sm w-full text-center">
           <div className="w-14 h-14 bg-[#EEF7F4] rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-7 h-7 text-[#0F7B6C]" />
@@ -141,14 +149,14 @@ export default function ResetPasswordPage() {
             <br />Redirigiendo al inicio de sesión…
           </p>
         </div>
-      </div>
+      </AuthPageLayout>
     );
   }
 
   // ── Formulario principal ──────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#F7F6F3] flex items-center justify-center px-4">
-      <div className="bg-white border border-[#E9E9E7] rounded-md p-8 w-full max-w-md">
+    <AuthPageLayout>
+      <div className="bg-white border border-[#E9E9E7] rounded-md p-6 sm:p-8 w-full max-w-md">
 
         {/* Header */}
         <div className="flex flex-col items-center text-center mb-7">
@@ -281,6 +289,6 @@ export default function ResetPasswordPage() {
           </Link>
         </div>
       </div>
-    </div>
+    </AuthPageLayout>
   );
 }
