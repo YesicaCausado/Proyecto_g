@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { KeyRound, Eye, EyeOff, CheckCircle, XCircle, Loader2, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
 import { PASSWORD_MAX, PASSWORD_RULES as RULES } from '../../data/passwordRules';
+import AppLoader from '../../components/AppLoader';
 
 type PageState = 'validating' | 'valid' | 'invalid' | 'success';
 
@@ -91,14 +92,7 @@ export default function ResetPasswordPage() {
 
   // ── Validando token ───────────────────────────────────────────
   if (pageState === 'validating') {
-    return (
-      <div className="min-h-screen bg-[#F7F6F3] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#37352F]" />
-          <p className="text-sm text-[#787774]">Verificando enlace…</p>
-        </div>
-      </div>
-    );
+    return <AppLoader message="Verificando tu enlace de recuperación" />;
   }
 
   // ── Token inválido o expirado ─────────────────────────────────

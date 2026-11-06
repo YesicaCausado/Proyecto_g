@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Loader2 } from 'lucide-react';
+import AppLoader from './AppLoader';
 
 type AllowedRole = 'estudiante' | 'profesor' | 'super_profesor' | 'admin';
 
@@ -11,14 +11,21 @@ interface Props {
 }
 
 export default function ProtectedRoute({ children, role, roles }: Props) {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, token, loading, sessionError, retrySession, logout, isAuthenticated } = useAuth();
   const location = useLocation();
 
   if (loading) {
+    return <AppLoader message="Comprobando tus permisos de acceso" />;
+  }
+
+  if (sessionError && token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F7F6F3]">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-      </div>
+      <AppLoader
+        message="No se pudo validar tu sesión"
+        error={sessionError}
+        onRetry={() => { void retrySession(); }}
+        onSignOut={logout}
+      />
     );
   }
 

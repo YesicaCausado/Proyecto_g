@@ -44,8 +44,8 @@ const POLL_MS = 60_000;
 const NotificationsContext = createContext<NotificationsState | null>(null);
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const enabled = !!user && !user.must_change_password;
+  const { user, loading: authLoading } = useAuth();
+  const enabled = !authLoading && !!user && !user.must_change_password;
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);

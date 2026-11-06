@@ -2,6 +2,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationsProvider } from './context/NotificationsContext';
+import AppLoader from './components/AppLoader';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import { GuidedTourProvider } from './components/GuidedTour';
@@ -42,18 +43,6 @@ const ClassroomDetailPage  = lazy(() => import('./pages/teacher/ClassroomDetailP
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'));
 const SuperDashboard       = lazy(() => import('./pages/super/SuperDashboard'));
 
-// Fallback minimalista mientras carga cada ruta diferida.
-function RouteLoader() {
-  return (
-    <div
-      className="flex min-h-[40vh] items-center justify-center text-slate-400"
-      aria-busy="true"
-    >
-      <span>Cargando…</span>
-    </div>
-  );
-}
-
 function DashboardRouter() {
   const { user } = useAuth();
   // Fuerza cambio de contraseña en primer login
@@ -66,7 +55,6 @@ function DashboardRouter() {
 
 function AppRoutes() {
   return (
-    <Suspense fallback={<RouteLoader />}>
       <Routes>
         {/* Landing en construcción: accesible en /landing mientras tanto.
         La raíz / apunta al login (página principal actual). */}
@@ -182,7 +170,24 @@ function AppRoutes() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </Suspense>
+  );
+}
+
+function AppContent() {
+  const { loading } = useAuth();
+
+  if (loading) {
+    return <AppLoader message="Verificando tu sesión y preparando NeuroLearn IA" />;
+  }
+
+  return (
+    <>
+      <Suspense fallback={<AppLoader message="Abriendo el módulo que elegiste" />}>
+        <AppRoutes />
+      </Suspense>
+      <PWAInstallPrompt />
+      <ConnectionStatus />
+    </>
   );
 }
 
@@ -192,9 +197,7 @@ export default function App() {
       <AuthProvider>
         <GuidedTourProvider>
           <NotificationsProvider>
-            <AppRoutes />
-            <PWAInstallPrompt />
-            <ConnectionStatus />
+            <AppContent />
           </NotificationsProvider>
         </GuidedTourProvider>
       </AuthProvider>

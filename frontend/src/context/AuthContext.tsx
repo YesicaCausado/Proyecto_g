@@ -3,8 +3,10 @@ import {
   useContext,
   useState,
   useEffect,
+  useCallback,
   type ReactNode,
 } from 'react';
+import axios from 'axios';
 
 import api, { clearApiCache } from '../services/api';
 
@@ -23,9 +25,11 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
+  sessionError: string | null;
 
   login: (data: LoginRequest) => Promise<void>;
   logout: () => void;
+  retrySession: () => Promise<void>;
 
   updateUser: (updates: Partial<User>) => void;
 
@@ -43,34 +47,6 @@ const AuthContext = createContext<AuthContextType | null>(null);
 // ============================================================================
 // HELPERS
 // ============================================================================
-
-/**
- * Obtiene el usuario guardado en localStorage.
- *
- * Si el contenido está corrupto, se elimina y se devuelve null.
- */
-function getStoredUser(): User | null {
-  try {
-    const cached = localStorage.getItem('user');
-
-    if (!cached) {
-      return null;
-    }
-
-    const parsed = JSON.parse(cached);
-
-    if (!parsed || typeof parsed !== 'object') {
-      localStorage.removeItem('user');
-      return null;
-    }
-
-    return parsed as User;
-  } catch {
-    localStorage.removeItem('user');
-    return null;
-  }
-}
-
 
 /**
  * Guarda el usuario de forma segura.
@@ -92,6 +68,50 @@ function clearStoredSession(): void {
   localStorage.removeItem('user');
 }
 
+const USER_ROLES: readonly User['role'][] = [
+  'estudiante',
+  'profesor',
+  'super_profesor',
+  'admin',
+];
+
+function isUserRole(role: unknown): role is User['role'] {
+  return typeof role === 'string' && USER_ROLES.includes(role as User['role']);
+}
+
+function isSessionUser(value: unknown): value is User {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<User>;
+  return Boolean(
+    typeof candidate.id === 'number' &&
+    Number.isInteger(candidate.id) &&
+    candidate.id > 0 &&
+    typeof candidate.username === 'string' &&
+    candidate.username.trim() &&
+    isUserRole(candidate.role),
+  );
+}
+
+class InvalidSessionResponseError extends Error {}
+
+let sessionValidationPromise: Promise<User> | null = null;
+
+function fetchSessionUser(): Promise<User> {
+  if (!sessionValidationPromise) {
+    sessionValidationPromise = api.get<unknown>('/auth/me', { timeout: 10_000 })
+      .then(({ data }) => {
+        if (!isSessionUser(data)) {
+          throw new InvalidSessionResponseError('El servidor devolvió datos de sesión inválidos.');
+        }
+        return data;
+      })
+      .finally(() => {
+        sessionValidationPromise = null;
+      });
+  }
+  return sessionValidationPromise;
+}
+
 
 // ============================================================================
 // PROVIDER
@@ -107,129 +127,64 @@ export function AuthProvider({
   // Estado inicial
   // --------------------------------------------------------------------------
 
-  const [user, setUser] = useState<User | null>(
-    getStoredUser,
-  );
+  const [user, setUser] = useState<User | null>(null);
 
   const [token, setToken] = useState<string | null>(
     () => localStorage.getItem('token'),
   );
 
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
 
   // ==========================================================================
   // INICIALIZACIÓN DE SESIÓN
   // ==========================================================================
 
-  useEffect(() => {
+  const initializeSession = useCallback(async () => {
+    setLoading(true);
+    setSessionError(null);
+    const currentToken = localStorage.getItem('token');
 
-    let mounted = true;
+    if (!currentToken) {
+      localStorage.removeItem('user');
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+      return;
+    }
 
-    const initAuth = async () => {
+    try {
+      const data = await fetchSessionUser();
+      setToken(currentToken);
+      setUser(data);
+      storeUser(data);
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      const rejectedSession = status === 401 || status === 403;
 
-      const currentToken =
-        localStorage.getItem('token');
-
-      // ----------------------------------------------------------------------
-      // No existe sesión
-      // ----------------------------------------------------------------------
-
-      if (!currentToken) {
-
-        if (mounted) {
-          setToken(null);
-          setUser(null);
-          setLoading(false);
-        }
-
+      if (rejectedSession || error instanceof InvalidSessionResponseError) {
+        clearStoredSession();
+        delete api.defaults.headers.common.Authorization;
+        setToken(null);
+        setUser(null);
         return;
       }
 
-
-      // ----------------------------------------------------------------------
-      // Existe token: validarlo contra backend
-      // ----------------------------------------------------------------------
-
-      try {
-
-        const { data } =
-          await api.get<User>('/auth/me');
-
-
-        // --------------------------------------------------------------------
-        // Validación mínima de respuesta
-        // --------------------------------------------------------------------
-
-        if (
-          !data ||
-          typeof data !== 'object' ||
-          !data.id ||
-          !data.username ||
-          !data.role
-        ) {
-          throw new Error(
-            'Respuesta de usuario inválida.',
-          );
-        }
-
-
-        if (!mounted) {
-          return;
-        }
-
-
-        // --------------------------------------------------------------------
-        // Sesión válida
-        // --------------------------------------------------------------------
-
-        setToken(currentToken);
-        setUser(data);
-
-        storeUser(data);
-
-      } catch (error) {
-
-        // --------------------------------------------------------------------
-        // Token inválido / expirado / usuario eliminado
-        // --------------------------------------------------------------------
-
-        console.warn(
-          'La sesión actual no es válida. Se cerrará la sesión.',
-          error,
-        );
-
-        if (!mounted) {
-          return;
-        }
-
-        clearStoredSession();
-        delete api.defaults.headers.common.Authorization;
-
-        setToken(null);
-        setUser(null);
-
-      } finally {
-
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-
-    initAuth();
-
-
-    // ------------------------------------------------------------------------
-    // Cleanup
-    // ------------------------------------------------------------------------
-
-    return () => {
-      mounted = false;
-    };
-
+      console.warn('No fue posible validar la sesión con el servidor.', error);
+      setToken(currentToken);
+      setUser(null);
+      setSessionError(
+        'No pudimos comprobar tu sesión por un problema de conexión. Verifica tu conexión e inténtalo de nuevo.',
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void initializeSession();
+  }, [initializeSession]);
 
 
   // ==========================================================================
@@ -260,6 +215,12 @@ export function AuthProvider({
       );
     }
 
+    if (!isUserRole(tokenData.role)) {
+      clearStoredSession();
+      setToken(null);
+      setUser(null);
+      throw new Error('El servidor no devolvió un rol de usuario válido.');
+    }
 
     // ------------------------------------------------------------------------
     // Validar ID (antes de guardar nada, para no dejar sesión a medias)
@@ -327,8 +288,7 @@ export function AuthProvider({
         null,
 
       role:
-        (tokenData.role ??
-          'estudiante') as User['role'],
+        tokenData.role,
 
       is_active:
         tokenData.is_active ??
@@ -381,6 +341,7 @@ export function AuthProvider({
     storeUser(userData);
 
     setUser(userData);
+    setSessionError(null);
 
 
   };
@@ -405,6 +366,7 @@ export function AuthProvider({
 
     setToken(null);
     setUser(null);
+    setSessionError(null);
 
 
     // ------------------------------------------------------------------------
@@ -454,11 +416,12 @@ export function AuthProvider({
     token,
 
     loading,
+    sessionError,
 
     login,
 
-
     logout,
+    retrySession: initializeSession,
 
     updateUser,
 
