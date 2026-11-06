@@ -13,12 +13,11 @@ import { Canvas }       from '@react-three/fiber';
 import { Environment, PerspectiveCamera } from '@react-three/drei';
 import type { AnimationClip } from 'three';
 
-import { CAMERA_CONFIG, CANVAS_CONFIG, ROBOT_TRANSFORM } from './RobotConfig';
+import { CAMERA_CONFIG, CANVAS_CONFIG } from './RobotConfig';
 import { RobotCanvasFallbackUI, RobotErrorBoundary } from './RobotErrorBoundary';
 import type { RobotState }  from './RobotStates';
 import RobotLights          from './RobotLights';
 import RobotEffects         from './RobotEffects';
-import RobotGeometric       from './RobotGeometric';
 import RobotAnimatedScene   from './RobotAnimatedScene';
 import { useRobotContextSafe } from '../../../../context/RobotContext';
 
@@ -73,17 +72,7 @@ function SceneContent({ robotState, onModelLoaded, lowPower }: SceneContentProps
         />
       )}
 
-      {/*
-       * Suspense muestra RobotGeometric mientras el GLB carga.
-       * RobotAnimatedScene combina modelo + motor de animaciones.
-       */}
-      <Suspense fallback={
-        <RobotGeometric
-          robotState={robotState}
-          position={ROBOT_TRANSFORM.position}
-          scale={ROBOT_TRANSFORM.scale[0]}
-        />
-      }>
+      <Suspense fallback={null}>
         <RobotAnimatedScene
           robotState={robotState}
           onReady={onModelLoaded}
@@ -230,7 +219,12 @@ export default function RobotCanvas({
               depth:                 true,
               logarithmicDepthBuffer: !lowPower,
             }}
-            style={transparent ? undefined : { background: CANVAS_CONFIG.backgroundColor }}
+            style={{
+              display: 'block',
+              width: '100%',
+              height: '100%',
+              ...(transparent ? {} : { background: CANVAS_CONFIG.backgroundColor }),
+            }}
             frameloop={paused ? 'never' : 'always'}
             performance={{ min: 0.8 }}
           >

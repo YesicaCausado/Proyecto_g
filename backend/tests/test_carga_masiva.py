@@ -2,7 +2,7 @@
 NeuroLearn IA — Carga masiva de profesores y estudiantes (plantillas CSV).
 
 Comprueba que el archivo que genera el botón «Descargar plantilla» del Súper
-Profesor (UsersTabs.tsx: BOM UTF-8, coma, CRLF) pasa por la revisión y la
+Profesor (UsersTabs.tsx: BOM UTF-8, punto y coma, CRLF) pasa por la revisión y la
 creación, y que también se aceptan los formatos con que Excel en español
 vuelve a guardarlo (punto y coma, Windows-1252, «sep=,», fecha DD/MM/AAAA).
 
@@ -16,6 +16,8 @@ import os
 import sys
 import unittest
 import unittest.mock
+import csv
+import io
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import tests.entorno_pruebas  # noqa: E402,F401  (BD en memoria, correo a consola, sin IA real)
@@ -40,12 +42,17 @@ STUDENT_HEADERS = (
     "nombre_completo,tipo_documento,numero_documento,correo,grado,fecha_nacimiento,nombre_acudiente"
 )
 STUDENT_EXAMPLE = (
-    "Ana Gómez,TI,1098765432,ana.gomez@colegio.edu.co,10°,2009-05-14,María Gómez"
+    "Carlos Álvarez,TI,1098765432,carlos.alvarez@colegio.edu.co,10°,2009-05-14,María Álvarez"
 )
 
 
-def template_bytes(headers: str, *rows: str) -> bytes:
-    return ("﻿" + headers + "\r\n" + "".join(r + "\r\n" for r in rows)).encode("utf-8")
+def template_bytes(headers: str, *rows: str, delimiter: str = ",") -> bytes:
+    source_rows = [next(csv.reader([row])) for row in (headers, *rows)]
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, delimiter=delimiter, lineterminator="\r\n", quoting=csv.QUOTE_ALL)
+    writer.writerows(source_rows)
+    separator = f"sep={delimiter}\r\n" if delimiter != "," else ""
+    return ("\ufeff" + separator + output.getvalue()).encode("utf-8")
 
 
 class CargaMasivaTests(unittest.TestCase):
@@ -104,7 +111,7 @@ class CargaMasivaTests(unittest.TestCase):
 
     # ── Plantillas tal como se descargan ─────────────────────────────────
     def test_plantilla_de_profesores_completa_el_flujo(self):
-        content = template_bytes(TEACHER_HEADERS, TEACHER_EXAMPLE)
+        content = template_bytes(TEACHER_HEADERS, TEACHER_EXAMPLE, delimiter=";")
         preview = self.send("teachers", "preview", content)
         self.assertEqual(preview.status_code, 200, preview.text)
         self.assertEqual((preview.json()["total_valid"], preview.json()["total_errors"]), (1, 0))
@@ -122,16 +129,31 @@ class CargaMasivaTests(unittest.TestCase):
         db.close()
 
     def test_plantilla_de_estudiantes_completa_el_flujo(self):
-        content = template_bytes(STUDENT_HEADERS, STUDENT_EXAMPLE)
+        content = template_bytes(STUDENT_HEADERS, STUDENT_EXAMPLE, delimiter=";")
         preview = self.send("students", "preview", content).json()
         self.assertEqual((preview["total_valid"], preview["total_errors"]), (1, 0))
         r = self.send("students", "bulk", content)
         self.assertEqual(r.status_code, 201, r.text)
         u = self.user("1098765432")
         self.assertEqual((u.full_name, u.role, u.document_type, u.grade, u.birth_date),
-                         ("Ana Gómez", "estudiante", "TI", "10°", "2009-05-14"))
-        self.assertEqual(u.guardian_name, "María Gómez")
+                         ("Carlos Álvarez", "estudiante", "TI", "10°", "2009-05-14"))
+        self.assertEqual(u.guardian_name, "María Álvarez")
         self.assertIsNotNone(u.guardian_authorized_at)
+
+    def test_plantilla_de_estudiantes_admite_varios_registros(self):
+        second_student = (
+            "Lucía Ríos,TI,1098765433,lucia.rios@colegio.edu.co,9°,2010-08-20,Paula Ríos"
+        )
+        content = template_bytes(
+            STUDENT_HEADERS, STUDENT_EXAMPLE, second_student, delimiter=";"
+        )
+
+        preview = self.send("students", "preview", content).json()
+        self.assertEqual((preview["total_valid"], preview["total_errors"]), (2, 0))
+
+        response = self.send("students", "bulk", content)
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["total_created"], 2)
 
     def test_creacion_individual_de_menor_solo_requiere_nombre_del_acudiente(self):
         response = self.client.post(

@@ -5,6 +5,12 @@ import { FieldError } from '../../../components/FieldError';
 import { useFieldErrors } from '../../../hooks/useFieldErrors';
 import { fieldA11y, focusFirstInvalid } from '../../../utils/formFields';
 import {
+  csvTemplateContent,
+  STUDENT_TEMPLATE,
+  TEACHER_TEMPLATE,
+  type CsvTemplate,
+} from './csvTemplates';
+import {
   DOCUMENT_TYPES, apiErrorMessage, apiFieldErrors, documentInputHint, escapeHtml,
   filterDocumentInput, isDocumentType, normalizeEmail, normalizePersonName, todayISO,
   validateBirthDate, validateDocumentNumber, validateEmail, validateFile, validateGrade,
@@ -52,26 +58,15 @@ function printCredentials(credentials: any[], title: string) {
   if (w) { w.document.write(html); w.document.close(); w.focus(); w.print(); }
 }
 
-// ── Plantillas de carga masiva ───────────────────────────────────────────────
-// Solo se descargan encabezados para evitar que una fila ficticia se cargue
-// accidentalmente como una cuenta real.
-const TEACHER_TEMPLATE = {
-  filename: 'plantilla_profesores.csv',
-  headers: 'nombre_completo,tipo_documento,numero_documento,correo,area',
-};
-const STUDENT_TEMPLATE = {
-  filename: 'plantilla_estudiantes.csv',
-  headers: 'nombre_completo,tipo_documento,numero_documento,correo,grado,fecha_nacimiento,nombre_acudiente',
-};
-
 // ── Utilidad: genera y descarga un archivo CSV de plantilla ─────────────────
 // Se genera en el navegador (no depende del servidor ni de archivos sueltos).
 // - BOM UTF-8: sin él Excel abría «Martínez» como «MartÃ­nez».
+// - Punto y coma: separador predeterminado de Excel en español.
 // - La URL del blob se libera después: liberarla en el mismo instante del
 //   clic cancelaba la descarga en algunos navegadores (Firefox, Safari), por
 //   eso a veces «no aparecía» la plantilla.
-function downloadCsvTemplate(template: { filename: string; headers: string }) {
-  const content = `\uFEFF${template.headers}\r\n`;
+function downloadCsvTemplate(template: CsvTemplate) {
+  const content = csvTemplateContent(template);
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -83,7 +78,7 @@ function downloadCsvTemplate(template: { filename: string; headers: string }) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function TemplateButton({ template }: { template: { filename: string; headers: string } }) {
+function TemplateButton({ template }: { template: CsvTemplate }) {
   return (
     <button
       type="button"
@@ -820,7 +815,7 @@ export function TeachersTab() {
                  El archivo CSV debe tener las siguientes cabeceras exactamente:
                </p>
                <code className="block bg-white p-2 rounded border border-[#E9E9E7] text-xs font-mono text-[#37352F] mb-3 break-all">
-                 {TEACHER_TEMPLATE.headers}
+                 {TEACHER_TEMPLATE.headers.join(',')}
                </code>
                <div className="text-xs text-[#787774] space-y-1 mt-2">
                  <p><span className="font-semibold text-[#37352F]">tipo_documento</span> — CC, TI, CE o PA</p>
@@ -1624,7 +1619,7 @@ export function StudentsTab() {
                  El archivo CSV debe tener las siguientes cabeceras exactamente:
                </p>
                <code className="block bg-white p-2 rounded border border-[#E9E9E7] text-xs font-mono text-[#37352F] mb-3 break-all">
-                 {STUDENT_TEMPLATE.headers}
+                 {STUDENT_TEMPLATE.headers.join(',')}
                </code>
                <div className="text-xs text-[#787774] space-y-1 mt-2">
                  <p><span className="font-semibold text-[#37352F]">tipo_documento</span> — CC, TI, CE o PA</p>
@@ -1634,9 +1629,12 @@ export function StudentsTab() {
                   <p><span className="font-semibold text-[#37352F]">nombre_acudiente</span> — requerido para menores o sin fecha de nacimiento.</p>
                </div>
                <p className="text-xs text-[#787774] mt-2 mb-2">
-                 Separador coma o punto y coma (Excel en español). Agrega una fila por usuario y usa un correo real.
+                 Agrega una fila por usuario y usa un correo real.
                </p>
                <TemplateButton template={STUDENT_TEMPLATE} />
+               <p className="text-xs text-[#787774] mt-2">
+                 Edita o elimina el ejemplo de Carlos Álvarez antes de cargarlo; agrega otros estudiantes en filas nuevas.
+               </p>
              </div>
              
              {previewResult ? (
