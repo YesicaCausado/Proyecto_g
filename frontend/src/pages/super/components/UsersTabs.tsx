@@ -5,6 +5,12 @@ import { FieldError } from '../../../components/FieldError';
 import { useFieldErrors } from '../../../hooks/useFieldErrors';
 import { fieldA11y, focusFirstInvalid } from '../../../utils/formFields';
 import {
+  csvTemplateContent,
+  STUDENT_TEMPLATE,
+  TEACHER_TEMPLATE,
+  type CsvTemplate,
+} from './csvTemplates';
+import {
   DOCUMENT_TYPES, apiErrorMessage, apiFieldErrors, documentInputHint, escapeHtml,
   filterDocumentInput, isDocumentType, normalizeEmail, normalizePersonName, todayISO,
   validateBirthDate, validateDocumentNumber, validateEmail, validateFile, validateGrade,
@@ -52,29 +58,15 @@ function printCredentials(credentials: any[], title: string) {
   if (w) { w.document.write(html); w.document.close(); w.focus(); w.print(); }
 }
 
-// ── Plantillas de carga masiva ───────────────────────────────────────────────
-// Encabezados iguales a los que exige el importador (api/credentials.py:
-// TEACHER_CSV_COLUMNS / STUDENT_CSV_COLUMNS). La fila de ejemplo cumple sus
-// validaciones; hay que reemplazarla por los datos reales.
-const TEACHER_TEMPLATE = {
-  filename: 'plantilla_profesores.csv',
-  headers: 'nombre_completo,tipo_documento,numero_documento,correo,area',
-  example: 'Carlos Martínez,CC,1234567890,carlos@colegio.edu.co,Matemáticas',
-};
-const STUDENT_TEMPLATE = {
-  filename: 'plantilla_estudiantes.csv',
-  headers: 'nombre_completo,tipo_documento,numero_documento,correo,grado,fecha_nacimiento',
-  example: 'Ana Gómez,TI,1098765432,ana.gomez@colegio.edu.co,10°,2009-05-14',
-};
-
 // ── Utilidad: genera y descarga un archivo CSV de plantilla ─────────────────
 // Se genera en el navegador (no depende del servidor ni de archivos sueltos).
 // - BOM UTF-8: sin él Excel abría «Martínez» como «MartÃ­nez».
+// - Punto y coma: separador predeterminado de Excel en español.
 // - La URL del blob se libera después: liberarla en el mismo instante del
 //   clic cancelaba la descarga en algunos navegadores (Firefox, Safari), por
 //   eso a veces «no aparecía» la plantilla.
-function downloadCsvTemplate(template: { filename: string; headers: string; example: string }) {
-  const content = `\uFEFF${template.headers}\r\n${template.example}\r\n`;
+function downloadCsvTemplate(template: CsvTemplate) {
+  const content = csvTemplateContent(template);
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -86,7 +78,7 @@ function downloadCsvTemplate(template: { filename: string; headers: string; exam
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function TemplateButton({ template }: { template: { filename: string; headers: string; example: string } }) {
+function TemplateButton({ template }: { template: CsvTemplate }) {
   return (
     <button
       type="button"
@@ -794,7 +786,6 @@ export function TeachersTab() {
                 <FieldError id="teacher-subjectArea" error={fields.errors.subjectArea} />
               </div>
             </div>
-            
             <div className="pt-4 flex justify-end">
               <button
                 type="submit"
@@ -824,7 +815,7 @@ export function TeachersTab() {
                  El archivo CSV debe tener las siguientes cabeceras exactamente:
                </p>
                <code className="block bg-white p-2 rounded border border-[#E9E9E7] text-xs font-mono text-[#37352F] mb-3 break-all">
-                 {TEACHER_TEMPLATE.headers}
+                 {TEACHER_TEMPLATE.headers.join(',')}
                </code>
                <div className="text-xs text-[#787774] space-y-1 mt-2">
                  <p><span className="font-semibold text-[#37352F]">tipo_documento</span> — CC, TI, CE o PA</p>
@@ -832,7 +823,7 @@ export function TeachersTab() {
                  <p><span className="font-semibold text-[#37352F]">area</span> — opcional (ej: Matemáticas)</p>
                </div>
                <p className="text-xs text-[#787774] mt-2 mb-2">
-                 Separador coma o punto y coma (Excel en español). Reemplaza la fila de ejemplo por tus datos antes de subirla.
+                 Separador coma o punto y coma (Excel en español). Agrega una fila por usuario y usa un correo real.
                </p>
                <TemplateButton template={TEACHER_TEMPLATE} />
              </div>
@@ -1124,7 +1115,7 @@ export function StudentsTab() {
       if (fullName && fullName !== editingStudent.full_name) {
         payload.full_name = fullName;
       }
-      // Correo vacío = sin correo (el servidor le asigna una dirección interna).
+      // Toda cuenta estudiantil debe conservar un correo recuperable.
       if (normalizeEmail(values.email ?? '') !== (editingStudent.email || '').toLowerCase()) {
         payload.email = normalizeEmail(values.email ?? '');
       }
@@ -1223,18 +1214,31 @@ export function StudentsTab() {
   const [firstName, setFirstName]           = useState('');
   const [lastName, setLastName]             = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
+  const [email, setEmail]                   = useState('');
   const [documentType, setDocumentType]     = useState<DocumentType>('TI');
   const [grade, setGrade]                   = useState('');
   const [birthDate, setBirthDate]           = useState('');
+  const [guardianAuthorizationConfirmed, setGuardianAuthorizationConfirmed] = useState(false);
+  const [guardianName, setGuardianName] = useState('');
+  const [batchAuthorizationConfirmed, setBatchAuthorizationConfirmed] = useState(false);
   const [assignedClassroomId, setAssignedClassroomId] = useState('');
   const [docNotice, setDocNotice]           = useState('');
   const studentFormRef = useRef<HTMLFormElement>(null);
-  const studentForm = { firstName, lastName, documentNumber, grade, birthDate };
+  const studentForm = { firstName, lastName, documentNumber, email, grade, birthDate };
+  const birth = birthDate ? new Date(`${birthDate}T00:00:00`) : null;
+  const today = new Date();
+  const studentAge = birth
+    ? today.getFullYear() - birth.getFullYear() -
+      ((today.getMonth() < birth.getMonth() ||
+        (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) ? 1 : 0)
+    : null;
+  const guardianRequired = studentAge === null || studentAge < 18;
   const fields = useFieldErrors<keyof typeof studentForm>({
     firstName: v => validatePersonName(v, { label: 'El nombre', max: 60 }),
     lastName: v => validatePersonName(v, { label: 'El apellido', max: 60 })
       ?? (normalizePersonName(`${firstName} ${v}`).length > 100 ? 'El nombre completo no puede superar 100 caracteres.' : null),
     documentNumber: v => validateDocumentNumber(v, documentType),
+    email: v => validateEmail(v),
     grade: v => validateGrade(v),
     birthDate: v => validateBirthDate(v),
   });
@@ -1252,6 +1256,14 @@ export function StudentsTab() {
       focusFirstInvalid(studentFormRef.current);
       return;
     }
+    if (!guardianAuthorizationConfirmed) {
+      setError('Confirma que la autorización del acudiente está verificada o que no aplica por mayoría de edad.');
+      return;
+    }
+    if (guardianRequired && !guardianName.trim()) {
+      setError('Para menores o sin fecha de nacimiento registra el nombre del acudiente.');
+      return;
+    }
 
     setIsLoading(true);
     setMessage('');
@@ -1262,8 +1274,11 @@ export function StudentsTab() {
         full_name: normalizePersonName(`${firstName} ${lastName}`),
         document_type: documentType,
         document_number: documentNumber.trim(),
+        email: normalizeEmail(email),
         grade: grade.trim(),
         birth_date: birthDate || null,
+        guardian_authorization_confirmed: guardianAuthorizationConfirmed,
+        guardian_name: guardianRequired ? guardianName.trim() : null,
       });
 
       setMessage('¡Estudiante creado exitosamente!');
@@ -1274,9 +1289,12 @@ export function StudentsTab() {
       setFirstName('');
       setLastName('');
       setDocumentNumber('');
+      setEmail('');
       setDocumentType('TI');
       setGrade('');
       setBirthDate('');
+      setGuardianAuthorizationConfirmed(false);
+      setGuardianName('');
       setDocNotice('');
       fields.reset();
     } catch (err: any) {
@@ -1343,6 +1361,7 @@ export function StudentsTab() {
     if (assignedClassroomId) {
       formData.append('classroom_id', assignedClassroomId);
     }
+    formData.append('authorization_confirmed', String(batchAuthorizationConfirmed));
 
     try {
       const response = await api.post('/super/students/bulk', formData, {
@@ -1354,6 +1373,7 @@ export function StudentsTab() {
       setNewCredentials(d.credentials || []);
       setPreviewResult(null);
       setPreviewPendingFile(null);
+      setBatchAuthorizationConfirmed(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (previewFileInputRef.current) previewFileInputRef.current.value = '';
       loadStudents();
@@ -1460,6 +1480,25 @@ export function StudentsTab() {
                 <FieldError id="student-lastName" error={fields.errors.lastName} />
               </div>
             </div>
+            <div>
+              <label htmlFor="student-email" className="block text-sm font-medium text-[#787774] mb-1 flex items-center gap-1">
+                <Mail className="w-3 h-3" /> Correo electrónico *
+              </label>
+              <input
+                {...fieldA11y('student-email', fields.errors.email)}
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                maxLength={100}
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); fields.onChange('email', e.target.value); }}
+                onBlur={(e) => fields.onBlur('email', e.target.value)}
+                className={`w-full p-2 border rounded focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm ${fields.errors.email ? 'border-[#E03E3E]' : 'border-[#E9E9E7]'}`}
+                placeholder="estudiante@colegio.edu.co"
+                required
+              />
+              <FieldError id="student-email" error={fields.errors.email} />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="student-documentType" className="block text-sm font-medium text-[#787774] mb-1">
@@ -1536,6 +1575,29 @@ export function StudentsTab() {
                 <FieldError id="student-birthDate" error={fields.errors.birthDate} />
               </div>
             </div>
+            <div className="rounded-md border border-[#E9E9E7] bg-[#F7F6F3] p-4 space-y-3">
+              <label className="flex items-start gap-2 text-sm text-[#37352F]">
+                <input type="checkbox" checked={guardianAuthorizationConfirmed}
+                  onChange={e => setGuardianAuthorizationConfirmed(e.target.checked)}
+                  required className="mt-0.5 h-4 w-4 accent-[#0B6E99]" />
+                <span>
+                  Confirmo que he verificado la autorización previa, informada y válida del padre,
+                  madre o acudiente cuando el estudiante es menor de edad; si es mayor de edad,
+                  confirmo que la autorización de acudiente no aplica. Esta casilla registra mi
+                  verificación institucional, no constituye la autorización del acudiente.
+                </span>
+              </label>
+              {guardianRequired && (
+                <div className="grid grid-cols-1 gap-3">
+                  <label className="text-xs font-medium text-[#787774]">
+                    Nombre del acudiente *
+                    <input value={guardianName} onChange={e => setGuardianName(e.target.value)}
+                      maxLength={150} required className="mt-1 w-full rounded border border-[#E9E9E7] p-2 text-sm"
+                      autoComplete="off" />
+                  </label>
+                </div>
+              )}
+            </div>
             
             <div className="pt-4 flex justify-end">
               <button
@@ -1557,18 +1619,22 @@ export function StudentsTab() {
                  El archivo CSV debe tener las siguientes cabeceras exactamente:
                </p>
                <code className="block bg-white p-2 rounded border border-[#E9E9E7] text-xs font-mono text-[#37352F] mb-3 break-all">
-                 {STUDENT_TEMPLATE.headers}
+                 {STUDENT_TEMPLATE.headers.join(',')}
                </code>
                <div className="text-xs text-[#787774] space-y-1 mt-2">
                  <p><span className="font-semibold text-[#37352F]">tipo_documento</span> — CC, TI, CE o PA</p>
-                 <p><span className="font-semibold text-[#37352F]">correo</span> — opcional</p>
+                 <p><span className="font-semibold text-[#37352F]">correo</span> — obligatorio para recuperar la contraseña y recibir credenciales</p>
                  <p><span className="font-semibold text-[#37352F]">grado</span> — opcional (ej: 10°)</p>
                  <p><span className="font-semibold text-[#37352F]">fecha_nacimiento</span> — opcional, formato AAAA-MM-DD (también DD/MM/AAAA)</p>
+                  <p><span className="font-semibold text-[#37352F]">nombre_acudiente</span> — requerido para menores o sin fecha de nacimiento.</p>
                </div>
                <p className="text-xs text-[#787774] mt-2 mb-2">
-                 Separador coma o punto y coma (Excel en español). Reemplaza la fila de ejemplo por tus datos antes de subirla.
+                 Agrega una fila por usuario y usa un correo real.
                </p>
                <TemplateButton template={STUDENT_TEMPLATE} />
+               <p className="text-xs text-[#787774] mt-2">
+                 Edita o elimina el ejemplo de Carlos Álvarez antes de cargarlo; agrega otros estudiantes en filas nuevas.
+               </p>
              </div>
              
              {previewResult ? (
@@ -1661,6 +1727,13 @@ export function StudentsTab() {
                        border border-[#E9E9E7] rounded-md p-2 transition-colors"
                    />
                  </div>
+
+                 <label className="flex items-start gap-2 rounded-md border border-[#E9E9E7] bg-[#F7F6F3] p-3 text-sm text-[#37352F]">
+                   <input type="checkbox" required checked={batchAuthorizationConfirmed}
+                     onChange={e => setBatchAuthorizationConfirmed(e.target.checked)}
+                     className="mt-0.5 h-4 w-4 accent-[#0B6E99]" />
+                   <span>Confirmo que revisé cada fila y que las autorizaciones de acudiente aplicables existen y fueron verificadas. Esta confirmación es mía y no sustituye la autorización real.</span>
+                 </label>
 
                  <div>
                    <label className="block text-sm font-medium text-[#787774] mb-1">
@@ -1847,8 +1920,8 @@ export function StudentsTab() {
           fields={[
             { key: 'full_name', label: 'Nombre completo', required: true, maxLength: 100,
               validate: v => validatePersonName(v, { label: 'El nombre completo' }) },
-            { key: 'email', label: 'Correo electrónico (opcional)', type: 'email', maxLength: 100,
-              validate: v => validateEmail(v, { required: false }) },
+            { key: 'email', label: 'Correo electrónico *', type: 'email', required: true, maxLength: 100,
+              validate: v => validateEmail(v) },
             { key: 'grade', label: 'Grado', maxLength: 20, validate: v => validateGrade(v) },
             { key: 'birth_date', label: 'Fecha de nacimiento', type: 'date', max: todayISO(),
               validate: v => validateBirthDate(v) },

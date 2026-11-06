@@ -180,7 +180,7 @@ def _post_to_dict(post: Post, current_user_id: int, db: Session) -> dict:
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("")
-async def list_posts(
+def list_posts(
     classroom_id: Optional[int] = Query(None, description="Filtrar por clase"),
     post_type: Optional[str]    = Query(None, description="Filtrar por tipo"),
     current_user: User = Depends(get_current_user),
@@ -248,7 +248,7 @@ def _notify_new_post(db: Session, post: Post, classroom: Classroom, teacher: Use
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_post(
+def create_post(
     body: PostCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -321,7 +321,7 @@ async def create_post(
 
 
 @router.get("/{post_id}")
-async def get_post(
+def get_post(
     post_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -335,7 +335,7 @@ async def get_post(
 
 
 @router.post("/{post_id}/reactions")
-async def toggle_reaction(
+def toggle_reaction(
     post_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -366,7 +366,7 @@ async def toggle_reaction(
 
 
 @router.get("/{post_id}/comments")
-async def list_comments(
+def list_comments(
     post_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -396,7 +396,7 @@ async def list_comments(
 
 
 @router.post("/{post_id}/comments", status_code=status.HTTP_201_CREATED)
-async def add_comment(
+def add_comment(
     post_id: int,
     body: CommentCreate,
     current_user: User = Depends(get_current_user),
@@ -431,7 +431,7 @@ async def add_comment(
 
 
 @router.delete("/{post_id}")
-async def delete_post(
+def delete_post(
     post_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

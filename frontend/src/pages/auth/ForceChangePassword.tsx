@@ -35,11 +35,12 @@ export default function ForceChangePassword() {
         new_password: newPwd,
         });
       setSuccess(true);
-      // Tras cambiar la contraseña temporal se Cierra la sesión (el token actual
-      // pertenecía a la sesión con la contraseña temporal) y se redirige al login
-      // para que el usuario inicie sesión con su NUEVA contraseña.
-      logout();
-      setTimeout(() => navigate('/login', { replace: true }), 1800);
+      // Mantener la sesión hasta terminar de mostrar el mensaje de éxito evita
+      // que ProtectedRoute desmonte esta pantalla antes de la redirección.
+      window.setTimeout(() => {
+        logout();
+        navigate('/login', { replace: true });
+      }, 1800);
     } catch (err: any) {
       setError(apiErrorMessage(err, 'Error al cambiar la contraseña'));
     } finally { setLoading(false); }

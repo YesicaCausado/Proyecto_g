@@ -13,13 +13,27 @@ import {
 import NeuronWelcome from '../../components/NeuronWelcome';
 import NeuronAvatar from '../../components/NeuronAvatar';
 
+interface InstitutionCapacity {
+  classrooms_used: number;
+  classrooms_limit: number;
+  classrooms_available: number;
+  students_used: number;
+  students_limit: number;
+  students_available: number;
+}
+
 export default function TeacherDashboard() {
   const { user } = useAuth();
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [loading, setLoading] = useState(true);
+  const [capacity, setCapacity] = useState<InstitutionCapacity | null>(null);
+  const [capacityError, setCapacityError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
+      api.get<InstitutionCapacity>('/institution/capacity')
+        .then(({ data }) => setCapacity(data))
+        .catch(() => setCapacityError('No se pudo consultar la capacidad institucional.'));
       try {
         const { data } = await api.get('/classrooms/my-classes');
         setClassrooms(data.classrooms || []);
@@ -41,6 +55,20 @@ export default function TeacherDashboard() {
         name={user?.full_name || user?.username || ''}
         subtitle="Gestiona tus clases y monitorea el progreso de tus estudiantes"
       />
+
+      {capacity && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6" aria-live="polite">
+          <div className="bg-white border border-[#E9E9E7] rounded-md p-4 text-sm text-[#37352F]">
+            Aulas de la institución: <strong>{capacity.classrooms_used}/{capacity.classrooms_limit}</strong>
+            {' · '}disponibles: <strong>{capacity.classrooms_available}</strong>
+          </div>
+          <div className="bg-white border border-[#E9E9E7] rounded-md p-4 text-sm text-[#37352F]">
+            Estudiantes de la institución: <strong>{capacity.students_used}/{capacity.students_limit}</strong>
+            {' · '}cupos: <strong>{capacity.students_available}</strong>
+          </div>
+        </div>
+      )}
+      {!capacity && capacityError && <p className="mb-4 text-sm text-[#E03E3E]" role="status">{capacityError}</p>}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -72,13 +100,19 @@ export default function TeacherDashboard() {
       {/* Actions */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-semibold text-[#37352F]">Mis Clases</h2>
-        <Link
-          to="/classrooms/new"
-          className="flex items-center gap-2 px-4 py-2 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Nueva Clase
-        </Link>
+        {capacity?.classrooms_available === 0 ? (
+          <span className="px-4 py-2 rounded-md text-sm text-[#787774] bg-[#F7F6F3]" title="La institución ya tiene 8 aulas">
+            Límite de aulas alcanzado
+          </span>
+        ) : (
+          <Link
+            to="/classrooms/new"
+            className="flex items-center gap-2 px-4 py-2 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Clase
+          </Link>
+        )}
       </div>
 
       {/* Classes list */}
@@ -91,13 +125,15 @@ export default function TeacherDashboard() {
           <BookOpen className="w-10 h-10 mx-auto mb-3 text-[#E9E9E7]" />
           <p className="font-medium text-[#787774] text-sm">No tienes clases creadas</p>
           <p className="text-xs text-[#9B9A97] mt-1">Crea tu primera clase para empezar</p>
-          <Link
-            to="/classrooms/new"
-            className="inline-flex items-center gap-2 mt-4 px-5 py-2.5 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Crear clase
-          </Link>
+          {capacity?.classrooms_available !== 0 && (
+            <Link
+              to="/classrooms/new"
+              className="inline-flex items-center gap-2 mt-4 px-5 py-2.5 bg-[#37352F] text-white rounded-md text-sm font-medium hover:bg-[#2F2D2B] transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Crear clase
+            </Link>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -118,7 +154,8 @@ export default function TeacherDashboard() {
               </div>
               <div className="flex items-center gap-1 text-xs text-[#9B9A97]">
                 <Users className="w-3.5 h-3.5" />
-                {c.student_count} estudiantes
+                {c.student_count}/{c.max_students} estudiantes
+                {' · '}{Math.max(0, c.max_students - c.student_count)} cupos
               </div>
             </Link>
           ))}

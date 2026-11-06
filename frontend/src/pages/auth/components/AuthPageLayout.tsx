@@ -14,7 +14,6 @@
 import type { ReactNode } from 'react';
 import { RobotProvider } from '../../../context/RobotContext';
 import RobotCanvas       from './robot/RobotCanvas';
-import { RobotErrorBoundary } from './robot/RobotErrorBoundary';
 
 interface AuthPageLayoutProps {
   /** Contenido de la tarjeta derecha (formulario) */
@@ -92,9 +91,7 @@ export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
                 boxShadow: 'inset 0 0 32px rgba(55,53,47,0.04)',
               }}
             />
-            <RobotErrorBoundary>
-              <RobotCanvas enabled className="absolute inset-0" />
-            </RobotErrorBoundary>
+            <RobotCanvas enabled lowPower className="absolute inset-0" />
             <p
               style={{
                 position: 'absolute', bottom: '16px', left: '20px',

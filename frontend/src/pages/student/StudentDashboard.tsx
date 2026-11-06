@@ -23,6 +23,7 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
+  ClipboardList,
 } from 'lucide-react';
 import NeuronWelcome from '../../components/NeuronWelcome';
 import NeuronAvatar from '../../components/NeuronAvatar';
@@ -97,16 +98,20 @@ export default function StudentDashboard() {
   const [, setLoading] = useState(true);
   // Error de carga: se avisa en lugar de mostrar ceros como si fueran datos.
   const [loadError, setLoadError] = useState(false);
+  // Diagnóstico inicial: cuántas competencias faltan (null = no se pudo saber).
+  const [diagnosticPending, setDiagnosticPending] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [classesRes, statsRes, perfRes] = await Promise.all([
+        const [classesRes, statsRes, perfRes, diagRes] = await Promise.all([
           api.get('/classrooms/my-enrolled').catch(() => ({ data: { classrooms: [] } })),
           api.get('/stats/dashboard').catch(() => ({ data: null })),
           api.get('/stats/performance').catch(() => ({ data: null })),
+          api.get('/student/diagnostic').catch(() => ({ data: null })),
         ]);
         setLoadError(statsRes.data === null || perfRes.data === null);
+        if (diagRes.data) setDiagnosticPending(diagRes.data.total - diagRes.data.completed_count);
 
         setClassrooms(classesRes.data.classrooms || []);
 
@@ -164,6 +169,22 @@ export default function StudentDashboard() {
         <div role="alert" className="mb-4 px-4 py-3 rounded-md border border-[#F4BDBD] bg-[#FDEEEE] text-sm text-[#37352F]">
           No se pudieron cargar todas tus estadísticas. Recarga la página en unos segundos.
         </div>
+      )}
+
+      {diagnosticPending !== null && diagnosticPending > 0 && (
+        <Link
+          to="/diagnostic"
+          className="mb-4 flex items-center gap-3 px-4 py-3 rounded-lg border border-[#B6DAF2] bg-[#E5F3FF] hover:border-[#0B6E99]/50 transition"
+        >
+          <ClipboardList className="w-5 h-5 shrink-0 text-[#0B6E99]" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[#074D6E]">Realiza tu diagnóstico inicial</p>
+            <p className="text-xs text-[#0B6E99]">
+              Te {diagnosticPending === 1 ? 'falta 1 competencia' : `faltan ${diagnosticPending} competencias`}. 10 preguntas por competencia para conocer tu nivel.
+            </p>
+          </div>
+          <ArrowRight className="w-4 h-4 shrink-0 text-[#0B6E99]" />
+        </Link>
       )}
 
       {/* Top action bar */}

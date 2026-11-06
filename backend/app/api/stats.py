@@ -7,6 +7,7 @@ from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.models.learning import QuizHistory, LearningSession, CognitiveEvent
 from app.api.auth import get_current_user
+from app.services.neuro_indicators import summarize_cognitive_events
 
 router = APIRouter()
 
@@ -132,41 +133,8 @@ def _build_cognitive_summary_from_events(events) -> dict:
     sustituidos por defaults y no se usan. Sin eventos válidos los indicadores
     son None (no 0 %).
     """
-    empty = {"fatigue": None, "overload": None, "doubt": None, "mastery": None}
-    events = [e for e in (events or []) if (e.event_data or {}).get("sufficient_evidence") is True]
-    if not events:
-        return empty
-
-    state_counts = {"fatigue": 0, "overload": 0, "doubt": 0, "mastery": 0, "flow": 0, "normal": 0}
-    for event in events:
-        payload = event.event_data or {}
-        state = (payload.get("cognitive_state") or event.inferred_state or "normal").strip().lower()
-        if state in {"focused", "flow"}:
-            state = "flow"
-        elif state in {"confused", "confusion"}:
-            state = "doubt"
-        elif state in {"struggling", "overload"}:
-            state = "overload"
-        elif state in {"stressed", "fatigue"}:
-            state = "fatigue"
-        elif state in {"happy", "mastery"}:
-            state = "mastery"
-        elif state in {"neutral", "normal"}:
-            state = "normal"
-
-        if state in state_counts:
-            state_counts[state] += 1
-
-    total = sum(state_counts.values())
-    if total == 0:
-        return empty
-
-    fatigue = int((state_counts["fatigue"] / total) * 100)
-    overload = int((state_counts["overload"] / total) * 100)
-    doubt = int((state_counts["doubt"] / total) * 100)
-    mastery = int(((state_counts["mastery"] + state_counts["flow"]) / total) * 100)
-
-    return {"fatigue": fatigue, "overload": overload, "doubt": doubt, "mastery": mastery}
+    summary = summarize_cognitive_events(events)
+    return {key: summary[key] for key in ("fatigue", "overload", "doubt", "mastery")}
 
 
 @router.get("/performance")

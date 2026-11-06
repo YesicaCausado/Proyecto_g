@@ -12,10 +12,9 @@ seguridad (PLAN.md §6.2.1 / P4-14):
    bloquea la llave durante RATE_LIMIT_LOCKOUT_SECONDS.
 
    ⚠️ En producción serverless (Vercel) la memoria NO persiste entre
-   invocaciones. Este limiter es un buen primer nivel / mitigación local.
-   Para un bloqueo estricto multi-instancia conviene mover el contador a
-   una tabla o a un almacén compartido (Redis). El diseño deja claro el
-   punto de extensión (``RateLimiter._storage``).
+   invocaciones. Este limiter es el primer nivel; el bloqueo de cuentas
+   existentes también se calcula desde audit_logs (``account_locked_until``
+   en app/api/auth.py), que sí es compartido por todas las instancias.
 
 2. Validación de origen / CSRF para peticiones de autenticación.
    Como la API usa JWT Bearer (sin cookies de sesión), el riesgo clásico de

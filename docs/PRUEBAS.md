@@ -152,7 +152,33 @@ paso:
 | `test_auditoria_final.py` | 10 | Parche 14: un Súper Profesor no ve grupos ni publicaciones de otra institución; la mensajería no cruza instituciones; activar, desactivar y transferir grupos se guarda (solo a profesores de la misma institución); cerrar sesiones invalida los tokens anteriores; historial real de accesos (exitosos y fallidos); menores sin autorización del acudiente no activan cámara ni micrófono; la voz de Azure pasa por el servidor sin exponer la clave; la configuración del sistema es de solo lectura; los quizzes no inventan respuestas correctas ni se generan sin IA |
 | `test_integraciones_profesor.py` | 8 | Webhook fuera del profesor; «Crear alerta» y «Enviar notificación» reales; solo el autor modifica una automatización; «Evaluar bajo rendimiento» sin error 500 y con el umbral de cada automatización; «Reporte generado» se dispara al exportar; importar de Drive como enlace; regreso de Google con «#»; riesgo y uso de NeuroBots reales en Analítica |
 | `test_borrado_definitivo.py` | 4 | Borrado definitivo por el Administrador (usuario e institución) con claves foráneas activas, como en PostgreSQL: no deja datos huérfanos ni da 500; el estudiante conserva su historial al borrar al profesor; la auditoría y la otra institución quedan intactas; tablas heredadas (`classroom_users`, `messages`) se descubren por reflexión |
+| `test_rendimiento_respuesta.py` | 1 | RNF-12 y RNF-13: inicio de sesión y 30 pantallas de los cuatro roles con datos reales (3 instituciones y luego 30, cada una con 60 estudiantes); el p95 de cada una es menor a 2,5 s y el número de consultas a la BD no crece con el número de instituciones. Con `-s` imprime el reporte (p50/p95/máx/consultas). Condiciones: backend en proceso, SQLite en memoria, sin IA ni correo reales |
+| `test_bloqueo_persistente.py` | 3 | RNF-04: la cuenta queda bloqueada 15 min tras 20 fallos en 5 min aunque cada intento llegue a una instancia nueva (el bloqueo se calcula desde `audit_logs`); el bloqueo vence; fallos repartidos fuera de la ventana no bloquean |
+| `test_bots_base_admin.py` | 2 | RF-74: el Administrador consulta los cinco NeuroBots base (temas preentrenados y uso real); otros roles no |
+| `test_diagnostico_inicial.py` | 9 | RF-13: banco de 10 preguntas por competencia, calificación y niveles, una sola presentación, evaluación del tutor de IA guardada con el resultado (con IA doble y con respaldo local), el tutor inicia la sesión desde el nivel diagnosticado, vista del profesor |
 | `test_rendimiento_bd.py` | 4 | Regresiones de rendimiento: la autenticación de cada petición no trae la foto del usuario ni el logo de la institución (columnas diferidas); Tablero y Calendario hacen un número fijo de consultas sin importar cuántos posts, comentarios o eventos haya; la sesión no expira objetos en cada commit |
+
+## Prueba de carga contra un servidor real (RNF-13)
+
+`scripts/prueba_carga.py` simula usuarios concurrentes navegando las
+pantallas principales de cada rol contra un backend real (local, preview o
+producción) y reporta p50/p95/p99, errores y solicitudes por segundo. Solo
+hace lecturas y un inicio de sesión por cuenta. Termina con código 1 si un
+p95 llega a 2,5 s o los errores superan el 1 %. Solo usa la biblioteca
+estándar de Python.
+
+```bash
+# Una cuenta por rol; por variable de entorno para no dejar claves en el historial.
+export PRUEBA_CARGA_CUENTAS="estudiante:usuario:clave,profesor:usuario:clave,super:usuario:clave,admin:usuario:clave"
+python scripts/prueba_carga.py --url http://localhost:8000 --usuarios 50 --duracion 60 --salida carga.json
+```
+
+Repita con 10, 25, 50 y 100 usuarios para ver dónde el p95 se acerca al
+límite. Contra producción, coordínelo con el equipo: la carga es real.
+
+Resultado de referencia (23 oct 2026, un proceso `uvicorn` local con SQLite,
+sin IA): 50 usuarios → 119 solicitudes/s, p95 global 341 ms, 0 % errores;
+100 usuarios → 114 solicitudes/s, p95 global 735 ms, 0 % errores.
 
 ## Scripts manuales que no forman parte de la suite
 

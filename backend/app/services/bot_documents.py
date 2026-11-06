@@ -162,6 +162,19 @@ def can_use_bot(db: Session, user: User, bot: ExpertBot) -> bool:
     return owns_classroom is not None
 
 
+BOT_INACTIVE_MESSAGE = ("Este NeuroBot fue desactivado. Puedes revisar la conversación, "
+                        "pero no continuarla.")
+BOT_NO_ACCESS_MESSAGE = ("Ya no tienes acceso a este NeuroBot. Puedes revisar la conversación, "
+                         "pero no continuarla.")
+
+
+def bot_unavailable_reason(db: Session, user: User, bot: ExpertBot) -> Optional[str]:
+    """None si el usuario puede usar el bot; si no, el motivo para mostrarle."""
+    if can_use_bot(db, user, bot):
+        return None
+    return BOT_INACTIVE_MESSAGE if not bot.is_active else BOT_NO_ACCESS_MESSAGE
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Validación del archivo
 # ═════════════════════════════════════════════════════════════════════════════

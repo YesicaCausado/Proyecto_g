@@ -242,7 +242,7 @@ async def _read_upload(file: UploadFile, default_name: str) -> tuple:
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.get("/materials")
-async def list_materials(
+def list_materials(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_MATERIALES)),
@@ -262,7 +262,7 @@ async def list_materials(
 
 
 @router.post("/materials/folders", status_code=201)
-async def create_folder(
+def create_folder(
     data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -287,7 +287,7 @@ async def create_folder(
 
 
 @router.delete("/materials/folders/{folder_id}", status_code=204)
-async def delete_folder(
+def delete_folder(
     folder_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -412,7 +412,7 @@ def _parse_shared(shared_with: Optional[str]) -> List[str]:
 
 
 @router.get("/materials/files/{file_id}/download")
-async def download_file(
+def download_file(
     file_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -444,7 +444,7 @@ async def download_file(
 
 
 @router.patch("/materials/files/{file_id}")
-async def update_file_sharing(
+def update_file_sharing(
     file_id: int,
     data: dict,
     db: Session = Depends(get_db),
@@ -470,7 +470,7 @@ async def update_file_sharing(
 
 
 @router.delete("/materials/files/{file_id}", status_code=204)
-async def delete_file(
+def delete_file(
     file_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

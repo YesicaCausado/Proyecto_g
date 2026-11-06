@@ -4,11 +4,12 @@ import { motion } from 'framer-motion';
 import {
   Users, TrendingUp, AlertTriangle, Brain,
   BarChart2, Award, Activity, Clock, Target, Sparkles, Download,
-  ArrowUpRight, ArrowDownRight, Bot, Layers, ShieldCheck, BookOpen,
+  ArrowUpRight, ArrowDownRight, Bot, Layers, ShieldCheck, BookOpen, UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import api from '../../../services/api';
 import ExportReportModal from './ExportReportModal';
+import IndividualStudentReportModal from './IndividualStudentReportModal';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface GroupPerf { name: string; avg: number; count: number; color: string; }
@@ -298,6 +299,7 @@ function CmdPanel({ title, icon: Icon, accent, right, children, center }: CmdPan
 export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [stats, setStats] = useState<TeacherStats | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const [showStudentReport, setShowStudentReport] = useState(false);
   const [loadError, setLoadError] = useState('');
 
   const load = useCallback(() => {
@@ -355,13 +357,21 @@ export default function AnaliticaTab({ onNavigate }: { onNavigate?: (tab: string
             <p className="text-sm text-[#787774]">Panel de rendimiento, participación y riesgo con datos reales</p>
           </div>
         </div>
-        <button onClick={() => setShowExport(true)}
-          className="flex items-center gap-2 text-sm font-medium bg-[#2E6FDB] hover:bg-[#255DC0] rounded-lg px-4 py-2 text-white shadow-sm">
-          <Download className="w-4 h-4" />
-          Exportar reporte
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setShowStudentReport(true)}
+            className="flex items-center gap-2 text-sm font-medium border border-[#2E6FDB] text-[#2E6FDB] hover:bg-[#EEF3FD] rounded-lg px-4 py-2">
+            <UserRound className="w-4 h-4" />
+            Reporte individual
+          </button>
+          <button onClick={() => setShowExport(true)}
+            className="flex items-center gap-2 text-sm font-medium bg-[#2E6FDB] hover:bg-[#255DC0] rounded-lg px-4 py-2 text-white shadow-sm">
+            <Download className="w-4 h-4" />
+            Exportar reporte
+          </button>
+        </div>
       </motion.div>
       {showExport && <ExportReportModal onClose={() => setShowExport(false)} />}
+      {showStudentReport && <IndividualStudentReportModal onClose={() => setShowStudentReport(false)} />}
 
       {/* ══ Hero: gauge de salud + modelos ══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

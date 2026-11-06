@@ -142,7 +142,9 @@ export default function UserManagement() {
 
   const editRules = {
     full_name: (v: string) => validatePersonName(v, { label: 'El nombre completo', required: false }),
-    email: (v: string) => validateEmail(v, { required: false }),
+    email: (v: string) => validateEmail(v, {
+      required: ['profesor', 'estudiante'].includes(editForm.role),
+    }),
   };
 
   const saveEdit = async () => {
@@ -400,8 +402,11 @@ export default function UserManagement() {
                 <FieldError id="adm-edit-name" error={editErrors.full_name} />
               </div>
               <div>
-                <label htmlFor="adm-edit-email" className="block text-xs font-semibold text-[#787774] mb-1">Correo electrónico</label>
+                <label htmlFor="adm-edit-email" className="block text-xs font-semibold text-[#787774] mb-1">
+                  Correo electrónico{['profesor', 'estudiante'].includes(editForm.role) ? ' *' : ''}
+                </label>
                 <input {...fieldA11y('adm-edit-email', editErrors.email)} type="email" inputMode="email" maxLength={100} value={editForm.email}
+                  required={['profesor', 'estudiante'].includes(editForm.role)}
                   onChange={e => { const value = e.target.value; setEditForm(f => ({ ...f, email: value }));
                     if (editErrors.email) setEditErrors(x => ({ ...x, email: editRules.email(value) ?? '' })); }}
                   onBlur={e => setEditErrors(x => ({ ...x, email: editRules.email(e.target.value) ?? '' }))}

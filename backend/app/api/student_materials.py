@@ -59,7 +59,7 @@ def _visible(db: Session, student: User) -> List[tuple]:
 
 
 @router.get("")
-async def list_my_materials(
+def list_my_materials(
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),
     db: Session = Depends(get_db),
@@ -91,7 +91,7 @@ async def list_my_materials(
 
 
 @router.get("/{material_id}/download")
-async def download_my_material(
+def download_my_material(
     material_id: int,
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),

@@ -454,29 +454,29 @@ class SuperProfesorAuditTests(unittest.TestCase):
 
     # ── Carga masiva de estudiantes ───────────────────────────────────────
     def _csv(self, rows):
-        head = "nombre_completo,tipo_documento,numero_documento,grado,correo\n"
+        head = "nombre_completo,tipo_documento,numero_documento,grado,fecha_nacimiento,correo\n"
         return {"file": ("lote.csv", head + "\n".join(rows) + "\n", "text/csv")}
 
     def test_bulk_students_enroll_in_group_and_validate_like_preview(self):
         rows = [
-            "Ana Uno,TI,9000001,9,ana1@test.edu.co",
-            "Beto Dos,TI,9000002,9,est1@test.edu.co",     # correo ya existe
-            "Caro Tres,TI,9000003,9,ana1@test.edu.co",    # correo repetido en el archivo
-            "Dani Cuatro,TI,9000001,9,",                  # documento repetido en el archivo
-            "Eva Cinco,TI,9000005,9,",
+            "Ana Uno,TI,9000001,9,2000-01-01,ana1@test.edu.co",
+            "Beto Dos,TI,9000002,9,2000-01-01,est1@test.edu.co",     # correo ya existe
+            "Caro Tres,TI,9000003,9,2000-01-01,ana1@test.edu.co",    # correo repetido en el archivo
+            "Dani Cuatro,TI,9000001,9,2000-01-01,dani@test.edu.co",   # documento repetido en el archivo
+            "Eva Cinco,TI,9000005,9,2000-01-01,eva5@test.edu.co",
         ]
         h = self.h("super_a")
         preview = self.client.post(f"{API}/super/students/preview", headers=h, files=self._csv(rows)).json()
         self.assertEqual((preview["total_valid"], preview["total_errors"]), (2, 3))
         with unittest.mock.patch("app.api.credentials.send_credentials_email") as sent:
             r = self.client.post(f"{API}/super/students/bulk", headers=h, files=self._csv(rows),
-                                 data={"classroom_id": str(self.c_mat)})
+                                 data={"classroom_id": str(self.c_mat), "authorization_confirmed": "true"})
         self.assertEqual(r.status_code, 201, r.text)
         d = r.json()
         # Lo que la vista previa marcó como válido es exactamente lo que se crea
         self.assertEqual((d["total_created"], d["total_errors"]), (preview["total_valid"], preview["total_errors"]))
         self.assertEqual((d["enrolled"], d["classroom"]), (2, "Matemáticas 9A"))
-        self.assertEqual(sent.call_count, 1)    # solo la fila con correo real
+        self.assertEqual(sent.call_count, 2)
         db = self.Session()
         ana = db.query(User).filter_by(document_number="9000001").one()
         self.assertEqual(db.query(Enrollment).filter_by(student_id=ana.id, classroom_id=self.c_mat).count(), 1)
@@ -488,9 +488,9 @@ class SuperProfesorAuditTests(unittest.TestCase):
 
     def test_bulk_students_rejects_foreign_or_inactive_group_and_full_group(self):
         h = self.h("super_a")
-        rows = ["Fer Seis,TI,9000006,9,"]
+        rows = ["Fer Seis,TI,9000006,9,2000-01-01,fer6@test.edu.co"]
         self.assertEqual(self.client.post(f"{API}/super/students/bulk", headers=h, files=self._csv(rows),
-                                          data={"classroom_id": str(self.c_b)}).status_code, 404)
+                                          data={"classroom_id": str(self.c_b), "authorization_confirmed": "true"}).status_code, 404)
         db = self.Session()
         old = db.query(Classroom).filter_by(invite_code="AUDOLD01").one()
         old_id = old.id
@@ -498,12 +498,11 @@ class SuperProfesorAuditTests(unittest.TestCase):
         db.commit()
         db.close()
         self.assertEqual(self.client.post(f"{API}/super/students/bulk", headers=h, files=self._csv(rows),
-                                          data={"classroom_id": str(old_id)}).status_code, 400)
+                                          data={"classroom_id": str(old_id), "authorization_confirmed": "true"}).status_code, 400)
         r = self.client.post(f"{API}/super/students/bulk", headers=h, files=self._csv(rows),
-                             data={"classroom_id": str(self.c_fis)})
-        self.assertEqual(r.status_code, 201, r.text)
-        self.assertEqual((r.json()["total_created"], r.json()["enrolled"]), (0, 0))
-        self.assertIn("cupos", r.json()["errors"][0]["error"])
+                             data={"classroom_id": str(self.c_fis), "authorization_confirmed": "true"})
+        self.assertEqual(r.status_code, 409, r.text)
+        self.assertIn("cupos", r.json()["detail"])
         db = self.Session()
         self.assertIsNone(db.query(User).filter_by(document_number="9000006").first())
         db.close()

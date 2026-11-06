@@ -557,7 +557,7 @@ def _quote(value: str) -> str:
 
 def user_google_integration(db: Session, institution_id: int, user_id: int,
                             provider: str) -> Optional[Integration]:
-    """La conexión de Google es de cada usuario (RF-32: «sus cuentas»). Antes
+    """La conexión de Google es de cada usuario (RF-53: «sus cuentas»). Antes
     era una por institución y cualquier profesor usaba el Drive del último
     que se había conectado."""
     return (

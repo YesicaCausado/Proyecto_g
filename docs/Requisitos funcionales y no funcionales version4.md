@@ -1,242 +1,187 @@
-REQUISITOS FUNCIONALES Y NO FUNCIONALES
-NeuroLearn IA
-Autores: Yesica Causado y Matias Ramirez
+1. Requisitos funcionales
+1.1. Autenticación, cuenta y comunicación
+RF-01. Inicio de sesión. El sistema debe permitir que los usuarios inicien sesión con las credenciales asignadas por la institución. También debe bloquear temporalmente el acceso después de los intentos fallidos establecidos y rechazar el acceso a cuentas o instituciones inactivas.
 
-1. REQUISITOS FUNCIONALES
-Los requisitos funcionales describen las acciones y los servicios que debe proporcionar NeuroLearn IA según las responsabilidades y los permisos de cada actor.
+RF-02. Cambio de contraseña inicial. El sistema debe exigir al usuario cambiar la contraseña temporal durante su primer inicio de sesión.
 
-1.1. Actor: Súper Profesor
-RF-01. El Súper Profesor debe poder iniciar y cerrar sesión mediante sus credenciales institucionales.
+RF-03. Recuperación de contraseña. El sistema debe permitir recuperar la contraseña mediante un enlace enviado al correo registrado, con una vigencia de 15 minutos y un solo uso.
 
-RF-02. El Súper Profesor debe gestionar a los docentes de su institución, incluyendo su creación, consulta, edición y activación o desactivación.
+RF-04. Cierre de sesión. El sistema debe permitir que los usuarios cierren su sesión de forma segura.
 
-RF-03. El Súper Profesor debe gestionar a los estudiantes y administrar los cupos institucionales.
+RF-05. Notificaciones. El sistema debe permitir que los usuarios consulten sus notificaciones y las marquen como leídas.
 
-RF-04. El Súper Profesor debe realizar la carga masiva de usuarios mediante archivos CSV o Excel.
+RF-06. Edición del perfil. El sistema debe permitir que los estudiantes, profesores y Súper Profesores actualicen su nombre, correo electrónico, contraseña y preferencias de notificación.
 
-RF-05. El Súper Profesor debe consultar un dashboard institucional con métricas académicas y administrativas.
+RF-07. Mensajería directa. El sistema debe permitir que los estudiantes, profesores y Súper Profesores envíen mensajes directos a otros usuarios de su institución y adjunten archivos cuando corresponda.
+1.2. Funcionalidades del estudiante
+RF-08. Calendario del estudiante. El sistema debe permitir que el estudiante consulte el calendario de su institución y de los grupos a los que pertenece.
 
-RF-06. El Súper Profesor debe acceder únicamente a los módulos y funcionalidades autorizados para su rol.
+RF-09. Ingreso a grupos. El sistema debe permitir que el estudiante se una a un grupo mediante un código de invitación válido.
 
-RF-07. El Súper Profesor debe enviar comunicados a todos los usuarios de su institución.
+RF-10. Consulta de clases. El sistema debe permitir que el estudiante consulte sus clases, incluyendo la asignatura, el profesor, el progreso, los NeuroBots asignados y las evaluaciones correspondientes.
 
-RF-08. El Súper Profesor debe supervisar los NeuroBots de su institución, incluyendo su activación, desactivación, eliminación y seguimiento del progreso.
+RF-11. Competencias académicas. El sistema debe ofrecer al estudiante las cinco competencias de NeuroLearn IA: Pensamiento Lógico-Matemático, Lectura Crítica, Inglés Comunicativo, Competencias Ciudadanas y Sociales, y Pensamiento Científico.
 
-RF-09. El Súper Profesor debe recibir notificaciones sobre la creación de grupos y NeuroBots, así como sobre estudiantes en riesgo académico.
+RF-12. Inicio de tutoría con IA. El sistema debe permitir que el estudiante inicie una sesión con el tutor de inteligencia artificial seleccionando una competencia o un NeuroBot que tenga asignado.
 
-RF-10. El Súper Profesor debe crear, consultar, editar, transferir y activar o desactivar grupos académicos.
+RF-13. Diagnóstico inicial. El sistema debe permitir que el tutor de inteligencia artificial realice un diagnóstico inicial mediante preguntas, evalúe las respuestas del estudiante y guarde los resultados como diagnóstico.
 
-RF-11. El Súper Profesor debe crear y administrar clases, gestionar sus integrantes y consultar su información.
+RF-14. Interacción con el tutor. El sistema debe permitir que el estudiante converse con el tutor de inteligencia artificial mediante texto y dictado por voz.
 
-RF-12. El Súper Profesor debe conectar sus cuentas de Google Drive y Google Calendar, cuando corresponda, y configurar automatizaciones autorizadas.
+RF-15. Recursos de aprendizaje. El sistema debe permitir que el estudiante solicite ejemplos, resúmenes y cuestionarios durante las sesiones con el tutor de inteligencia artificial.
 
-RF-13. El Súper Profesor debe utilizar herramientas de inteligencia artificial generativa para crear planes de clase, preguntas, guías y rúbricas.
+RF-16. Estimación del estado cognitivo. El sistema debe mostrar una estimación del estado cognitivo del estudiante durante la sesión, utilizando únicamente señales disponibles y datos válidos, sin presentar valores ficticios cuando no haya información suficiente.
 
-RF-14. El Súper Profesor debe consultar estadísticas institucionales y el estado general de la plataforma dentro de su ámbito de autorización.
+RF-17. Respuestas por voz. El sistema debe permitir que el estudiante escuche mediante voz las respuestas del tutor de inteligencia artificial.
 
-RF-15. El Súper Profesor debe moderar los NeuroBots públicos conforme a los permisos establecidos.
+RF-18. Consentimiento para cámara y micrófono. El sistema debe permitir que el estudiante otorgue y revoque por separado el consentimiento para utilizar la cámara y el micrófono.
 
-RF-16. El Súper Profesor debe restablecer las contraseñas de los usuarios de su institución cuando esté autorizado.
+RF-19. Consulta de NeuroBots asignados. El sistema debe permitir que el estudiante consulte sus NeuroBots asignados, incluyendo el objetivo de cada uno, su estado y el progreso alcanzado.
 
-RF-17. El Súper Profesor debe consultar exclusivamente la información correspondiente a su institución.
+RF-20. Cuestionarios adaptativos. El sistema debe permitir que el estudiante realice cuestionarios adaptativos y reciba retroalimentación inmediata, puntaje, explicación por pregunta, identificación de conceptos débiles y recomendación de dificultad.
 
-1.2. Actor: Profesor
-RF-18. El profesor debe iniciar y cerrar sesión de forma segura.
+RF-21. Refuerzo de conceptos débiles. El sistema debe identificar los conceptos débiles detectados en cuestionarios anteriores y ofrecer actividades de refuerzo relacionadas con ellos.
 
-RF-19. El profesor debe cambiar su contraseña temporal durante el primer acceso, cuando corresponda.
+RF-22. Consulta del desempeño académico. El sistema debe permitir que el estudiante consulte su desempeño por competencia, progreso, fortalezas, debilidades, rachas de actividad y logros obtenidos.
 
-RF-20. El profesor debe crear, consultar, editar y gestionar sus aulas o grupos académicos.
+RF-23. Historial de conversaciones. El sistema debe permitir que el estudiante consulte, retome y elimine sus conversaciones guardadas con el tutor de inteligencia artificial y los NeuroBots.
 
-RF-21. El profesor debe generar códigos de invitación para las clases que administre.
+RF-24. Presentación de evaluaciones. El sistema debe permitir que el estudiante responda las evaluaciones publicadas en sus grupos, respetando los límites de tiempo e intentos, y consulte su calificación y corrección cuando estén disponibles.
 
-RF-22. El profesor debe crear NeuroBots especializados para la tutoría educativa.
+RF-25. Materiales de apoyo. El sistema debe permitir que el estudiante consulte y descargue los materiales de apoyo que sus profesores hayan compartido con sus grupos.
 
-RF-23. El profesor debe cargar documentos y fuentes de conocimiento para configurar sus NeuroBots.
+RF-26. Publicaciones de grupo. El sistema debe permitir que los profesores y estudiantes consulten las publicaciones del tablero de grupo y que los usuarios autorizados reaccionen y comenten en ellas.
+1.3. Inteligencia artificial y patrones neurodigitales
+RF-27. Captura de dinámica de teclado e interacción. El sistema debe registrar las dinámicas de teclado e interacción digital relevantes para el aprendizaje, incluyendo ritmo, pausas, correcciones y decisiones, dentro de los permisos y condiciones de privacidad establecidos.
 
-RF-24. El profesor debe configurar sus NeuroBots como públicos o privados, según los permisos disponibles.
+RF-28. Análisis facial y de voz. El sistema debe analizar microexpresiones faciales y prosodia de voz únicamente cuando exista consentimiento vigente. El procesamiento de estas señales debe realizarse en el dispositivo y al servidor solo deben enviarse indicadores numéricos, sin almacenar imágenes, audio ni video originales.
 
-RF-25. El profesor debe asignar NeuroBots a grupos o clases específicas.
+RF-29. Integración de señales neurodigitales. El sistema debe combinar las señales disponibles de los patrones neurodigitales para estimar posibles estados relacionados con fatiga, frustración, sobrecarga o duda, sin emitir estimaciones cuando no exista información suficiente.
 
-RF-26. El profesor debe consultar la lista de estudiantes inscritos en sus grupos.
+RF-30. Cálculo del riesgo de error. El sistema debe calcular el riesgo de error del estudiante a partir de información verificable y disponible, sin inventar datos ni presentar estimaciones sin fundamento.
 
-RF-27. El profesor debe consultar las neuroalertas relacionadas con posibles estados de fatiga, frustración o riesgo académico de sus estudiantes.
+RF-31. Adaptación del aprendizaje. El sistema debe adaptar la dificultad, el nivel de orientación, la extensión de las respuestas, los ejemplos, los ejercicios y las pistas al nivel y progreso del estudiante.
 
-RF-28. El profesor debe consultar estadísticas y reportes académicos de los grupos que tiene asignados.
+RF-32. Generación de cuestionarios. El sistema debe generar cuestionarios después de las actividades de enseñanza, considerando el tema trabajado y los conceptos débiles identificados.
 
-RF-29. El profesor debe exportar los reportes académicos autorizados en formatos PDF y CSV.
+RF-33. Respaldo de proveedores de IA. El sistema debe intentar utilizar Groq como proveedor principal de inteligencia artificial, recurrir a Gemini cuando Groq falle y ofrecer una respuesta local de respaldo cuando ambos proveedores no estén disponibles.
 
-RF-30. El profesor debe compartir NeuroBots educativos con sus grupos o estudiantes autorizados.
+RF-34. Registro de sesiones. El sistema debe registrar los mensajes, eventos cognitivos, cuestionarios e interacciones asociados a cada sesión, respetando las restricciones de privacidad y conservación de datos.
 
-RF-31. El profesor debe utilizar herramientas de inteligencia artificial generativa para crear planes de clase, preguntas, guías y rúbricas.
+RF-35. Actualización del modelo del estudiante. El sistema debe actualizar el modelo de aprendizaje del estudiante con información válida sobre dominio de habilidades, estado de aprendizaje, memoria y siguiente acción recomendada para el tutor.
 
-RF-32. El profesor debe conectar sus cuentas de Google Drive y Google Calendar, cuando corresponda, y configurar las automatizaciones autorizadas.
+RF-36. Consulta de documentos de conocimiento. El sistema debe permitir que los NeuroBots consulten sus documentos de conocimiento para fundamentar las respuestas que proporcionan.
 
-RF-33. El profesor debe consultar los módulos y funcionalidades correspondientes a su rol.
+RF-37. Seguimiento de objetivos de NeuroBots. El sistema debe realizar seguimiento al progreso del estudiante con cada NeuroBot asignado y notificar al profesor cuando se alcance el objetivo establecido.
 
-RF-34. El profesor debe acceder únicamente a los grupos, estudiantes, recursos y funcionalidades que tenga autorizados.
+RF-38. Actualización del riesgo académico. El sistema debe recalcular el riesgo académico después de los cuestionarios y notificar a los responsables autorizados cuando un estudiante entre en una condición de riesgo alto.
+1.4. Funcionalidades del profesor
+RF-39. Administración de grupos por el profesor. El sistema debe permitir que el profesor cree, consulte y desactive sus grupos. También debe generar un código de invitación para cada grupo.
 
-1.3. Actor: Estudiante
-RF-35. El estudiante debe iniciar sesión con las credenciales asignadas por la institución.
+RF-40. Administración de estudiantes del grupo. El sistema debe permitir que el profesor consulte los estudiantes inscritos en sus grupos y retire a un estudiante cuando esté autorizado para hacerlo.
 
-RF-36. El estudiante debe cambiar su contraseña temporal durante el primer acceso, cuando corresponda.
+RF-41. Seguimiento académico de grupos. El sistema debe permitir que el profesor supervise el progreso académico de sus grupos mediante un tablero de control y un centro de analítica.
 
-RF-37. El estudiante debe recuperar su contraseña mediante el procedimiento de verificación por correo electrónico establecido por la plataforma.
+RF-42. Exportación de informes académicos. El sistema debe permitir que el profesor exporte informes académicos en PDF y CSV, incluyendo resúmenes, cuestionarios y evaluaciones, con filtros por grupo y fechas.
 
-RF-38. El estudiante debe consultar y editar la información básica de su perfil, según los permisos disponibles.
+RF-43. Consulta de alertas neuroacadémicas. El sistema debe permitir que los profesores y Súper Profesores consulten NeuroAlertas relacionadas con inactividad, falta de inicio de actividades, bajo rendimiento y riesgo académico.
 
-RF-39. El estudiante debe unirse a clases mediante códigos de invitación válidos.
+RF-44. Creación y administración de NeuroBots. El sistema debe permitir que el profesor cree, configure, pruebe, active, desactive y elimine NeuroBots, así como definir su visibilidad como públicos o privados.
 
-RF-40. El estudiante debe consultar las competencias académicas disponibles en la plataforma.
+RF-45. Administración de documentos de NeuroBots. El sistema debe permitir que el profesor agregue, consulte y administre los documentos de conocimiento de sus NeuroBots. Debe admitir archivos PDF con texto, DOCX, TXT y MD, con un tamaño máximo de 4 MB por archivo.
 
-RF-41. El estudiante debe seleccionar las competencias que desea fortalecer para iniciar su proceso de aprendizaje.
+RF-46. Asignación de NeuroBots. El sistema debe permitir que el profesor asigne NeuroBots a grupos o estudiantes y establezca un objetivo de entre 1 y 200 interacciones.
 
-RF-42. El estudiante debe consultar los NeuroBots que le hayan sido asignados individualmente o mediante sus grupos.
+RF-47. Seguimiento del progreso con NeuroBots. El sistema debe permitir que los profesores y Súper Profesores consulten el progreso de los estudiantes con cada NeuroBot asignado, según sus permisos.
 
-RF-43. El estudiante debe iniciar sesiones de aprendizaje con el tutor de inteligencia artificial.
+RF-48. Administración de evaluaciones. El sistema debe permitir que el profesor cree evaluaciones en borrador, las edite, publique, cierre y elimine.
 
-RF-44. El estudiante debe realizar diagnósticos iniciales para identificar su nivel académico.
+RF-49. Generación de preguntas con IA. El sistema debe permitir que el profesor genere preguntas para las evaluaciones mediante inteligencia artificial.
 
-RF-45. El estudiante debe interactuar con el tutor de inteligencia artificial mediante un chat.
+RF-50. Consulta y calificación de evaluaciones. El sistema debe permitir que el profesor consulte los resultados de las evaluaciones y califique las preguntas abiertas que requieran revisión manual.
 
-RF-46. El estudiante debe recibir explicaciones adaptadas a su nivel de conocimiento y necesidades de aprendizaje.
+RF-51. Publicación de anuncios. El sistema debe permitir que el profesor publique anuncios en sus grupos y adjunte archivos cuando corresponda.
 
-RF-47. El estudiante debe realizar las evaluaciones automáticas disponibles durante su proceso de aprendizaje.
+RF-52. Organización y distribución de materiales. El sistema debe permitir que el profesor organice materiales en carpetas y los comparta con los grupos autorizados.
 
-RF-48. El estudiante debe recibir retroalimentación sobre sus respuestas y resultados.
+RF-53. Integraciones con Google Drive y Calendar. El sistema debe permitir que el profesor conecte Google Drive para importar archivos mediante enlaces y Google Calendar para crear eventos, gestionando adecuadamente la autenticación y los permisos de las integraciones.
 
-RF-49. El estudiante debe realizar actividades de refuerzo sobre los temas en los que presente dificultades.
+RF-54. Automatizaciones. El sistema debe permitir que el profesor defina automatizaciones mediante reglas del tipo «cuando ocurra X, ejecutar Y» y consulte el historial de sus ejecuciones.
 
-RF-50. El estudiante debe solicitar ejemplos, evaluaciones y resúmenes relacionados con los contenidos de aprendizaje.
+RF-55. Generación de materiales didácticos con IA. El sistema debe permitir que el profesor genere materiales didácticos mediante inteligencia artificial, incluyendo planes de clase, preguntas, guías de estudio y rúbricas.
 
-RF-51. El estudiante debe consultar la información sobre su estado cognitivo cuando esta funcionalidad esté habilitada y cuente con las autorizaciones correspondientes.
+RF-56. Administración del calendario por el profesor. El sistema debe permitir que el profesor y el Súper Profesor creen y eliminen eventos del calendario para los grupos o la institución, de acuerdo con sus permisos y las reglas de visibilidad establecidas.
+1.5. Funcionalidades del Súper Profesor
+RF-57. Administración de profesores. El sistema debe permitir que el Súper Profesor cree, consulte, edite y elimine cuentas de profesores de su institución, generando las credenciales de acceso correspondientes.
 
-RF-52. El estudiante debe consultar dashboards con su progreso académico.
+RF-58. Administración de estudiantes. El sistema debe permitir que el Súper Profesor cree, consulte, edite y elimine cuentas de estudiantes de su institución.
 
-RF-53. El estudiante debe consultar el historial de sus sesiones de aprendizaje y conversaciones con el tutor de inteligencia artificial.
+RF-59. Carga masiva de usuarios. El sistema debe permitir que el Súper Profesor cargue masivamente profesores y estudiantes mediante archivos CSV, validando la información y mostrando una vista previa de las filas antes de confirmar el registro.
 
-RF-54. El estudiante debe identificar sus fortalezas y las áreas que necesita mejorar.
+RF-60. Consentimiento de acudientes. El sistema debe permitir registrar la autorización del acudiente para estudiantes menores de edad y gestionar los casos en que falte la fecha de nacimiento, conforme a las reglas de protección de datos aplicables.
 
-RF-55. El estudiante debe consultar su racha de aprendizaje y los días de actividad registrados.
+RF-61. Tablero institucional. El sistema debe mostrar al Súper Profesor un tablero con métricas académicas y administrativas de su institución.
 
-RF-56. El estudiante debe acceder únicamente a los módulos y funcionalidades autorizados para su rol.
+RF-62. Administración institucional de grupos. El sistema debe permitir que el Súper Profesor active, desactive y transfiera grupos a otros profesores de su institución.
 
-RF-57. El estudiante debe consultar exclusivamente su información personal y académica, así como los recursos compartidos con él.
+RF-63. Supervisión institucional de NeuroBots. El sistema debe permitir que el Súper Profesor consulte los NeuroBots de su institución y los active, desactive o elimine, sin modificar el contenido de los NeuroBots creados por los profesores.
 
-1.4. Actor: Sistema de Inteligencia Artificial
-RF-58. El Sistema de Inteligencia Artificial debe capturar métricas de dinámica de teclado cuando exista autorización para hacerlo.
+RF-64. Exportación de informes institucionales. El sistema debe permitir que el Súper Profesor exporte informes institucionales en formatos PDF y CSV.
 
-RF-59. El Sistema de Inteligencia Artificial debe analizar señales visuales y sonoras cuando se cuente con los permisos y autorizaciones correspondientes.
+RF-65. Anuncios institucionales. El sistema debe permitir que el Súper Profesor envíe anuncios a toda la institución, a los profesores, a los estudiantes o a un grado específico.
 
-RF-60. El Sistema de Inteligencia Artificial debe combinar las métricas conductuales disponibles para realizar análisis multimodales.
+RF-66. Consulta y cierre de sesiones. El sistema debe permitir que el Súper Profesor consulte las sesiones activas y el historial de acceso de los usuarios de su institución, y cierre las sesiones de un usuario cuando esté autorizado.
 
-RF-61. El Sistema de Inteligencia Artificial debe estimar posibles estados cognitivos a partir de las señales disponibles, sin presentarlos como diagnósticos médicos.
+RF-67. Actualización de datos institucionales. El sistema debe permitir que el Súper Profesor actualice la información de su institución dentro de los permisos asignados.
 
-RF-62. El Sistema de Inteligencia Artificial debe ajustar la dificultad de las actividades según el desempeño y las necesidades de aprendizaje del estudiante.
+RF-68. Consulta de auditoría. El sistema debe permitir que el Súper Profesor consulte los registros de auditoría de su institución. El Administrador debe poder consultar los registros de auditoría de toda la plataforma.
+1.6. Funcionalidades del Administrador
+RF-69. Administración de instituciones. El sistema debe permitir que el Administrador registre instituciones, cree las cuentas de sus Súper Profesores y genere sus credenciales. También debe permitir consultar, activar y desactivar instituciones.
 
-RF-63. El Sistema de Inteligencia Artificial debe identificar posibles errores o dificultades durante el aprendizaje.
+RF-70. Administración de usuarios de la plataforma. El sistema debe permitir que el Administrador consulte, filtre, edite y elimine los usuarios de la plataforma dentro de las operaciones autorizadas.
 
-RF-64. El Sistema de Inteligencia Artificial debe seleccionar estrategias pedagógicas de acuerdo con el desempeño del estudiante.
+RF-71. Activación y desactivación de cuentas. El sistema debe permitir que el Administrador active o desactive cuentas de usuario.
 
-RF-65. El Sistema de Inteligencia Artificial debe organizar secuencias de enseñanza adaptativa según el progreso del estudiante.
+RF-72. Asignación de roles y permisos. El sistema debe permitir que el Administrador asigne roles válidos y debe garantizar que cada usuario solo pueda ejecutar las operaciones autorizadas para su rol.
 
-RF-66. El Sistema de Inteligencia Artificial debe generar evaluaciones posteriores a las actividades de enseñanza cuando corresponda.
+RF-73. Restablecimiento de contraseñas. El sistema debe permitir que el Administrador restablezca la contraseña de un usuario mediante una contraseña temporal.
 
-RF-67. El Sistema de Inteligencia Artificial debe reforzar los conceptos que el estudiante no haya comprendido satisfactoriamente.
+RF-74. Moderación de NeuroBots de la plataforma. El sistema debe permitir que el Administrador modere los NeuroBots de la plataforma según su visibilidad y estado, y consulte los NeuroBots base preentrenados de las cinco competencias.
 
-RF-68. El Sistema de Inteligencia Artificial debe identificar posibles señales de fatiga o frustración a partir de las métricas disponibles y autorizadas.
+RF-75. Estadísticas globales. El sistema debe mostrar al Administrador estadísticas globales de la plataforma, incluyendo el número total y activo de instituciones y los usuarios activos por rol.
 
-RF-69. El Sistema de Inteligencia Artificial debe adaptar sus respuestas al nivel de conocimiento y al contexto de aprendizaje del estudiante.
+RF-76. Monitoreo técnico de la plataforma. El sistema debe permitir que el Administrador consulte, en modo de solo lectura, el estado de la base de datos, los proveedores de inteligencia artificial, el servicio de correo, la versión, el entorno, la vigencia del token y los conteos de usuarios e instituciones.
 
-RF-70. El Sistema de Inteligencia Artificial debe utilizar servicios externos de inteligencia artificial mediante APIs y mecanismos alternativos de disponibilidad (fallback).
+2. Requisitos no funcionales
+2.1. Adecuación funcional
+RNF-01. Adecuación funcional por rol. El sistema debe cubrir las funciones definidas para los roles de Estudiante, Profesor, Súper Profesor y Administrador, y debe permitir únicamente las operaciones autorizadas para cada rol.
 
-RF-71. El Sistema de Inteligencia Artificial debe registrar los eventos cognitivos estimados y las interacciones relevantes para el aprendizaje, respetando las políticas de privacidad.
+RNF-02. Corrección y consistencia. El sistema debe producir resultados correctos y consistentes. El repositorio debe ejecutar pruebas automáticas del backend y la compilación del frontend ante cada cambio enviado.
+2.2. Seguridad y protección de datos
+RNF-03. Protección de contraseñas. El sistema debe almacenar las contraseñas mediante hash bcrypt y exigir una longitud mínima de ocho caracteres que incluya una mayúscula, una minúscula, un número y un carácter especial. Los tokens de recuperación deben almacenarse mediante hash SHA-256.
 
-RF-72. El Sistema de Inteligencia Artificial debe actualizar el perfil de aprendizaje del estudiante con base en sus resultados e interacciones.
+RNF-04. Seguridad de sesiones y solicitudes. El sistema debe utilizar JWT con vencimiento de 24 horas y mecanismos de invalidación de sesiones. Debe bloquear la cuenta durante 15 minutos después de 20 intentos fallidos dentro de un periodo de cinco minutos. También debe restringir CORS, aplicar las cabeceras de seguridad CSP y HSTS y validar el origen de las solicitudes.
 
-RF-73. El Sistema de Inteligencia Artificial debe generar recomendaciones pedagógicas para los profesores a partir de la información académica disponible.
+RNF-05. Aislamiento de instituciones. El sistema debe mantener aislados los datos de cada institución mediante un esquema de separación lógica multiinstitucional, de modo que los usuarios no puedan acceder a información de otras instituciones sin autorización.
 
-RF-74. El Sistema de Inteligencia Artificial debe actualizar los parámetros y configuraciones de aprendizaje cuando exista autorización para hacerlo.
+RNF-06. Protección de credenciales externas. El sistema debe almacenar las credenciales de servicios externos únicamente en variables de entorno del servidor y debe cifrar los tokens de Google.
 
-1.5. Actor: Administrador
-RF-75. El Administrador debe gestionar los usuarios registrados en la plataforma, incluyendo su creación, consulta, edición y activación o desactivación.
+RNF-07. Confidencialidad de datos neurodigitales. El sistema no debe almacenar videos, audios ni imágenes capturados para el análisis neurodigital. Al servidor solo deben enviarse los indicadores numéricos y el texto dictado que sean necesarios para las funcionalidades autorizadas.
 
-RF-76. El Administrador debe activar o desactivar las cuentas de usuario según las políticas de la plataforma.
+RNF-08. Procesamiento local de señales. El sistema debe procesar en el dispositivo las señales faciales mediante MediaPipe y las señales de prosodia mediante Web Audio. Debe informar y gestionar adecuadamente las condiciones de privacidad del reconocimiento de voz del navegador, que puede utilizar servicios en línea del proveedor.
 
-RF-77. El Administrador debe asignar y modificar los roles de los usuarios autorizados.
+RNF-09. Persistencia y trazabilidad. El sistema debe mantener la persistencia de los datos académicos y registrar en auditoría las acciones administrativas y de acceso relevantes.
+2.3. Fiabilidad y disponibilidad
+RNF-10. Disponibilidad y tolerancia a fallos. El sistema debe mantener la disponibilidad de sus funcionalidades y tolerar fallos de los servicios externos. Debe utilizar los mecanismos de respaldo disponibles para los proveedores de inteligencia artificial y gestionar los errores de la base de datos y del despliegue de manera controlada.
 
-RF-78. El Administrador debe moderar los NeuroBots públicos de acuerdo con las políticas de uso.
+RNF-11. Funcionamiento sin conexión. La aplicación debe permitir el acceso sin conexión a las funciones que lo soporten. También debe informar claramente cuáles funcionalidades, incluidos el acceso a datos remotos y el tutor de inteligencia artificial, requieren conexión a internet.
+2.4. Rendimiento y capacidad
+RNF-12. Tiempo de respuesta. El sistema debe responder en menos de 2,5 segundos en condiciones normales de operación. El cumplimiento debe verificarse mediante pruebas reproducibles que identifiquen las condiciones y las funcionalidades evaluadas.
 
-RF-79. El Administrador debe consultar todos los NeuroBots de la plataforma (públicos y privados) y cambiar su visibilidad y su estado (activo o inactivo).
+RNF-13. Capacidad de crecimiento. La plataforma debe soportar el crecimiento del número de instituciones y usuarios. Su capacidad debe verificarse mediante pruebas de carga y de rendimiento.
+2.5. Usabilidad, portabilidad e interoperabilidad
+RNF-14. Diseño adaptable. La interfaz del sistema debe adaptarse a celulares, tabletas y computadores, manteniendo la legibilidad y el acceso a las funciones disponibles según el rol.
 
-RF-80. El Administrador debe consultar estadísticas globales de la plataforma.
+RNF-15. Instalabilidad como PWA. La aplicación debe poder instalarse como aplicación web progresiva (PWA) en navegadores modernos compatibles.
 
-RF-81. El Administrador debe monitorear el estado general y la disponibilidad de la plataforma.
-
-RF-82. El Administrador debe consultar los registros generales de auditoría.
-
-RF-83. El Administrador debe consultar y gestionar la configuración general de la plataforma según sus permisos.
-
-RF-85. El Administrador debe consultar información global de la plataforma sin pertenecer a una institución específica, respetando los controles de acceso y la protección de los datos personales.
-
-RF-86. El Administrador debe bloquear o impedir el acceso de los usuarios cuando la institución correspondiente se encuentre desactivada, según las reglas de acceso definidas.
-
-2. REQUISITOS NO FUNCIONALES
-Los requisitos no funcionales establecen las condiciones de calidad, seguridad, rendimiento, compatibilidad y tecnología que debe cumplir NeuroLearn IA.
-
-2.1. Seguridad y privacidad
-RNF-01. El sistema debe proteger los datos personales conforme a la Ley 1581 de 2012 y las demás normas colombianas aplicables sobre protección de datos personales.
-
-RNF-02. El sistema no debe almacenar videos, audios ni imágenes faciales en bruto de menores de edad.
-
-RNF-03. El sistema debe procesar localmente en el dispositivo los datos biométricos visuales y sonoros, cuando corresponda.
-
-RNF-04. El sistema debe almacenar las contraseñas mediante funciones criptográficas de hash seguras y adecuadas para contraseñas.
-
-RNF-05. El sistema debe garantizar la seguridad, integridad y confidencialidad de la información.
-
-RNF-06. El sistema debe implementar mecanismos seguros para el cierre de sesiones y la revocación de tokens de acceso.
-
-RNF-07. El sistema debe registrar los intentos de inicio de sesión exitosos y fallidos.
-
-RNF-08. El sistema debe solicitar y verificar las autorizaciones correspondientes del acudiente cuando sean legalmente necesarias para el uso de cámara y micrófono por parte de menores de edad.
-
-RNF-09. El sistema debe impedir el acceso a módulos y funcionalidades no autorizados según el rol del usuario, mediante controles de autorización en el backend y respuestas HTTP 403 cuando corresponda.
-
-RNF-10. El sistema debe generar registros de auditoría para las acciones críticas realizadas en la plataforma.
-
-RNF-11. El sistema debe implementar controles de acceso para proteger los datos personales y evitar que los usuarios consulten información ajena a sus permisos.
-
-2.2. Rendimiento y disponibilidad
-RNF-12. El sistema debe responder en menos de 2,5 segundos en condiciones normales de operación para las solicitudes ordinarias, con criterios de medición definidos.
-
-RNF-13. El sistema debe garantizar la disponibilidad del servicio y contar con mecanismos de recuperación ante fallos.
-
-RNF-14. El sistema debe generar notificaciones oportunas para los eventos relevantes de la plataforma.
-
-RNF-15. El sistema debe mantener la persistencia y trazabilidad de los datos académicos y de las interacciones registradas.
-
-RNF-34. El sistema de Inteligencia Artificial debe responder en un máximo de 20-30 segundos para solicitudes de IA.
-
-2.3. Compatibilidad y accesibilidad
-RNF-16. El sistema debe funcionar como una aplicación web progresiva (PWA).
-
-RNF-17. El sistema debe contar con un diseño responsive compatible con teléfonos móviles, tabletas y computadores.
-
-RNF-18. El sistema debe cumplir con los criterios de accesibilidad web WCAG 2.1 nivel AA.
-
-2.4. Arquitectura y tecnologías
-RNF-20. El backend debe desarrollarse utilizando FastAPI y Python.
-
-RNF-21. El frontend debe desarrollarse utilizando React, TypeScript y Vite.
-
-RNF-22. El sistema debe implementar una arquitectura multiinstitucional (multi-tenant) que garantice el aislamiento de los datos entre instituciones.
-
-RNF-23. El sistema debe utilizar Supabase PostgreSQL como base de datos.
-
-RNF-24. El sistema debe desplegarse en Vercel para el frontend y los servicios de backend compatibles con su entorno de ejecución.
-
-RNF-25. El sistema debe integrarse con servicios externos de inteligencia artificial mediante APIs.
-
-RNF-26. El sistema debe contar con mecanismos de compatibilidad y migración para mantener la integridad de los datos cuando cambie el esquema de la base de datos.
-
-
+RNF-16. Integración con servicios externos. El sistema debe integrarse con Groq y Gemini para inteligencia artificial, Azure Speech para servicios de voz, Brevo para correo electrónico y Google Drive y Google Calendar para las funcionalidades de integración correspondientes.

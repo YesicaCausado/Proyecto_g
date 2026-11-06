@@ -15,25 +15,11 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
-      manifest: {
-        name: 'Proyecto G',
-        short_name: 'ProyectoG',
-        description: 'Aplicación Proyecto G',
-        theme_color: '#ffffff',
-        icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      },
+      includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png'],
+      // El manifiesto es public/manifest.json (enlazado en index.html, con los
+      // íconos reales). Sin esto el plugin generaba un segundo manifiesto
+      // «Proyecto G» con íconos inexistentes (RNF-15).
+      manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
         cleanupOutdatedCaches: true,

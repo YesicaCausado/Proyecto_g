@@ -50,74 +50,40 @@ export class RobotErrorBoundary extends Component<Props, State> {
 
 // ── Fallback visual por defecto ───────────────────────────────
 
-function RobotCanvasFallbackUI({ error }: { error: Error | null }) {
+export function RobotCanvasFallbackUI({ error }: { error: Error | null }) {
   const isGlbMissing = error?.message?.includes('robot.glb') ||
                        error?.message?.includes('Could not load') ||
                        error?.message?.includes('valid JSON');
 
   return (
     <div
+      role="status"
       style={{
-        position:       'absolute',
-        inset:          0,
-        display:        'flex',
-        flexDirection:  'column',
-        alignItems:     'center',
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
         justifyContent: 'center',
-        gap:            '16px',
+        gap: '8px',
+        padding: '16px',
+        textAlign: 'center',
       }}
     >
-      {/* Placeholder animado del robot */}
-      <div
-        style={{
-          width:        '80px',
-          height:       '80px',
-          borderRadius: '50%',
-          border:       '2px solid rgba(11,110,153,0.3)',
-          display:      'flex',
-          alignItems:   'center',
-          justifyContent: 'center',
-          animation:    'pulse 2s ease-in-out infinite',
-          background:   'radial-gradient(circle, rgba(11,110,153,0.08) 0%, transparent 70%)',
-        }}
-      >
-        {/* Silueta robot SVG inline */}
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="12" y="4" width="16" height="12" rx="3" fill="rgba(11,110,153,0.3)" />
-          <circle cx="16" cy="10" r="2" fill="rgba(11,110,153,0.6)" />
-          <circle cx="24" cy="10" r="2" fill="rgba(11,110,153,0.6)" />
-          <rect x="8"  y="18" width="24" height="14" rx="3" fill="rgba(11,110,153,0.25)" />
-          <rect x="2"  y="20" width="5"  height="9"  rx="2" fill="rgba(11,110,153,0.2)" />
-          <rect x="33" y="20" width="5"  height="9"  rx="2" fill="rgba(11,110,153,0.2)" />
-          <rect x="13" y="32" width="5"  height="7"  rx="2" fill="rgba(11,110,153,0.2)" />
-          <rect x="22" y="32" width="5"  height="7"  rx="2" fill="rgba(11,110,153,0.2)" />
-          {/* Antena */}
-          <line x1="20" y1="4" x2="20" y2="1" stroke="rgba(11,110,153,0.4)" strokeWidth="1.5" strokeLinecap="round" />
-          <circle cx="20" cy="1" r="1" fill="rgba(11,110,153,0.5)" />
-        </svg>
-      </div>
-
       {isGlbMissing ? (
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>
+          <p style={{ fontSize: '11px', color: 'rgba(44,42,39,0.65)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 500 }}>
             Robot no disponible
           </p>
-          <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.18)', fontFamily: 'monospace' }}>
+          <p style={{ fontSize: '10px', color: 'rgba(44,42,39,0.45)', fontFamily: 'monospace' }}>
             Coloca robot.glb en /public
           </p>
         </div>
       ) : (
-        <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        <p style={{ fontSize: '11px', color: 'rgba(44,42,39,0.55)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
           Escena no disponible
         </p>
       )}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.6; transform: scale(1); }
-          50%       { opacity: 1;   transform: scale(1.06); }
-        }
-      `}</style>
     </div>
   );
 }

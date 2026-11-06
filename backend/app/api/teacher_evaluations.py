@@ -207,7 +207,7 @@ def _apply_payload(ev: TeacherEvaluation, data: EvaluationCreate, classroom: Cla
 # ─── CRUD ────────────────────────────────────────────────────────────────────
 
 @router.get("/evaluations")
-async def list_evaluations(
+def list_evaluations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     _authorized: User = Depends(require_permission(Permission.GESTIONAR_EVALUACIONES)),
@@ -234,7 +234,7 @@ async def list_evaluations(
 
 
 @router.post("/evaluations", status_code=201)
-async def create_evaluation(
+def create_evaluation(
     data: EvaluationCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -255,7 +255,7 @@ async def create_evaluation(
 
 
 @router.put("/evaluations/{eval_id}")
-async def update_evaluation(
+def update_evaluation(
     eval_id: int,
     data: EvaluationCreate,
     db: Session = Depends(get_db),
@@ -282,7 +282,7 @@ async def update_evaluation(
 
 
 @router.post("/evaluations/{eval_id}/publish")
-async def publish_evaluation(
+def publish_evaluation(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -323,7 +323,7 @@ def _notify_published(db: Session, ev: TeacherEvaluation, teacher: User) -> None
 
 
 @router.post("/evaluations/{eval_id}/close")
-async def close_evaluation(
+def close_evaluation(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -353,7 +353,7 @@ async def close_evaluation(
 
 
 @router.delete("/evaluations/{eval_id}", status_code=204)
-async def delete_evaluation(
+def delete_evaluation(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -385,7 +385,7 @@ def _submission_summary(sub: EvaluationSubmission) -> dict:
 
 
 @router.get("/evaluations/{eval_id}/results")
-async def evaluation_results(
+def evaluation_results(
     eval_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -497,7 +497,7 @@ def _submission_detail(db: Session, ev: TeacherEvaluation, sub: EvaluationSubmis
 
 
 @router.get("/evaluations/{eval_id}/submissions/{submission_id}")
-async def submission_detail(
+def submission_detail(
     eval_id: int,
     submission_id: int,
     db: Session = Depends(get_db),
@@ -511,7 +511,7 @@ async def submission_detail(
 
 
 @router.post("/evaluations/{eval_id}/submissions/{submission_id}/grade")
-async def grade_submission(
+def grade_submission(
     eval_id: int,
     submission_id: int,
     payload: GradePayload,

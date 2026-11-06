@@ -13,11 +13,11 @@ import { Canvas }       from '@react-three/fiber';
 import { Environment, PerspectiveCamera } from '@react-three/drei';
 import type { AnimationClip } from 'three';
 
-import { CAMERA_CONFIG, CANVAS_CONFIG, ROBOT_TRANSFORM } from './RobotConfig';
+import { CAMERA_CONFIG, CANVAS_CONFIG } from './RobotConfig';
+import { RobotCanvasFallbackUI, RobotErrorBoundary } from './RobotErrorBoundary';
 import type { RobotState }  from './RobotStates';
 import RobotLights          from './RobotLights';
 import RobotEffects         from './RobotEffects';
-import RobotGeometric       from './RobotGeometric';
 import RobotAnimatedScene   from './RobotAnimatedScene';
 import { useRobotContextSafe } from '../../../../context/RobotContext';
 
@@ -34,8 +34,8 @@ export interface RobotCanvasProps {
   transparent?:  boolean;
   onSceneReady?: () => void;
   /**
-   * Modo liviano (landing): menos resolución, sin sombras ni buffer
-   * logarítmico. Reduce mucho la memoria de la GPU. El login no lo usa.
+   * Modo liviano: menos resolución, sin sombras, entorno ni postproceso.
+   * Reduce memoria GPU cuando la escena es decorativa.
    */
   lowPower?:     boolean;
   /** Si true, deja de dibujar cuadros (el robot queda quieto, sin gastar GPU). */
@@ -47,9 +47,10 @@ export interface RobotCanvasProps {
 interface SceneContentProps {
   robotState:    RobotState;
   onModelLoaded: (clips: AnimationClip[]) => void;
+  lowPower:      boolean;
 }
 
-function SceneContent({ robotState, onModelLoaded }: SceneContentProps) {
+function SceneContent({ robotState, onModelLoaded, lowPower }: SceneContentProps) {
   return (
     <>
       <PerspectiveCamera
@@ -63,30 +64,22 @@ function SceneContent({ robotState, onModelLoaded }: SceneContentProps) {
 
       <RobotLights robotState={robotState} />
 
-      <Environment
-        preset="city"
-        environmentIntensity={0.3}
-        backgroundBlurriness={1}
-      />
-
-      {/*
-       * Suspense muestra RobotGeometric mientras el GLB carga.
-       * RobotAnimatedScene combina modelo + motor de animaciones.
-       */}
-      <Suspense fallback={
-        <RobotGeometric
-          robotState={robotState}
-          position={ROBOT_TRANSFORM.position}
-          scale={ROBOT_TRANSFORM.scale[0]}
+      {!lowPower && (
+        <Environment
+          preset="city"
+          environmentIntensity={0.3}
+          backgroundBlurriness={1}
         />
-      }>
+      )}
+
+      <Suspense fallback={null}>
         <RobotAnimatedScene
           robotState={robotState}
           onReady={onModelLoaded}
         />
       </Suspense>
 
-      <RobotEffects robotState={robotState} />
+      <RobotEffects robotState={robotState} disabled={lowPower} />
     </>
   );
 }
@@ -116,11 +109,9 @@ export default function RobotCanvas({
   );
 
   // ── Recuperación de pérdida de contexto WebGL ────────────────
-  // Estado que fuerza el re-montaje del <Canvas> cuando el contexto
-  // se pierde de forma IRRECUPERABLE (GPU/reset del driver). Remontar
-  // es la única forma fiable de reconstruir renderer + escena, porque
-  // Three.js no re-subcarga geometrías/texturas tras un contexto perdido.
+  // El canvas se remonta si WebGL se restaura y muestra un fallback si no.
   const [webglEpoch, setWebglEpoch] = useState(0);
+  const [webglFailed, setWebglFailed] = useState(false);
   // Guardamos el renderer en ESTADO (no en ref) para que el useEffect
   // de abajo se re-ejecute justo cuando R3F lo instancia vía onCreated
   // (que ocurre DESPUÉS del primer render del <Canvas>).
@@ -156,9 +147,7 @@ export default function RobotCanvas({
       }
       lostHandled = true;
       // Si en 4s no llega 'webglcontextrestored', el contexto está muerto de
-      // forma permanente (GPU saturada por varios <Canvas>, driver crash,
-      // pestaña en segundo plano…). Remontamos con una key nueva para forzar
-      // un contexto WebGL limpio.
+      // forma permanente (GPU saturada, driver crash o pestaña en segundo plano).
       if (restoreTimer) clearTimeout(restoreTimer);
       restoreTimer = setTimeout(() => {
         if (!lostHandled) return;
@@ -167,9 +156,9 @@ export default function RobotCanvas({
           return; // ya se recuperó
         }
         if (import.meta.env.DEV) {
-          console.warn('[RobotCanvas] Contexto nunca se restauró — remontando canvas.');
+          console.warn('[RobotCanvas] Contexto nunca se restauró — usando fallback.');
         }
-        setWebglEpoch((e) => e + 1);
+        setWebglFailed(true);
       }, 4000);
     };
 
@@ -184,9 +173,8 @@ export default function RobotCanvas({
         const h = gl.domElement?.clientHeight || 1;
         gl.setSize(w, h, false);
       }
-      // Remontamos para reconstruir la escena con un contexto limpio. Es lo
-      // más robusto ante GPU saturadas (varios <Canvas> montados en la misma
-      // página, p.ej. landing → login).
+      setWebglFailed(false);
+      // Remontamos para reconstruir la escena con un contexto limpio.
       setWebglEpoch((e) => e + 1);
     };
 
@@ -208,34 +196,46 @@ export default function RobotCanvas({
       className={`relative w-full h-full ${className}`}
       aria-hidden="true"
     >
-      <Canvas
-        key={webglEpoch}
-        shadows={lowPower ? false : CANVAS_CONFIG.shadows}
-        dpr={lowPower ? LOW_POWER_DPR : CANVAS_CONFIG.dpr}
-        onCreated={handleCreated}
-        gl={{
-          antialias:             true,
-          alpha:                 transparent,
-          // 'high-performance' puede fallar en GPUs integradas/remotas.
-          // Con failIfMajorPerformanceCaveat:false permitimos que el navegador
-          // use el renderer por software (swiftshader) en vez de negar el
-          // contexto → evita "Context Lost" silencioso en hardware débil.
-          powerPreference:       lowPower ? 'default' : 'high-performance',
-          failIfMajorPerformanceCaveat: false,
-          preserveDrawingBuffer: false,
-          stencil:               false,
-          depth:                 true,
-          logarithmicDepthBuffer: !lowPower,
-        }}
-        style={transparent ? undefined : { background: CANVAS_CONFIG.backgroundColor }}
-        frameloop={paused ? 'never' : 'always'}
-        performance={{ min: 0.8 }}
-      >
-        <SceneContent
-          robotState={robotState}
-          onModelLoaded={handleModelLoaded}
-        />
-      </Canvas>
+      {webglFailed ? (
+        <RobotCanvasFallbackUI error={new Error('WebGL no disponible')} />
+      ) : (
+        <RobotErrorBoundary key={webglEpoch}>
+          <Canvas
+            key={webglEpoch}
+            shadows={lowPower ? false : CANVAS_CONFIG.shadows}
+            dpr={lowPower ? LOW_POWER_DPR : CANVAS_CONFIG.dpr}
+            onCreated={handleCreated}
+            gl={{
+              antialias:             !lowPower,
+              alpha:                 transparent,
+              // 'high-performance' puede fallar en GPUs integradas/remotas.
+              // Con failIfMajorPerformanceCaveat:false permitimos que el navegador
+              // use el renderer por software (swiftshader) en vez de negar el
+              // contexto → evita "Context Lost" silencioso en hardware débil.
+              powerPreference:       lowPower ? 'default' : 'high-performance',
+              failIfMajorPerformanceCaveat: false,
+              preserveDrawingBuffer: false,
+              stencil:               false,
+              depth:                 true,
+              logarithmicDepthBuffer: !lowPower,
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              height: '100%',
+              ...(transparent ? {} : { background: CANVAS_CONFIG.backgroundColor }),
+            }}
+            frameloop={paused ? 'never' : 'always'}
+            performance={{ min: 0.8 }}
+          >
+            <SceneContent
+              robotState={robotState}
+              onModelLoaded={handleModelLoaded}
+              lowPower={lowPower}
+            />
+          </Canvas>
+        </RobotErrorBoundary>
+      )}
     </div>
   );
 }

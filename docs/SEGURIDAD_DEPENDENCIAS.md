@@ -24,7 +24,7 @@ y sin `npm audit fix --force`.
 | `react-router` | 7.13.2 | producción | Alta (5 altos, 4 moderados, 1 bajo): DoS, redirección abierta en `<Link>`/`useNavigate`, CSRF y XSS en modo RSC | 7.18.2 | `react-router-dom` 7.13.2 (versión exacta) | El frontend usa solo el modo declarativo (`HashRouter`, `Routes`, `Link`, `useNavigate`), estable en 7.x | Mínimo `react-router-dom ^7.18.2` |
 | `form-data` | 4.0.5 | producción (dentro de axios) | Alta (1): inyección CRLF en multipart | 4.0.6 | `axios` (`^4.0.5`) | Solo la usa el adaptador de Node de axios; en el navegador no se carga | Llega con axios 1.20 |
 | `follow-redirects` | 1.15.11 | producción (dentro de axios) | Moderada (1): fuga de cabeceras de autenticación en redirecciones | 1.16.0 | `axios` (`^1.15.11`) | Igual que `form-data` | Llega con axios 1.20 |
-| `dompurify` | 3.4.11 | producción (dentro de jsPDF) | Moderada (1 moderado, 2 bajos): XSS con `IN_PLACE` | 3.4.16 | `jspdf` (`^3.3.1`) | Parche de la misma versión | `npm audit fix` |
+| `dompurify` | 3.4.11 | producción (dentro de jsPDF) | Crítica desde oct 2026 (bypass de `SAFE_FOR_TEMPLATES`, `IN_PLACE`, SMIL) | 3.4.17 | `jspdf` (`^3.3.1`) | Parche de la misma versión | `npm audit fix` |
 | `fflate` | 0.6.10 | producción (dentro de three-stdlib) | Moderada (1): bucle infinito con ZIP64 mal formado | 0.6.11 | `three-stdlib` (`^0.6.9`) | Parche | `npm audit fix` |
 | `vite` | 8.0.3 | desarrollo | Alta (3 altos, 2 moderados): lectura de archivos del servidor de desarrollo | 8.0.16 | directa (`^8.0.1`) | Sin cambios incompatibles hasta 8.3.x; sigue pidiendo Node `^20.19 \|\| >=22.12`; plugins (`@vitejs/plugin-react`, `vite-plugin-pwa`, `@tailwindcss/vite`) admiten `^8` | Mínimo `^8.0.16` |
 | `postcss` | 8.5.8 | desarrollo (dentro de Vite) | Alta (2 altos, 2 moderados): lectura de archivos vía source maps | 8.5.23 | `vite` (`^8.5.8`) | Parche | Llega con Vite / `npm audit fix` |
@@ -100,7 +100,7 @@ versiones fijadas tiene avisos en la GitHub Advisory Database.
 | Dependencia | Antes | Ahora | Avisos que corrige | Exposición en NeuroLearn | Cambio en el código |
 |---|---|---|---|---|---|
 | `python-multipart` | 0.0.6 | 0.0.32 | 5 altos, 1 moderado, 3 bajos: DoS y ReDoS al procesar `multipart/form-data` | Alta: subida de documentos de NeuroBots, carga masiva CSV y adjuntos | Ninguno |
-| `pypdf` | 5.1.0 | 6.19.0 | 10 altos, 36 moderados, 3 bajos: bucles infinitos y consumo de memoria con PDF manipulados | Alta: se extrae el texto de los PDF que suben los profesores | `bot_documents.py` atiende `LimitReachedError` (nuevo en pypdf 6) con un 422 y un mensaje claro |
+| `pypdf` | 5.1.0 | 6.21.2 (6.19.0 hasta el 23 oct 2026, que acumuló 11 avisos nuevos) | 10 altos, 36 moderados, 3 bajos: bucles infinitos y consumo de memoria con PDF manipulados | Alta: se extrae el texto de los PDF que suben los profesores | `bot_documents.py` atiende `LimitReachedError` (nuevo en pypdf 6) con un 422 y un mensaje claro |
 | `starlette` | 0.27.0 (vía FastAPI) | 1.7.0 (fijada aparte) | 3 altos, 3 moderados, 1 bajo: DoS en formularios, límites ignorados, validación de `Host` | Alta | Ninguno (la app no usa `on_event` ni APIs retiradas en 1.0) |
 | `fastapi` | 0.104.1 | 0.142.4 | Necesario para Starlette 1.x | — | Ninguno: las 166 rutas y el esquema OpenAPI son idénticos |
 | `anyio` | 3.7.1 (vía FastAPI) | 4.x (la última que admite Starlette, ≥ 4.14.2) | 1 crítico, 1 moderado | Baja | Ninguno |

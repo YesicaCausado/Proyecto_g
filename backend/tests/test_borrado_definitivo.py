@@ -109,7 +109,9 @@ class HardDeleteTest(unittest.TestCase):
             "full_name": f"Docente {letra}", "document_type": "CC", "document_number": f"820000{n}",
             "email": f"docente{n}@borrado.co", "subject_area": "Matemáticas"}))
         s = self.ok(c.post(f"{API}/super/students", headers=d["sp"], json={
-            "full_name": f"Estudiante {letra}", "document_type": "TI", "document_number": f"830000{n}"}))
+            "full_name": f"Estudiante {letra}", "document_type": "TI", "document_number": f"830000{n}",
+            "email": f"estudiante{n}@borrado.co", "birth_date": "2000-01-01",
+            "guardian_authorization_confirmed": True}))
         d["teacher"], d["student"] = self.first_login(t), self.first_login(s)
         d["teacher_id"] = c.get(f"{API}/auth/me", headers=d["teacher"]).json()["id"]
         d["student_id"] = c.get(f"{API}/auth/me", headers=d["student"]).json()["id"]

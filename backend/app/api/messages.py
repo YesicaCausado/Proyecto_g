@@ -195,7 +195,7 @@ def _can_message(sender: User, receiver: User, db: Session) -> bool:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/contacts")
-async def get_contacts(
+def get_contacts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -268,7 +268,7 @@ async def get_contacts(
 
 
 @router.get("/conversations")
-async def list_conversations(
+def list_conversations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -427,7 +427,7 @@ async def list_conversations(
 
 
 @router.get("/conversations/{other_user_id}")
-async def get_messages(
+def get_messages(
     other_user_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -460,7 +460,7 @@ async def get_messages(
 
 
 @router.delete("/{message_id}", status_code=status.HTTP_200_OK)
-async def delete_message(
+def delete_message(
     message_id: int,
     scope: str = Query(default="for_me", description="'for_me' | 'for_all'"),
     current_user: User = Depends(get_current_user),
@@ -534,7 +534,7 @@ async def delete_message(
 
 
 @router.get("/{message_id}/attachment")
-async def download_attachment(
+def download_attachment(
     message_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -571,7 +571,7 @@ async def download_attachment(
 
 
 @router.post("/conversations/{other_user_id}", status_code=status.HTTP_201_CREATED)
-async def send_message(
+def send_message(
     other_user_id: int,
     content: str = Form(...),
     file: Optional[UploadFile] = File(None),
@@ -613,7 +613,7 @@ async def send_message(
 
 
 @router.post("/conversations/{other_user_id}/read")
-async def mark_as_read(
+def mark_as_read(
     other_user_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

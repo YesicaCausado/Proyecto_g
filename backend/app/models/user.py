@@ -137,6 +137,23 @@ class User(Base):
         nullable=False,
     )
 
+    tutorial_completed = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    tutorial_role = Column(
+        String(20),
+        nullable=True,
+    )
+
+    tutorial_step = Column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
     # =========================================================
     # INFORMACIÓN ACADÉMICA
     # =========================================================
@@ -234,6 +251,26 @@ class User(Base):
     )
 
     guardian_authorized_by_id = Column(
+        Integer,
+        nullable=True,
+    )
+
+    guardian_consent_date = Column(
+        String(10),
+        nullable=True,
+    )
+
+    guardian_authorization_reference = Column(
+        String(100),
+        nullable=True,
+    )
+
+    guardian_confirmation_recorded_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    guardian_confirmation_by_id = Column(
         Integer,
         nullable=True,
     )

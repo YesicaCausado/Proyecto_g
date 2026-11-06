@@ -44,6 +44,7 @@ class Permission(str, enum.Enum):
 
     # Estudiante
     PARTICIPAR_EN_AULAS = "participar_en_aulas"    # unirse y ver sus aulas
+    REALIZAR_DIAGNOSTICO = "realizar_diagnostico"  # diagnóstico inicial por competencia
 
     # Compartidos
     USAR_CHAT_IA = "usar_chat_ia"                  # tutor IA / asistente
@@ -68,6 +69,7 @@ ROLE_PERMISSIONS: Dict[Permission, FrozenSet[str]] = {
     # (filtrado en app/services/neurobot_service.py::results).
     Permission.VER_RESULTADOS_NEUROBOT: frozenset({ADMIN, SUPER, PROFESOR}),
     Permission.PARTICIPAR_EN_AULAS: frozenset({ESTUDIANTE}),
+    Permission.REALIZAR_DIAGNOSTICO: frozenset({ESTUDIANTE}),
     Permission.USAR_CHAT_IA: frozenset({ADMIN, PROFESOR, ESTUDIANTE}),
     Permission.VER_NEUROALERTAS: frozenset({ADMIN, SUPER, PROFESOR}),
     Permission.EXPORTAR_REPORTES: frozenset({ADMIN, SUPER, PROFESOR}),

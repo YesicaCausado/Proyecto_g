@@ -34,13 +34,15 @@ from sqlalchemy.orm import Session
 from app.models.classroom import Classroom, Enrollment
 from app.models.evaluation import EvaluationSubmission, TeacherEvaluation
 from app.models.institution import Institution
-from app.models.learning import QuizHistory
+from app.models.learning import CognitiveEvent, QuizHistory
 from app.models.user import User, UserRole
 from app.services import evaluation_service
+from app.services.competencies import COMP_NAMES, evaluation_competency, quiz_competency
+from app.services.neuro_indicators import summarize_cognitive_events
 from app.services.pdf_table import build_table_pdf
 
 COLOMBIA_TZ = timezone(timedelta(hours=-5))
-REPORT_KINDS = ("resumen", "quizzes", "evaluaciones")
+REPORT_KINDS = ("resumen", "quizzes", "evaluaciones", "estudiante")
 RISK_LABELS = {"none": "Sin riesgo", "low": "Bajo", "medium": "Medio", "high": "Alto"}
 EVAL_STATUS_LABELS = {"calificada": "Calificada", "pendiente_revision": "Por calificar"}
 
@@ -126,11 +128,48 @@ def scope_classrooms(db: Session, user: User, classroom_id: Optional[int]) -> Li
 # ── Reportes ─────────────────────────────────────────────────────────────────
 
 def build_report(db: Session, user: User, kind: str, classroom_id: Optional[int],
-                 start: Optional[date], end: Optional[date]) -> Report:
+                 start: Optional[date], end: Optional[date],
+                 student_id: Optional[int] = None) -> Report:
     if kind not in REPORT_KINDS:
-        raise ReportError("Tipo de reporte inválido. Usa resumen, quizzes o evaluaciones.")
+        raise ReportError("Tipo de reporte inválido. Usa resumen, quizzes, evaluaciones o estudiante.")
     if start and end and start > end:
         raise ReportError("La fecha inicial no puede ser posterior a la final.")
+    if kind == "estudiante":
+        if student_id is None:
+            raise ReportError("Selecciona un estudiante para generar su reporte individual.")
+        detail = build_student_detail(db, user, student_id, classroom_id, start, end)
+        student = detail["student"]
+        rows = [
+            [
+                row["date"], row["competency_name"], row["title"], row["source_label"],
+                _pct(row["percentage"]), _pct(row["score"]), _pct(row["max_score"]),
+            ]
+            for row in detail["history"]
+        ]
+        if not rows:
+            rows = [["", "", "Sin evaluaciones registradas en el período", "", "", "", ""]]
+        indicators = detail["neurodigital"]
+        meta = [
+            f"Generado por: {user.full_name or user.username} · {datetime.now(COLOMBIA_TZ):%Y-%m-%d %H:%M} (hora de Colombia)",
+            f"Estudiante: {student['name']} (@{student['username']}) · Grupo(s): {', '.join(student['groups'])}",
+            f"Período: {detail['period']} · Resultados académicos: {detail['summary']['results']}",
+            f"Indicadores neurodigitales: {indicators['evidence_count']} eventos con evidencia suficiente",
+        ]
+        for key, label in (
+            ("fatigue", "Fatiga"),
+            ("overload", "Sobrecarga"),
+            ("doubt", "Duda"),
+            ("mastery", "Dominio / flujo"),
+        ):
+            value = indicators[key]
+            meta.append(f"{label}: {value}%" if value is not None else f"{label}: sin datos suficientes")
+        return Report(
+            "estudiante", f"Reporte individual: {student['name']}", meta,
+            ["Fecha", "Competencia", "Actividad", "Fuente", "Resultado (%)", "Puntaje", "Máximo"],
+            rows, [1.3, 2.2, 2.4, 1.3, 1.0, 0.8, 0.8],
+            f"reporte_estudiante_{_slug(student['name'])}",
+            {"generated_at": datetime.now(COLOMBIA_TZ).strftime("%Y-%m-%d %H:%M")},
+        )
 
     classrooms = scope_classrooms(db, user, classroom_id)
     if not classrooms:
@@ -249,6 +288,7 @@ def build_report(db: Session, user: User, kind: str, classroom_id: Optional[int]
             f"reporte_quizzes_{file_scope}{file_range}", summary,
         )
 
+
     if kind == "evaluaciones":
         rows = []
         for ev in evaluations:
@@ -326,6 +366,194 @@ def build_report(db: Session, user: User, kind: str, classroom_id: Optional[int]
         rows, [2.0, 1.1, 1.7, 0.7, 1.2, 1.1, 1.5, 0.9, 0.8, 1.3],
         f"reporte_resumen_{file_scope}{file_range}", summary,
     )
+
+
+def list_report_students(db: Session, user: User, classroom_id: Optional[int] = None) -> List[dict]:
+    classrooms = scope_classrooms(db, user, classroom_id)
+    if not classrooms:
+        return []
+    classroom_ids = [classroom.id for classroom in classrooms]
+    rows = (
+        db.query(User, Classroom.name)
+        .join(Enrollment, Enrollment.student_id == User.id)
+        .join(Classroom, Classroom.id == Enrollment.classroom_id)
+        .filter(
+            Classroom.id.in_(classroom_ids),
+            Enrollment.is_active.is_(True),
+            User.role == UserRole.ESTUDIANTE.value,
+            User.is_active.is_(True),
+        )
+        .order_by(User.full_name, User.username, Classroom.name)
+        .all()
+    )
+    students: Dict[int, dict] = {}
+    for student, group_name in rows:
+        item = students.setdefault(student.id, {
+            "id": student.id,
+            "name": student.full_name or student.username,
+            "username": student.username,
+            "groups": [],
+        })
+        if group_name not in item["groups"]:
+            item["groups"].append(group_name)
+    return list(students.values())
+
+
+def build_student_detail(
+    db: Session,
+    user: User,
+    student_id: int,
+    classroom_id: Optional[int],
+    start: Optional[date],
+    end: Optional[date],
+) -> dict:
+    if start and end and start > end:
+        raise ReportError("La fecha inicial no puede ser posterior a la final.")
+    classrooms = scope_classrooms(db, user, classroom_id)
+    classroom_ids = [classroom.id for classroom in classrooms]
+    if not classroom_ids:
+        raise ReportError("No tienes grupos activos para consultar este estudiante.", 404)
+
+    enrollments = (
+        db.query(Enrollment, Classroom)
+        .join(Classroom, Classroom.id == Enrollment.classroom_id)
+        .filter(
+            Enrollment.student_id == student_id,
+            Enrollment.classroom_id.in_(classroom_ids),
+            Enrollment.is_active.is_(True),
+        )
+        .order_by(Classroom.name)
+        .all()
+    )
+    student = (
+        db.query(User)
+        .filter(
+            User.id == student_id,
+            User.role == UserRole.ESTUDIANTE.value,
+            User.is_active.is_(True),
+        )
+        .first()
+    )
+    if not student or not enrollments:
+        raise ReportError("El estudiante no existe o no pertenece a tus grupos activos.", 404)
+
+    since, until = _utc_bounds(start, end)
+    quizzes_query = db.query(QuizHistory).filter(
+        QuizHistory.user_id == student_id,
+        QuizHistory.completed_at.isnot(None),
+        QuizHistory.performance_score.isnot(None),
+    )
+    if since:
+        quizzes_query = quizzes_query.filter(QuizHistory.completed_at >= since)
+    if until:
+        quizzes_query = quizzes_query.filter(QuizHistory.completed_at < until)
+    quizzes = quizzes_query.order_by(QuizHistory.completed_at).all()
+
+    groups_by_id = {group.id: group for _, group in enrollments}
+    evaluations = (
+        db.query(TeacherEvaluation)
+        .filter(
+            TeacherEvaluation.classroom_id.in_(list(groups_by_id)),
+            TeacherEvaluation.status.in_(("publicada", "cerrada")),
+        )
+        .all()
+    )
+    submissions_query = db.query(EvaluationSubmission).filter(
+        EvaluationSubmission.student_id == student_id,
+        EvaluationSubmission.evaluation_id.in_([evaluation.id for evaluation in evaluations] or [-1]),
+        EvaluationSubmission.status != "en_curso",
+        EvaluationSubmission.submitted_at.isnot(None),
+    )
+    if since:
+        submissions_query = submissions_query.filter(EvaluationSubmission.submitted_at >= since)
+    if until:
+        submissions_query = submissions_query.filter(EvaluationSubmission.submitted_at < until)
+    submissions_by_evaluation: Dict[int, List[EvaluationSubmission]] = {}
+    for submission in submissions_query.all():
+        submissions_by_evaluation.setdefault(submission.evaluation_id, []).append(submission)
+
+    history = []
+    for quiz in quizzes:
+        competency, _ = quiz_competency(quiz)
+        history.append({
+            "date": _local(quiz.completed_at),
+            "competency": competency,
+            "competency_name": COMP_NAMES.get(competency, "Sin competencia identificada"),
+            "title": quiz.quiz_title or quiz.topic or "Quiz",
+            "source": "quiz",
+            "source_label": "Quiz adaptativo",
+            "percentage": float(quiz.performance_score),
+            "score": float(quiz.correct_answers) if quiz.correct_answers is not None else None,
+            "max_score": float(quiz.questions_count) if quiz.questions_count is not None else None,
+            "attempts": 1,
+        })
+
+    pending_review = 0
+    for evaluation in evaluations:
+        submissions = submissions_by_evaluation.get(evaluation.id, [])
+        official = evaluation_service.official_submission(submissions)
+        if official is None:
+            continue
+        if official.status != "calificada" or official.percentage is None:
+            pending_review += 1
+            continue
+        competency, _ = evaluation_competency(evaluation, groups_by_id.get(evaluation.classroom_id))
+        history.append({
+            "date": _local(official.submitted_at),
+            "competency": competency,
+            "competency_name": COMP_NAMES.get(competency, "Sin competencia identificada"),
+            "title": evaluation.title,
+            "source": "evaluacion",
+            "source_label": "Evaluación docente",
+            "percentage": float(official.percentage),
+            "score": float(official.score) if official.score is not None else None,
+            "max_score": float(official.max_score) if official.max_score is not None else None,
+            "attempts": len(submissions),
+        })
+    history.sort(key=lambda result: result["date"])
+
+    events_query = db.query(CognitiveEvent).filter(CognitiveEvent.user_id == student_id)
+    if since:
+        events_query = events_query.filter(CognitiveEvent.timestamp >= since)
+    if until:
+        events_query = events_query.filter(CognitiveEvent.timestamp < until)
+    neurodigital = summarize_cognitive_events(
+        events_query.order_by(CognitiveEvent.timestamp).all()
+    )
+    competency_rows = []
+    for key, name in COMP_NAMES.items():
+        results = [row["percentage"] for row in history if row["competency"] == key]
+        competency_rows.append({
+            "key": key,
+            "name": name,
+            "results": len(results),
+            "average": round(sum(results) / len(results), 1) if results else None,
+        })
+    percentages = [row["percentage"] for row in history]
+    return {
+        "student": {
+            "id": student.id,
+            "name": student.full_name or student.username,
+            "username": student.username,
+            "groups": [group.name for group in groups_by_id.values()],
+        },
+        "period": (
+            f"{start.isoformat() if start else 'inicio'} a {end.isoformat() if end else 'hoy'}"
+            if start or end else "Todo el período"
+        ),
+        "summary": {
+            "results": len(history),
+            "average": round(sum(percentages) / len(percentages), 1) if percentages else None,
+            "last_result": history[-1]["date"] if history else None,
+            "quiz_results": len(quizzes),
+            "evaluation_results": len(history) - len(quizzes),
+            "pending_review": pending_review,
+            "competencies_evaluated": [row["name"] for row in competency_rows if row["results"]],
+        },
+        "competencies": competency_rows,
+        "history": list(reversed(history)),
+        "neurodigital": neurodigital,
+    }
 
 
 # ── Formatos ─────────────────────────────────────────────────────────────────

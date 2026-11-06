@@ -13,13 +13,21 @@ de la inscripción (`enrollments`):
 `key` identifica la alerta (tipo + inscripción) y `signature` el estado que la
 originó; con ambos se recuerda si el usuario ya la marcó como resuelta.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterable, Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.alert_ack import AlertAcknowledgement
 from app.models.classroom import Enrollment
+
+def _naive_utc(dt: datetime) -> datetime:
+    # En PostgreSQL enrollments.last_activity es TIMESTAMPTZ y llega con zona
+    # horaria; restarla de un datetime.utcnow() (ingenuo) lanza TypeError.
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
 
 _PREFIX = {
     "inactividad": "inact",
@@ -37,7 +45,7 @@ def enrollment_alerts(e: Enrollment, now: Optional[datetime] = None) -> list[dic
     out: list[dict] = []
 
     if e.last_activity:
-        days = (now - e.last_activity).days
+        days = (_naive_utc(now) - _naive_utc(e.last_activity)).days
         if days >= 7:
             out.append({
                 "type": "inactividad",

@@ -365,6 +365,12 @@ export function AuthProvider({
       document_number:
         tokenData.document_number ??
         undefined,
+
+      privacy_notice_acknowledged_version:
+        tokenData.privacy_notice_acknowledged_version ?? null,
+
+      privacy_notice_required_version:
+        tokenData.privacy_notice_required_version ?? null,
     };
 
 

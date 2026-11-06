@@ -66,7 +66,7 @@ def _bot_for_teacher(db: Session, bot_id: int, teacher: User) -> ExpertBot:
 # ── Estudiante ─────────────────────────────────────────────────────────────
 
 @router.get("/assigned-to-me")
-async def my_assigned_bots(
+def my_assigned_bots(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),
 ):
@@ -75,7 +75,7 @@ async def my_assigned_bots(
 
 
 @router.get("/assigned-to-me/{bot_id}")
-async def my_assigned_bot(
+def my_assigned_bot(
     bot_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.PARTICIPAR_EN_AULAS)),
@@ -89,7 +89,7 @@ async def my_assigned_bot(
 # ── Profesor ───────────────────────────────────────────────────────────────
 
 @router.get("/{bot_id}/assignments")
-async def get_assignments(
+def get_assignments(
     bot_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.ASIGNAR_BOTS_AULA)),
@@ -99,7 +99,7 @@ async def get_assignments(
 
 
 @router.post("/{bot_id}/assignments")
-async def create_assignments(
+def create_assignments(
     bot_id: int,
     payload: AssignPayload,
     db: Session = Depends(get_db),
@@ -120,7 +120,7 @@ async def create_assignments(
 
 
 @router.delete("/{bot_id}/assignments/classrooms/{classroom_id}")
-async def delete_classroom_assignment(
+def delete_classroom_assignment(
     bot_id: int,
     classroom_id: int,
     db: Session = Depends(get_db),
@@ -137,7 +137,7 @@ async def delete_classroom_assignment(
 
 
 @router.delete("/{bot_id}/assignments/students/{student_id}")
-async def delete_student_assignment(
+def delete_student_assignment(
     bot_id: int,
     student_id: int,
     db: Session = Depends(get_db),
@@ -156,7 +156,7 @@ async def delete_student_assignment(
 # ── Resultados ─────────────────────────────────────────────────────────────
 
 @router.get("/{bot_id}/progress")
-async def bot_results(
+def bot_results(
     bot_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.VER_RESULTADOS_NEUROBOT)),

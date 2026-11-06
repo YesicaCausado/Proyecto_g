@@ -44,7 +44,7 @@ from app.db.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.classroom import Classroom, Enrollment  # noqa: E402
 from app.models.expert_bot import ExpertBot  # noqa: E402
-from app.models.institution import Institution  # noqa: E402
+from app.models.institution import AuditLog, Institution  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 
 API = "/api/v1"
@@ -188,6 +188,15 @@ class AuthRolesTests(unittest.TestCase):
         # Bloqueado: ni siquiera la contraseña correcta entra.
         r = self.client.post(f"{API}/auth/login", json={"username": username, "password": PASSWORD})
         self.assertEqual(r.status_code, 429)
+        # El bloqueo persiste en audit_logs (RNF-04): vaciar la memoria no basta.
+        reset_limits()
+        r = self.client.post(f"{API}/auth/login", json={"username": username, "password": PASSWORD})
+        self.assertEqual(r.status_code, 429)
+        db = self.Session()
+        db.query(AuditLog).filter(AuditLog.performed_by_id == self.ids["estudiante"],
+                                  AuditLog.action == "login_failed").delete()
+        db.commit()
+        db.close()
         reset_limits()
 
     # ── Token ────────────────────────────────────────────────────────────────

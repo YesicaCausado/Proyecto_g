@@ -27,7 +27,7 @@ httpx==0.28.1
 python-dotenv==1.2.4
 psycopg2-binary==2.9.9
 # Lectura de PDF para la base de conocimiento de los NeuroBots (Python puro)
-pypdf==6.19.0
+pypdf==6.21.2
 # Cifrado (Fernet) de los tokens OAuth de Google Drive en Integraciones
 # (app/services/integration_service.py). Sin ella, conectar Drive da error 500.
 cryptography==50.0.2

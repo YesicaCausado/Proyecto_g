@@ -163,6 +163,49 @@ def _record_login(db: Session, user, action: str, ip: str) -> None:
         db.rollback()
 
 
+def account_locked_until(db: Session, user, now: Optional[datetime] = None) -> Optional[datetime]:
+    """Fin del bloqueo de la cuenta o None si no está bloqueada (RNF-04).
+
+    Se calcula con los «login_failed» guardados en audit_logs, así que el
+    bloqueo vale para todas las instancias serverless y no solo para la que
+    recibió los intentos (el contador en memoria no se comparte). La cuenta
+    se bloquea RATE_LIMIT_LOCKOUT_SECONDS desde el fallo que completa
+    RATE_LIMIT_MAX_REQUESTS fallos dentro de RATE_LIMIT_WINDOW_SECONDS; un
+    inicio de sesión correcto posterior reinicia la cuenta.
+    """
+    from app.models.institution import AuditLog
+
+    now = now or datetime.utcnow()
+    window = timedelta(seconds=settings.RATE_LIMIT_WINDOW_SECONDS)
+    lockout = timedelta(seconds=settings.RATE_LIMIT_LOCKOUT_SECONDS)
+    max_failures = settings.RATE_LIMIT_MAX_REQUESTS
+    since = now - window - lockout
+    try:
+        last_success = (
+            db.query(func.max(AuditLog.created_at))
+            .filter(AuditLog.performed_by_id == user.id, AuditLog.action == "login",
+                    AuditLog.created_at >= since)
+            .scalar()
+        )
+        q = db.query(AuditLog.created_at).filter(
+            AuditLog.performed_by_id == user.id,
+            AuditLog.action == "login_failed",
+            AuditLog.created_at >= since,
+        )
+        if last_success:
+            q = q.filter(AuditLog.created_at > last_success)
+        failures = [row[0] for row in q.order_by(AuditLog.created_at).all()]
+    except SQLAlchemyError:
+        db.rollback()
+        return None  # sin BD queda el bloqueo en memoria
+
+    locked_until = None
+    for i in range(max_failures - 1, len(failures)):
+        if failures[i] - failures[i - max_failures + 1] <= window:
+            locked_until = failures[i] + lockout
+    return locked_until if locked_until and now < locked_until else None
+
+
 def _epoch(dt: datetime) -> int:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -343,7 +386,8 @@ def validate_profile_photo(
 # USUARIO ACTUAL
 # ============================================================
 
-async def get_current_user(
+def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ):
@@ -427,6 +471,34 @@ async def get_current_user(
 
     ensure_institution_active(user)
 
+    if user.role == UserRole.ESTUDIANTE.value:
+        # Estas rutas son necesarias para validar la sesión, cambiar la
+        # contraseña temporal y completar el aviso. El resto de la API queda
+        # bloqueado aunque el cliente navegue directamente o invoque endpoints.
+        allowed_paths = {
+            "/api/v1/auth/me",
+            "/api/v1/auth/change-password",
+            "/api/v1/privacy-notice/me",
+            "/api/v1/privacy-notice/acknowledge",
+            "/api/v1/events",
+        }
+        request_path = request.url.path
+        is_calendar_event_path = (
+            request_path == "/api/v1/events" or request_path.startswith("/api/v1/events/")
+        )
+        if request_path not in allowed_paths and not is_calendar_event_path:
+            if user.must_change_password:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "PASSWORD_CHANGE_REQUIRED", "message": "Debes cambiar tu contraseña antes de continuar."},
+                )
+            from app.services import student_privacy_service
+            if not student_privacy_service.has_acknowledged(db, user.id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"code": "PRIVACY_NOTICE_REQUIRED", "message": "Debes consultar el aviso de privacidad antes de continuar."},
+                )
+
     return user
 
 
@@ -481,7 +553,7 @@ def require_permission(permission: Permission):
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def register(
+def register(
     user_data: UserCreate,
     request: Request,
     db: Session = Depends(get_db),
@@ -646,7 +718,7 @@ async def register(
     "/login",
     response_model=Token,
 )
-async def login(
+def login(
     user_data: UserLogin,
     request: Request,
     db: Session = Depends(get_db),
@@ -731,6 +803,22 @@ async def login(
 
     password_valid = False
 
+    # Bloqueo persistente de la cuenta (compartido entre instancias).
+    if user and account_locked_until(db, user):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Demasiados intentos fallidos. "
+                "Cuenta temporalmente bloqueada. "
+                "Espera unos minutos e intenta de nuevo."
+            ),
+            headers={
+                "Retry-After": str(
+                    settings.RATE_LIMIT_LOCKOUT_SECONDS
+                )
+            },
+        )
+
     if user:
         password_valid = verify_password(
             user_data.password,
@@ -746,7 +834,7 @@ async def login(
         locked = failed_login_tracker.on_failure(
             user_data.username,
             ip,
-        )
+        ) or bool(user and account_locked_until(db, user))
 
         if locked:
             raise HTTPException(
@@ -821,6 +909,12 @@ async def login(
             "role": user.role,
         }
     )
+    from app.services import student_privacy_service
+    notice_record = (
+        student_privacy_service.current_notice(db, user.id)
+        if user.role == UserRole.ESTUDIANTE.value
+        else None
+    )
 
     # --------------------------------------------------------
     # 10. Respuesta
@@ -872,6 +966,16 @@ async def login(
             None,
         ),
         created_at=user.created_at,
+        privacy_notice_acknowledged_version=(
+            notice_record.policy_version
+            if notice_record and notice_record.acknowledged_at
+            else None
+        ),
+        privacy_notice_required_version=(
+            student_privacy_service.POLICY_VERSION
+            if user.role == UserRole.ESTUDIANTE.value
+            else None
+        ),
     )
 
 
@@ -883,7 +987,8 @@ async def login(
     "/me",
     response_model=UserResponse,
 )
-async def get_me(
+def get_me(
+    db: Session = Depends(get_db),
     current_user: UserModel = Depends(
         get_current_user
     ),
@@ -892,11 +997,27 @@ async def get_me(
     Obtener información del usuario autenticado.
     """
 
-    return current_user
+    from app.services import student_privacy_service
+    record = (
+        student_privacy_service.current_notice(db, current_user.id)
+        if current_user.role == UserRole.ESTUDIANTE.value
+        else None
+    )
+    from app.schemas.schemas import UserResponse
+    response = UserResponse.model_validate(current_user).model_dump()
+    response["privacy_notice_acknowledged_version"] = (
+        record.policy_version if record and record.acknowledged_at else None
+    )
+    response["privacy_notice_required_version"] = (
+        student_privacy_service.POLICY_VERSION
+        if current_user.role == UserRole.ESTUDIANTE.value
+        else None
+    )
+    return response
 
 
 @router.get("/institution-branding")
-async def get_institution_branding(
+def get_institution_branding(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Nombre y logo de la institución del usuario (lo configura el Súper
@@ -916,7 +1037,7 @@ async def get_institution_branding(
     "/me",
     response_model=UserResponse,
 )
-async def update_me(
+def update_me(
     data: dict,
     request: Request,
     db: Session = Depends(get_db),
@@ -1037,7 +1158,7 @@ async def update_me(
 # ============================================================
 
 @router.post("/logout-all")
-async def logout_all_sessions(
+def logout_all_sessions(
     request: Request,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
@@ -1061,7 +1182,7 @@ async def logout_all_sessions(
     "/change-password",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def change_password(
+def change_password(
     data: dict,
     request: Request,
     db: Session = Depends(get_db),

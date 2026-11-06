@@ -33,6 +33,7 @@ from app.api.auth import create_access_token  # noqa: E402
 from app.db.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.classroom import Classroom, Enrollment  # noqa: E402
+from app.models.academic import AcademicPeriod  # noqa: E402
 from app.models.evaluation import EvaluationSubmission, TeacherEvaluation  # noqa: E402
 from app.models.institution import Institution  # noqa: E402
 from app.models.learning import QuizHistory  # noqa: E402
@@ -348,6 +349,53 @@ class SuperReportsTests(unittest.TestCase):
         self.assertTrue(any("No hay resultados" in w for w in d["quality"]["warnings"]))
         r = self.get("/export", start_date="2020-01-01", end_date="2020-01-31", section="resumen", format="pdf")
         self.assertEqual(r.status_code, 404)                       # nunca archivos vacíos
+
+    def test_academic_period_filter_and_institution_isolation(self):
+        db = self.Session()
+        today = evaluation_service.today_colombia()
+        institution_a = db.query(Institution).filter(Institution.name == "Colegio Andino").one()
+        institution_b = db.query(Institution).filter(Institution.name == "Colegio Bravo").one()
+        previous = AcademicPeriod(
+            institution_id=institution_a.id,
+            name="Período anterior",
+            start_date=today - timedelta(days=60),
+            end_date=today - timedelta(days=30),
+        )
+        current = AcademicPeriod(
+            institution_id=institution_a.id,
+            name="Período actual",
+            start_date=today - timedelta(days=29),
+            end_date=today,
+        )
+        foreign = AcademicPeriod(
+            institution_id=institution_b.id,
+            name="Período ajeno",
+            start_date=today - timedelta(days=29),
+            end_date=today,
+        )
+        db.add_all([previous, current, foreign])
+        db.commit()
+        previous_id, current_id, foreign_id = previous.id, current.id, foreign.id
+        db.close()
+
+        data = self.ok(period=False, period_id=current_id)
+        self.assertEqual(
+            data["meta"]["period"],
+            {
+                "start": (today - timedelta(days=29)).isoformat(),
+                "end": today.isoformat(),
+                "label": f"Período actual ({(today - timedelta(days=29)).isoformat()} a {today.isoformat()})",
+            },
+        )
+        self.assertEqual(
+            data["meta"]["previous_period"],
+            {
+                "start": (today - timedelta(days=60)).isoformat(),
+                "end": (today - timedelta(days=30)).isoformat(),
+            },
+        )
+        self.assertNotEqual(current_id, previous_id)
+        self.assertEqual(self.get(period=False, period_id=foreign_id).status_code, 404)
 
     # ── Aislamiento y permisos ─────────────────────────────────────────────
     def test_08_institution_isolation(self):
