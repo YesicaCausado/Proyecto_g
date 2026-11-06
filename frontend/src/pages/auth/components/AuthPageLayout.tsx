@@ -43,7 +43,7 @@ const CSS = `
   }
   .auth-robot-panel {
     position: relative;
-    background: #EDECEA;
+    background: radial-gradient(120% 120% at 50% 10%, #15161a 0%, #0c0d10 55%, #050507 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -90,7 +90,7 @@ export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
             <div
               style={{
                 position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-                boxShadow: 'inset 0 0 32px rgba(55,53,47,0.04)',
+                boxShadow: 'inset 0 0 48px rgba(255,255,255,0.06)',
               }}
             />
             <RobotCanvas enabled transparent className="absolute inset-0" />
@@ -98,7 +98,7 @@ export default function AuthPageLayout({ children }: AuthPageLayoutProps) {
               style={{
                 position: 'absolute', bottom: '16px', left: '20px',
                 fontSize: '9px', letterSpacing: '0.18em',
-                color: 'rgba(55,53,47,0.25)', textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase',
                 fontWeight: 500, zIndex: 3, margin: 0,
               }}
             >
