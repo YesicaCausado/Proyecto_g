@@ -109,7 +109,7 @@ export default function RobotCanvas({
   );
 
   // ── Recuperación de pérdida de contexto WebGL ────────────────
-  // Three.js restaura los recursos del renderer en el mismo canvas.
+  const [webglEpoch, setWebglEpoch] = useState(0);
   const [webglFailed, setWebglFailed] = useState(false);
   // Guardamos el renderer en ESTADO (no en ref) para que el useEffect
   // de abajo se re-ejecute justo cuando R3F lo instancia vía onCreated
@@ -127,7 +127,7 @@ export default function RobotCanvas({
   // NOTA: R3F invoca `onCreated(state)` y DESCARTA su valor de retorno,
   // por lo que no se pueden devolver cleanup functions desde ahí. En su
   // lugar, gestionamos el ciclo de vida aquí con useEffect sobre `gl`,
-  // que sí recibe el cleanup real al desmontar o al remontar (webglEpoch).
+  // que sí recibe el cleanup real al desmontar o al remontar.
   useEffect(() => {
     if (!gl) return;
     const dom = gl.domElement;
@@ -168,14 +168,10 @@ export default function RobotCanvas({
       if (restoreTimer) clearTimeout(restoreTimer);
       restoreTimer = null;
       lostHandled = false;
-      // Re-sincroniza el viewport con el tamaño real del DOM (el canvas pudo
-      // quedar en 0×0 o con el tamaño viejo tras la pérdida).
-      if (gl && typeof gl.setSize === 'function') {
-        const w = gl.domElement?.clientWidth  || 1;
-        const h = gl.domElement?.clientHeight || 1;
-        gl.setSize(w, h, false);
-      }
       setWebglFailed(false);
+      // Reinstanciar la escena vuelve a conectar el modelo y sus animaciones
+      // con el contexto restaurado, como hacía la versión estable anterior.
+      setWebglEpoch((epoch) => epoch + 1);
     };
 
     dom.addEventListener('webglcontextlost', onLost, false);
@@ -185,9 +181,8 @@ export default function RobotCanvas({
       dom.removeEventListener('webglcontextlost', onLost, false);
       dom.removeEventListener('webglcontextrestored', onRestored, false);
       if (restoreTimer) clearTimeout(restoreTimer);
-      setGl(null);
     };
-  }, [gl]);
+  }, [gl, webglEpoch]);
 
   if (!enabled) return null;
 
@@ -199,8 +194,9 @@ export default function RobotCanvas({
       {webglFailed ? (
         <RobotCanvasFallbackUI error={new Error('WebGL no disponible')} />
       ) : (
-        <RobotErrorBoundary>
+        <RobotErrorBoundary key={webglEpoch}>
           <Canvas
+            key={webglEpoch}
             className="robot-canvas-surface"
             shadows={lowPower ? false : CANVAS_CONFIG.shadows}
             dpr={lowPower ? LOW_POWER_DPR : CANVAS_CONFIG.dpr}
