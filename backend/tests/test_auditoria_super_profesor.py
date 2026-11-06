@@ -16,7 +16,7 @@ import os
 import sys
 import unittest
 import unittest.mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import tests.entorno_pruebas  # noqa: E402,F401  (BD en memoria, correo a consola, sin IA real)
@@ -27,6 +27,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.api.auth import create_access_token  # noqa: E402
+from app.api.super_stats import _utc_naive  # noqa: E402
 from app.db.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.alert_ack import AlertAcknowledgement  # noqa: E402
@@ -41,6 +42,13 @@ API = "/api/v1"
 
 
 class SuperProfesorAuditTests(unittest.TestCase):
+    def test_dashboard_activity_date_normalizes_aware_and_naive_datetimes(self):
+        aware = datetime(2026, 11, 6, 12, 0, tzinfo=timezone(timedelta(hours=-5)))
+        self.assertEqual(_utc_naive(aware), datetime(2026, 11, 6, 17, 0))
+
+        naive = datetime(2026, 11, 6, 17, 0)
+        self.assertEqual(_utc_naive(naive), naive)
+
     def setUp(self):
         engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         Base.metadata.create_all(bind=engine)

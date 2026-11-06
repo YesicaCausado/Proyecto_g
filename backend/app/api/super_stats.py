@@ -18,7 +18,7 @@ Endpoints:
 from fastapi import APIRouter, Depends, Query, HTTPException, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
@@ -242,6 +242,13 @@ def _avg10(values: list[float]) -> Optional[float]:
     return round(sum(values) / len(values) / 10, 1) if values else None
 
 
+def _utc_naive(value: datetime) -> datetime:
+    """Normaliza fechas almacenadas con o sin zona a UTC sin zona."""
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
 def _compute_super_dashboard(current_user: User, db: Session):
     inst_id = _get_institution_id(current_user, db)
     if not inst_id:
@@ -306,7 +313,7 @@ def _compute_super_dashboard(current_user: User, db: Session):
     at_risk_detail.sort(key=lambda x: (risk_rank[x["risk"]], x["avg"] if x["avg"] is not None else 99))
 
     # ── Ranking de profesores (solo promedios con actividad real) ─
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
     by_teacher: dict[int, list[Enrollment]] = {}
     for e in enrollments:
         by_teacher.setdefault(classroom_by_id[e.classroom_id].teacher_id, []).append(e)
@@ -316,7 +323,10 @@ def _compute_super_dashboard(current_user: User, db: Session):
             continue
         ens = by_teacher.get(t.id, [])
         students = {e.student_id for e in ens}
-        active = {e.student_id for e in ens if e.last_activity and e.last_activity > week_ago}
+        active = {
+            e.student_id for e in ens
+            if e.last_activity and _utc_naive(e.last_activity) > week_ago
+        }
         teacher_ranking.append({
             "name": t.full_name or t.username,
             "subject": t.subject_area or "—",
