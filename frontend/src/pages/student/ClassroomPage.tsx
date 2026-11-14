@@ -223,25 +223,24 @@ export default function ClassroomPage() {
           {/* Progreso del estudiante */}
           <section className="bg-white border border-[#E9E9E7] rounded-md p-6">
             <h2 className="font-medium text-[#37352F] text-sm mb-4">Tu progreso</h2>
-            {/* El progreso del grupo sale de los quizzes de su competencia
-                (Desafíos); sin quizzes no hay dato que mostrar. */}
+            {/* El promedio se calcula con los quizzes completados de la competencia del grupo. */}
             {classroom.total_sessions === 0 ? (
               <p className="text-xs text-[#9B9A97]">
-                Aún no hay quizzes de la competencia de este grupo. Tu avance aparecerá cuando completes uno en Desafíos.
+                Aún no hay quizzes completados de la competencia de este grupo. Tu promedio aparecerá cuando completes uno en Desafíos.
               </p>
             ) : (
             <>
             <div className="mb-4">
               <div className="flex items-center justify-between text-xs mb-1.5">
-                <span className="text-[#787774]">Avance general</span>
+                <span className="text-[#787774]">Promedio de aciertos</span>
                 <span className="font-medium text-[#37352F]">
-                  {classroom.overall_progress.toFixed(0)}%
+                  {classroom.average_score.toFixed(1)}%
                 </span>
               </div>
               <div className="h-2 bg-[#E9E9E7] rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full"
-                  style={{ width: `${Math.min(classroom.overall_progress, 100)}%`, backgroundColor: accent }}
+                  style={{ width: `${Math.min(Math.max(classroom.average_score, 0), 100)}%`, backgroundColor: accent }}
                 />
               </div>
             </div>
@@ -258,14 +257,6 @@ export default function ClassroomPage() {
                 </span>
                 <span className="font-medium text-[#37352F]">
                   {Math.round(classroom.total_time_minutes)} min
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[#787774] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" /> Promedio
-                </span>
-                <span className="font-medium text-[#37352F]">
-                  {classroom.average_score.toFixed(1)}%
                 </span>
               </div>
             </div>
