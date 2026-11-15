@@ -47,6 +47,7 @@ from app.services.enrollment_tracking_service import EnrollmentTrackingService
 from app.models.classroom import Enrollment
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import hashlib
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -1488,6 +1489,7 @@ async def send_message(
                 try:
                     verdict, grade_conf = await grade_user_answer(
                         ai_manager, request.message, last_assistant, topic,
+                        context_messages=request.history,
                     )
                 except Exception as ec:
                     logger.warning("⚠️ Calificación de respuesta del chat falló: %s", ec)
@@ -1583,6 +1585,22 @@ async def send_message(
                         "chat_grade": verdict,
                         "chat_grade_confidence": grade_conf,
                         "chat_grading_failed": grading_failed,
+                        "chat_evaluation": {
+                            "message_id": request.client_message_id,
+                            "status": (
+                                "evaluated" if verdict is not None
+                                else "error" if grading_failed
+                                else "neutral" if was_question
+                                else "not_applicable"
+                            ),
+                            "verdict": verdict,
+                            "confidence": grade_conf if was_question else None,
+                            "question_sha256": (
+                                hashlib.sha256(last_assistant.encode("utf-8")).hexdigest()
+                                if was_question else None
+                            ),
+                            "evaluated_at": now.isoformat() if was_question else None,
+                        },
                         "had_error_chat": had_error_chat if verdict is not None else None,
                         "pattern_status": {k: v["status"] for k, v in pattern_status.items()},
                     },

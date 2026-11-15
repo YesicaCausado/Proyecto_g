@@ -256,6 +256,19 @@ def performance_status(*, verdict: Optional[str], grading_failed: bool,
              "error_risk": "probabilidad estimada (experimental)"}
 
     if grading_failed:
+        if evals or quiz_count:
+            if last_quiz_at is not None and not evals and now - last_quiz_at > PERFORMANCE_STALE_AFTER:
+                return _entry(
+                    STALE, src,
+                    "No fue posible calificar la respuesta actual; se conservan resultados anteriores.",
+                    measured_at=last_quiz_at, values=values, units=units,
+                )
+            measured_at = last_quiz_at if quiz_count and not evals else None
+            return _entry(
+                AVAILABLE, src,
+                "No fue posible calificar la respuesta actual; se muestran resultados anteriores.",
+                measured_at=measured_at, values=values, units=units,
+            )
         e = _entry(ERROR, src, "No fue posible calificar la respuesta de este turno.",
                    values=values, units=units)
         e["values"] = {}

@@ -45,6 +45,7 @@ from app.models.learning import CognitiveEvent  # noqa: E402
 from app.models.user import User, UserRole  # noqa: E402
 from app.schemas.neuro_signals import FacialSignal, VoiceSignal, parse_signal  # noqa: E402
 from app.services import consent_service  # noqa: E402
+from app.services import student_privacy_service  # noqa: E402
 
 FACIAL = {"valence": 0.2, "arousal": 0.45, "attention_score": 0.8, "blink_rate": 14.0,
           "brow_furrow": 0.1, "smile_intensity": 0.3, "gaze_direction": "screen",
@@ -60,17 +61,27 @@ QUESTION = "¿Cuál es el resultado de 2 + 2?"
 
 
 class _FakeAI:
-    """Doble de la IA: el calificador (max_tokens=8) devuelve `verdicts` en orden."""
+    """Doble de la IA: devuelve veredictos JSON para el calificador."""
 
     def __init__(self, verdicts=None, grader_raises=False):
         self.verdicts = list(verdicts or [])
         self.grader_raises = grader_raises
 
     async def __call__(self, prompt, system_prompt="", **kwargs):
-        if kwargs.get("max_tokens") == 8:
+        if "calificador objetivo" in system_prompt.lower():
             if self.grader_raises:
                 raise RuntimeError("proveedor caído")
-            return {"response": self.verdicts.pop(0) if self.verdicts else "NEUTRO", "provider": "fake"}
+            verdict = self.verdicts.pop(0) if self.verdicts else "NEUTRO"
+            normalized = verdict.strip().lower()
+            normalized = {
+                "correcto": "correct",
+                "incorrecto": "incorrect",
+                "neutro": "neutral",
+            }.get(normalized, normalized)
+            return {
+                "response": '{"verdict":"%s","confidence":0.9}' % normalized,
+                "provider": "fake",
+            }
         return {"response": "Respuesta del tutor", "provider": "fake", "fallback_used": False}
 
 
@@ -108,6 +119,18 @@ class PatronesNeurodigitalesTests(unittest.TestCase):
         cls.user_a, cls.user_b = users["est_patrones_a"], users["est_patrones_b"]
         cls.h = {"Authorization": "Bearer " + create_access_token({"sub": "est_patrones_a"})}
         cls.hb = {"Authorization": "Bearer " + create_access_token({"sub": "est_patrones_b"})}
+        for headers in (cls.h, cls.hb):
+            notice = cls.client.get("/api/v1/privacy-notice/me", headers=headers)
+            assert notice.status_code == 200, notice.text
+            accepted = cls.client.post(
+                "/api/v1/privacy-notice/acknowledge",
+                headers=headers,
+                json={
+                    "version": student_privacy_service.POLICY_VERSION,
+                    "acknowledged": True,
+                },
+            )
+            assert accepted.status_code == 200, accepted.text
         for ctype in ("camara_facial", "microfono_voz"):
             r = cls.client.post("/api/v1/consents", headers=cls.h, json={
                 "consent_type": ctype, "version": consent_service.current_version(ctype), "accepted": True})
@@ -288,6 +311,15 @@ class PatronesNeurodigitalesTests(unittest.TestCase):
         self.assertIs(pe["values"]["last_answer_correct"], False)    # antes salía True
         self.assertEqual(pe["values"]["chat_eval_count"], 1)
         self.assertEqual(pe["values"]["chat_error_rate"], 1.0)
+        first_event = self.events(self.user_a)[-1].event_data
+        self.assertEqual(first_event["chat_evaluation"]["status"], "evaluated")
+        self.assertEqual(first_event["chat_evaluation"]["verdict"], "incorrect")
+        self.assertEqual(first_event["chat_evaluation"]["confidence"], 0.9)
+        self.assertEqual(
+            len(first_event["chat_evaluation"]["question_sha256"]),
+            64,
+        )
+        self.assertNotIn("question_text", first_event["chat_evaluation"])
         meta = self.send(topic="Tema H", question=True, ai=_FakeAI(["CORRECTO"]), **TYPED)["metadata"]
         pe = meta["pattern_status"]["performance"]
         self.assertIs(pe["values"]["last_answer_correct"], True)
@@ -305,10 +337,9 @@ class PatronesNeurodigitalesTests(unittest.TestCase):
         self.assertIsInstance(meta["error_risk"], float)
 
     def test_h_calificador_no_confunde_incorrecto(self):
-        self.assertEqual(parse_verdict("INCORRECTO")[0], "incorrect")
-        self.assertEqual(parse_verdict("incorrecto.")[0], "incorrect")
-        self.assertEqual(parse_verdict("CORRECTO")[0], "correct")
-        self.assertIsNone(parse_verdict("NEUTRO")[0])
+        self.assertEqual(parse_verdict('{"verdict":"incorrect","confidence":0.9}')[0], "incorrect")
+        self.assertEqual(parse_verdict('{"verdict":"correct","confidence":0.9}')[0], "correct")
+        self.assertIsNone(parse_verdict('{"verdict":"neutral","confidence":0.4}')[0])
         self.assertEqual(parse_verdict("no sé")[0], GRADING_ERROR)
 
     # ── I. Permisos y aislamiento ───────────────────────────────────────────
