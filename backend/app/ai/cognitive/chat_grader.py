@@ -23,9 +23,15 @@ _OPTIONS_RE = re.compile(r"(?m)\b[A-E][\.\)\:]\s", re.IGNORECASE)
 _KNOWLEDGE_CHECK_HINTS = (
     "qué es", "cuál es", "cuáles son", "cuánto", "cuántos", "cuándo", "quién",
     "quienes", "dónde", "cómo se", "cómo funciona", "cómo resolver", "por qué",
-    "define", "explica", "resuelve", "calcula", "menciona",
+    "en qué", "para qué", "con qué", "de qué manera", "qué ocurre", "qué sucede",
+    "cuál sería", "define", "explica", "resuelve", "calcula", "menciona",
+    "describe", "compara", "identifica", "nombra", "diferencia",
     "verdadero o falso", "completa", "ordena", "elige", "selecciona",
-    "¿cuál", "¿qué", "¿cuánto", "¿quién",
+)
+_NON_EVALUABLE_QUESTION_HINTS = (
+    "te gustaría", "te gustaria", "quieres que", "te parece", "qué opinas",
+    "que opinas", "cómo te sientes", "como te sientes", "tienes alguna duda",
+    "alguna pregunta", "algo más", "algo mas",
 )
 
 
@@ -34,20 +40,15 @@ def tutor_is_asking(last_assistant_text: str) -> bool:
     if not last_assistant_text or not str(last_assistant_text).strip():
         return False
     text = str(last_assistant_text).strip()
-    stripped = text.rstrip("? ")
-    if not stripped:
-        return False
-
-    # Termina en signo de interrogación → pregunta.
-    if text.endswith("?"):
-        return True
-
     # Contiene opciones de opción múltiple → evaluación.
     if _OPTIONS_RE.search(text):
         return True
 
-    # Contiene una palabra/expresión de verificación de comprensión.
     lower = text.lower()
+    if any(hint in lower for hint in _NON_EVALUABLE_QUESTION_HINTS):
+        return False
+
+    # Una pregunta conversacional no basta: debe pedir contenido demostrable.
     return any(hint in lower for hint in _KNOWLEDGE_CHECK_HINTS)
 
 
@@ -104,6 +105,9 @@ async def grade_user_answer(ai_manager, user_message: str,
     except Exception as exc:
         logger.warning("⚠️ Calificador de chat falló: %s", exc)
         return GRADING_ERROR, 0.0
+    if not isinstance(result, dict) or result.get("provider") == "local":
+        logger.warning("⚠️ El calificador no recibió una respuesta de un proveedor de IA.")
+        return GRADING_ERROR, 0.0
     return parse_verdict(result.get("response") or "")
 
 
@@ -112,10 +116,16 @@ def parse_verdict(raw_text: str):
 
     "INCORRECTO" contiene la subcadena "CORRECTO": antes se comprobaba primero
     `"CORRECTO" in raw` y TODA respuesta incorrecta se registraba como
-    correcta. Ahora se compara la primera palabra exacta.
+    correcta. Ahora se acepta solo el veredicto al inicio, opcionalmente
+    precedido por "Veredicto:" o "Respuesta:".
     """
-    words = re.findall(r"[A-ZÁÉÍÓÚÑ]+", (raw_text or "").strip().upper())
-    first = words[0] if words else ""
+    match = re.match(
+        r"\s*(?:(?:VEREDICTO|RESPUESTA)\s*[:=\-]\s*)?"
+        r"(CORRECTO|INCORRECTO|NEUTRO)\b",
+        raw_text or "",
+        re.IGNORECASE,
+    )
+    first = match.group(1).upper() if match else ""
     if first == _VERDICT_INCORRECT[0]:
         return _VERDICT_INCORRECT[1], 0.9
     if first == _VERDICT_CORRECT[0]:
