@@ -4,8 +4,12 @@ Parche 11B (octubre de 2026). Describe el flujo real, ya implementado y
 probado, entre profesor y estudiante con los NeuroBots, y el sistema de
 notificaciones persistentes que lo acompaña.
 
-> **Migración requerida:** `backend/migrations/011_neurobots_notificaciones.sql`
-> debe ejecutarse en Supabase **antes** de desplegar este código.
+> El backend crea las tablas que falten y agrega al arrancar las columnas
+> `classroom_bots.goal_interactions` y `classroom_bots.assigned_by_id`, por lo
+> que una migración pendiente de esas columnas no debe dejar «Mis NeuroBots»
+> en error 500. Ejecuta igualmente
+> `backend/migrations/011_neurobots_notificaciones.sql` en Supabase para
+> mantener el esquema alineado y aplicar la configuración completa de RLS.
 
 ## 1. Flujo NeuroBot
 

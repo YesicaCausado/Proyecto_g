@@ -83,6 +83,10 @@ def _add_missing_sqlite_columns(engine) -> None:
 # Columnas que el código usa aunque el SQL de migrations/ no se haya ejecutado
 # en Supabase. (tabla, columna, definición)
 RUNTIME_COLUMNS = [
+    # Asignaciones de NeuroBots (011): las consultas del estudiante leen estas
+    # columnas aunque la migración SQL aún no se haya ejecutado en Supabase.
+    ("classroom_bots", "goal_interactions", "INTEGER"),
+    ("classroom_bots", "assigned_by_id", "INTEGER REFERENCES users(id)"),
     # Tutorial guiado: avance y finalización independientes de los datos académicos.
     ("users", "tutorial_completed", "BOOLEAN NOT NULL DEFAULT FALSE"),
     ("users", "tutorial_role", "VARCHAR(20)"),
