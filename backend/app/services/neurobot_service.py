@@ -59,6 +59,22 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def _is_earlier(candidate: Optional[datetime], current: Optional[datetime]) -> bool:
+    if candidate is None:
+        return False
+    if current is None:
+        return True
+    candidate_utc = (
+        candidate.replace(tzinfo=timezone.utc)
+        if candidate.tzinfo is None else candidate.astimezone(timezone.utc)
+    )
+    current_utc = (
+        current.replace(tzinfo=timezone.utc)
+        if current.tzinfo is None else current.astimezone(timezone.utc)
+    )
+    return candidate_utc < current_utc
+
+
 def display_name(user: Optional[User]) -> str:
     if user is None:
         return ""
@@ -107,7 +123,7 @@ def _assignments_for_students(db: Session, student_ids: Iterable[int],
         entry["is_required"] = entry["is_required"] or bool(cb.is_required)
         entry["sources"].append({"type": "aula", "classroom_id": classroom.id,
                                  "classroom_name": classroom.name, "teacher_id": teacher_id})
-        if cb.assigned_at and (entry["assigned_at"] is None or cb.assigned_at < entry["assigned_at"]):
+        if _is_earlier(cb.assigned_at, entry["assigned_at"]):
             entry["assigned_at"] = cb.assigned_at
 
     q = db.query(StudentBotAssignment).filter(StudentBotAssignment.student_id.in_(student_ids))
@@ -120,7 +136,7 @@ def _assignments_for_students(db: Session, student_ids: Iterable[int],
         entry["individual_goal"] = a.goal_interactions
         entry["teacher_ids"].add(a.teacher_id)
         entry["sources"].append({"type": "individual", "teacher_id": a.teacher_id})
-        if a.assigned_at and (entry["assigned_at"] is None or a.assigned_at < entry["assigned_at"]):
+        if _is_earlier(a.assigned_at, entry["assigned_at"]):
             entry["assigned_at"] = a.assigned_at
 
     for entry in out.values():
